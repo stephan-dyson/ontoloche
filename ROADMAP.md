@@ -112,7 +112,23 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Exit criterion:** which of the three. This decides Phase 3's shape, not Phase 1's — recorded now because the conversation is free while standing there.
 
-**PHASE 0 EXIT:** 0.1 and 0.2 answered. 0.3 and 0.4 are desirable, not blocking.
+### 0.5 — The proposal-quality test, on public data *(agent-executable; free; needs nobody)*
+
+**Tests the single weakest assumption in the whole venture:** that step 2 of [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — the system *proposing* a reading of a file rather than handing the user a schema editor — is right often enough that a domain expert keeps reviewing instead of rubber-stamping. **If the correction rate is high, the product does not work, and no amount of engineering fixes it.**
+
+**No office file can ever be used for this.** Federal data does not leave the building, and a venture resting on the founder's day-job access is compromised regardless of care taken. **The public equivalent is better anyway** — same domain, same agency family, reproducible by any reader, zero conflict-of-interest surface.
+
+**Data, verified 2026-08-27:** [`NH_HealthCitations_Aug2026.csv`](https://data.cms.gov/provider-data/dataset/r5ix-sfxw) — CMS nursing-home health citations. 157 MB, 23 columns, ~15,000 facilities, updated 2026-08-01. Confirmed to carry real pathologies: a boolean-sounding column holding three status strings, ~1% of rows with a correction date *preceding* the survey date, a redundant denormalised `Location` column, and all-caps facility names requiring genuine entity resolution against a real key (`CCN`).
+
+**Do:** hand the file (or a slice) to a capable model cold and ask it to produce step 2's proposal. Score it against the ground truth a human establishes separately. **Measure, do not eyeball.**
+
+**Exit criterion:** a correction rate, with the scoring method written down. Plus a specific answer to: **does it notice the correction-date anomaly, or does it confidently propose an "overdue" metric that is silently wrong for 1% of rows?**
+
+**Why this belongs in Phase 0:** it is the cheapest possible disconfirmation of the core usability bet, it costs nothing, it needs no cooperation from anyone, and — like 0.1 — an agent can run it today.
+
+**Known gap:** the file has no `Inspector` column, so this tests entity resolution on **Facilities** but not on **People**, and the walkthrough's step-4 action has no counterpart. Find a second public source for the person half, or leave it untested and say so.
+
+**PHASE 0 EXIT:** 0.1 (done) and 0.2 answered. **0.5 should run before Phase 1** — it is free, it needs nobody, and a bad result changes the whole plan. 0.3 and 0.4 are desirable, not blocking.
 
 ---
 
@@ -210,6 +226,7 @@ Written now, while it is cheap to be honest.
 
 ## Standing constraints
 
+0. **No data from the founder's employer is ever used — not to test, not to demo, not to describe in detail.** Not a caution, a hard line. It protects his employment, keeps the venture's evidence base defensible, and removes any characterisation of the work as trading on his access. **Public equivalents exist and are better** (§0.5): reproducible by any reader, which an open-source project's central claims must be. A test that cannot be run on public data is a test this project does not run.
 1. **Do not quit to build this.** The current job is simultaneously the research lab, the customer-discovery channel, and the funding source. What burns savings is building for a long stretch before contact with a user.
 2. **Do not build the general thing before the specific thing works.** Every scaffold in `VISION.md` §8 — 79 stars, two commits — is someone who started with the framework.
 3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — until Phase 3 works for a real outside user. Recorded in the Tenshen spec's §12.
