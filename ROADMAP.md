@@ -41,9 +41,13 @@ That last row is why this phase is not optional. If the cause is semantic collis
 
 **Finding:** [`docs/FINDINGS-0.1-tenshen-archaeology.md`](docs/FINDINGS-0.1-tenshen-archaeology.md)
 
-**Headline:** the four-mechanism table below is the wrong frame. Of the seven vocabularies, **five are not pollution at all** — they are *capability predicates* ("what is commentable", "what is searchable"), each locally correct, and **merging them would destroy true information**. **Two** are genuine semantic collision (mechanism 4 — present, inside one codebase, with no teams involved). And the only *documented production incident* was caused by a **fifth mechanism the table does not name**: a producer emitted a new type, every consumer gates on its own private allowlist, and the feature died **silently** in the consumer that had not been updated.
+**Scope, stated first:** this examined **Tenshen**, not Foundry. The four mechanisms below are hypotheses about *HHS*; a single-owner codebase with no teams cannot test them, and **nothing in this finding challenges them.** They are tested at §0.2.
 
-**Consequence:** `merge_types` is demoted and needs a guard; **`consumers(type)` — "who gates on this?" — becomes the centre of Phase 1**, and `predicate` becomes a first-class concept. See §1.
+**Headline:** Tenshen's disease is not the one the table describes. Of the seven vocabularies, **five are not pollution at all** — they are *capability predicates* ("what is commentable", "what is searchable"), each locally correct, and **merging them would destroy true information**. **Two** are genuine semantic collision (mechanism 4 — present, inside one codebase, with no teams involved). And the only *documented production incident* was caused by a **fifth mechanism the table does not name**: a producer emitted a new type, every consumer gates on its own private allowlist, and the feature died **silently** in the consumer that had not been updated.
+
+**Consequence:** `consumers(type)` — "who gates on this?" — and `predicate` are **added**; the evidence forced both, and HHS cannot make them unnecessary. `merge_types` is guarded. **But which call is the *centre* is NOT settled by this finding** — that is Tenshen's disease, and 0.2 may contest it. See §1.
+
+**The more important structural result:** if 0.2 finds HHS has a *different* disease, Phase 2's "two implementations against one interface" stops being a nice-to-have and becomes the load-bearing part of the plan — an interface forced to serve two genuinely unlike consumers is exactly the N=1 cure §2 exists for. **Two different diseases is a good outcome, not a problem.**
 
 **Not a kill criterion trip:** collision is present but not dominant (2 of 7) and not across teams.
 
@@ -121,7 +125,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 **Surface, as corrected by finding 0.1** (was six calls; the correction is the finding's main product):
 
 ```
-consumers(type)                   -> who gates on this type, and would silently drop it   [NEW — the centre]
+consumers(type)                   -> who gates on this type, and would silently drop it   [NEW — required]
 predicates()                      -> named capability sets ("commentable", "searchable")  [NEW]
 resolve_type(candidate, context)  -> existing | proposal | None
 propose_type(name, definition, evidence, proposed_by)
@@ -131,7 +135,7 @@ provenance(type)                  -> who, when, on what evidence
 merge_types(from, into, reason)   -> MUST refuse when the two have different consumer sets [demoted + guarded]
 ```
 
-**`consumers` carries the thesis now.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught.
+**`consumers` is required, and provisionally carries the thesis.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught. **That is Tenshen's disease.** Whether it is also HHS's is unknown until §0.2; if HHS reports plain duplicate sprawl, `resolve_type` reclaims the centre and this ordering flips. **Do not write Phase 1 until 0.2 reports** — the call list is stable, the emphasis is not.
 
 **`predicate` is first-class because five of Tenshen's seven vocabularies are predicates, not vocabularies.** A registry that cannot represent "commentable" as distinct from "the type list" will flatten them and assert falsehoods.
 
