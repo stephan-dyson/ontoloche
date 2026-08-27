@@ -11,6 +11,15 @@ governed actions that AI agents can safely call.
 - [`VISION.md`](VISION.md) — the thesis, what was observed, what is assumed, and
   the open questions. Claims are tagged **[Observed] / [Inferred] / [Assumed]**;
   §9 lists what is explicitly *not* validated.
+- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — **the concrete test of the whole idea.** A
+  non-technical analyst goes from a spreadsheet to a sent action in five steps, without a
+  developer at any point. Read this to argue with the product; read the two above to argue
+  with the strategy.
+- [`docs/FINDINGS-0.1-tenshen-archaeology.md`](docs/FINDINGS-0.1-tenshen-archaeology.md) —
+  the first piece of real evidence. Seven entity vocabularies in one codebase, traced to
+  their origin commits. It changed the interface: **most "duplicate" types are not
+  duplicates**, and the failure that actually shipped a bug was a type being *silently
+  ignored*, not a type being duplicated.
 
 ## The one-paragraph version
 
