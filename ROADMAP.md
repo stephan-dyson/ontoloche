@@ -37,7 +37,18 @@
 
 That last row is why this phase is not optional. If the cause is semantic collision, the "merge duplicates" operation currently at the centre of the design is the *opposite* of correct.
 
-### 0.1 — Tenshen archaeology *(one sitting; free; needs nobody)*
+### 0.1 — Tenshen archaeology — ✅ **COMPLETE 2026-08-27**
+
+**Finding:** [`docs/FINDINGS-0.1-tenshen-archaeology.md`](docs/FINDINGS-0.1-tenshen-archaeology.md)
+
+**Headline:** the four-mechanism table below is the wrong frame. Of the seven vocabularies, **five are not pollution at all** — they are *capability predicates* ("what is commentable", "what is searchable"), each locally correct, and **merging them would destroy true information**. **Two** are genuine semantic collision (mechanism 4 — present, inside one codebase, with no teams involved). And the only *documented production incident* was caused by a **fifth mechanism the table does not name**: a producer emitted a new type, every consumer gates on its own private allowlist, and the feature died **silently** in the consumer that had not been updated.
+
+**Consequence:** `merge_types` is demoted and needs a guard; **`consumers(type)` — "who gates on this?" — becomes the centre of Phase 1**, and `predicate` becomes a first-class concept. See §1.
+
+**Not a kill criterion trip:** collision is present but not dominant (2 of 7) and not across teams.
+
+<details>
+<summary>Original task definition (kept for provenance)</summary>
 
 Seven disagreeing entity-type vocabularies exist in a codebase under full control, each locally correct:
 
@@ -55,11 +66,19 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 **Why it matters most:** this is the pollution mechanism, observed, with complete history, in a system fully understood. No external cooperation required, and it can be done today.
 
+</details>
+
 ### 0.2 — The HHS pollution question *(one conversation)*
 
-`VISION.md` §11 Q3, verbatim: **why did the ontology get polluted, who could edit it, and what was missing?**
+**Re-prioritised by finding 0.1.** Ask in this order — the original pollution question is now third, because 0.1 showed it was not the mechanism that caused harm:
 
-**Exit criterion:** either it confirms 0.1's mechanism, or it names a second one. Both outcomes are useful; only the *absence* of an answer blocks Phase 1.
+1. **"When someone adds a new object type, how do they find out what breaks?"** — tests Cause C (silent per-consumer drop), the mechanism that actually shipped a bug in Tenshen and the one no existing tool answers.
+2. **"Do two teams use the same word for different things?"** — tests Cause B (semantic collision). Present in Tenshen *without* teams, so multi-team HHS is the harder case and this is the kill-criterion probe.
+3. `VISION.md` §11 Q3, verbatim: **why did the ontology get polluted, who could edit it, and what was missing?**
+
+**Exit criterion:** either it confirms 0.1's causes, or it names a different one. Both outcomes are useful; only the *absence* of an answer blocks Phase 1.
+
+**Watch for the disconfirming answer:** if HHS reports plain duplicate-type sprawl with no predicate structure and no silent-drop problem, then Tenshen was **not** representative and Phase 1 should be re-centred *back* toward `resolve_type`/`merge_types`. 0.1 is N=1; it earns a re-centering, not a certainty.
 
 **Settle first:** employment terms, conflict-of-interest rules, and procurement ethics if that office could ever be a customer. Be straight that the questions are orientation, because they are.
 
@@ -99,18 +118,24 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Why this component first, and not the venture's own wedge:** it is the *only* component Tenshen and open-ontology genuinely share, and Tenshen already runs a working instance of it (`work_link_types`: AI proposes a type only when confident none fit; `created_by: seed | ai | user`; usage counted). Ingestion — the venture's ROI wedge — unlocks nothing for Tenshen, which has no CSV problem.
 
-**Provisional surface** (six calls; to be corrected by Phase 0's findings):
+**Surface, as corrected by finding 0.1** (was six calls; the correction is the finding's main product):
 
 ```
+consumers(type)                   -> who gates on this type, and would silently drop it   [NEW — the centre]
+predicates()                      -> named capability sets ("commentable", "searchable")  [NEW]
 resolve_type(candidate, context)  -> existing | proposal | None
 propose_type(name, definition, evidence, proposed_by)
 list_types(kind, include_retired)
-merge_types(from, into, reason)
 usage(type)                       -> count, last_seen, orphaned?
 provenance(type)                  -> who, when, on what evidence
+merge_types(from, into, reason)   -> MUST refuse when the two have different consumer sets [demoted + guarded]
 ```
 
-`resolve_type` and `merge_types` carry the thesis. Everything else is bookkeeping.
+**`consumers` carries the thesis now.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught.
+
+**`predicate` is first-class because five of Tenshen's seven vocabularies are predicates, not vocabularies.** A registry that cannot represent "commentable" as distinct from "the type list" will flatten them and assert falsehoods.
+
+**`merge_types` was previously described as carrying the thesis. It does not.** Against capability predicates it is *hazardous* — merging "commentable" into "searchable" claims something untrue. It survives only with the consumer-set guard.
 
 **Exit criteria:**
 - Every call has a signature, a data shape, and a stated behaviour when uncertain
@@ -169,7 +194,8 @@ Written now, while it is cheap to be honest.
 
 | Signal | Reading |
 |---|---|
-| Phase 0 shows the pollution cause was **semantic collision** | Redesign before Phase 1 — the current shape is wrong |
+| ~~Phase 0 shows the pollution cause was **semantic collision**~~ | **CHECKED 2026-08-27 — not tripped.** Collision is present (2 of 7) but not dominant and not across teams. The merge-centred shape was nonetheless wrong for a *different* reason; §1 is re-centred on `consumers` |
+| **A capability predicate gets merged as a duplicate** *(new, from 0.1)* | The registry is flattening true distinctions. Stop — this is the failure that destroys meaning, and it is likelier here than duplicate-type pollution |
 | Tenshen's own curated vocabulary **rots anyway** under Phase 2B | **The core `[Assumed]` bet is disconfirmed.** Stop before spending capital — this is the cheapest possible disconfirmation and it is the reason 2B exists |
 | Phase 0.4 returns *"nobody has asked"* | The ingestion wedge has no buyer. Phase 3 needs a different customer |
 | Phase 0.2b shows contractor hours go mostly to **plumbing**, not ontology mapping | Airbyte already solves it. **The venture narrows to the registry alone** — still worth building, much smaller, and the services-substitution business case weakens |
