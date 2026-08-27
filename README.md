@@ -7,6 +7,7 @@ governed actions that AI agents can safely call.
 
 ## Start here
 
+- [`ROADMAP.md`](ROADMAP.md) — the sequenced plan. Priority: top, behind CASA/compliance only. Phase 0 is discovery with no code and no spec, because the interface shape depends on WHICH pollution mechanism it must prevent.
 - [`VISION.md`](VISION.md) — the thesis, what was observed, what is assumed, and
   the open questions. Claims are tagged **[Observed] / [Inferred] / [Assumed]**;
   §9 lists what is explicitly *not* validated.
