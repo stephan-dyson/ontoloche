@@ -30,6 +30,16 @@ All of this comes from one day inside an HHS office that licenses Foundry. **[Ob
 
 That is roughly **500 person-hours a year**, discovered from a sample of two conversations on day one. **[Inferred]** that the true figure across the organisation is materially larger; two people is not a base rate and this number must not be extrapolated without asking more people.
 
+**The lock-in is a services dependency, not a technical one.** **[Observed]** Not enough people internally can build the data ingest, pipelines and transforms, so the organisation relies on **contractors sourced directly from Palantir** to do it.
+
+This single fact explains the other two observations rather than sitting beside them:
+
+- **It explains the pollution.** Contractors rotate through engagements; each adds the entities their scope needs; none owns the vocabulary long-term. That is mechanisms 1 and 3 (no review + never retired) with a named cause. **[Inferred]**
+- **It explains the manual uploads.** If getting a pipeline built means a contractor engagement, then two people spending an hour a day is *rational avoidance of a procurement*, not a skills gap. **[Inferred]**
+- **It makes the commercial model easier than §7 assumes.** The agency already pays for outside expertise. A paid arm substitutes for an existing contractor line item rather than asking for new budget. **[Inferred]**
+
+Data portability would not fix this. The data could be perfectly extractable and the dependency would remain, because what is locked in is the *capability*, not the bytes.
+
 **Second data point:** the same ontology-pollution pattern was visible in consulting engagements at Deloitte. **[Observed]**, but by the same observer — so it is two readings by one person, not two independent sources. It is still the strongest available evidence that the pattern generalises beyond one office.
 
 ---
@@ -59,6 +69,20 @@ The failure mode is *entropy under multi-writer pressure*. The answer is not mor
 **There is a working precedent for this** in an existing codebase (Tenshen's `work_link_types`): a relationship-type registry with `name`, `definition`, `is_symmetric`, `inverse_label`, `created_by: seed | ai | user`, and `usage_count`, where an AI classifier proposes a new type only when confident none of the existing ones fit. It governs one edge family today. **[Inferred]** that the pattern generalises; that is the core technical bet of this project.
 
 ---
+
+## 4b. What the contractors are actually paid for — and it is the product
+
+Airbyte lands data. dbt transforms it. **Neither knows what an *entity* is.** Foundry's real differentiator is not any single layer — it is that ingestion, transformation, ontology and actions are one coherent thing. **That coherence is un-automated everywhere, which is precisely why it takes humans on contract.**
+
+So the product is neither ETL nor an ontology store. It is **the mapping layer between them**: landed rows to typed entities and relationships, with curation and provenance applied *at the point of ingest*.
+
+That framing is worth holding because it makes the build **smaller**, not bigger:
+
+- It is **complementary** to Airbyte/dbt — a dependency on them, not a replacement
+- It is exactly the manual work the contractors do today, which is where the money already is
+- It is unbuildable without the type registry, which is why the registry stays Phase 1
+
+**[Inferred]** that this mapping work is what the contractor hours are mostly spent on. **Confirm it** — it is one question and it is the single highest-value thing to verify in Phase 0.
 
 ## 5. The wedge: ingestion, aimed at the rot problem
 
@@ -92,6 +116,7 @@ Scope discipline, written down early because this idea has already demonstrated 
 - **Not an ontology editor for non-engineers.** That is precisely the thing that produced reason 3.
 - **Not a general knowledge-graph database.** RDF/OWL/SPARQL exist and are decades mature; interoperate, do not compete.
 - **Not a BI tool.** PowerBI is not the enemy and not the target.
+- **NOT an ETL or pipeline tool — this is the most important non-goal.** That category is solved and crowded: Airbyte ships 600+ connectors and self-hosts on Docker/Kubernetes at no cost (which is exactly what a data-residency-constrained agency needs), dbt owns SQL transformation, Airflow and Dagster own orchestration — all open source, all mature. **Consume them; do not compete with them.** A roadmap that drifts into "make pipelines easier" is a fight against well-funded incumbents on their home ground.
 
 ---
 
@@ -139,6 +164,10 @@ Written plainly, because the surrounding conviction makes it easy to skip.
 | Agencies would pay a compliance arm | **[Assumed]** — the core commercial bet |
 | The pattern generalises beyond public-sector health | **[Inferred]** from N=2, same observer |
 | Open-source distribution beats commercial for this buyer | **[Assumed]** |
+| Internal staff cannot build pipelines; Palantir contractors do it | **[Observed]** |
+| Contractor rotation is what polluted the ontology | **[Inferred]** — plausible, unconfirmed |
+| Contractor hours go mostly to raw-data-to-ontology mapping | **[Inferred]** — **the highest-value thing to confirm in Phase 0** |
+| A paid arm can substitute for an existing contractor line item | **[Inferred]** — easier sale than net-new spend, untested |
 
 **Nobody has told Stephan they would adopt a different ontology layer.** What they have said is that data entry is tedious and Foundry is complex, locked-in, and polluted. Those are related but not identical to the product thesis.
 
