@@ -63,6 +63,16 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 **Settle first:** employment terms, conflict-of-interest rules, and procurement ethics if that office could ever be a customer. Be straight that the questions are orientation, because they are.
 
+### 0.2b — What are the contractors actually doing? *(one conversation, highest value in Phase 0)*
+
+**[Observed]** the organisation relies on Palantir-sourced contractors to build ingest, pipelines and transforms. **[Inferred]** that most of those hours go to *mapping raw data into the ontology* rather than to moving bytes — which is the layer Airbyte and dbt do not cover (`VISION.md` §4b).
+
+**Ask:** what does a contractor engagement actually produce — connectors, transforms, ontology definitions, actions, or all four? **Roughly what share is the ontology mapping?**
+
+**Exit criterion:** a rough split of contractor effort across those four.
+
+**Why it is the highest-value question here:** it either confirms the product is the mapping layer — small, complementary to the ETL incumbents, and aimed at an existing budget line — or it reveals the hours go to plumbing, in which case Airbyte already solves it and **the venture thesis narrows sharply**.
+
 ### 0.3 — Prior art *(thirty minutes)*
 
 Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology-open)'s ObjectType / LinkType / ActionType shapes, and Foundry's own type-registry API surface if reachable.
@@ -135,7 +145,9 @@ Postgres-backed, built against messy CSV-shaped data. **Not** built against Tens
 
 ## Phase 3 — The ingestion wedge
 
-Automated CSV/Excel landing **with provenance and typed relationships intact**, so what accumulates is a curated graph rather than another pile of entities.
+**The mapping layer, not an ETL tool.** Landed rows to typed entities and relationships, with curation and provenance applied at the point of ingest — so what accumulates is a curated graph rather than another pile of entities.
+
+**Consume the existing pipeline layer.** Airbyte for extraction and loading, dbt for transformation where it fits. **Building connectors or an orchestrator is out of scope** (`VISION.md` §6), and drifting there means fighting funded incumbents on their home ground.
 
 **Shape decided by:** Phase 0.4's answer.
 
@@ -160,6 +172,7 @@ Written now, while it is cheap to be honest.
 | Phase 0 shows the pollution cause was **semantic collision** | Redesign before Phase 1 — the current shape is wrong |
 | Tenshen's own curated vocabulary **rots anyway** under Phase 2B | **The core `[Assumed]` bet is disconfirmed.** Stop before spending capital — this is the cheapest possible disconfirmation and it is the reason 2B exists |
 | Phase 0.4 returns *"nobody has asked"* | The ingestion wedge has no buyer. Phase 3 needs a different customer |
+| Phase 0.2b shows contractor hours go mostly to **plumbing**, not ontology mapping | Airbyte already solves it. **The venture narrows to the registry alone** — still worth building, much smaller, and the services-substitution business case weakens |
 | The interface never changes in Phase 2 | The second consumer was not different enough — N=1 problem survived, and the abstraction is Tenshen's data model with the names filed off |
 | Phase 2 slips past Phase 1's estimate by a wide margin | The interface was underspecified. Return to Phase 1, do not build through it |
 
@@ -171,4 +184,5 @@ Written now, while it is cheap to be honest.
 2. **Do not build the general thing before the specific thing works.** Every scaffold in `VISION.md` §8 — 79 stars, two commits — is someone who started with the framework.
 3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — until Phase 3 works for a real outside user. Recorded in the Tenshen spec's §12.
 4. **Version everything `v0` and say it is unstable.** An interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.
-5. **Tag every claim `[Observed] / [Inferred] / [Assumed]`.** This roadmap's parent document does; a project whose thesis is *provenance and curation* should hold itself to it.
+5. **Consume the ETL layer; never rebuild it.** Airbyte, dbt, Airflow and Dagster are mature, open source and self-hostable. The gap is the mapping *above* them, which is small and unowned. Rebuilding beneath is how this becomes a decade-long fight it cannot win.
+6. **Tag every claim `[Observed] / [Inferred] / [Assumed]`.** This roadmap's parent document does; a project whose thesis is *provenance and curation* should hold itself to it.
