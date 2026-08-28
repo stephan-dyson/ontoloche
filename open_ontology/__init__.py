@@ -28,6 +28,7 @@ from .errors import (
     UnknownType,
 )
 from .policy import NamespacePolicy, TierOrder
+from .registry import Registry
 from .types import (
     Citation,
     Consumer,
@@ -49,6 +50,7 @@ from .types import (
 )
 
 __all__ = [
+    "Registry",
     "Citation",
     "Consumer",
     "ConsumerReport",
