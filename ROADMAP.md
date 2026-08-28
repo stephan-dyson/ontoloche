@@ -1,6 +1,6 @@
 # Roadmap — open-ontology
 
-**Status:** Draft v0.3, 2026-08-28 — Phase 0 closed (0.3 done on evidence), **Phase 1 v0 shipped**, Tenshen-rebuild ordering added; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
+**Status:** Draft v0.4, 2026-08-28 — Phase 0 closed (0.3 done on evidence), **Phase 1 v0 shipped**, **ordering deliverable #2 (`docs/PACKAGE.md` v0) shipped**; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
 **Priority:** **Top priority, behind CASA/compliance only.** See §0.
 **Companion:** [`VISION.md`](VISION.md) — the thesis, the evidence, and what is not validated.
 
@@ -176,7 +176,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Kill criterion checked, not tripped** (§12 of the document): `merge_types` is 1 of 12 calls with four non-overridable refusals, and the mechanism-4 answer is `namespace` — preserve, not merge.
 
-**Next:** deliverable #2, `docs/PACKAGE.md`.
+**Next:** ~~deliverable #2, `docs/PACKAGE.md`~~ — **shipped 2026-08-28**, see the ordering table below. Next is **#3, Phase 2A**.
 
 <details>
 <summary>Phase 1 as briefed (kept for provenance)</summary>
@@ -221,7 +221,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 | # | open-ontology deliverable | Tenshen slice it unblocks | Session model |
 |---|---|---|---|
 | 1 | ~~**`docs/INTERFACE.md` v0**~~ — **DONE 2026-08-28** ([`docs/INTERFACE.md`](docs/INTERFACE.md)) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
-| 2 | **`docs/PACKAGE.md` v0** — the importable package shape: `open_ontology` Python package, a storage-adapter protocol, SQLite and Postgres backends, **the contract-test suite as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
+| 2 | ~~**`docs/PACKAGE.md` v0**~~ — **DONE 2026-08-28** ([`docs/PACKAGE.md`](docs/PACKAGE.md)) — `open_ontology` package shape, a **fifteen-primitive** storage-adapter protocol, SQLite + Postgres table shapes, the `attributes` schema-per-kind mechanism, and **109 contract tests as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
 | 3 | **Phase 2A** reference implementation, passing the contract tests on CMS data | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") | Opus build, Sonnet mechanical |
 | 4 | **`docs/EDGES.md` v0** — typed relationship store, `neighbors(node, edge_types, depth)` read seam, provenance on edges | Slice 1 (read seam), Slice 2 (`relations`), spec §4.3 provenance | Opus |
 | 5 | **Phase 2B** — Tenshen migration, in beacon | — | beacon program's call |
@@ -231,6 +231,24 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 **Alongside, not gating:** ~~0.3 prior art~~ **done 2026-08-28, before #1** ([`docs/0.3-prior-art.md`](docs/0.3-prior-art.md)); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
 
 **Rule of the ordering:** nothing in #1–#4 may take a shape *because* Tenshen has it. If a Tenshen need and a CMS-data need conflict, the CMS need wins and the conflict is recorded in the spec — that recorded conflict is Phase 2's exit criterion ("the interface changed at least once") arriving early.
+
+### Deliverable #2 result — `docs/PACKAGE.md` v0, 2026-08-28
+
+**What shipped:** a zero-dependency `open_ontology` package (Python 3.11 floor, stdlib + one driver per backend, **no ORM mandated** — justified in its §2.4); a **fifteen-primitive** storage adapter built on one rule — *the adapter stores records and does not know what a proposal, an approval or a refusal is*; SQLite and Postgres table shapes over nine tables; the **`attributes` schema-per-kind mechanism decided** rather than deferred (versioned per kind, three modes, default `off` so #1's "opaque to v0" contract is untouched, plus an unconditional key census so the escape hatch accumulates *visibly*); and **109 contract tests in seventeen groups**, covering every `INTERFACE.md` §5 refusal with none untested.
+
+**The structural result:** `Capabilities` — the adapter declaring in advance what it *cannot* answer, with a sentence per gap — is what makes Rule U implementable across unlike backends, and it is what lets a one-table registry be conformant without weakening conformance. **Exactly two guarantees are non-negotiable:** uniqueness of `(namespace, kind, name)`, and transactional approve. **Zero of §5's refusals are enforced by a backend.**
+
+**Tenshen test result:** **yes, as a third backend — nine of fifteen primitives serve as-is, six contortions recorded, none designed away.** The price is one `ALTER TABLE` adding three columns (`status`, `attributes_json`, `provenance_json`) to `work_link_types`, with `is_symmetric`/`inverse_label` projected both ways so beacon's existing reads keep working — **one table, no rewrite**, as 2B asks. `consumers()` needs **no schema change at all** (a config-backed consumer source), which is the highest-value thing available on that path. Two contortions are findings for beacon rather than complaints: no proposal table means **review costs exactly one table**, and no `last_used_at` means the rot sensor still cannot fire.
+
+**A new rule the design test forced:** *a destructive override that cannot be recorded is refused.* On a backend with no event log, `retire(force=True)` and `merge_types(acknowledge=…)` return a refusal rather than doing the destructive thing unrecorded.
+
+**Kill criterion checked, not tripped** (its §7.5), on four mechanical grounds: nine reference tables against Tenshen's one; 9-of-15 primitive fit rather than 15-of-15; more than half the reference schema by column count is CMS-forced weight Tenshen has no use for; and both protocol amendments made during the design tests were adopted on the reference-deployment case, not on Tenshen's.
+
+**Blocking finding for #5, and it is on this line, not beacon's:** **the adapter protocol is synchronous and beacon's data layer is `AsyncSession` throughout.** A sync adapter cannot share beacon's transaction, and driving one from a thread is not safe. `AsyncStorageAdapter` / `AsyncRegistry` is a **prerequisite of #5** and is not yet scheduled — **founder ruling wanted: inside #3's scope, or a new row between #3 and #5?** Two smaller rulings are in `PACKAGE.md` §11.1 (`attribute_census` as a call beyond §5; three new `Refusal.reason` values).
+
+**Known gap, recorded not papered over:** the CMS design test is **specified, not executed** — the 400-row `sample_state.csv` 0.5 actually used is not in the repo and `docs/make_sample.py` regenerates a *different* (300-row random) sample. Checking the public 400-row sample in as a test fixture is a #3 task; the data is public CMS data, so standing constraint 0 argues for it.
+
+**Next:** #3, Phase 2A — the reference implementation against the contract suite.
 
 ---
 
@@ -245,6 +263,8 @@ Postgres-backed, built against messy CSV-shaped data. **Not** built against Tens
 `work_link_types` migrates to call the `v0` interface, backed by Tenshen's own tables. **One service, one table — not a rewrite, and not 222 actions.**
 
 **Depends on:** Tenshen ruling **Q7a** (`docs/specs/2026-08-27-ontology-layer-exploration-design.md` §7). If Q7a is *file-it-with-the-lint*, the lint is this phase's instrumentation. If Q7a is *do-not-file*, 2B still proceeds but loses its sensor.
+
+**Also depends on an async adapter protocol, which does not yet exist** ([`docs/PACKAGE.md`](docs/PACKAGE.md) §7 contortion B2, added 2026-08-28). beacon's data layer is `AsyncSession` throughout; a synchronous adapter cannot share its transaction. This is open-ontology's work, not beacon's, and it is unscheduled pending a founder ruling. **Concrete price of 2B otherwise:** one `ALTER TABLE` on `work_link_types` adding `status`, `attributes_json` and `provenance_json`; `consumers()` needs no schema change at all.
 
 **Why two implementations and not one:** an interface stressed by two unlike consumers is the only cheap cure for the N=1 problem `VISION.md` §9 names. Tenshen alone reproduces it; Tenshen plus government data does not.
 
