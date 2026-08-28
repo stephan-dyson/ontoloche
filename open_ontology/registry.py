@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Sequence
 
@@ -114,6 +115,16 @@ _DOMAIN_SEMANTIC_WORDS = (
     "required by",
     "graded",
 )
+
+
+@dataclass(frozen=True)
+class _DefinitionProbe:
+    """A stand-in entry whose ``name`` is a definition, so ``Resolver.score`` can be
+    asked "how alike are these two sentences?" without widening the protocol."""
+
+    name: str
+    definition: str
+    aliases: tuple[str, ...] = ()
 
 
 def _uuid() -> str:
@@ -1278,11 +1289,15 @@ class Registry:
                 },
             )
 
-        # 6
+        # 6 -- the comparison is between the two DEFINITIONS, not the two names: two
+        # words that look nothing alike may mean the same thing, and two that look
+        # alike often do not. The resolver is asked through its own protocol by
+        # handing it the other definition as the thing to match against.
+        probe = _DefinitionProbe(name=right.definition, definition=right.definition)
         score = self.resolver.score(
-            left.name,
+            left.definition,
             ResolveContext(definition_hint=left.definition),
-            [right],
+            [probe],
             tier="unspecified",
         )
         divergence = score[0][1] if score else 0.0
