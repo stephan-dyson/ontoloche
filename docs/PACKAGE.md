@@ -645,6 +645,8 @@ returning, per `(kind, key)`: `n`, `first_seen`, `last_seen`, an example, whethe
 
 This is the same move as `ConsumerReport.complete = False`: it does not solve the problem, it makes the problem **visible and enumerable** rather than silent. It also gives the only sane migration path — you read the census, *then* write a schema that matches reality, *then* turn on `warn`, *then* `enforce`.
 
+> **Recorded by deliverable #3, 2026-08-28 — this section specifies two tables and a facade method but adds no primitive to carry them,** while §3.4 stays at fifteen and `C0-04` polices the boundary. Phase 2A reaches them through an **optional `AttributeStore` protocol, outside the fifteen and outside conformance**, which is consistent with ruling R2. A backend that does not implement it is still fully conformant, and `attribute_census` then reports `complete=False` with a `why` rather than an empty census. See [`2A-RUN.md`](2A-RUN.md) §4.4, deviation D-2.
+
 **Flagged: `attribute_census` is a method beyond the calls enumerated in `INTERFACE.md` §5.** It is the only one this document adds. §11 asks for a ruling: absorb it into #1, or keep it package-local and out of the conformance definition. Until ruled, the suite tests it (`C15-02`) but a backend may not be failed for it — the tests are marked `xfail_if_not_declared`.
 
 ### 5.6 What it does not fix
@@ -1079,6 +1081,8 @@ Standing constraint 0 argues *for* fixing this, not against: the data is public 
 
 **Task for deliverable #3:** check the 400-row public sample in at `open_ontology/contract/fixtures/cms_sample_400.csv` (~80 KB), and add a `make_sample_state.py` that regenerates it from the public file so the provenance is checkable. Until it exists, the C13 group is `skipif`-gated on the fixture and **the CMS design test is therefore not yet runnable — it is specified, not passing.** Said plainly so nobody reads §8.2 as a result.
 
+> **DONE, deliverable #3, 2026-08-28.** The fixture is checked in (**152,927 bytes**, not ~80 KB — the `Deficiency Description` column is long) and `tools/make_sample_state.py` regenerates it. The source file re-downloaded that day is **165,336,194 bytes, byte-for-byte the size the ground truth records**, so the fixture is the sample 0.5 actually cut. The C13 group runs and §8.2 is now a result: every [Observed] count matches, and the one [Inferred] count was **computed** — 7 distinct severity codes, B C D E F G J — rather than asserted against run D's quotation. See [`2A-RUN.md`](2A-RUN.md) §3.
+
 ### 8.5 CMS verdict
 
 > **The vocabulary loads: 8 type rows, 8 usage rows, 0 consumers, on SQLite with zero configuration and no dependencies. The two `value_set` entries are the reason the attribute-schema mechanism in §5 exists, and `not_a_type` is what stops `location` becoming type #9.**
@@ -1141,6 +1145,8 @@ The first is forward-only and may be dropped. The second is never applied backwa
 ---
 
 ## 11. Open items, and what would change this
+
+> **Deliverable #3 landed 2026-08-28.** The whole suite is green on both reference backends in one run (`229 passed`) and the CMS design test executes. Fourteen deviations are recorded in [`2A-RUN.md`](2A-RUN.md) §4; the one wanting a founder ruling is **D-1** — §3.4 primitive 10 and `C11-04` require a `Refusal` for a read-only consumer source, and ruling R3's closed fourteen has no honest value for it. Item 1 below (async) was answered by ruling **R1** as new row 3b; items 2 and 3 by **R2** and **R3**.
 
 ### 11.1 For the founder to rule on
 

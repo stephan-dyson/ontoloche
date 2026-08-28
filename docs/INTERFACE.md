@@ -149,6 +149,8 @@ Citation:
 
 **v0 does not attempt to detect automatically whether a definition asserts a domain semantic.** That is a model judgement and belongs to the proposer. **[Assumed]** that proposers will flag it honestly; §11 lists what would change this.
 
+> **Recorded by deliverable #3, 2026-08-28 — this sentence and §10's worked example disagree.** §10 shows `propose_type(...)` producing `p.warnings == ["no_evidence", "unverified_semantics"]` from a call that carries no such flag, and `PACKAGE.md` test `C4-06` asserts the same. A flag-only design cannot satisfy §10; a detection-only design contradicts this sentence. Phase 2A implements a **conservative keyword rule** that deliberately over-warns — a spurious `unverified_semantics` costs one enumerable entry, a missed one is the 0.5 severity inversion going unlabelled. If this sentence is meant literally, the fix is an explicit proposer-supplied flag on `propose_type`, which is a change to §5.4. See [`2A-RUN.md`](2A-RUN.md) §4.5, deviation D-6.
+
 ### 2.9 `Consumer` — a registered code path that gates on a predicate
 
 ```
@@ -544,6 +546,8 @@ A project whose thesis is that governed vocabularies resist rot does not ship an
 
 **Adding a value requires amending this section in the same change that introduces it.** A `Refusal` whose `reason` is not in this list is a conformance failure, and the contract suite (`PACKAGE.md` §6) should assert it. Ruling record: [`decisions/2026-08-28-package-v0-rulings.md`](decisions/2026-08-28-package-v0-rulings.md).
 
+> **Recorded by deliverable #3, 2026-08-28 — a conflict this closure creates, ruling wanted.** `PACKAGE.md` §3.4 primitive 10 and contract test `C11-04` require `register_consumer` against a **read-only consumer source** (a checked-in config file) to return a `Refusal` rather than a silent no-op. **None of the fourteen says that honestly** — `proposals_not_stored` is about proposals, `cannot_record_override` is about an audit trail, and reusing either is the confident wrong answer Rule U forbids. Phase 2A therefore **raises `NotSupported`**, which is a loud failure and satisfies what `C11-04` is actually about, and records the conflict rather than adding a fifteenth value unilaterally. **Ruling wanted: add a fifteenth reason (e.g. `consumer_source_read_only`), amending this section in the same change per R3 — or confirm the exception.** See [`2A-RUN.md`](2A-RUN.md) §4.1, deviation D-1.
+
 ## 6. Which mechanism this is designed against
 
 **Against A1** ([`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md)): *HHS's dominant mechanism is **1 + 3 together** — anyone could add a type with no review, and nothing was ever retired — with contractor rotation as the named cause. Collision (4) is present but not dominant. Silent per-consumer drop (C) is present but unobserved by the office, because no existing tool surfaces it.*
@@ -759,6 +763,17 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 | **Q7a ruled *do-not-file*** (A4) | Tenshen's rot sensor is gone | `usage()` becomes the **only** evidence path for the venture's core bet — which contortion 2 says Tenshen currently cannot supply. `last_used_at` in beacon becomes load-bearing |
 | **A5's relaxation is not confirmed** by the founder | 2A cannot gate 2B | Ordering changes, not this interface |
 | **A domain expert says the proposals are organised wrongly** even when factually correct | 0.5's unmeasured Score 3 lands badly | The `Evidence`/`warnings` machinery is insufficient — the gap is in the *proposal*, not the registry, and Phase 3 is affected more than Phase 1 |
+
+**Recorded by deliverable #3 (Phase 2A), 2026-08-28.** The reference implementation landed with **fourteen deviations, all in [`2A-RUN.md`](2A-RUN.md) §4** rather than silently resolved. Those that touch *this* document, for its next revision:
+
+- **`TypeEntry.warnings` is not in §2.1's field table**, yet §5.4, §5.5 and §5.9 all describe returned entries carrying warnings and `PACKAGE.md` stores them. Implemented as a top-level field (D-3).
+- **`Provenance` needs a `history_why`** — `PACKAGE.md` §3.4 primitive 15 requires an empty `history` to carry a `why`, and §2.4 has nowhere to put it (D-4).
+- **`TypeListing` needs `excluded_unknown`** — `C6-05` requires the count of types excluded from an `orphaned=` filter *because their orphan state is unknown* to be reported, and §5.6's four fields cannot (D-5).
+- **`Resolution.alternatives` is typed `tuple[str, float]`**, but §5.5 asks for a prior rejection to surface there and nothing scored it. Implemented as `tuple[str, float | None]`; `0.0` would be Rule U's forbidden zero (D-12).
+- **`merge_types` takes one `namespace`**, which makes a cross-namespace merge unexpressible and refusal #4 unreachable. One additive keyword, `into_namespace` (D-7).
+- **§2.5 states the Foundry status mapping but no §5 call performs it**, while `PACKAGE.md`'s C12 group tests it. Landed as `Registry.import_types`, a method beyond the twelve (D-8).
+- **`propose_type` and `reject` can return a `Refusal`** — required by `PACKAGE.md` §3.6 and §5.3, absent from §5.4 and §5.5's signatures (D-10).
+- **The call count** is unchanged and still wrong somewhere: §0, §5.10 and §13 say *twelve*; enumerating §5.1–§5.11 gives thirteen.
 
 **Also open, independent of the office:**
 
