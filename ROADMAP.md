@@ -222,7 +222,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 |---|---|---|---|
 | 1 | ~~**`docs/INTERFACE.md` v0**~~ — **DONE 2026-08-28** ([`docs/INTERFACE.md`](docs/INTERFACE.md)) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
 | 2 | ~~**`docs/PACKAGE.md` v0**~~ — **DONE 2026-08-28** ([`docs/PACKAGE.md`](docs/PACKAGE.md)) — `open_ontology` package shape, a **fifteen-primitive** storage-adapter protocol, SQLite + Postgres table shapes, the `attributes` schema-per-kind mechanism, and **109 contract tests as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
-| 3 | **Phase 2A** reference implementation, passing the contract tests on CMS data | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") | Opus build, Sonnet mechanical |
+| 3 | ~~**Phase 2A** reference implementation, passing the contract tests on CMS data~~ — **DONE 2026-08-28** ([`docs/2A-RUN.md`](docs/2A-RUN.md)). The repo's first code: 15-primitive adapter, the twelve calls, SQLite **and** Postgres, **all 109 contract tests green on both backends in one run (229 passed, 0 failed, 0 skipped)**, and the CMS design test executing against the pre-registered ground truth | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") — **MET** | Opus build, Sonnet mechanical |
 | 3b | **AsyncStorageAdapter** — async mirror of the 15-primitive protocol + an async run of the same contract suite *(added by ruling R1, [`docs/decisions/2026-08-28-package-v0-rulings.md`](docs/decisions/2026-08-28-package-v0-rulings.md): beacon is `AsyncSession` throughout, so #5 cannot land on the sync adapter)* | **the async gate for #5**; may run alongside #4 | Opus |
 | 4 | **`docs/EDGES.md` v0** — typed relationship store, `neighbors(node, edge_types, depth)` read seam, provenance on edges | Slice 1 (read seam), Slice 2 (`relations`), spec §4.3 provenance | Opus |
 | 5 | **Phase 2B** — Tenshen migration, in beacon | — | beacon program's call |
@@ -247,9 +247,29 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 **Blocking finding for #5, and it is on this line, not beacon's:** **the adapter protocol is synchronous and beacon's data layer is `AsyncSession` throughout.** A sync adapter cannot share beacon's transaction, and driving one from a thread is not safe. `AsyncStorageAdapter` / `AsyncRegistry` is a **prerequisite of #5** and is not yet scheduled — **founder ruling wanted: inside #3's scope, or a new row between #3 and #5?** Two smaller rulings are in `PACKAGE.md` §11.1 (`attribute_census` as a call beyond §5; three new `Refusal.reason` values).
 
-**Known gap, recorded not papered over:** the CMS design test is **specified, not executed** — the 400-row `sample_state.csv` 0.5 actually used is not in the repo and `docs/make_sample.py` regenerates a *different* (300-row random) sample. Checking the public 400-row sample in as a test fixture is a #3 task; the data is public CMS data, so standing constraint 0 argues for it.
+**Known gap, recorded not papered over — ~~open~~ CLOSED by #3 on 2026-08-28:** the CMS design test was **specified, not executed** — the 400-row `sample_state.csv` 0.5 actually used was not in the repo and `docs/make_sample.py` regenerates a *different* (300-row random) sample. The public 400-row sample is now checked in at `open_ontology/contract/fixtures/cms_sample_400.csv` with `tools/make_sample_state.py` to regenerate it, and the CMS test runs. The source file re-downloaded on 2026-08-28 is byte-for-byte the size the ground truth records, so the fixture is the sample 0.5 actually cut.
 
-**Next:** #3, Phase 2A — the reference implementation against the contract suite.
+**Next:** ~~#3, Phase 2A~~ — **shipped 2026-08-28**, see the #3 result below. Next is **#3b** (the async adapter, ruling R1) and **#4, `docs/EDGES.md`**, which may run alongside each other.
+
+---
+
+### Deliverable #3 result — Phase 2A, the reference implementation, 2026-08-28
+
+**What shipped: the repo's first code, and the 2B gate is met.** [`docs/2A-RUN.md`](docs/2A-RUN.md) carries the run record and the exact commands.
+
+**The result in one line:** `229 passed in 49.25s` — **all 109 contract tests green on SQLite *and* on Postgres 16.14, in one process, in one run**, plus the CMS design test executing against the pre-registered ground truth. Zero runtime dependencies in the base install; Python 3.11 floor.
+
+**The CMS design test is no longer specified-but-not-executed.** The 400-row Montana sample is checked in as a fixture and reproduces every pre-registered number exactly: `facility` 10, `survey` 69, `citation` 400, `deficiency_tag` 92, four of the six correction statuses, 0 tags with more than one description (T5), `Location` exactly rebuilt from four sibling columns in **400 of 400** rows (T3), `Processing Date` single-valued (T7). **Eight type rows, not four hundred** — the registry stores types, not instances, and `C13-01` asserts against the reading that would have made the harness commit the T3/T6 failure itself.
+
+**The one [Inferred] count was computed, not asserted.** `PACKAGE.md` §8.2 marks the severity-code count [Inferred] because it was quoted from run **D** — the run that got the ordering backwards — and instructs the test to compute it. Computed independently: **7 distinct codes, B C D E F G J.** That confirms the quotation rather than relying on it.
+
+**The severity case runs end to end.** `INTERFACE.md` §10's worked example, verbatim, as test `C5-03`: a haiku-tier `value_set` proposal asserting *"higher letters are LESS serious"* with no evidence carries `no_evidence` and `unverified_semantics`, is refused for auto-approval with `tier_below_auto_approve_policy`, and if a human approves it anyway stays permanently enumerable.
+
+**Fourteen deviations recorded, none silently resolved** ([`docs/2A-RUN.md`](docs/2A-RUN.md) §4). **One wants a founder ruling: D-1.** `PACKAGE.md` §3.4 and test `C11-04` require `register_consumer` against a read-only consumer source to return a `Refusal`, but ruling **R3** closed `Refusal.reason` at fourteen values and none of them says this honestly. Implemented as a raised `NotSupported` — a loud failure, which is what `C11-04` is actually about — pending a ruling to either add a fifteenth reason (amending `INTERFACE.md` §5.12 in the same change, per R3) or confirm the exception. The other thirteen are fields the docs require but do not list, methods beyond the twelve that a test demands (the Foundry import mapping; `into_namespace`, without which the `cross_namespace_merge` refusal is unreachable), and one genuine internal contradiction: **§2.8 says v0 does not detect a domain semantic automatically, while §10's worked example and `C4-06` require the warning to fall out of the call alone.** Resolved with a conservative rule that over-warns; if §2.8 is meant literally the fix is an explicit proposer flag, which is an `INTERFACE.md` change.
+
+**What this does not establish, stated plainly.** Both reference backends are SQL and both declare every capability `True`. The interesting half of the conformance claim — *an unlike backend with real gaps is conformant without weakening conformance* — is exercised by a degraded-adapter wrapper this repo wrote, not by a third party's store. **The first real test of it is `work_link_types` behind the adapter, which is 2B.**
+
+**Nothing async exists**, per ruling **R1**. Row **3b** remains the blocking prerequisite of **#5**.
 
 ---
 
@@ -257,8 +277,10 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 This is the phase that unlocks Tenshen. **Both tracks start together.**
 
-### 2A — open-ontology reference implementation
+### 2A — open-ontology reference implementation — **DONE 2026-08-28**
 Postgres-backed, built against messy CSV-shaped data. **Not** built against Tenshen's schema.
+
+**Landed:** the `open_ontology` package — 15-primitive adapter, the twelve calls, SQLite and Postgres backends, 109 contract tests green on both in one run, the CMS design test executing. Run record: [`docs/2A-RUN.md`](docs/2A-RUN.md).
 
 ### 2B — Tenshen migration
 `work_link_types` migrates to call the `v0` interface, backed by Tenshen's own tables. **One service, one table — not a rewrite, and not 222 actions.**
