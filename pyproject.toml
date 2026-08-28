@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "open-ontology"
+version = "0.0.0"
+description = "A registry of types, with a proposal->approval loop around every addition."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+# PACKAGE.md 2.4 -- runtime base install is zero dependencies. One driver per backend,
+# one extra for the suite that defines conformance.
+[project.optional-dependencies]
+postgres = ["psycopg>=3.1,<4"]
+contract = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+include = ["open_ontology*"]
+
+[tool.setuptools.package-data]
+"open_ontology.backends" = ["migrations/sqlite/*.sql", "migrations/postgres/*.sql"]
+"open_ontology.contract" = ["fixtures/*.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["open_ontology/contract"]
+markers = [
+    "cms: the CMS design test (PACKAGE.md 8); needs the checked-in 400-row fixture",
+    "nonbinding: asserted but outside the conformance definition (ruling R2)",
+]
