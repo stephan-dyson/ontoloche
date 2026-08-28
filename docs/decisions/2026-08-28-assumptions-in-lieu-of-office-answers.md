@@ -46,7 +46,7 @@ The beacon spec §12 (commit `27a9b712`) records: Tenshen will be rebuilt on top
 
 **Founder direction today:** order open-ontology's work so that rebuild is unblocked as early as possible.
 
-**Reading adopted [Assumed on the interpretation, founder to confirm]:** the two are compatible. §12's condition "working Phase 1 with a real outside user" is **relaxed to "Phase 2A passes contract tests with CMS data as its primary consumer."** CMS public data is the outside consumer; a paying user is not required before Tenshen may depend on the package. The three §12 reasons still bind: the abstraction is derived from messy government data first, Tenshen second; Tenshen's §6 slices proceed independently in beacon and are not waited on; `work_link_types` staying clean is the venture's first experiment.
+**Reading adopted — CONFIRMED by the founder 2026-08-28** ("confirmed. we are going to rebuild tenshen on top of open ontology"): the two are compatible. §12's condition "working Phase 1 with a real outside user" is **relaxed to "Phase 2A passes contract tests with CMS data as its primary consumer."** CMS public data is the outside consumer; a paying user is not required before Tenshen may depend on the package. The three §12 reasons still bind: the abstraction is derived from messy government data first, Tenshen second; Tenshen's §6 slices proceed independently in beacon and are not waited on; `work_link_types` staying clean is the venture's first experiment.
 
 **What it commits the roadmap to:** component order = **what Tenshen's slices consume first.** See `ROADMAP.md` §"Ordering for the Tenshen rebuild".
 
@@ -60,6 +60,6 @@ The beacon spec §12 (commit `27a9b712`) records: Tenshen will be rebuilt on top
 | A2 | 0.2b | ~half of contractor hours are ontology mapping | "What does an engagement actually produce?" |
 | A3 | 0.4 | long queue for a pipeline | "Has anyone tried to automate the uploads?" |
 | A4 | Q7a | file with lint | founder ruling in beacon |
-| A5 | §12 arrow | relaxed to "2A passes contract tests on CMS data" | founder confirms this reading |
+| A5 | §12 arrow | relaxed to "2A passes contract tests on CMS data" | **confirmed 2026-08-28** — now a ruling, not an assumption |
 
 When an office answer arrives, edit the row, tag the change **[Observed]**, and open a roadmap diff — do not silently rewrite the specs.
