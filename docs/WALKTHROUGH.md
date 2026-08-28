@@ -203,7 +203,7 @@ Citation under IIDR | Location | Processing Date
 
 | Pathology | Evidence | Why it is a good test |
 |---|---|---|
-| **A column named like a boolean that is not one** | `Deficiency Corrected` holds three status strings — `Past Non-Compliance`, `Deficient, Provider has plan of correction`, `Deficient, Provider has date of correction`. **No yes/no anywhere** | A mapper that infers type from the column *name* gets this wrong. Exactly the silent-wrongness step 5 exists to catch |
+| **A column named like a boolean that is not one** | `Deficiency Corrected` holds **six** status strings — `Deficient, Provider has date of correction` (408,475), `Past Non-Compliance` (6,115), `Deficient, Provider has plan of correction` (2,638), `Deficient, Provider has no plan of correction` (1,607), `Waiver has been granted` (367), `No revisit needed` (277). **No yes/no anywhere** | A mapper that infers type from the column *name* gets this wrong. Exactly the silent-wrongness step 5 exists to catch |
 | **Temporal anomaly in real data** | **2 of 199 rows have a `Correction Date` earlier than the `Survey Date`** (~1%) | An "overdue" calculation built on these is quietly wrong for 1% of rows. Does the proposal notice, or confidently produce a broken metric? |
 | **Redundant denormalised column** | `Location` re-concatenates address + city + state + ZIP already present in four other columns | Does it propose one Facility, or invent a second entity from the duplicate? |
 | **Entity resolution, unavoidable** | `"BURNS NURSING HOME, INC."` — all-caps, inconsistent punctuation, across ~15,000 facilities, with `CCN` as the true key | This is the *"I already know 38 of these"* claim from step 2, tested against real name variation instead of a friendly example |
