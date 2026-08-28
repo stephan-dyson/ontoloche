@@ -112,7 +112,18 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Exit criterion:** which of the three. This decides Phase 3's shape, not Phase 1's — recorded now because the conversation is free while standing there.
 
-### 0.5 — The proposal-quality test, on public data *(agent-executable; free; needs nobody)*
+### 0.5 — The proposal-quality test — ✅ **RUN 2026-08-28**
+
+**Results:** [`docs/0.5-RESULTS.md`](docs/0.5-RESULTS.md) · ground truth pre-registered first in [`docs/0.5-ground-truth-PREREGISTERED.md`](docs/0.5-ground-truth-PREREGISTERED.md)
+
+**Verdict: the bet survives at the top model tier, and dies at the cheap one.** Four blind agents, four tiers. Structure correct 4/4. Opus made **zero factual errors in 12 checked claims** and recomputed a poisoned metric correctly unprompted; one Sonnet also caught the temporal anomaly and asked the user rather than asserting. **Haiku inverted the CMS severity scale** — turning a worst-violations report into its opposite while every number stayed correct and nothing errored.
+
+**Three consequences:** (1) walkthrough step 5 (impact analysis) is confirmed **load-bearing** — it is the only proposed mechanism that catches a confident wrong answer; (2) **model tier is a product parameter**, not an implementation detail, and belongs in the cost model; (3) **verification against external domain documentation must be in the product**, since the severity inversion was caught by reading CMS, not by inspecting data.
+
+**Not measured, despite being pre-registered:** the correction rate *as a domain expert would judge it*. Factual accuracy was measured instead. The rubber-stamping risk is untouched and still needs a human.
+
+<details>
+<summary>Original task definition (kept for provenance)</summary>
 
 **Tests the single weakest assumption in the whole venture:** that step 2 of [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — the system *proposing* a reading of a file rather than handing the user a schema editor — is right often enough that a domain expert keeps reviewing instead of rubber-stamping. **If the correction rate is high, the product does not work, and no amount of engineering fixes it.**
 
@@ -128,7 +139,9 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Known gap:** the file has no `Inspector` column, so this tests entity resolution on **Facilities** but not on **People**, and the walkthrough's step-4 action has no counterpart. Find a second public source for the person half, or leave it untested and say so.
 
-**PHASE 0 EXIT:** 0.1 (done) and 0.2 answered. **0.5 should run before Phase 1** — it is free, it needs nobody, and a bad result changes the whole plan. 0.3 and 0.4 are desirable, not blocking.
+</details>
+
+**PHASE 0 EXIT:** 0.1 (done) and 0.2 answered. 0.5 (done) — it is free, it needs nobody, and a bad result changes the whole plan. 0.3 and 0.4 are desirable, not blocking.
 
 ---
 
