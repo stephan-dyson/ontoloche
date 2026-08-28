@@ -100,11 +100,24 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 **Why it is the highest-value question here:** it either confirms the product is the mapping layer — small, complementary to the ETL incumbents, and aimed at an existing budget line — or it reveals the hours go to plumbing, in which case Airbyte already solves it and **the venture thesis narrows sharply**.
 
-### 0.3 — Prior art *(thirty minutes)*
+### 0.3 — Prior art — ✅ **COMPLETE 2026-08-28**
+
+**Finding:** [`docs/0.3-prior-art.md`](docs/0.3-prior-art.md)
+
+**Verdict:** **no interface worth matching call-for-call; one vocabulary worth matching field-for-field.** Both candidates are pure *declaration* registries. `foundry-ontology-open`'s `Ontology` class is five `register_*` methods plus `get_linked_types` / `validate_ontology` / `summary` / `to_dict`, with **no** proposal, approval, retirement, usage, provenance or consumer concept. Foundry's public Ontology API is **read-only for type metadata** — `GET .../objectTypes` and `GET .../fullMetadata` exist; creating an object type via API does not, and the open request for it is [palantir/foundry-platform-python#318](https://github.com/palantir/foundry-platform-python/issues/318) (2026-01-19). **The proposal→approval loop has no prior art in either.**
+
+**Three consequences carried into Phase 1:** (1) do **not** copy the `register_*` shape — `propose_type` may return a proposal, which a declaration API cannot express; (2) **do** round-trip Foundry's `status ∈ {active, experimental, deprecated}` against our `proposed | active | retired`, and say how `experimental` reads; (3) carry Foundry's `apiName` / `rid` / `primaryKey` as opaque **provenance**, not as our own fields.
+
+**The practical asymmetry:** a customer can be migrated *off* Foundry through the read API today and *onto* it through no public API at all — so "match Foundry so we can hand data back" is not a real requirement.
+
+<details>
+<summary>Original task definition (kept for provenance)</summary>
 
 Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology-open)'s ObjectType / LinkType / ActionType shapes, and Foundry's own type-registry API surface if reachable.
 
 **Exit criterion:** a one-paragraph note on whether any existing interface is worth matching for migration purposes. Cheap insurance against reinventing a shape someone already got right.
+
+</details>
 
 ### 0.4 — The ingestion question *(one conversation, same visit as 0.2)* — **ANSWERED BY ASSUMPTION A3, 2026-08-28**
 
@@ -147,7 +160,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 </details>
 
-**PHASE 0 EXIT — PASSED BY ASSUMPTION 2026-08-28.** 0.1 and 0.5 done on evidence; 0.2, 0.2b, 0.4 assumed (A1–A3) pending the office visits. **0.3 is still open** and runs alongside Phase 1 as its first prior-art input. Two 0.5 gaps also remain open and are scheduled below: T4 entity resolution on the name-collision slice, and the People half.
+**PHASE 0 EXIT — PASSED BY ASSUMPTION 2026-08-28.** 0.1, 0.3 and 0.5 done on evidence; 0.2, 0.2b, 0.4 assumed (A1–A3) pending the office visits. **0.3 closed 2026-08-28** — its verdict is Phase 1's first prior-art input. Two 0.5 gaps also remain open and are scheduled below: T4 entity resolution on the name-collision slice, and the People half.
 
 ---
 
@@ -200,7 +213,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 | 6 | Actions-registry spec | none yet — Tenshen's actions stay in code (spec §10.7) | later |
 | 7 | **Phase 3** ingestion / mapping | none — the venture's wedge, not Tenshen's need | later |
 
-**Alongside, not gating:** 0.3 prior art (Sonnet, before #1 finalises — cheap insurance against reinventing a shape); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
+**Alongside, not gating:** ~~0.3 prior art~~ **done 2026-08-28, before #1** ([`docs/0.3-prior-art.md`](docs/0.3-prior-art.md)); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
 
 **Rule of the ordering:** nothing in #1–#4 may take a shape *because* Tenshen has it. If a Tenshen need and a CMS-data need conflict, the CMS need wins and the conflict is recorded in the spec — that recorded conflict is Phase 2's exit criterion ("the interface changed at least once") arriving early.
 
