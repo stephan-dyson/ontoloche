@@ -1,6 +1,6 @@
 # Roadmap — open-ontology
 
-**Status:** Draft v0.1, 2026-08-27
+**Status:** Draft v0.2, 2026-08-28 — Phase 0 closed **by assumption**, Phase 1 open, Tenshen-rebuild ordering added. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
 **Priority:** **Top priority, behind CASA/compliance only.** See §0.
 **Companion:** [`VISION.md`](VISION.md) — the thesis, the evidence, and what is not validated.
 
@@ -72,7 +72,9 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 </details>
 
-### 0.2 — The HHS pollution question *(one conversation)*
+### 0.2 — The HHS pollution question *(one conversation)* — **ANSWERED BY ASSUMPTION A1, 2026-08-28**
+
+**[Assumed]** no-review + never-retired dominant (contractor rotation), collision minor, silent-drop present. Phase 1 is written against this; the office visit refines it. Kill criterion not tripped by assumption.
 
 **Re-prioritised by finding 0.1.** Ask in this order — the original pollution question is now third, because 0.1 showed it was not the mechanism that caused harm:
 
@@ -86,7 +88,9 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 **Settle first:** employment terms, conflict-of-interest rules, and procurement ethics if that office could ever be a customer. Be straight that the questions are orientation, because they are.
 
-### 0.2b — What are the contractors actually doing? *(one conversation, highest value in Phase 0)*
+### 0.2b — What are the contractors actually doing? *(one conversation, highest value in Phase 0)* — **ANSWERED BY ASSUMPTION A2, 2026-08-28**
+
+**[Assumed]** all four produced; ontology mapping is the largest share, roughly half. Venture thesis holds provisionally.
 
 **[Observed]** the organisation relies on Palantir-sourced contractors to build ingest, pipelines and transforms. **[Inferred]** that most of those hours go to *mapping raw data into the ontology* rather than to moving bytes — which is the layer Airbyte and dbt do not cover (`VISION.md` §4b).
 
@@ -102,7 +106,9 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Exit criterion:** a one-paragraph note on whether any existing interface is worth matching for migration purposes. Cheap insurance against reinventing a shape someone already got right.
 
-### 0.4 — The ingestion question *(one conversation, same visit as 0.2)*
+### 0.4 — The ingestion question *(one conversation, same visit as 0.2)* — **ANSWERED BY ASSUMPTION A3, 2026-08-28**
+
+**[Assumed]** "a pipeline means a contractor engagement, and the queue is long." Phase 3 is self-serve mapping.
 
 **"Has anyone tried to automate the CSV uploads, and what happened?"**
 
@@ -141,7 +147,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 </details>
 
-**PHASE 0 EXIT:** 0.1 (done) and 0.2 answered. 0.5 (done) — it is free, it needs nobody, and a bad result changes the whole plan. 0.3 and 0.4 are desirable, not blocking.
+**PHASE 0 EXIT — PASSED BY ASSUMPTION 2026-08-28.** 0.1 and 0.5 done on evidence; 0.2, 0.2b, 0.4 assumed (A1–A3) pending the office visits. **0.3 is still open** and runs alongside Phase 1 as its first prior-art input. Two 0.5 gaps also remain open and are scheduled below: T4 entity resolution on the name-collision slice, and the People half.
 
 ---
 
@@ -164,7 +170,7 @@ provenance(type)                  -> who, when, on what evidence
 merge_types(from, into, reason)   -> MUST refuse when the two have different consumer sets [demoted + guarded]
 ```
 
-**`consumers` is required, and provisionally carries the thesis.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught. **That is Tenshen's disease.** Whether it is also HHS's is unknown until §0.2; if HHS reports plain duplicate sprawl, `resolve_type` reclaims the centre and this ordering flips. **Do not write Phase 1 until 0.2 reports** — the call list is stable, the emphasis is not.
+**`consumers` is required, and provisionally carries the thesis.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught. **That is Tenshen's disease.** Whether it is also HHS's is unknown until §0.2; if HHS reports plain duplicate sprawl, `resolve_type` reclaims the centre and this ordering flips. ~~Do not write Phase 1 until 0.2 reports~~ **Gate lifted 2026-08-28 (founder).** Phase 1 is written against A1: **no single call is the centre — the proposal→approval loop is**, with `consumers`, `resolve_type`, lifecycle (`usage`/orphaned/retire) and `propose_type` all first-class. The document header carries *"written against the 2026-08-28 assumptions; see docs/decisions/"*.
 
 **`predicate` is first-class because five of Tenshen's seven vocabularies are predicates, not vocabularies.** A registry that cannot represent "commentable" as distinct from "the type list" will flatten them and assert falsehoods.
 
@@ -177,6 +183,26 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 - Tenshen's `work_link_types` can be expressed in it without contortion — a design *test*, not a design *input*
 
 **Kill criterion:** if Phase 0 shows the dominant mechanism is semantic collision across teams, **stop and redesign** — the merge-centred shape is wrong and shipping it would destroy meaning.
+
+---
+
+## Ordering for the Tenshen rebuild (founder direction 2026-08-28)
+
+**Direction:** sequence open-ontology's components by **what Tenshen's rebuild consumes first.** Tenshen's own cheap version proceeds in the beacon repo per its spec §6 and is **not waited on** (beacon `docs/specs/2026-08-27-ontology-layer-exploration-design.md` §12, commit `27a9b712`). The abstraction is still derived from CMS data first, Tenshen second — Tenshen is the *design test*, never the *design input*.
+
+| # | open-ontology deliverable | Tenshen slice it unblocks | Session model |
+|---|---|---|---|
+| 1 | **`docs/INTERFACE.md` v0** — the type-registry contract (Phase 1) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
+| 2 | **`docs/PACKAGE.md` v0** — the importable package shape: `open_ontology` Python package, a storage-adapter protocol, SQLite and Postgres backends, **the contract-test suite as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
+| 3 | **Phase 2A** reference implementation, passing the contract tests on CMS data | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") | Opus build, Sonnet mechanical |
+| 4 | **`docs/EDGES.md` v0** — typed relationship store, `neighbors(node, edge_types, depth)` read seam, provenance on edges | Slice 1 (read seam), Slice 2 (`relations`), spec §4.3 provenance | Opus |
+| 5 | **Phase 2B** — Tenshen migration, in beacon | — | beacon program's call |
+| 6 | Actions-registry spec | none yet — Tenshen's actions stay in code (spec §10.7) | later |
+| 7 | **Phase 3** ingestion / mapping | none — the venture's wedge, not Tenshen's need | later |
+
+**Alongside, not gating:** 0.3 prior art (Sonnet, before #1 finalises — cheap insurance against reinventing a shape); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
+
+**Rule of the ordering:** nothing in #1–#4 may take a shape *because* Tenshen has it. If a Tenshen need and a CMS-data need conflict, the CMS need wins and the conflict is recorded in the spec — that recorded conflict is Phase 2's exit criterion ("the interface changed at least once") arriving early.
 
 ---
 
@@ -242,7 +268,7 @@ Written now, while it is cheap to be honest.
 0. **No data from the founder's employer is ever used — not to test, not to demo, not to describe in detail.** Not a caution, a hard line. It protects his employment, keeps the venture's evidence base defensible, and removes any characterisation of the work as trading on his access. **Public equivalents exist and are better** (§0.5): reproducible by any reader, which an open-source project's central claims must be. A test that cannot be run on public data is a test this project does not run.
 1. **Do not quit to build this.** The current job is simultaneously the research lab, the customer-discovery channel, and the funding source. What burns savings is building for a long stretch before contact with a user.
 2. **Do not build the general thing before the specific thing works.** Every scaffold in `VISION.md` §8 — 79 stars, two commits — is someone who started with the framework.
-3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — until Phase 3 works for a real outside user. Recorded in the Tenshen spec's §12.
+3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — ~~until Phase 3 works for a real outside user~~ **until Phase 2A passes its contract tests with CMS public data as the primary consumer** (assumption A5, 2026-08-28 — founder to confirm this relaxation). Recorded in the Tenshen spec's §12; that section's three reasons still bind.
 4. **Version everything `v0` and say it is unstable.** An interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.
 5. **Consume the ETL layer; never rebuild it.** Airbyte, dbt, Airflow and Dagster are mature, open source and self-hostable. The gap is the mapping *above* them, which is small and unowned. Rebuilding beneath is how this becomes a decade-long fight it cannot win.
 6. **Tag every claim `[Observed] / [Inferred] / [Assumed]`.** This roadmap's parent document does; a project whose thesis is *provenance and curation* should hold itself to it.
