@@ -263,6 +263,8 @@ Postgres-backed, built against messy CSV-shaped data. **Not** built against Tens
 
 **Shape decided by:** Phase 0.4's answer.
 
+**Provisionally homed here (supervisor assignment 2026-08-28, under the make-assumptions ruling; founder may move it):** **instance resolution** — the walkthrough's *"I already know 38 of these"* — which `docs/INTERFACE.md` §10.3 found belongs to no deliverable. It is the mapping layer's problem (rows → entities), not the type registry's, so it lives with ingestion. **[Assumed]**
+
 **Why after Phase 2, not before:** ingestion without a curation engine fills an ontology faster — building the pollution machine before the filter. `VISION.md` §5 states this directly.
 
 **Exit criterion:** the two people lose the hour a day, and what lands is queryable rather than a pile.
