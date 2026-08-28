@@ -1,6 +1,6 @@
 # Roadmap — open-ontology
 
-**Status:** Draft v0.2, 2026-08-28 — Phase 0 closed **by assumption**, Phase 1 open, Tenshen-rebuild ordering added. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
+**Status:** Draft v0.2, 2026-08-28 — Phase 0 closed **by assumption**, Phase 1 open, Tenshen-rebuild ordering added; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
 **Priority:** **Top priority, behind CASA/compliance only.** See §0.
 **Companion:** [`VISION.md`](VISION.md) — the thesis, the evidence, and what is not validated.
 
@@ -268,7 +268,7 @@ Written now, while it is cheap to be honest.
 0. **No data from the founder's employer is ever used — not to test, not to demo, not to describe in detail.** Not a caution, a hard line. It protects his employment, keeps the venture's evidence base defensible, and removes any characterisation of the work as trading on his access. **Public equivalents exist and are better** (§0.5): reproducible by any reader, which an open-source project's central claims must be. A test that cannot be run on public data is a test this project does not run.
 1. **Do not quit to build this.** The current job is simultaneously the research lab, the customer-discovery channel, and the funding source. What burns savings is building for a long stretch before contact with a user.
 2. **Do not build the general thing before the specific thing works.** Every scaffold in `VISION.md` §8 — 79 stars, two commits — is someone who started with the framework.
-3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — ~~until Phase 3 works for a real outside user~~ **until Phase 2A passes its contract tests with CMS public data as the primary consumer** (assumption A5, 2026-08-28 — founder to confirm this relaxation). Recorded in the Tenshen spec's §12; that section's three reasons still bind.
+3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — ~~until Phase 3 works for a real outside user~~ **until Phase 2A passes its contract tests with CMS public data as the primary consumer** (A5, **confirmed by the founder 2026-08-28**: Tenshen will be rebuilt on top of open-ontology). Recorded in the Tenshen spec's §12; that section's three reasons still bind.
 4. **Version everything `v0` and say it is unstable.** An interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.
 5. **Consume the ETL layer; never rebuild it.** Airbyte, dbt, Airflow and Dagster are mature, open source and self-hostable. The gap is the mapping *above* them, which is small and unowned. Rebuilding beneath is how this becomes a decade-long fight it cannot win.
 6. **Tag every claim `[Observed] / [Inferred] / [Assumed]`.** This roadmap's parent document does; a project whose thesis is *provenance and curation* should hold itself to it.
