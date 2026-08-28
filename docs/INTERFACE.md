@@ -536,6 +536,14 @@ def record_use(type: str, *, by: str | None = None, at: datetime | None = None,
 
 ---
 
+### 5.12 `Refusal.reason` is a closed vocabulary *(added by ruling R3, 2026-08-28)*
+
+A project whose thesis is that governed vocabularies resist rot does not ship an open-ended `reason` string in its own contract. `Refusal.reason` takes exactly these fourteen values — eleven defined in this document, three introduced by [`PACKAGE.md`](PACKAGE.md) v0 and adopted here:
+
+`different_consumer_sets` · `predicate_merge` · `kind_mismatch` · `cross_namespace_merge` · `retired_operand` · `definitions_diverge` · `no_consumer_evidence` · `live_consumers` · `tier_below_auto_approve_policy` · `already_decided` · `unknown_proposal` · `proposals_not_stored` · `cannot_record_override` · `attributes_schema_violation`
+
+**Adding a value requires amending this section in the same change that introduces it.** A `Refusal` whose `reason` is not in this list is a conformance failure, and the contract suite (`PACKAGE.md` §6) should assert it. Ruling record: [`decisions/2026-08-28-package-v0-rulings.md`](decisions/2026-08-28-package-v0-rulings.md).
+
 ## 6. Which mechanism this is designed against
 
 **Against A1** ([`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md)): *HHS's dominant mechanism is **1 + 3 together** — anyone could add a type with no review, and nothing was ever retired — with contractor rotation as the named cause. Collision (4) is present but not dominant. Silent per-consumer drop (C) is present but unobserved by the office, because no existing tool surfaces it.*
