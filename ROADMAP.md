@@ -1,6 +1,6 @@
 # Roadmap — open-ontology
 
-**Status:** Draft v0.2, 2026-08-28 — Phase 0 closed **by assumption**, Phase 1 open, Tenshen-rebuild ordering added; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
+**Status:** Draft v0.3, 2026-08-28 — Phase 0 closed (0.3 done on evidence), **Phase 1 v0 shipped**, Tenshen-rebuild ordering added; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
 **Priority:** **Top priority, behind CASA/compliance only.** See §0.
 **Companion:** [`VISION.md`](VISION.md) — the thesis, the evidence, and what is not validated.
 
@@ -164,9 +164,22 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 ---
 
-## Phase 1 — The interface. One document, no implementation.
+## Phase 1 — The interface. One document, no implementation. — ✅ **v0 SHIPPED 2026-08-28**
 
-**Deliverable:** `docs/INTERFACE.md` — the vocabulary/type registry contract, versioned **`v0` and explicitly labelled unstable**.
+**Deliverable:** [`docs/INTERFACE.md`](docs/INTERFACE.md) — the vocabulary/type registry contract, versioned **`v0` and explicitly labelled unstable**. **Written 2026-08-28 against assumption A1.** All four exit criteria met (checked in its §13).
+
+**What shipped:** twelve calls — the ten the surface below names, plus `approve`/`reject` named and shaped, plus `retire`, plus `register_consumer`/`record_use` (named because `consumers()` and `usage()` are otherwise unimplementable). Data model, model tier as a parameter, and an evidence slot carrying external-documentation citations.
+
+**Two changes to the surface below, both forced by the CMS data, both resolved against Tenshen's needs** ("Rule of the ordering"): (1) **`value_set` added as a kind** — CMS's two most dangerous fields are property value sets (the six-value `Deficiency Corrected`, the ordered A–L severity scale), and without the kind the severity ordering has no provenance and no evidence slot; Tenshen needs no such kind. (2) **`resolve_type` gained a fourth outcome, `not_a_type`** — the 99.988%-redundant `Location` column resolves to `None` under the three-outcome shape, which reads as "go propose it", handing the pollution machine its first type; Tenshen's classifier-sourced candidates cannot hit this case. **This is Phase 2's exit criterion ("the interface changed at least once") arriving in Phase 1.**
+
+**Tenshen test result:** expressible, **seven contortions recorded, none designed away.** Two are structural — `is_symmetric`/`inverse_label` have no home until #4, and `work_link_types` has **no approval step at all** (AI proposals persist immediately), which v0 can only express as `approval_policy="auto"` with `approved_by="auto:classifier"`. Two are findings **for the beacon program**: `usage_count` is a bare counter with no `last_used_at`, so the venture's rot sensor **cannot currently fire**; and nothing registers a consumer, so `consumers()` returns `known: 0` — the very blind spot 0.1 diagnosed.
+
+**Kill criterion checked, not tripped** (§12 of the document): `merge_types` is 1 of 12 calls with four non-overridable refusals, and the mechanism-4 answer is `namespace` — preserve, not merge.
+
+**Next:** deliverable #2, `docs/PACKAGE.md`.
+
+<details>
+<summary>Phase 1 as briefed (kept for provenance)</summary>
 
 **Why this component first, and not the venture's own wedge:** it is the *only* component Tenshen and open-ontology genuinely share, and Tenshen already runs a working instance of it (`work_link_types`: AI proposes a type only when confident none fit; `created_by: seed | ai | user`; usage counted). Ingestion — the venture's ROI wedge — unlocks nothing for Tenshen, which has no CSV problem.
 
@@ -197,6 +210,8 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 **Kill criterion:** if Phase 0 shows the dominant mechanism is semantic collision across teams, **stop and redesign** — the merge-centred shape is wrong and shipping it would destroy meaning.
 
+</details>
+
 ---
 
 ## Ordering for the Tenshen rebuild (founder direction 2026-08-28)
@@ -205,7 +220,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 | # | open-ontology deliverable | Tenshen slice it unblocks | Session model |
 |---|---|---|---|
-| 1 | **`docs/INTERFACE.md` v0** — the type-registry contract (Phase 1) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
+| 1 | ~~**`docs/INTERFACE.md` v0**~~ — **DONE 2026-08-28** ([`docs/INTERFACE.md`](docs/INTERFACE.md)) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
 | 2 | **`docs/PACKAGE.md` v0** — the importable package shape: `open_ontology` Python package, a storage-adapter protocol, SQLite and Postgres backends, **the contract-test suite as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
 | 3 | **Phase 2A** reference implementation, passing the contract tests on CMS data | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") | Opus build, Sonnet mechanical |
 | 4 | **`docs/EDGES.md` v0** — typed relationship store, `neighbors(node, edge_types, depth)` read seam, provenance on edges | Slice 1 (read seam), Slice 2 (`relations`), spec §4.3 provenance | Opus |
