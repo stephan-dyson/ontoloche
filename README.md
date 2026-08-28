@@ -3,7 +3,7 @@
 An open ontology and pipeline layer — typed entities, typed relationships, and
 governed actions that AI agents can safely call.
 
-**Status: pre-code.** This repository currently holds a draft vision only.
+**Status: pre-code, specs in progress.** Phase 0 discovery is closed and Phase 1's interface contract is written. No implementation yet.
 
 ## Start here
 
@@ -15,6 +15,13 @@ governed actions that AI agents can safely call.
   non-technical analyst goes from a spreadsheet to a sent action in five steps, without a
   developer at any point. Read this to argue with the product; read the two above to argue
   with the strategy.
+- [`docs/INTERFACE.md`](docs/INTERFACE.md) — **the Phase 1 deliverable: the type-registry
+  contract, `v0` and unstable.** Twelve calls built around a proposal→approval loop, with
+  `consumers(type)` — *"if I add this, what will silently ignore it?"* — first-class. Includes
+  the Tenshen and CMS design tests, and the conflicts both produced.
+- [`docs/0.3-prior-art.md`](docs/0.3-prior-art.md) — what the two visible prior interfaces
+  actually look like, read on 2026-08-28. Verdict: no interface worth matching call-for-call;
+  Foundry's status vocabulary worth matching field-for-field.
 - [`docs/FINDINGS-0.1-tenshen-archaeology.md`](docs/FINDINGS-0.1-tenshen-archaeology.md) —
   the first piece of real evidence. Seven entity vocabularies in one codebase, traced to
   their origin commits. It changed the interface: **most "duplicate" types are not
