@@ -22,3 +22,15 @@ build/
 *.log
 tmp/
 scratch/
+
+# open-ontology
+# The CMS source file (165 MB) and anything derived from it beyond the checked-in
+# 400-row fixture. Public data, regenerable -- see tools/make_sample_state.py.
+nh_full.csv
+sample_300.csv
+sample_state.csv
+*.sqlite
+*.sqlite3
+*.db
+.pytest_cache/
+*.egg-info/
