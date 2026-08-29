@@ -131,13 +131,21 @@ def main() -> int:
     check("T2.1   the family expresses under 2.2", len(reg.families) == 1)
 
     # T2.2 -- the severity precondition is NOT expressible.
+    # Round 2: this used to assert a construction-time ValueError. The rule now
+    # binds at the DOOR, so it carries a reason and a door like every other one.
     try:
-        Precondition(kind="value_in_set", subject="facility",
-                     why="the facility has a citation in the IJ band")
+        reg.declare(ActionFamily(
+            name="flag_by_severity", namespace="cms", reversibility="reversible",
+            approval_mode="auto",
+            inputs=(InputSpec("facility", "instance", kinds=("entity",)),),
+            preconditions=(Precondition(kind="value_in_set", subject="facility",
+                                        why="the facility has a citation in the IJ band"),)))
         check("T2.2   a value-level precondition is NOT expressible", False, "it was accepted")
-    except ValueError as exc:
+    except DeclarationRefused as exc:
         check("T2.2   a value-level precondition is NOT expressible",
-              "closed at four" in str(exc), str(exc).split("--")[-1].strip())
+              exc.reason == "attributes_schema_violation"
+              and "closed at four" in exc.detail.get("why", ""),
+              f"{exc.reason} at door={exc.detail['door']}")
 
     # T2.3 -- the modelling escape hatch is refused by EDGES 2.4.1, twice.
     try:
