@@ -91,7 +91,9 @@ Eight keys, all in `TypeEntry.attributes`, all governed by one `AttributeSchema`
 
 **Cross-field rules: one, in the shape R18 licensed.** Ruling **R18** accepted `symmetric ⇒ inverse_label is None` as *"the single cross-field rule `approve()` knows about `kind="edge"` attributes"* — explicitly narrowly, explicitly because a rule language is not v0's problem. This document takes exactly one for `kind="action"`:
 
-> **`reversibility="irreversible"` ⇒ `approval_mode` MUST be `"human"`.** A family declaring that it cannot be undone *and* that a model may run it unattended has written the failure mode this project exists to prevent into its own configuration. Refused at declaration: `Refusal(reason="human_approval_required")`, §7.
+> **`reversibility="irreversible"` ⇒ `approval_mode` MUST be `"human"`.** A family declaring that it cannot be undone *and* that a model may run it unattended has written the failure mode this project exists to prevent into its own configuration. Refused at declaration with **`attributes_schema_violation`**, not with a value of its own.
+
+> **The refusal value is R18's own, and the first draft got it wrong.** `PACKAGE.md` §5.6 records R18 as *an exception list of length one inside the attribute-schema mechanism*, and the shipped `edges.family_declaration_problem` returns `attributes_schema_violation` for exactly this shape — *"neither needed a new value; `INTERFACE.md` §5.12 stays at twenty-one"*. This document minted `human_approval_required` for it, which would have made two instances of one ruling return two different reasons. **Found by round 1's integrator lens** (§19); `PACKAGE.md` §5.6's exception list goes to **length two**, one rule per kind, which is the shape R18 licensed. `human_approval_required` survives for the *invocation* door only (§5.2), where it is about an approver rather than about a declaration.
 
 Two candidate second rules were considered and **not** taken, because two is where an exception list becomes a grammar:
 
@@ -100,10 +102,11 @@ Two candidate second rules were considered and **not** taken, because two is whe
 
 | # | rule | exercised by |
 |---|---|---|
-| 2.2-1 | The eight keys are all **required** except `min_auto_tier` and `payload_schema`; a family declaring none of `reversibility` / `approval_mode` is refused rather than defaulted | `C19-26` |
-| 2.2-2 | The one cross-field rule, in **R18**'s shape: `reversibility="irreversible"` ⇒ `approval_mode` MUST be `"human"`, refused at declaration with `human_approval_required` | `C19-27` |
-| 2.2-3 | No `InputSpec` may name `predicate` in `kinds`, at any ref level — `EDGES.md` §2.4.1's general rule inherited, and the `ROADMAP.md` kill row one indirection away | `C19-28` |
-| 2.2-4 | `created_by` and `namespace` are `TypeEntry`'s and are **not** restated in `attributes` | `prose-only:` an absence cannot be exercised by a test that does not know what to look for; the gate that catches a second home for one fact is `check_spec_drift.py` holding the printed shape against the code, which the build row extends |
+| 2.2-1 | **A `kind="action"` entry that declares none of the eight keys is a legal `TypeEntry` and is NOT refused.** It is simply not yet usable as an action family, and `preflight` / `record_invocation` refuse on it with `attributes_schema_violation`. Refusing the *registration* would reject entries `INTERFACE.md` §2.1 says are legal — `edges.family_declaration_problem`'s own recorded decision for the identical case one kind along | `C19-26` |
+| 2.2-2 | A family that declares **some** of the eight must declare `reversibility` and `approval_mode`, and each must be a value of its closed vocabulary; a fourth `approval_mode` or a fifth `reversibility` is `attributes_schema_violation`, never a bare exception | `C19-27` |
+| 2.2-3 | The one cross-field rule, in **R18**'s shape: `reversibility="irreversible"` ⇒ `approval_mode` MUST be `"human"`, refused at declaration with **`attributes_schema_violation`** — R18's own value, not a new one | `C19-28` |
+| 2.2-4 | Every declaration rule binds at **all three** shipped doors — `propose_type`, `approve` and `import_types` — because *a rule with one enforcement point is a rule with one door left open*. On the `import_types` path a `Refusal` is not returnable, so the entry is not written and the caller gets `import_refused:<reason>` | `C19-44` |
+| 2.2-5 | `created_by` and `namespace` are `TypeEntry`'s and are **not** restated in `attributes` | `prose-only:` an absence cannot be exercised by a test that does not know what to look for; the gate that catches a second home for one fact is `check_spec_drift.py` holding the printed shape against the code, which the build row extends |
 
 
 ### 2.3 `inputs` — three reference shapes, and the third is this document's
@@ -141,6 +144,10 @@ InputSpec:
 
 **`predicate` is excluded as an input kind at every ref level, and it is the general rule again.** `EDGES.md` §2.4.1 forbids `kind="predicate"` in any family's `endpoint_kinds`, at either level, because *two predicates being equivalent is a claim about extents* and `ROADMAP.md`'s kill row is one indirection away. **An action taking two predicates as inputs is the same indirection with a verb in front of it** — `merge_capabilities(commentable, searchable)` is the kill row spelled as a tool call. The exclusion is inherited unchanged and stated here so nobody has to derive it: **no `InputSpec` may name `predicate` in `kinds`**, and a family that does is refused at declaration.
 
+> **The rule binds at BOTH layers, and round 1 constructed the kill row through the layer that was missing.** `EDGES.md` §2.4.1 spent an adversarial round establishing that its endpoint rule binds *at declaration and at write*, and this document said it inherited that rule *unchanged* — while enforcing only the declaration half. A reviewer declared a family with `kinds=None`, handed `preflight` two `kind="predicate"` refs, got `verdict="allowed"`, and recorded it `applied`: **`merge_capabilities(commentable, searchable)`, end to end, through the one door this section calls unconstructible.** §17 audited it as shut.
+>
+> **So `preflight` and `record_invocation` both validate every supplied `InputRef` against its `InputSpec`** — ref shape, `kinds`, `families`, and required-but-missing — and refuse with **`input_kind_mismatch`** (§7, the twenty-eighth value, added in this change per **R3**). **A `kind="predicate"` ref is refused whatever the family declared**, exactly as `EDGES.md` §2.4.1 excludes it at both levels: the exclusion is general or it is nothing.
+
 > **Not a back door for gating on predicates, either.** §2.4's `predicate_holds` precondition asks *"does this input's type satisfy predicate P?"* — a question about **one** type's membership, answered by reading `TypeEntry.predicates`, which is `INTERFACE.md` §2.3's own derivation. It never compares two extents, and comparing two extents is what refusal #2 exists to prevent.
 
 ### 2.4 `preconditions` — four kinds, each one existing call, and no query language
@@ -149,7 +156,7 @@ InputSpec:
 
 | kind | asks | answered by |
 |---|---|---|
-| `type_active` | this `TypeRef` is a registered entry with `status="active"` | `resolve_type` / `list_types` |
+| `type_active` | this `TypeRef` is a registered entry with `status="active"` | `list_types` — **and it can answer `True` but not always `False`**; see below |
 | `predicate_holds` | this input's type carries predicate `P` in `TypeEntry.predicates` | `predicates()` / `list_types(predicate=…)` |
 | `edge_exists` | an `active` edge of family `F` links these two inputs | `neighbors(src, [F], depth=1)` |
 | `edge_absent` | **no** such edge exists | the same call, negated |
@@ -161,8 +168,16 @@ Precondition:
     predicate:  str | None          # for predicate_holds
     family:     str | None          # for edge_exists / edge_absent
     object:     str | None          # for edge_exists / edge_absent: the other input's name
+    namespace:  str                 # the FAMILY's namespace, for the edge kinds. Defaults
+                                    #   "default", and MUST be supplied when it is not
     why:        str                 # REQUIRED, non-empty. What this condition protects
 ```
+
+**`namespace` is on the shape because `neighbors` requires it and has no default.** `Registry.neighbors(node, families, depth, *, namespace)` makes it keyword-only **without** a default *"precisely because `"default"` is a wrong answer nobody notices"* — UC3's whole subject. **The printed shape omitted it until round 1**, while the probe kit had silently added it: *"fixed only in the throwaway probe kit"*, which is the failure row 4b names and this row reproduced inside the same document that quotes it. Two readings of the missing field gave **opposite verdicts** on UC3's own fixture — one found the edge, the other returned `edge_family_unknown`.
+
+**`edge_exists` and `edge_absent` search `direction="both"`, and that is a decision.** `EDGES.md` §2.2 records a confident, complete **false negative** produced by filtering a symmetric family on direction, so a precondition that filtered would inherit it. The cost is stated: for a *directed* family, `edge_absent(a, b)` is false when the edge runs `b → a`. That is the conservative answer — it refuses more than it must, never less — and no fixture needs the sharper one. There is deliberately no `direction` key: it is a fifth field on a shape whose whole argument is that it is not a query language.
+
+> **`type_active` cannot use `resolve_type`, and the negative case is Rule U's — contortion ACT6.** `resolve_type` requires a `tier` and a column-shaped `ResolveContext` (§5.1's **ACT2**), and `preflight` has neither. `list_types` has no `name` filter on the façade at all, so the check is a **listing plus a scan above the call** — and `INTERFACE.md` §5.6 makes a filtered `TypeListing` **incomplete**. Therefore: a **hit** is a fact (`holds=True`); a **miss** off an incomplete listing is `holds=None` plus a `why`, because *"we did not find it in the rows we were shown"* is not *"it is not there"*. **[Observed]** by round 1's integrator lens, which asked which of the planned ids it could write and could not write this one. **Q41** asks for a `name` filter on `list_types`, which would make the negative cheap and complete; nothing here takes it.
 
 **`why` is required and non-empty**, on exactly the reasoning `PACKAGE.md` §5.2 gives for `FieldSpec.description` and `INTERFACE.md` §2.1 for a non-empty `definition`: an undescribed condition is how an escape hatch re-forms one level down. A precondition nobody can read is a precondition nobody will ever delete when it stops being true.
 
@@ -181,11 +196,14 @@ Three unrelated surfaces reaching for one missing mechanism is the shape that ea
 | # | rule | exercised by |
 |---|---|---|
 | 2.4-1 | The precondition vocabulary is closed at four kinds; a family declaring a fifth is refused at declaration | `C19-01` |
-| 2.4-2 | Each kind is answered by a call that already exists — `resolve_type` / `predicates` / `neighbors` — and this document adds no call to `INTERFACE.md` §5 | `C19-02` |
+| 2.4-2 | Each kind is answered by a call that already exists — `list_types` / `predicates` / `neighbors` — and this document adds no call to `INTERFACE.md` §5 | `C19-02` |
 | 2.4-3 | `Precondition.why` is required and non-empty | `C19-03` |
 | 2.4-4 | A precondition that does not hold returns `Refusal(reason="precondition_unmet")` naming the failing condition's `subject` and `kind` in `detail`, never a bare `False` | `C19-04` |
 | 2.4-5 | A precondition whose answer is **unknown** — the backend cannot answer it, e.g. `stores_edges=False` under an `edge_exists` — is `None` plus a `why`, and `preflight` refuses rather than treating unknown as satisfied | `C19-05` |
-| 2.4-6 | A value-level condition is not expressible in v0 | `prose-only:` the mechanism has no slot for it, and ruling **R22** routed exactly this question to Phase 3 with contortion 11. Recorded as contortion **ACT4** rather than designed away |
+| 2.4-6 | A `Precondition` whose `subject` or `object` names neither an `InputSpec` nor a literal identity ref is refused **at declaration** with `attributes_schema_violation`, as is a `predicate_holds` with no `predicate` and an edge condition with no `family` — the precondition door is shut where the effect door is | `C19-45` |
+| 2.4-7 | `Precondition.namespace` is the **family's**, and the edge kinds pass it to `neighbors`, which has no default for it | `C19-46` |
+| 2.4-8 | The edge kinds search `direction="both"`; a directed family's `edge_absent` is therefore conservative rather than exact | `C19-47` |
+| 2.4-9 | A value-level condition is not expressible in v0 | `prose-only:` the mechanism has no slot for it, and ruling **R22** routed exactly this question to Phase 3 with contortion 11. Recorded as contortion **ACT4** rather than designed away |
 
 ### 2.5 `effects` — a closed operation vocabulary, and the six calls it excludes
 
@@ -196,9 +214,15 @@ Effect:
     op:         "add_edge" | "retract_edge" | "propose_type" | "host_state"
     family:     str | None      # for add_edge / retract_edge: the edge family
     namespace:  str | None      # for propose_type
-    kind:       str | None      # for propose_type
+    kind:       str | None      # for propose_type. May NOT be "predicate"
     why:        str             # REQUIRED for op="host_state", non-empty. Rule U
 ```
+
+**`namespace` is carried by the edge ops too, not only by `propose_type`.** `Registry` resolves an edge family by `(name, namespace)`, so an effect that names a family without one cannot be checked against the registry — the same hole as §2.4's missing `Precondition.namespace`, one field along, and found in the same round.
+
+**Effect identity is defined, because §3.3's whole mechanism is set containment over these.** Two effects are the same effect when `(op, namespace, family, kind)` match; **`why` is not part of identity** for the three protocol ops, so amending a sentence does not turn one declared effect into two. **`host_state` has no target at all, so its `why` IS its identity** — which means two `host_state` admissions with different prose are two effects, and that cost is stated rather than hidden. Round 1 found `effect_undeclared:host_state:None:None` being printed and the spec's `<op>:<target>` format having no reading for an op with no target.
+
+**`propose_type` may not name `kind="predicate"`, and that is the third predicate door.** A predicate's extent is a set of **types** and `INTERFACE.md` §5.10's refusal #2 is non-overridable. An action permitted to propose one, on a namespace whose policy auto-approves — **[Observed]** UC1's deployment is exactly that policy, `INTERFACE.md` §9 contortion 4 — mints a **live capability set** unattended, at the tier `0.5-RESULTS.md` caught inverting a scale. A reviewer did it against the shipped `Registry` in round 1. Refused at declaration with `effect_not_permitted`.
 
 **Four operations, and the fourth is an admission rather than a capability.** `host_state` means *this action changes something this protocol does not model*, and it carries a mandatory sentence saying what. It exists because the alternative is worse: a family that mutates the host's database and declares `effects: []` is claiming a blast radius of zero, and **an empty list standing in for "we did not look" is what Rule U forbids by name**. `host_state` turns a silent zero into a stated unknown, which is the only honest thing available to a registry that does not own the host's schema.
 
@@ -209,6 +233,8 @@ Effect:
 > **Those six are the governance loop itself.** An action that can `approve` closes the proposal→approval loop with no human in it — mechanism **1** restored through the very layer this document adds. An action that can `merge_types` is `ROADMAP.md`'s kill row wearing a verb. An action that can `register_consumer` can make itself look gated. **An action may PROPOSE; only a human, or an auto-policy a deployment set deliberately, may APPROVE.** That sentence is the line, and `propose_type` is in the vocabulary precisely so the line has a legal side: an ingestion action meeting a new word may say so, and what it says is a request.
 
 A family declaring any of the six is refused **at declaration**: `Refusal(reason="effect_not_permitted")`. Not at invocation. `EDGES.md` §2.4.1 spent a whole adversarial round learning that a rule checked only at write time is a rule a family author opts out of by declaring something permissive, and the lesson transfers without modification: **the door is the declaration.**
+
+> **And "the declaration" is THREE call sites, not one — a round-1 finding that had made §17's kill-row audit false.** The shipped `Registry._edge_family_refusal` is called from `propose_type`, from `approve` **and from `import_types`**, and says why in its own docstring: *"because a rule with one enforcement point is a rule with one door left open — and the thing on the other side of this one is the `ROADMAP.md` kill row."* This document said *"at declaration"* eleven times and named no call, and `import_types` appears nowhere in it. A reviewer imported an **active** `kind="action"` family declaring `merge_types` as an effect *and* breaching §2.2's cross-field rule, through the shipped registry, with no warning at all. **`import_types` returns entries and cannot return a `Refusal`**, so on that path the entry is not written and the caller gets the existing `import_refused:<reason>` warning (`INTERFACE.md` §5.4) — the same treatment the edge path already gives.
 
 **Declared versus observed, and why the record-time failure is a warning rather than a refusal.** The brief for this row offered `effect_undeclared` as a candidate `Refusal.reason`. Driving UC1 through the model moved it (§11):
 
@@ -230,6 +256,8 @@ If `record_invocation` **refused** a report because the host observed an effect 
 | 2.5-5 | The exclusion binds at **declaration** time, not only at invocation time | `C19-10` |
 | 2.5-6 | An observed effect outside the declared set is a **warning** on a recorded invocation, never a refusal that discards the record | `C19-11` |
 | 2.5-7 | An effect naming an edge family that is not a registered `kind="edge"` entry is refused at declaration with `edge_family_unknown` — `EDGES.md` §4.3's existing value, not a new one | `C19-12` |
+| 2.5-8 | `propose_type` may **not** name `kind="predicate"`: a predicate's extent is a set of types and refusal #2 is non-overridable, so an auto-approving namespace would mint live capability sets unattended | `C19-48` |
+| 2.5-9 | Effect identity is `(op, namespace, family, kind)`, with `why` excluded — except for `host_state`, which has no target and whose `why` is its identity | `C19-49` |
 
 ### 2.6 `reversibility` — a declaration, and the honest thing it is not
 
@@ -273,7 +301,11 @@ Invocation:
     outcome:            "applied" | "refused" | "failed" | "compensated"
     refusal:            Refusal | None        # REQUIRED when outcome == "refused"
     gate_verdict:       "allowed" | "refused" | "not_asked"
+    compensates:        str | None            # the invocation_id this one compensates
     compensated_by:     str | None            # the invocation_id that compensated this one
+                                              #   -- DERIVED by the facade; the store holds
+                                              #   only the forward pointer (9)
+    reviewed_at:        datetime | None       # set by an `invocation_reviewed` event. 5.2
     provenance:         InvocationProvenance  # 3.2
     warnings:           list[str]             # INTERFACE 5.4's vocabulary, which this change amends
     attr_schema_version: int | None           # the inputs schema in force when this was written
@@ -308,7 +340,11 @@ InvocationProvenance:
 
 **Invocations are the case where that argument runs the other way.** An invocation *does* have an approval decision, taken by `approval_mode` (§5.2), and the decision has a real subject: either a human approved this use of this verb, or a policy did. So `INTERFACE.md` §2.4's rule is inherited verbatim rather than dropped:
 
-> **`approved_by` is never null on an `applied` invocation.** If no human approved it, the value is `"auto:<policy-name>"`. A record that leaves the field blank invites a reader to assume a human signed off — the rubber-stamping failure `WALKTHROUGH.md` names, arriving through the data model.
+> **`approved_by` is never null on an `applied` invocation *that the gate decided*, and it is NEVER FABRICATED.** When `gate_verdict="allowed"` the value is whatever `preflight` returned — a human's actor id, or `"auto:<policy-name>"`. When the gate was **not asked**, or asked and **refused**, the registry has no approval to record: the field is `None` and the record carries `warnings: ["approval_unrecorded"]`.
+>
+> **The first draft got this exactly backwards and round 1 caught it.** It filled `"auto:<policy>"` on every `applied` invocation, so an `irreversible` / `human` family — the class §2.2's cross-field rule exists to make un-auto-approvable — recorded `outcome="applied"`, `gate_verdict="not_asked"`, `approved_by="auto:action_policy"`, actor `ai:reaper`, **no human and no warning**. That is an approval nobody performed, written into `delete_person`'s ledger: precisely the field `EDGES.md` §5.1 dropped from `EdgeProvenance` because *"a field whose only honest value is a lie should not be on the shape."* A null plus a named warning is the honest third answer the first draft did not look for.
+
+**`created_by` is DERIVED from `created_by_actor`, never passed.** `INTERFACE.md` §2.1: *"The registry reads it off the actor, the way it already reads `ai:` and `seed:`"*, and `derived:<rule>` lands `created_by="derived"` — which is how §13's T3.6 produces its result. Round 1 found `record_invocation`'s printed signature carrying no `created_by` while `InvocationProvenance` required one, and the probe kit inventing a parameter to bridge them.
 
 **Dropped from `Provenance`, each with its reason:** `proposed_by` (the *family* is proposed; an invocation is not), and `imported_from` (an invocation is never imported in v0 — though a host with a year of undo records is exactly the migration this omission blocks, and that is **Q37**).
 
@@ -374,7 +410,7 @@ with three new `event` values — `invocation_recorded`, `invocation_reviewed`, 
 **Two things make it not-nothing, and both are countable rather than rhetorical:**
 
 1. **The refusal is typed and recorded.** `Refusal.reason` is closed (§7), so *"the gate said no"* is a value from a twenty-seven-word vocabulary rather than a free-text log line, and every refusal of every family is one query away.
-2. **Every override is enumerable.** `invocations(gate_verdict="refused", outcome="applied")` returns every case where a host ran something the gate refused. That is the same move `INTERFACE.md` §2.8 makes with `list_types(unverified_semantics=True)`: **the registry cannot stop the thing; it can make the thing countable, and a count is what turns a policy discussion into a measurement.**
+2. **Every override is enumerable — as a floor, not a total.** `invocations(gate_verdict="refused", outcome="applied")` returns the cases where a host ran something the gate refused, and because it is a **filtered** listing it comes back `complete=False` with a `why` (§6.3, Rule K, `INTERFACE.md` §5.6's rule for `TypeListing`). *(The first draft's implementation stamped it `complete=True` through a dead sub-expression — `(not filtered or True)` — in the one query this section asks an operator to act on. Round 1.)* That is the same move `INTERFACE.md` §2.8 makes with `list_types(unverified_semantics=True)`: **the registry cannot stop the thing; it can make the thing countable, and a count is what turns a policy discussion into a measurement.**
 
 **The corollary is uncomfortable and is stated rather than buried:** in a deployment where nobody ever runs that query, this layer's governance value is zero. Its recording value is not — the ledger still exists — but the gate is advisory by construction. **[Assumed]** that an operator who can see the override count will act on it; that assumption is untested, it is the same one `consumers`' `complete: false` friction rests on, and §15 names what would revise it.
 
@@ -396,13 +432,25 @@ A new action family is proposed, resolved against existing ones, approved or rej
 |---|---|---|
 | `auto` | approves, **if** the actor's tier passes `min_auto_tier` and every precondition holds | `"auto:<policy>"` |
 | `review` | approves, and the record is enumerable by `invocations(unreviewed=True)` until an `invocation_reviewed` event is appended | `"auto:<policy>"` |
-| `human` | **refuses** unless `approved_by` names a human actor — one whose id is not prefixed `ai:`, `auto:` or `derived:` | that human's actor id |
+| `human` | **refuses** unless `approved_by` names an actor whose derived `created_by` is `"user"` | that human's actor id |
+
+> **An ALLOWLIST off `created_by`, not a prefix blocklist — round 1 walked through the blocklist four ways.** The first draft refused ids prefixed `ai:`, `auto:` or `derived:`; a reviewer got `bot:reaper`, `svc:cleanup`, `AI:bot` and `nobody` past it, on an `irreversible`/`human` family. `INTERFACE.md` line 58 names the failure by name — *"a `created_by_actor` string convention that nothing validates"* — and the record already carries the derived value, so the honest test is `created_by == "user"` and everything else is refused. A three-item blocklist is the wrong shape for a rule whose whole job is mechanism 1.
 
 **`min_auto_tier` is a product parameter, and the registry compares two opaque strings it did not order.** `INTERFACE.md` §2.7 is explicit — *"v0 does not define the tier vocabulary or the ordering… requires the policy comparison to be supplied by the deployment"* — and this document inherits that posture without softening it. **The registry does not know that `haiku` is below `sonnet`.** A deployment supplies the order; without one, `min_auto_tier` cannot be evaluated and `preflight` reports `tier_floor_why` saying so rather than guessing. **[Assumed], inherited from §2.7:** that a total order over tiers exists per deployment. Untested, and possibly wrong for mixed vendors.
 
 **`min_auto_tier=None` under `approval_mode="auto"` means there is no floor, and it is a legitimate configuration** — a single-tier deployment has nothing to compare. It is **not** a warning value, deliberately: minting one would put a vocabulary entry on a correct configuration. What the caller gets instead is Rule U on the report: `Preflight.tier_floor=None` with `tier_floor_why="the family declares no floor; every tier auto-approves"`. **The honest surface is a stated absence, not an alarm.**
 
 **Below the floor, `preflight` returns `Refusal(reason="tier_below_action_policy")`** — a new value, and §7 argues why `tier_below_auto_approve_policy` is not reused.
+
+**Three states, not two, and the third is `None`.** The comparison is the shipped `TierOrder.below(tier, minimum) -> bool | None`, and the deployment's order is the shipped `NamespacePolicy.tier_order`. `None` — *cannot be told* — has **three** causes and `detail["state"] == "unknown"` with a `why` naming which:
+
+| cause | `why` |
+|---|---|
+| the deployment supplied no order | *"no deployment tier order supplied; the registry does not order tiers (INTERFACE 2.7)"* |
+| no tier was supplied for the actor | *"no tier was supplied for the invoking actor"* |
+| the actor's tier is not in the order | *"tier `<x>` is not in this deployment's order"* |
+
+**All three refuse, and none of them says `false`.** The shipped comment on `TierOrder.below` gives the reason for the second: returning `False` would *"auto-approve an unknown model on the strength of not recognising its name"*. Round 1 found the first draft returning a confident below-the-floor refusal for a tier nobody supplied, and **raising an uncaught `ValueError`** for a tier outside the order — in the one place §5.2 flags mixed vendors as **[Assumed]** and possibly wrong.
 
 ### 5.3 What `min_auto_tier` does NOT decide — ruling R20, restated because it is easy to over-read
 
@@ -420,11 +468,12 @@ So, concretely, for the one host that exists:
 | # | rule | exercised by |
 |---|---|---|
 | 5.2-1 | `approval_mode` is closed at three values; a family declaring a fourth is refused at declaration | `C19-13` |
-| 5.2-2 | `approval_mode="human"` refuses a `preflight` whose `approved_by` is absent or names a non-human actor (`ai:` / `auto:` / `derived:` prefixed) with `human_approval_required` | `C19-14` |
-| 5.2-3 | An actor tier below `min_auto_tier` returns `tier_below_action_policy`, with the family's floor and the actor's tier in `detail` | `C19-15` |
+| 5.2-2 | `approval_mode="human"` refuses a `preflight` whose `approved_by` is absent or whose **derived `created_by` is not `"user"`** — an allowlist, not a prefix blocklist | `C19-14` |
+| 5.2-3 | An actor tier below `min_auto_tier` returns `tier_below_action_policy` with `detail["state"] == "false"`, the family's floor and the actor's tier | `C19-15` |
 | 5.2-4 | `min_auto_tier=None` under `approval_mode="auto"` is a legal configuration reported as `tier_floor=None` plus a `why`, never a warning and never a refusal | `C19-16` |
-| 5.2-5 | The registry never orders tiers itself; with no deployment-supplied order the floor cannot be evaluated and the report says so rather than guessing | `C19-17` |
+| 5.2-5 | The comparison is `bool \| None`, and **all three** unknown causes — no order, no tier, a tier outside the order — refuse with `detail["state"] == "unknown"` and a `why` naming which. None of them raises, and none says `false` | `C19-17` |
 | 5.2-6 | `model_tier` on `InvocationProvenance` is the tier of the **invoking** actor, distinct from the family's own `provenance.model_tier` | `C19-18` |
+| 5.2-7 | `approval_mode="review"` records `approved_by="auto:<policy>"` and the invocation is enumerable by `invocations(unreviewed=True)` until an `invocation_reviewed` event sets `reviewed_at` | `C19-50` |
 
 ---
 
@@ -466,8 +515,14 @@ PreconditionResult:
     condition:     Precondition
     holds:         bool | None    # None = could not be evaluated. Rule U -- NOT False
     why:           str | None     # REQUIRED when holds is None
-    evaluated_by:  str            # "resolve_type" | "predicates" | "neighbors"
+    evaluated_by:  str            # "list_types" | "predicates" | "neighbors"
+                                  #   NOT `resolve_type` -- it needs a tier and a
+                                  #   column-shaped context preflight does not have
 ```
+
+**`preflight` validates its inputs before it evaluates anything.** Every supplied `InputRef` is checked against its `InputSpec` — ref shape, `kinds`, `families`, required-but-missing — and a `kind="predicate"` ref is refused whatever the family declared. `Refusal(reason="input_kind_mismatch")`, §2.3. **This is the layer round 1 walked the kill row through**, and `record_invocation` runs the same check for the same reason.
+
+**`preflight` never raises where it could return.** The shipped `Registry.predicates(of=…)` and `consumers(…)` raise `UnknownType` for an unregistered subject; a `predicate_holds` condition naming one would escape the return type entirely. It is **caught** and becomes `holds=None` plus a `why` — Rule U's unknown, which the verdict then refuses. Round 1 found the escape.
 
 **`preflight` records nothing.** It is a question, it is idempotent, and it may be called a hundred times. A host that wants the question answered *and* the answer recorded calls `record_invocation` with the verdict it received.
 
@@ -523,7 +578,8 @@ InvocationReport:
     invocations:     tuple[Invocation, ...]
     known:           int | None      # None = the backend cannot count. Rule U beats Rule K
     complete:        bool            # False whenever a filter suppressed rows or the
-                                     #   limit truncated the answer
+                                     #   limit truncated the answer -- so EVERY filtered
+                                     #   answer, including 4's override query, is a floor
     why_incomplete:  str | None
     warnings:        list[str]
 ```
@@ -550,11 +606,13 @@ Shape and rules in §10, because the argument for it is the tool-slot ceiling an
 | # | rule | exercised by |
 |---|---|---|
 | 6-1 | `preflight` **records nothing** and is idempotent: calling it N times leaves the invocation store unchanged | `C19-34` |
-| 6-2 | Every `PreconditionResult` carries `evaluated_by` naming the existing call that answered it — §2.4's no-query-language claim, made mechanical | `C19-35` |
+| 6-2 | Every `PreconditionResult` carries `evaluated_by` naming the existing call that answered it, from the closed set `list_types` / `predicates` / `neighbors` — §2.4's no-query-language claim, made mechanical | `C19-35` |
 | 6-3 | `holds=None` is refused, and the refusal's `detail` says **unknown** rather than **false**; unknown is never treated as satisfied | `C19-36` |
 | 6-4 | `record_invocation` does **not** re-evaluate preconditions, and an invocation whose gate refused is recorded rather than discarded | `C19-37` |
 | 6-5 | `InvocationReport.known` is `int | None` and `complete` is `False` whenever a filter suppressed rows or `limit` truncated the answer | `C19-38` |
-| 6-6 | `invocations` does not page | `prose-only:` ruling **R25** routed paging for every listing to Phase 3 *together*; a test asserting the absence of a cursor would pin a decision this document is explicitly not making |
+| 6-6 | `preflight` and `record_invocation` validate every supplied input against its `InputSpec`, and refuse a `kind="predicate"` ref whatever the family declared | `C19-51` |
+| 6-7 | A shipped call that **raises** for an unregistered subject (`predicates`, `consumers`) is caught and becomes `holds=None` plus a `why`; nothing escapes the return type | `C19-52` |
+| 6-8 | `invocations` does not page | `prose-only:` ruling **R25** routed paging for every listing to Phase 3 *together*; a test asserting the absence of a cursor would pin a decision this document is explicitly not making |
 
 
 ---
@@ -622,13 +680,15 @@ Ruling **R5** gives `transaction_scope: "owned" | "savepoint"`. The invocation s
 
 > **When the invocation store and the type store share a connection, `action_transaction_scope` MUST equal `transaction_scope`. A `Capabilities` declaring two different scopes on one connection is non-conformant.**
 
+**`Capabilities.scope_conflict()` RETURNS the sentence; it does not raise** — the shipped method's own contract, *"so a `Capabilities` stays a plain frozen record that a test can construct in any shape it likes"*. Round 1 found the probe kit raising instead, which would have made the rule testable two incompatible ways. **With a third store there are now two independent pairs and `scope_conflict()` returns one sentence**; which one it names when both conflict is unspecified, and is recorded as **Q42** rather than decided here.
+
 `action_store_shares_connection` is the **premise** of that rule and is declared up front rather than discovered. **[Observed]** `EDGES.md` §6's printed block omitted `edge_store_shares_connection` while `PACKAGE.md` §3.2 printed it and the code carried it — *a rule whose premise is unstated is a rule an adapter author can miss by reading* — and that omission cost an adversarial round. Repeating the finding one row later would be worse than the original.
 
 Under `"savepoint"`, a `record_invocation` result carries `not_durable_until_host_commits:<why>` — `INTERFACE.md` §5.4's existing value, unchanged, on one more carrier. **No new warning value**, and the row-3d lesson applies verbatim: it is stamped at the **write** call site and **not** on `invocations`, because a signal that never turns off is noise. And it is stamped by `record_invocation` **itself**, not carried forward from anywhere — `EDGES.md` §6.2 records `retract_edge` getting exactly that wrong, and it is the second time this repo has seen the bug.
 
 | # | rule | exercised by |
 |---|---|---|
-| 8-1 | `stores_invocations=False` makes **every** invocation call return `Refusal(reason="action_store_absent")`, never an empty report | `C19-39` |
+| 8-1 | `stores_invocations=False` makes every call that **reads or writes the invocation store** — `record_invocation` and `invocations` — return `Refusal(reason="action_store_absent")`, never an empty report. `preflight` and `projection` touch no invocation and are unaffected; *"every invocation call"* was undefined until round 1 asked which four | `C19-39` |
 | 8-2 | Every `False` action flag carries a non-empty `Capabilities.why`, and when `stores_invocations` is `False` the other two are **vacuous rather than declined** — `C0-01`'s carve-out shape | `C19-40` |
 | 8-3 | With `action_store_shares_connection=True`, `action_transaction_scope` MUST equal `transaction_scope`; declaring two scopes on one connection is non-conformant | `C19-41` |
 | 8-4 | Under `action_transaction_scope="savepoint"`, `record_invocation` stamps `not_durable_until_host_commits` **itself**, and `invocations` does not | `C19-42` |
@@ -682,14 +742,52 @@ def find_invocations(
     since: datetime | None = None,
     after: tuple[datetime, str] | None = None,   # keyset: (created_at, invocation_id)
     limit: int = 100,
-) -> tuple[tuple[InvocationRecord, ...], bool]: ...   # (page, truncated)
+) -> InvocationPage: ...
+
+@dataclass(frozen=True)
+class InvocationPage:
+    records:        tuple[InvocationRecord, ...]
+    known:          int | None      # None = the BACKEND cannot count. Rule U
+    complete:       bool
+    why_incomplete: str | None
+    next_after:     tuple[datetime, str] | None
 ```
+
+**A `Page`, not a 2-tuple, and the reason is `known`.** §6.3 requires `InvocationReport.known` to be `int | None` because *a backend entitled to say "we did not count" must have somewhere to say it*. A `(page, truncated)` tuple gives the backend nowhere, so the façade could only ever report `len(rows)` — the falsification §6.3 forbids — or `None` by fiat regardless of what the backend knew. **Every other paging primitive in the package already returns this shape** (`EdgePage`, `TypePage`, `ProposalPage`, all with the same five fields); the 2-tuple was a round-1 finding and the fix is to stop being different.
 
 **Keyset-paged on `(created_at, invocation_id)`, the same key row 4b used for edges** — and for the same reason: an offset page over an append-only table shifts under a concurrent write, and an invocation ledger is append-only by construction. The registry does not expose the cursor (R25); the primitive has one so the façade can bound its own reads honestly.
 
 **`compensates` is on the primitive and `compensated_by` is on the surface**, which is one fact stored one way and read the other. The store holds the forward pointer because the compensating invocation is written *after* the one it compensates and a store never rewrites a row (`INTERFACE.md` §5.8); the façade derives the backward pointer. **Stated because the asymmetry is real and a reader who saw only the surface would look for a field the store does not have.**
 
 **`Evidence` and `history` are not on the record.** Evidence goes through `append_event`'s existing path with `invocation_id` set (§3.5), which is where `Provenance.history` already lives (`PACKAGE.md` §3.4 primitive 15). Putting them on `InvocationRecord` would give one concept two homes and would make a backend that stores invocations but not events undescribable.
+
+### 9.1 One amendment to an existing primitive, and it is not free
+
+**Primitive 15 gains an `invocation_id` filter**, and `EventRecord` gains the field it filters on:
+
+```python
+# 15, amended
+def read_events(
+    self, namespace: str, *, kind=None, name=None,
+    proposal_id=None, edge_id=None, invocation_id=None,
+) -> list[EventRecord]: ...
+```
+
+**This is not a fourth primitive and it is not a free change either.** `StorageAdapter` is `runtime_checkable`, and ruling **R30** records that `runtime_checkable` matches on method *names*: adding a **method** silently un-implements the protocol for a third-party backend, while adding a **keyword** to an existing one breaks any backend that implemented the old signature positionally or without `**kwargs`. `EDGES.md`'s `edge_id` made exactly this amendment in row 4b and `PACKAGE.md` §3.4 records what it cost — *"this line was stale for two adversarial rounds… a third-party author implementing `read_events` literally from this block hit a `TypeError` on the first `edge_provenance` call."*
+
+**Round 1 found this document specifying `InvocationProvenance.history`, a `review` mode that reads it, and `read_events` as the way to read it — in a change that never touched `adapter.py`.** Both halves landed in the fix, with `PACKAGE.md` §3.3 and §3.4 amended in the same change and the async mirror regenerated.
+
+### 9.2 The store — table, version and migration
+
+**[Not specified by row #4 either, and that is not a defence.]** `EDGES.md` the spec printed `EdgeRecord` column for column and left the DDL to row 4b; this document does the same for `InvocationRecord`, and states the three things a build row must decide so they are decisions rather than discoveries:
+
+| what | this row's position |
+|---|---|
+| table | `oo_invocation`, the ninth. `oo_event` gains `invocation_id`, which is an `ALTER`, not a recreate |
+| store version | **5**. `PACKAGE.md` §9.2's rule stands: a store from the future is refused, never downgraded |
+| `owns_schema=False` | `oo_invocation`'s column list joins the derived required-columns set that `_sql.py` verifies, exactly as `oo_edge`'s did — a check `PACKAGE.md` §9.3 records as having been added *after* a host store passed `migrate()` and then died on a raw driver error |
+
+**Three fields need a serialisation decision the build row owns:** `inputs` (a dict of refs), the two effect tuples, and `warnings`. `PACKAGE.md` §4.5's `attributes` treatment is the obvious precedent and this row does not pre-empt it.
 
 ---
 
@@ -738,23 +836,29 @@ ProjectionReport:
     surface:          str
     budget:           int
     reserved:         int
-    counts:           dict[str, int]        # families per reachability group. RULE-INDEPENDENT
+    counts:           dict[str, int]        # families DECLARING each group. RULE-INDEPENDENT:
+                                            #   a family in two groups is counted in both
+    admitted:         dict[str, int]        # families CHARGED to each group by `rule` --
+                                            #   one slot each, in the first group they match
     rule:             str                   # "greedy_whole_group" -- 10.4
     order_source:     "caller" | None       # None = no order supplied. Rule U
     fits:             tuple[str, ...]       # groups admitted, in order
     would_evict:      tuple[str, ...]       # groups that do not fit, in order
     over_by:          int                   # 0 when everything fits
     consumers_at_risk: tuple[str, ...]      # consumer ids gating on an evicted family
-    known:            int | None            # families counted. None = backend cannot count
+    known:            int | None            # families this report SELECTED, not the
+                                            #   whole registry. None = cannot count
     complete:         bool                  # Rule K
     why_incomplete:   str | None
 ```
+
+**`counts` and `admitted` are two numbers because `reachability` is a `list`.** A family may declare two groups, and then *"how many families declare `alpha`?"* and *"how many slots does `alpha` cost under this order?"* are different questions with different answers. **Round 1 found `counts` changing with the order** — `{alpha: 2, beta: 2}` unordered, `{alpha: 2, beta: 1}` under one order and the mirror image under the other — which made §10.4's *"the useful half of this call is the counting"* rest on a guarantee that did not hold. No design test found it because **[Observed]** beacon's `ActionSpec.category` is a single string, so the fixture the section was built from cannot exercise it.
 
 **Selection:** every registered, `active`, `kind="action"` family whose `reachability` intersects `order`. `surface` is a label recorded on the report, not a filter — a family does not know which *page* a host assembles, and asking it to would put the host's routing table in the registry.
 
 **With `order=None` the call answers `counts` and nothing else.** `fits` and `would_evict` are empty, `order_source` is `None`, `complete` is `False`, and `why_incomplete` reads *"no order supplied; the registry does not choose which families reach a surface"*. **That is §10.2's rule made structural rather than promised.** The one question this document most obviously *could* have answered — *which 128?* — is the one it is built to be unable to answer.
 
-**Refuses with `action_family_unknown`** when `order` names a group no registered family carries **and** `order` names nothing else either — a projection over an entirely unknown vocabulary is a typo, and an empty report for a typo is mechanism C committed by the call that exists to surface it. When `order` names a mix of known and unknown groups, the unknown ones appear in `counts` with `0` and `complete` goes `False` with a `why`, because a host legitimately assembles a context from groups that happen to be empty today.
+**Refuses with `action_family_unknown`** when `order` names a group **no registered family anywhere carries** — a projection over an entirely unknown vocabulary is a typo, and an empty report for a typo is mechanism C committed by the call that exists to surface it. **The judgement is made against every registered family, not against the `namespace`-filtered pool**: an empty *namespace* is a legitimate scope and answers with zeroes, where an unknown *group* is a misspelling. Round 1 found the filtered version refusing a real projection over an empty namespace. When `order` names a mix of known and unknown groups, the unknown ones appear in `counts` with `0` and `complete` goes `False` with a `why`, because a host legitimately assembles a context from groups that happen to be empty today.
 
 ### 10.4 The admission rule is the host's convention, and the registry does one of them
 
@@ -779,12 +883,14 @@ For every family in `would_evict`, the registry reads the family's `TypeEntry.pr
 | # | rule | exercised by |
 |---|---|---|
 | 10-1 | `reachability` values are opaque strings in the host's vocabulary; the registry never interprets one | `C19-19` |
-| 10-2 | The registry never chooses which families reach a surface — with `order=None` the report carries `counts` only, `order_source=None`, `complete=False` and a `why` | `C19-20` |
-| 10-3 | `counts` is rule-independent and `fits`/`would_evict` are computed under the named `rule`; a caller may use one without the other | `C19-21` |
+| 10-2 | The registry never chooses which families reach a surface — with `order=None` the report carries `counts` only, and **`order_source is None` is the marker**, not `complete`, which is `False` on every projection for the independent reason in rule 10-5 | `C19-20` |
+| 10-3 | `counts` is rule-independent — a family declaring two ordered groups is counted in **both** and charged to **one** (`admitted`), and `counts` is identical under every permutation of `order` | `C19-21` |
 | 10-4 | `rule="greedy_whole_group"` admits groups whole, in the caller's order, until `budget − reserved` is exhausted | `C19-22` |
 | 10-5 | `consumers_at_risk` inherits `ConsumerReport.complete == False` and can never be a complete casualty list | `C19-23` |
 | 10-6 | A projection whose `order` names only groups no family carries is refused with `action_family_unknown`, not answered with an empty report | `C19-24` |
 | 10-7 | The 128 ceiling is a provider's and the registry neither enforces nor assumes it — `budget` is a caller's argument with no default | `C19-25` |
+| 10-8 | `known` is the number of families this report **selected**, not the size of the registry | `C19-53` |
+| 10-9 | An `order` naming groups no registered family carries anywhere is a typo and refuses; a `namespace` that happens to hold no such family is a legitimate scope and answers with zeroes | `C19-54` |
 
 ---
 
