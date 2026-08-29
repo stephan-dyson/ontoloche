@@ -116,6 +116,13 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 #: evidence for.
 _EDGE_PAGE_SIZE = 256
 
+#: EDGES.md 4.3 / ruling **R38**, row 4c. How far the identity closure follows a
+#: successor chain before it stops and says so. A chain this long is a vocabulary in
+#: trouble; the cap exists so a *broken* one -- or a cycle, which INTERFACE.md 5.9 does
+#: not forbid constructing -- cannot make the one read call hang. C0-10's question,
+#: asked of chain-following: *can a broken backend make this loop?*
+_IDENTITY_CHAIN_CAP = 16
+
 #: Rule U applied to an edge's history. `neighbors` and `add_edge` do not fetch
 #: events per edge -- on the 9.7M-degree node EDGES.md 4.2 measures, that is the
 #: whole reason the read seam is bounded -- so an empty `history` on an edge they
@@ -3092,86 +3099,204 @@ class Registry:
             seen_cursors.add(cursor)
         return families, complete, why
 
-    def _merged_with(self, ref: TypeRef) -> tuple[tuple[str, ...], str | None]:
-        """Type names this one is joined to by a MERGE or a retirement with a successor.
+    def _successor_map(
+        self, namespace: str, kind: str, cache: dict
+    ) -> tuple[dict[str, str], str | None]:
+        """``{retired name -> its successor}`` for one ``(namespace, kind)``, paged out.
 
-        ``(names, why the look was partial)`` -- and the names are what `neighbors`
-        cannot see, not what it searched.
+        **One scan per namespace-and-kind, memoised for the whole `neighbors` call**, and
+        that is the difference between R38 being affordable and not. The first version of
+        the merge-awareness code (row 4b's `_merged_with`) did a full paged read of the
+        namespace's retired rows **per node it asked about** -- fine for one origin, and
+        on the 9.7M-degree node EDGES.md 4.2 measures it would be one scan per frontier
+        member at depth 2. The successor relation is a property of the vocabulary, not of
+        the node, so it is read once and walked in memory.
 
-        **The gap this closes was a BLOCKING finding** (row 4b, adversarial round 3).
-        `merge_types` is the registry's sanctioned, routine answer to mechanism 4, which
-        `EDGES.md` 12 calls co-dominant for this row. It retires one word with the other
-        as its `successor` and adds the retired name to the survivor's aliases. **Edges
-        already written under the retired name keep naming it** -- `src`/`dst` are
-        references by identity triple (2.1) and nothing rewrites them -- so a caller who
-        does the CORRECT thing after a merge, resolving to the canonical type and then
-        walking, got `known=0`, **`complete=True`** and an empty `warnings`.
+        Retired rows are the small half of a vocabulary; there is no `successor` filter on
+        `TypeQuery` and there should not be one, because that would put registry policy
+        inside the backend (PACKAGE.md 3.3's rule).
 
-        That is the confident, complete, false negative this document treats as
-        unacceptable everywhere else (2.2's `direction` finding), and it contradicts
-        4.4's own argument for why `complete` may be `True` at all: *"there is no edge
-        that exists in the store and is invisible to a query over it."* Across a merge
-        there is.
-
-        **What this does and does not do.** It makes the report HONEST -- the walk says
-        which other name holds edges it did not search, and `complete` becomes `False`.
-        It does **not** follow the chain and return those edges: doing that silently
-        would change what `neighbors` means, and whether an edge written under a merged
-        word is an edge of its survivor is a decision above this row. Recorded as
-        deviation **D-4b-15** and **Q33**.
+        The second element is Rule U on the LOOK: a backend that could not page its
+        retired rows has not told us there is no merge, only that it could not say.
         """
-        seen: list[str] = []
+        key = (namespace, kind)
+        if key in cache:
+            return cache[key]
+        successors: dict[str, str] = {}
         why: str | None = None
-
-        rec = self.adapter.get_type(ref.namespace, ref.name, kind=ref.kind)
-        if rec is not None and rec.status == "retired" and rec.successor:
-            seen.append(rec.successor)
-
-        # The other direction: a RETIRED word whose successor is this one. There is no
-        # `successor` filter on `TypeQuery` -- it would be registry policy inside the
-        # backend (3.3's rule) -- so the retired rows are read and filtered above,
-        # scoped to this namespace and paged to exhaustion, exactly as the collision
-        # scan does. Retired rows are the small half of a vocabulary.
         after: str | None = None
         cursors: set[str] = set()
         while True:
             page = self.adapter.find_types(
                 TypeQuery(
-                    namespace=ref.namespace,
+                    namespace=namespace,
+                    kind=kind,
                     status="retired",
                     include_retired=True,
                     after=after,
                 )
             )
-            for other in page.records:
-                if other.successor == ref.name and other.name not in seen:
-                    seen.append(other.name)
+            for rec in page.records:
+                if rec.successor:
+                    successors[rec.name] = rec.successor
             if not page.complete and page.next_after is None:
-                why = page.why_incomplete or "the backend could not page the retired types"
+                why = page.why_incomplete or (
+                    "the backend could not page this namespace's retired types"
+                )
                 break
             after = page.next_after
-            if after is None or after in cursors:
+            if after is None:
+                break
+            if after in cursors:
+                # C0-10's question, asked of the identity scan: a backend whose
+                # `next_after` points at rows it has already returned must not make this
+                # hang. It stops and says so, exactly as the edge walk does.
+                why = (
+                    "this backend returned a pagination cursor it had already returned, "
+                    "so the retired rows cannot be read to exhaustion "
+                    "(PACKAGE.md 3.4 primitive 6)"
+                )
                 break
             cursors.add(after)
+        cache[key] = (successors, why)
+        return successors, why
 
-        # And the aliases `merge_types` writes onto the survivor, which name the words it
-        # absorbed. **`stores_aliases=False` does NOT make this a partial look**, and the
-        # first version of this said it did: it set a `why` off that flag, which made
-        # EVERY walk on such a backend `complete=False` -- a signal that never turns off,
-        # which is the exact failure row 3d recorded for the durability warning, produced
-        # here by the fix for a false `complete=True`. Caught by the capability matrix
-        # within the hour.
-        #
-        # The reason it is not a partial look: `merge_types` writes BOTH a successor and
-        # an alias for the same absorption, and the retired-row scan above reads the
-        # successor. Aliases are a second reading of a fact already read, so their
-        # absence subtracts nothing from the merge question. They are still consulted,
-        # because a hand-written alias is one this scan would otherwise miss.
-        if rec is not None and rec.status == "active":
-            for alias in rec.aliases:
-                if alias not in seen and alias != ref.name:
-                    seen.append(alias)
-        return tuple(seen), why
+    def _identity_closure(
+        self, ref: TypeRef, cache: dict
+    ) -> tuple[tuple[TypeRef, ...], bool, str | None]:
+        """Every written name that now denotes ONE identity. Ruling **R38**, row 4c.
+
+        ``(members, followed to the end, why it stopped)``. ``members[0]`` is always the
+        reference the caller gave.
+
+        **What R38 changed, in one sentence:** *an edge endpoint reference resolves to
+        the identity it now belongs to, not to the reference that was written.*
+        `resolve_type` has followed the successor chain since row 3c and calls confidence
+        1.0 on it a **guarantee** (INTERFACE.md 5.3); `neighbors` did not, and one
+        identity model per call is a defect rather than a choice. Row 4b made the report
+        honest about the gap (`endpoint_type_merged`, `complete=False`) and deliberately
+        did not close it, because whether an edge written under a merged word is an edge
+        of its survivor is a decision above that row. R38 is that decision.
+
+        **Why it matters, in the founder's terms:** this is what makes `merge_types`
+        *safe on a store with edges in it*. Without it a merge silently orphans every
+        edge ever written against the merged-away name, and the caller who does the
+        correct thing -- resolve to the canonical type, then walk -- gets the emptiest
+        possible true-looking answer.
+
+        The closure is walked in **both** directions and they are different questions:
+
+        * **forward** -- `assignee` was retired with `owner` as its successor, so a walk
+          from `assignee` is a walk from `owner` (5.3's guarantee, transposed);
+        * **backward** -- a walk from `owner` must find the edges written against
+          `assignee`, which is the direction `merge_types` actually produces and the one
+          a caller reaches after doing the right thing.
+
+        Aliases are consulted too, because `merge_types` writes both a successor and an
+        alias for one absorption and a hand-written alias is one the successor scan would
+        miss. They do not make the look partial when `stores_aliases=False`: the
+        successor is the record, and the alias is a second reading of a fact already
+        read. *(Row 4b learned that the hard way -- keying a `why` off that flag made
+        EVERY walk on such a backend incomplete, a signal that never turns off.)*
+
+        **It stops, and says so, rather than looping.** Three ways a chain can fail to
+        terminate and all three are reachable: a **cycle** (`retire(a, successor=b)` then
+        `retire(b, successor=a)` -- nothing in 5.9 forbids it), a chain longer than
+        ``_IDENTITY_CHAIN_CAP``, and a backend that cannot page its retired rows. The
+        visited set handles the first, the cap the second, and Rule U the third; a walk
+        that stopped early reports `complete=False` with a `why`, and **never** claims to
+        have followed an identity it did not finish resolving.
+        """
+        members: list[TypeRef] = [ref]
+        seen = {ref.name}
+        complete = True
+        why: str | None = None
+        successors, scan_why = self._successor_map(ref.namespace, ref.kind, cache)
+        if scan_why is not None:
+            complete = False
+            why = (
+                "whether this reference is joined to another by a merge or a "
+                "retirement-with-successor could not be determined, so the identity it "
+                "belongs to was not resolved: " + scan_why
+            )
+        predecessors: dict[str, list[str]] = {}
+        for retired, successor in successors.items():
+            predecessors.setdefault(successor, []).append(retired)
+
+        frontier = [ref.name]
+        hops = 0
+        while frontier:
+            hops += 1
+            if hops > _IDENTITY_CHAIN_CAP:
+                complete = False
+                why = why or (
+                    f"the successor chain from {ref} is longer than "
+                    f"{_IDENTITY_CHAIN_CAP} hops, so the identity this reference now "
+                    "belongs to was not resolved to the end and edges under the names "
+                    "beyond it were not searched (EDGES.md 4.3)"
+                )
+                break
+            nxt: list[str] = []
+            for name in frontier:
+                joined = list(predecessors.get(name, ()))
+                if name in successors:
+                    joined.append(successors[name])
+                rec = self.adapter.get_type(ref.namespace, name, kind=ref.kind)
+                if rec is not None and rec.status == "active":
+                    joined.extend(alias for alias in rec.aliases if alias != name)
+                for other in joined:
+                    if other in seen:
+                        # A cycle -- `a` succeeded by `b` succeeded by `a` -- is broken
+                        # here rather than followed. Nothing in INTERFACE.md 5.9 forbids
+                        # constructing one, so the walk must survive it.
+                        continue
+                    if self.adapter.get_type(ref.namespace, other, kind=ref.kind) is None:
+                        # A successor or alias naming nothing is a dangling reference,
+                        # and EDGES.md 2.7's rule applies: it is a fact, not an error.
+                        # There is simply nothing to search under it.
+                        continue
+                    seen.add(other)
+                    members.append(TypeRef(ref.namespace, ref.kind, other))
+                    nxt.append(other)
+            frontier = nxt
+        return tuple(members), complete, why
+
+    def _expand_frontier(
+        self, nodes: Sequence[NodeRef], cache: dict
+    ) -> tuple[dict, bool, str | None]:
+        """One frontier, widened to the identities its members now belong to. **R38**.
+
+        ``{adapter key -> the reference it was reached under, or None}``. R38's rule
+        applies at every hop and not only at the origin: an edge two hops out whose far
+        endpoint was merged is orphaned in exactly the same way, and a rule that held for
+        the first hop and not the second would be the *"one identity model per call"*
+        defect moved one level down.
+
+        **A method rather than a closure inside `neighbors`, and that is not style.**
+        `tools/unasync.py` cannot prove where to await a NESTED function that becomes a
+        coroutine -- its name is neither a method attribute nor a module-level name -- so
+        it emitted `async def` with every call left un-awaited. It refuses that shape as
+        of row 4c; this is the shape it accepts.
+        """
+        out: dict = {}
+        ok = True
+        reason: str | None = None
+        for member in nodes:
+            written = type_of(member)
+            closure, closed, closure_why = self._identity_closure(written, cache)
+            if not closed:
+                ok = False
+                reason = reason or closure_why
+            for ref in closure:
+                stand_in = (
+                    InstanceRef(ref, member.id)
+                    if isinstance(member, InstanceRef)
+                    else ref
+                )
+                key = node_key(stand_in)
+                if key not in out:
+                    out[key] = None if ref == written else str(stand_in)
+        return out, ok, reason
 
     def add_edge(
         self,
@@ -3916,28 +4041,39 @@ class Registry:
                     warnings.append(f"edge_family_retired:{fam.name}")
 
         origin_type = type_of(node)
-        # EDGES.md 4.3, rule 4.3-14. Cheap: one paged read of this namespace's retired
-        # rows, and only for the origin -- a frontier node reached at depth 2 was
-        # reached BY a stored edge, so its name is the name the store holds.
-        merged, merged_why = self._merged_with(origin_type)
-        if merged:
+        # ---- ruling **R38**: the walk FOLLOWS the successor chain (EDGES.md 4.3-14).
+        #
+        # `resolve_type` has followed it since row 3c and INTERFACE.md 5.3 calls the
+        # confidence-1.0 redirect a GUARANTEE. `neighbors` did not, so one call in this
+        # package resolved a name to the identity it now belongs to and another resolved
+        # it to the reference that was written -- **one identity model per call is a
+        # defect, not a choice**, and R38 rules it for both documents.
+        #
+        # Row 4b made the report honest about the gap and deliberately stopped there
+        # (`endpoint_type_merged`, `complete=False`, D-4b-15, Q33). What that left is a
+        # merge that silently orphans every edge written against the merged-away name --
+        # and the caller who does the CORRECT thing, resolving to the canonical type
+        # before walking, gets the emptiest possible true-looking answer.
+        #
+        # The identity scan is memoised for the whole call: one paged read of the
+        # retired rows per (namespace, kind) touched, walked in memory thereafter. Row
+        # 4b's version did that scan per node it asked about, which is one scan per
+        # frontier member at depth 2 -- on the 9.7M-degree node 4.2 measures, that is the
+        # cost model this seam exists to bound.
+        identity_cache: dict = {}
+        origin_members, identity_complete, identity_why = self._identity_closure(
+            origin_type, identity_cache
+        )
+        if len(origin_members) > 1:
+            # The value keeps its name and changes what it MEANS, and 2.8's table is
+            # amended in the same change per ruling R3: it used to say *"edges under the
+            # other name were NOT searched"* and it now says they were, and are marked.
             warnings.append(f"endpoint_type_merged:{origin_type}")
+        if not identity_complete:
+            # Rule U on the look itself. A closure that stopped early has NOT resolved
+            # the identity, so the walk cannot claim to have searched it.
             complete = False
-            why = why or (
-                f"{origin_type} is joined by a merge or a retirement-with-successor to "
-                + ", ".join(sorted(merged))
-                + ", and edges written under those names are NOT searched: an edge's "
-                "endpoints are references by identity triple (EDGES.md 2.1) and a merge "
-                "rewrites none of them. Walk the other name too (EDGES.md 4.3, Q33)"
-            )
-        elif merged_why:
-            # Rule U on the look itself: a backend that could not page its retired rows
-            # has not told us there is no merge, only that it could not say.
-            complete = False
-            why = why or (
-                "whether this origin's type is joined to another by a merge could not "
-                "be determined: " + merged_why
-            )
+            why = why or identity_why
 
         if self.adapter.get_type(
             origin_type.namespace, origin_type.name, kind=origin_type.kind
@@ -3959,15 +4095,30 @@ class Registry:
         push_direction = "both" if (symmetric or edge_families is None) else direction
 
         seen: dict[str, NeighborEdge] = {}
+        reached_via: dict[str, str | None] = {}
         frontier: list[NodeRef] = [node]
-        visited = {str(node)}
+        # The origin under any of its former names IS the origin, so it is excluded from
+        # `nodes` under all of them. Reporting `assignee#1` as a neighbour of `owner#1`
+        # would say the origin is its own neighbour, which is the same false statement
+        # `nodes` excludes the origin to avoid.
+        origin_written = {
+            str(InstanceRef(ref, node.id) if isinstance(node, InstanceRef) else ref)
+            for ref in origin_members
+        }
+        visited = set(origin_written)
         depth_reached = 0
         bound_hit = False
 
         for level in range(1, depth + 1):
             if not frontier or bound_hit:
                 break
-            frontier_keys = tuple(dict.fromkeys(node_key(n) for n in frontier))
+            expanded, level_closed, level_why = self._expand_frontier(
+                frontier, identity_cache
+            )
+            if not level_closed:
+                complete = False
+                why = why or level_why
+            frontier_keys = tuple(expanded)
             fresh: dict[str, Edge] = {}
             cursor: str | None = None
             cursors_seen: set[str] = set()
@@ -4010,6 +4161,12 @@ class Registry:
                     if not keep:
                         continue
                     fresh[rec.edge_id] = _edge_from_record(rec)
+                    src_k = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
+                    dst_k = (rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id)
+                    # Rule K. The written reference stays on the edge -- nothing here
+                    # edits `src` or `dst` -- and this says which reference the walk
+                    # actually found it under when that is not the one it was given.
+                    reached_via[rec.edge_id] = expanded.get(src_k) or expanded.get(dst_k)
                 if self.max_edges is not None and len(seen) + len(fresh) > self.max_edges:
                     # **Strictly greater, and the `=` in `>=` was a BLOCKING finding**
                     # (row 4b, adversarial round 2). A walk of exactly `max_edges`
@@ -4052,7 +4209,9 @@ class Registry:
                 if self.max_edges is not None and len(seen) >= self.max_edges:
                     bound_hit = True
                     break
-                seen[edge_id] = NeighborEdge(edge=edge, at_depth=level)
+                seen[edge_id] = NeighborEdge(
+                    edge=edge, at_depth=level, via_successor=reached_via.get(edge_id)
+                )
                 new_here += 1
                 for far in (edge.src, edge.dst):
                     if str(far) not in visited:
@@ -4104,7 +4263,14 @@ class Registry:
         # reached -- a triangle's closing edge reaches nobody new, and saying so is Rule
         # U rather than picking one of its ends.
         nodes: list[NodeRef] = []
-        seen_nodes: set[str] = {str(node)}
+        # **Seeded with every reference the origin now answers to, not only the one the
+        # caller wrote** (ruling R38). `nodes` excludes the origin, and after a merge the
+        # origin has more than one written name: an edge found under `assignee#7` while
+        # walking from `owner#7` reaches nobody new, so reporting `assignee#7` in `nodes`
+        # -- or as that edge's `reached` -- would say the origin is its own neighbour.
+        # That is the same false statement the origin exclusion exists to prevent,
+        # produced by the fix for a different one.
+        seen_nodes: set[str] = set(origin_written)
         resolved: list[NeighborEdge] = []
         for ne in edges:
             reached: NodeRef | None = None
