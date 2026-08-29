@@ -142,7 +142,7 @@ The three clauses earn their keep on real fixtures, and the first two pull in op
 | # | rule | exercised by |
 |---|---|---|
 | 2.4.1-1 | A `level="instance"` family accepts only `kind="entity"` endpoints — only an entity has instances, and §1 rules out reification | `C17-09`, `C18-04` |
-| 2.4.1-2 | A `level="type"` family accepts any registered kind except `predicate`, `kind="edge"` included — that is a row of the vocabulary, not a reified instance | `C17-27`, `C18-05` |
+| 2.4.1-2 | A `level="type"` family accepts any registered kind except `predicate`, `kind="edge"` included — that is a row of the vocabulary, not a reified instance | `C17-30`, `C17-27`, `C18-05` |
 | 2.4.1-3 | `predicate` is excluded at **both** levels, as a general rule rather than a family's opt-in — the `ROADMAP.md` kill row is one indirection away | `C17-09` |
 | 2.4.1-4 | All three clauses bind at family-**DECLARATION** time, not only at write time; the write-time check still runs, because an endpoint of the wrong *level* is a caller's mistake rather than the family's | `C17-08`, `C17-09` |
 | 2.4.1-5 | A family whose declaration breaches this section is refused at every door a declaration can arrive through | `C17-09` |
@@ -1018,10 +1018,10 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 | Type-to-type edges (**R7**) | §3. `equivalent_to`, symmetric, non-transitive, non-merging — and the non-merging half checked against the shipped registry |
 | `v0` and "unstable" in the header | Header, line 3 |
 | A design-test section per use case, expected outcomes stated first | §9, §10, §11. **Thirty-four predictions, committed in a separate commit ahead of the results; eleven contortions recorded, none designed away** |
-| An adversarial review loop | §17. **Three rounds, six fresh reviewers, ten BLOCKING and ten MAJOR findings**, every one reproduced by running code. **No round was clean.** Closed at the brief's three-round cap with a convergence note (§17.5), the same way rows 3c and 3d closed. *(Row 4b ran its own loop over the implementation; see [`4B-RUN.md`](../runs/4B-RUN.md) §6.)* |
+| An adversarial review loop | §17. **Three rounds, six fresh reviewers, ten BLOCKING and ten MAJOR findings**, every one reproduced by running code. **No round was clean.** Closed at the brief's three-round cap with a convergence note (§17.5), the same way rows 3c and 3d closed. *(Row 4b runs its own loop over the implementation; whatever [`4B-RUN.md`](../runs/4B-RUN.md) §6 records is the state of it. **This sentence used to say the loop "ran", in a commit whose own `4B-RUN.md` §6 said it had not started** — round-2 finding B6 of THIS document's loop, recurring one row later inside the change that added the process gate meant to catch it. A cross-reference that asserts the other document's content is a claim; one that names it is a pointer.)* |
 | **Implemented** *(row 4b, and not part of row #4's own criteria)* | Adapter primitives **16–18**, the four capability flags and two declarations, store version **4** on both dialects, `add_edge` / `retract_edge` / `neighbors` / `edge_provenance` on the registry, `equivalent_to` seeded, and **39 contract ids** (`C17`, `C18`) across three reference legs in both stacks |
 | Every new `warnings` value goes through `INTERFACE.md` §5.4 in the same change | §2.8. Five added; §5.4 now enumerates sixteen across four carriers |
-| New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | Three added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent`. §5.12 now enumerates eighteen |
+| New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | **Four** added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent` — and `unknown_edge`, which §17.4 records this document's own round 3 adding. §5.12 enumerated **nineteen** at this row's close. *(This cell said "Three… eighteen" until row 4b, disagreeing with §17.4 three sections below it, with `INTERFACE.md` §5.12's own header, and with `types.REFUSAL_REASONS`' comment — a **three-way** mismatch, in the summary table a reader checks before trusting the rest. Exactly §16's own recorded failure mode, on a different number.)* |
 
 ---
 

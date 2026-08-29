@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (28). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (31). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -34,6 +34,8 @@ exactly the shape beacon's `work_link_types` has for two of them (`is_symmetric`
 """
 
 from __future__ import annotations
+
+from dataclasses import replace
 
 import pytest
 
@@ -140,6 +142,25 @@ def test_c17_02_an_edge_record_round_trips_and_a_lost_payload_key_is_absent_not_
     assert edge.attributes == {"description": "the flagship query", "note": "x"}
     assert edge.provenance.confidence == 0.82
     assert edge.provenance.created_by == "user"
+    # Ruling **R20** -- `model_tier` on `EdgeProvenance`. Additive and symmetric
+    # with `Provenance`, and the reason it exists is beacon's
+    # `infer_person_relationships` classifying person pairs with a named cheap tier
+    # and auto-applying at 0.7 -- finding 0.5's failure shape one level down. R20
+    # takes the FIELD and declines the gate. It was threaded end to end and
+    # asserted nowhere until row 4b's first adversarial round.
+    tiered = registry.add_edge(
+        "blocks", task(5), task(6), "ai:classifier",
+        created_by="ai", confidence=0.71, model_tier="haiku",
+    )
+    assert tiered.provenance.model_tier == "haiku"
+    assert tiered.provenance.created_by == "ai"
+    read_back = registry.neighbors(task(5), ["blocks"], 1, namespace="default")
+    assert read_back.edges[0].edge.provenance.model_tier == "haiku", (
+        "and it survives the round trip through the store, not only the return value"
+    )
+    assert edge.provenance.model_tier is None, (
+        "None, not a manufactured default -- nothing scored this one"
+    )
 
     stored = adapter.get_edge(edge.edge_id)
     assert isinstance(stored, EdgeRecord)
@@ -1159,3 +1180,142 @@ def test_c17_29_a_family_that_declared_nothing_is_a_legal_type_and_an_unusable_f
     assert refusal.reason == "attributes_schema_violation"
     assert refusal.detail["missing"] == ["level"]
     assert refusal.detail["rule"] == "EDGES 2.4"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+def test_c17_30_equivalent_to_between_two_edge_families_is_written_not_refused(registry):
+    """EDGES.md 2.4.1's second clause and 3.1's endpoint list, at WRITE time.
+
+    **The rule table mapped this rule to two ids that only read the declaration.** Row
+    4b's first adversarial round found it: `C17-27` asserts that `endpoint_kinds`
+    *contains* `"edge"` and `C18-05` writes only `value_set` endpoints, so nothing in
+    the suite had ever written a `kind="edge"` endpoint. That is the "an id exists but
+    does not exercise the rule it is mapped to" failure ruling **R31** was made to
+    prevent, inside the row that built R31's gate -- and the gate is structurally blind
+    to it, because it verifies that an id exists and not what the id asserts.
+
+    **And the case is not academic**: it is T3.13, which `EDGES.md` 11.3 added
+    specifically because §1 forbade `edge` as an endpoint kind while §3.1 declared it
+    legal three sections later -- *"a contradiction no design test exercised"*, found by
+    both round-1 reviewers by reading, and by neither by running, **because nothing ran
+    it**. Two agencies naming the same real-world relation differently is UC3's own
+    collision shape, one level up from `borough`.
+
+    It is **not** reification. Reification is an edge pointing at an edge *instance*,
+    and 2.4.1's instance clause makes that unconstructible: an `InstanceRef` may only
+    name a `kind="entity"` type. A `kind="edge"` `TypeEntry` is a row of the vocabulary,
+    exactly like an `entity` or a `value_set` row.
+    """
+    concerns = edge_family(
+        registry, "concerns", namespace="dpr",
+        definition="a DPR record concerns a thing",
+    )
+    relates_to = edge_family(
+        registry, "relates_to", namespace="oti_311",
+        definition="a 311 request relates to a thing",
+    )
+    assert concerns.kind == relates_to.kind == "edge"
+
+    src = TypeRef("dpr", "edge", "concerns")
+    dst = TypeRef("oti_311", "edge", "relates_to")
+    written = registry.add_edge(EQUIVALENT_TO, src, dst, "user:dot")
+    assert not isinstance(written, Refusal), written
+    assert written.family == EQUIVALENT_TO
+
+    report = registry.neighbors(src, [EQUIVALENT_TO], 1, namespace="default")
+    assert [str(n) for n in report.nodes] == ["oti_311:edge:relates_to"]
+    assert report.complete is True
+
+    # And the clause that makes it not reification: an InstanceRef may only name a
+    # `kind="entity"` type, so there is no way to construct a reference to an edge
+    # INSTANCE and therefore no edge-about-an-edge.
+    instance_level = registry.add_edge(
+        EQUIVALENT_TO, InstanceRef(src, "1"), InstanceRef(dst, "2"), "user:dot"
+    )
+    assert isinstance(instance_level, Refusal)
+    assert instance_level.reason == "endpoint_kind_mismatch"
+    assert instance_level.detail["problem"] == "level"
+
+    # `predicate` is still refused at this level, and that is the asymmetry the whole
+    # clause turns on: `edge` is legal because 3.1's list includes it, `predicate` is
+    # illegal because 2.4.1 forbids it GENERALLY -- not because this family opted out.
+    seed(registry, "commentable", kind="predicate", definition="a code path accepts it")
+    kill_row = registry.add_edge(
+        EQUIVALENT_TO,
+        TypeRef("default", "predicate", "commentable"),
+        TypeRef("default", "predicate", "commentable"),
+        "user:dot",
+    )
+    assert isinstance(kill_row, Refusal)
+    assert kill_row.reason == "endpoint_kind_mismatch"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+def test_c17_31_find_edges_returns_only_records_incident_to_the_frontier(
+    adapter, make_registry
+):
+    """PACKAGE.md 3.4 primitive 18's own filter, pinned as its own subject.
+
+    `C17-06` does this for the family filter; **nothing did it for `incident_to`**, and
+    row 4b's first adversarial round built an adapter that ignores the frontier entirely
+    and returns every edge of the matching family. It was caught -- by `C17-07`,
+    `C17-17`, `C17-23` and `C18-05`, four tests whose subject is something else. *Caught
+    incidentally* is a weaker claim than *pinned*, and a backend author reading the
+    coverage report cannot tell which of the two they have.
+
+    The same round found the registry's own half of it missing: `_edge_passes` returned
+    `True` unconditionally on the `direction="both"` branch, so its docstring's *"the
+    registry narrows, always"* was false for the direction every caller defaults to.
+    Both halves are asserted here -- the primitive filters, and the registry narrows
+    above a store that does not.
+    """
+    registry = make_registry(adapter)
+    blocks(registry)
+    registry.add_edge("blocks", task(1), task(2), "user:sd")
+    registry.add_edge("blocks", task(90), task(91), "user:sd")  # nowhere near the frontier
+
+    frontier = (("tenshen", "entity", "task", "1"),)
+    page = adapter.find_edges(EdgeQuery(incident_to=frontier))
+    assert len(page.records) == 1
+    for rec in page.records:
+        src = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
+        dst = (rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id)
+        assert src in frontier or dst in frontier, (
+            "every returned record has an endpoint in the frontier it was asked about"
+        )
+
+    # A frontier of several nodes, including one with no edges at all: still only what
+    # is incident, and the node with none contributes none rather than widening the set.
+    wider = adapter.find_edges(
+        EdgeQuery(
+            incident_to=(
+                ("tenshen", "entity", "task", "1"),
+                ("tenshen", "entity", "task", "404"),
+                ("tenshen", "entity", "task", "90"),
+            )
+        )
+    )
+    assert len(wider.records) == 2
+
+    # And the registry's half: a store that ignores the frontier is narrowed above it,
+    # on the default direction as well as on `out` and `in`.
+    class _IgnoresFrontier:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def find_edges(self, q):
+            return self.inner.find_edges(replace(q, incident_to=None))
+
+    blind = make_registry(_IgnoresFrontier(adapter))
+    for direction in ("both", "out", "in"):
+        report = blind.neighbors(
+            task(1), ["blocks"], 1, namespace="default", direction=direction
+        )
+        for ne in report.edges:
+            assert "#1" in (str(ne.edge.src) + str(ne.edge.dst)), (
+                f"direction={direction}: the registry narrows an unfiltered store, "
+                "and `both` is the direction every caller defaults to"
+            )

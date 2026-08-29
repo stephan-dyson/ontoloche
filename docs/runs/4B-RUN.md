@@ -11,9 +11,9 @@
 | | before (row 3e) | after |
 |---|---|---|
 | adapter primitives ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §3.4) | 15 | **18** |
-| contract ids (§6.2) | 150 | **189** |
-| sync suite, one run | `388 passed, 80 skipped` | **`470 passed, 115 skipped`** |
-| async suite, one run | `421 passed, 80 skipped` | **`506 passed, 115 skipped`** |
+| contract ids (§6.2) | 150 | **191** |
+| sync suite, one run | `388 passed, 80 skipped` | **`474 passed, 117 skipped`** |
+| async suite, one run | `421 passed, 80 skipped` | **`510 passed, 117 skipped`** |
 | `Capabilities` flags | 10 + 2 declarations | **14 + 5 declarations** |
 | store schema version | 3 | **4** |
 | `warnings` values (`INTERFACE.md` §5.4) | 20 | **21** |
@@ -21,7 +21,9 @@
 | `check_spec_drift.py` | 15 shapes, 14 calls, 2 vocabularies | **+3 PACKAGE shapes, +1 rule-coverage gate (R31)** |
 | registry facade calls | 14 + 3 package-local | **14 + 3 package-local, and 3 edge calls** |
 
-**Thirty-nine new ids: twenty-nine in `C17` and ten in `C18`.** Nothing here came from a ruling that had not already been made — the whole of row #4's design was ruled in `R17`–`R26` before the row started — so the ratio that matters is a different one: **ten of the twenty-nine `C17` ids exist to hold a BLOCKING finding that row #4's own adversarial loop had already found and fixed *in a throwaway probe kit the package does not import*.** §3 is about that.
+**Forty-one new ids: thirty-one in `C17` and ten in `C18`.** Nothing here came from a ruling that had not already been made — the whole of row #4's design was ruled in `R17`–`R26` before the row started — so the ratio that matters is a different one: **ten of `C17`'s ids exist to hold a BLOCKING finding that row #4's own adversarial loop had already found and fixed *in a throwaway probe kit the package does not import*,** and **two more came from row 4b's own loop** (§6). §3 is about the first ten.
+
+> **These numbers were measured, and the first draft of this table did not measure two of them.** It wrote `476 / 512` by arithmetic — the previous run plus two new ids × two new tests — and the suites actually report `474 / 510`, because the new ids skip on `sqlite_minimal`. Nothing turned on the difference, which is exactly why it is worth recording: this repository has been bitten four times by a number in prose that nothing derives, and a *predicted* number is that same defect with better intentions. Caught by re-running rather than by re-reading.
 
 ---
 
@@ -35,23 +37,30 @@ CONFORMANCE (PACKAGE.md 6.1)
   resolver: the shipped DeterministicResolver (2.6's fixed point)
   nonbinding tests excluded from the verdict: none
   coverage, per leg (PACKAGE.md 6.4 / ruling R12):
-    sqlite          CONFORMANT: 186 ids exercised, 1 not exercisable on this backend (listed)
+    sqlite          CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
                       1: PACKAGE.md 5.7 -- this backend stores arbitrary attributes, so a census restricted to its
                         projections has no subject here. C15-02 is the full case.
                          C15-09
-    postgres        CONFORMANT: 186 ids exercised, 1 not exercisable on this backend (listed)
+    postgres        CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
                       1: PACKAGE.md 5.7 -- this backend stores arbitrary attributes, so a census restricted to its
                         projections has no subject here. C15-02 is the full case.
                          C15-09
-    sqlite_minimal  CONFORMANT: 74 ids exercised, 113 not exercisable on this backend (listed)
-                      32: PACKAGE.md 3.2 -- this backend declares stores_edges=False, which 3.2 says is conformant.
+    sqlite_minimal  CONFORMANT: 74 ids exercised, 115 not exercisable on this backend (listed)
+                      34: PACKAGE.md 3.2 -- this backend declares stores_edges=False, which 3.2 says is conformant.
                         This test needs it as scaffolding, not as its subject: this store is a type registry only: no
                         table holds relationships, so there is nothing to write an edge to and nothing for a neighbour
                         walk to read
-                      22: PACKAGE.md 3.2 -- this backend declares indexes_membership=False, which 3.2 says is
+                         C17-02, C17-03, C17-04, C17-05, C17-06, C17-07, C17-08, C17-11, C17-12, C17-13, C17-14, C17-15,
+                           C17-16, C17-17, C17-18, C17-19, C17-20, C17-21, C17-22, C17-23, C17-24, C17-26, C17-30, C17-31,
+                           C18-01, C18-02, C18-03, C18-04, C18-05, C18-06, C18-07, C18-08, C18-09, C18-10
+                      23: PACKAGE.md 3.2 -- this backend declares indexes_membership=False, which 3.2 says is
                         conformant. [...]
+                         C1-04, C1-09, C10-01, C10-02, C11-01, C12-01, C12-05, C12-06, C17-28, C2-01, C2-03, C2-04,
+                           C2-05, C3-10, C4-08, C6-01, C6-03, C9-01, C9-02, C9-03, C9-04, C9-11, C9-15
                       22: PACKAGE.md 3.2 -- this backend declares stores_proposals=False, which 3.2 says is
                         conformant. [...]
+                         C15-03, C15-06, C17-10, C3-06, C3-07, C4-02, C4-04, C4-05, C5-01, C5-03, C5-04, C5-05, C5-06,
+                           C5-07, C5-08, C5-09, C5-10, C5-11, C6-06, C8-01, C8-02, C8-05
                       21: PACKAGE.md 3.2 -- this backend declares stores_events=False, which 3.2 says is conformant.
                         [...]
                       12: PACKAGE.md 3.2 -- this backend declares stores_attributes=False, which 3.2 says is
@@ -64,12 +73,12 @@ CONFORMANCE (PACKAGE.md 6.1)
                       1: PACKAGE.md 9.3 -- [...] C0-05
     (+2 backend-independent, run once: C0-04, C14-07)
   A conformance claim without its coverage line is not a claim (ruling R12).
-470 passed, 115 skipped in 170.66s (0:02:50)
+474 passed, 117 skipped in 150.34s (0:02:30)
 ```
 
-*(The five long `requires_capability` reasons are elided with `[...]` only where they are unchanged from [`3E-RUN.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/runs/3E-RUN.md) §2.1; the new ones are printed in full. The run prints all of them.)*
+*(Reasons unchanged from [`3E-RUN.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/runs/3E-RUN.md) §2.1 are elided with `[...]`; the new ones and every id list are printed in full. The run itself prints all of them.)*
 
-**`sqlite_minimal` goes 70 → 74 ids exercised and 78 → 113 not exercisable, and both halves of that are the point.** It declares `stores_edges=False` **natively** — `oo_edge` is absent from its SQL, not hidden behind a Python `if` — so 32 `C17`/`C18` ids skip there with the backend's own sentence. The four it *gains* are the ones whose subject IS the declined capability: `C17-01` (every edge call refuses rather than returning an empty report), `C17-25`, `C17-27` and `C17-29`.
+**`sqlite_minimal` goes 70 → 74 ids exercised and 78 → 115 not exercisable, and both halves are the point.** It declares `stores_edges=False` **natively** — `oo_edge` is absent from its SQL, not hidden behind a Python `if` — so 34 `C17`/`C18` ids skip there with the backend's own sentence, one more skips for a reason specific to the declaration check, and `C17-28` skips on `indexes_membership` and `C17-10` on `stores_proposals`. The four it *gains* are the ones whose subject IS a declined capability: `C17-01` (every edge call refuses rather than returning an empty report), `C17-25`, `C17-27` and `C17-29`.
 
 ### 2.2 Async — `pytest --pyargs open_ontology.aio.contract -q`
 
@@ -81,12 +90,12 @@ CONFORMANCE (PACKAGE.md 6.1)
   resolver: the shipped DeterministicResolver (2.6's fixed point)
   nonbinding tests excluded from the verdict: none
   coverage, per leg (PACKAGE.md 6.4 / ruling R12):
-    sqlite          CONFORMANT: 186 ids exercised, 1 not exercisable on this backend (listed)
-    postgres        CONFORMANT: 186 ids exercised, 1 not exercisable on this backend (listed)
-    sqlite_minimal  CONFORMANT: 74 ids exercised, 113 not exercisable on this backend (listed)
+    sqlite          CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
+    postgres        CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
+    sqlite_minimal  CONFORMANT: 74 ids exercised, 115 not exercisable on this backend (listed)
     (+2 backend-independent, run once: C0-04, C14-07)
   A conformance claim without its coverage line is not a claim (ruling R12).
-506 passed, 115 skipped in 178.93s (0:02:58)
+510 passed, 117 skipped in 138.78s (0:02:18)
 ```
 
 The async tree is generated by [`tools/unasync.py`](https://github.com/stephan-dyson/open-ontology/blob/main/tools/unasync.py) and `test_generated_matches_source.py` fails if it has drifted. It refused to emit twice during this row and was right both times — see §5, D-4b-7.
@@ -98,21 +107,21 @@ PACKAGE.md 3.2 -- every OPTIONAL capability, declined one at a time.
 required and never declinable: enforces_unique_name, transactional
 
   configuration                  verdict   passed  skipped  failed
-  stores_proposals=False         conformant    168       28       0
-  stores_events=False            conformant    164       32       0
-  stores_attributes=False        conformant    146       50       0
-  stores_aliases=False           conformant    186       10       0
-  indexes_membership=False       conformant    150       46       0
-  counts_usage=False             conformant    182       14       0
-  timestamps_usage=False         conformant    187        9       0
-  owns_schema=False              conformant    190        6       0
-  stores_edges=False             conformant    157       39       0
-  stores_edge_events=False       conformant    189        7       0
-  indexes_edges_by_family=False  conformant    189        7       0
-  stores_edge_attributes=False   conformant    189        7       0
-  no AttributeStore              conformant    183       13       0
-  stores_attributes=False +proj  conformant    146       50       0
-  stores_edge_attributes=F +proj conformant    189        7       0
+  stores_proposals=False         conformant    170       28       0
+  stores_events=False            conformant    166       32       0
+  stores_attributes=False        conformant    146       52       0
+  stores_aliases=False           conformant    188       10       0
+  indexes_membership=False       conformant    152       46       0
+  counts_usage=False             conformant    184       14       0
+  timestamps_usage=False         conformant    189        9       0
+  owns_schema=False              conformant    192        6       0
+  stores_edges=False             conformant    157       41       0
+  stores_edge_events=False       conformant    191        7       0
+  indexes_edges_by_family=False  conformant    191        7       0
+  stores_edge_attributes=False   conformant    191        7       0
+  no AttributeStore              conformant    185       13       0
+  stores_attributes=False +proj  conformant    146       52       0
+  stores_edge_attributes=F +proj conformant    191        7       0
 ```
 
 **Twelve configurations became fifteen**, and the four edge flags are ordinary members of `CAPABILITY_FLAGS` rather than a separate tuple precisely so this script reaches them without being told about them. The fifteenth is beacon finding **U3**'s shape one row down: a host-owned edge table with `description` and `confidence` as real typed columns and no JSON blob.
@@ -155,7 +164,7 @@ So on the morning this row started, every one of those ten was fixed **nowhere a
 | rule | exercised by |
 |---|---|
 | **2.4.1-1** instance level accepts only `entity` endpoints | `C17-09`, `C18-04` |
-| **2.4.1-2** type level accepts any registered kind except `predicate`, `edge` included | `C17-27`, `C18-05` |
+| **2.4.1-2** type level accepts any registered kind except `predicate`, `edge` included | `C17-30`, `C17-27`, `C18-05` |
 | **2.4.1-3** `predicate` excluded at both levels, as a general rule | `C17-09` |
 | **2.4.1-4** all three clauses bind at DECLARATION time; the write-time check still runs | `C17-08`, `C17-09` |
 | **2.4.1-5** a breaching declaration is refused at every door | `C17-09` |
@@ -207,7 +216,10 @@ A checker nobody has watched fail is a checker nobody knows works — row 3e pro
             somebody deleted from the table and left in the prose
 ```
 
-**What the gate does NOT do, stated rather than implied:** it cannot see a rule added to a section's *prose* and never added to that section's *table*. It compares the table to the suite, which is two of the three sides. The third side is what the adversarial loop is for, and `EDGES.md` §17.5 is honest about what that is worth.
+**What the gate does NOT do, stated rather than implied.** Two things, and round 1 of this row's own loop found the second one by walking into it.
+
+1. It cannot see a rule added to a section's *prose* and never added to that section's *table*. It compares the table to the suite, which is two of the three sides.
+2. **It verifies that a named id EXISTS. It cannot verify that the id asserts the rule it is mapped to** — and it never will, because that is a judgement about what a test means, not a fact about a file. Round 1 found rule `2.4.1-2` mapped to two ids, neither of which wrote a `kind="edge"` endpoint: the rule was claimed as exercised and was not. **That is the failure R31 exists to prevent, found inside the row that built R31's gate.** The mapping needs a reader. §6.2 is what the reader found.
 
 ---
 
@@ -236,9 +248,40 @@ A checker nobody has watched fail is a checker nobody knows works — row 3e pro
 
 *(Standing constraint 7. This section is written **after** the loop runs, never before it — row #4's own §17 recorded its exit-criteria table claiming two rounds while §17 recorded one, which was a BLOCKING finding of its round 2. See §6.1 below for the live state.)*
 
+**Protocol** (standing constraint 7; the brief's stop rule): fresh reviewers each round, two per round with **distinct lenses** — one told to *drive the shipped registry through the CMS and NYC fixtures and try to make a broken edge backend pass*, one told to *hold the code against the three specifications and each document against the others*. Neither is told the work passed an earlier round, or who wrote it. **Stop: two consecutive clean rounds, or three rounds plus an honest convergence note.**
+
 ### 6.1 Round log
 
-*Pending — the loop has not run at the time of writing. This sentence is the honest state and is replaced by the log, not deleted.*
+| Round | Reviewers | Verdicts | BLOCKING | MAJOR | Outcome |
+|---|---|---|---|---|---|
+| **1** | real-data lens · coherence lens | SHIP IT · NOT YET | **2** | **1** + 2 MINOR | Both blockers were in the DOCUMENTS, not the code — and one of them is row #4's own round-2 finding recurring inside the commit that added the gate meant to catch it. §6.2 |
+
+### 6.2 Round 1 — what it found
+
+**The split verdict is itself the finding.** The reviewer who *ran* things could not break the implementation: they reproduced every headline number independently against a real Postgres, built **seven** lying adapters — ignore `limit`/`after`, ignore `families` while declaring `indexes_edges_by_family=True`, lose the retraction tombstone, declare `stores_edges=True` and silently no-op every write, truncate while claiming `complete=True`, ignore `include_retracted=False`, ignore `incident_to` entirely — and **every one was driven to `NOT CONFORMANT`**, several by more than one test. They then drove the CMS and NYC fixtures through shapes `C17`/`C18` do not use (mixed symmetric and directed families in one call under `out` and `in`, self-loops, a triangle with both endpoints in the frontier, a retired family through `edge_families=None`, a cross-namespace walk, the assembly bound against real CMS fan-out) and found no wrong answer, no false `complete=True` and no dropped edge. **SHIP IT, one MINOR.**
+
+The reviewer who *read* returned **NOT YET** with two BLOCKING, and both are the failure class this repository keeps paying for.
+
+**B1 — `EDGES.md` §16 said row 4b "ran its own loop", in the same commit whose `4B-RUN.md` §6 said it had not started.** One document asserting the other's content, and the other flatly contradicting it. **This is row #4's own round-2 BLOCKING finding B6 — *"§16 said the loop had run twice when §17 recorded once"* — recurring one row later, inside the change that added ruling R31's process gate.** The gate could not see it: R31 binds §2.4.1, §4.3 and §4.4's rule tables, not §16's prose.
+
+*Resolved* by making the cross-reference a **pointer rather than a claim**: §16 now says what §6 *records* is the state, and carries the recurrence in its own text so the next reader knows it happened twice.
+
+**B2 — rule `2.4.1-2` was mapped to two contract ids, neither of which exercises it.** The rule is *"a `level="type"` family accepts any registered kind except `predicate`, `kind="edge"` included"*. `C17-27` asserts that `equivalent_to`'s declared `endpoint_kinds` *contains* `"edge"`; `C18-05` writes only `value_set` endpoints. **Nothing in the suite had ever written a `kind="edge"` endpoint.** And the case is not academic: it is **T3.13**, which `EDGES.md` §11.3 added specifically because §1 forbade `edge` as an endpoint kind while §3.1 declared it legal three sections later — *"a contradiction no design test exercised"*, found by both of that row's round-1 reviewers **by reading, and by neither by running, because nothing ran it**.
+
+> **This is the failure R31 exists to prevent, found inside the row that built R31's gate — and the gate is blind to it by construction.** `check_spec_drift.py` verifies that a named id *exists*. It cannot verify that the id *asserts the rule it is mapped to*, and it never will: that is a judgement about what a test means. **The mapping needs a reader, and this is what the reader is for.** Recorded in §4 as a named limit of the gate rather than left as a property nobody stated.
+
+*Resolved* by **`C17-30`**, which writes `equivalent_to(dpr:edge:concerns, oti_311:edge:relates_to)` through the shipped registry, reads it back, asserts the instance-level form is still refused (reification stays unconstructible), and asserts `predicate` is still refused at the same level. The rule table now names it first.
+
+**M1 — `EDGES.md` §16 miscounted its own `Refusal.reason` additions, three ways at once.** The exit-criteria table said *"Three added… §5.12 now enumerates eighteen"*, while §17.4 of the same document records its round 3 adding a fourth (`unknown_edge`, the nineteenth), `INTERFACE.md` §5.12's own header says four, and `types.REFUSAL_REASONS`' comment says nineteen. Row 4b had edited two other cells of that same table without noticing the stale one beside them. *Corrected, with the three-way mismatch recorded in the cell.*
+
+**The two MINOR, both taken.**
+
+| # | Finding | Resolution |
+|---|---|---|
+| m1 | **Ruling R20's `model_tier` was threaded end to end and asserted nowhere on the edge path.** The only `model_tier` assertions in the suite are on the type side | Asserted in `C17-02`: written, read back through the store, and `None` rather than a manufactured default when nothing scored the edge |
+| m2 | **`_edge_passes` returned `True` unconditionally on the `direction="both"` branch**, so its own docstring's *"the registry narrows, always"* was false for the direction every caller defaults to. An adapter ignoring `incident_to` was caught — by four tests whose subject is something else, which is a weaker claim than *pinned* | The branch re-checks incidence, and **`C17-31`** pins the primitive's own filter the way `C17-06` pins the family filter. **The regression was reproduced before the fix was believed**: reverting the branch fails `C17-31` and nothing else |
+
+**Two numbers in this document were wrong when round 1 read it**, and neither reviewer caught them — they were found by re-running the suites to write §2's tails: §1 said `476 / 512`, computed by arithmetic from the previous run rather than measured, and the truth is `474 / 510`. Recorded in §1 rather than quietly corrected, because a *predicted* number is the same defect this repository has been bitten by four times, with better intentions.
 
 ---
 
