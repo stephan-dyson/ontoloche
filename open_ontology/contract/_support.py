@@ -464,7 +464,24 @@ def cms_vocabulary(facts: dict) -> list[dict]:
             "name": "issued_during",
             "kind": "edge",
             "definition": "A citation was issued during a survey.",
-            "attributes": {"from": "citation", "to": "survey"},
+            # EDGES.md 2.4's five keys, added by row 4b -- and `from`/`to` STAY,
+            # which is a finding rather than untidiness. `endpoint_kinds`
+            # constrains the KIND of an endpoint and not its TYPE, so it cannot
+            # say "src is a citation and dst is a survey" -- both are entities.
+            # EDGES.md 2.4 motivates `endpoint_kinds` with exactly the claim it
+            # cannot serve ("a citation edge must not accept a facility at the tag
+            # end"), and what CMS actually gets is the entity-vs-value_set
+            # exclusion of 2.4.1. Recorded in 4B-RUN.md; `from`/`to` remain
+            # unvalidated payload, which is where the fact currently lives.
+            "attributes": {
+                "from": "citation",
+                "to": "survey",
+                "level": "instance",
+                "symmetric": False,
+                "inverse_label": "issued",
+                "endpoint_kinds": {"src": ["entity"], "dst": ["entity"]},
+                "payload_schema": None,
+            },
             "uses": facts["citation"],
             "evidence": [_data(f"{facts['citation']} citations, each on exactly one survey")],
         },
@@ -472,12 +489,79 @@ def cms_vocabulary(facts: dict) -> list[dict]:
             "name": "conducted_at",
             "kind": "edge",
             "definition": "A survey was conducted at a facility.",
-            "attributes": {"from": "survey", "to": "facility"},
+            "attributes": {
+                "from": "survey",
+                "to": "facility",
+                "level": "instance",
+                "symmetric": False,
+                "inverse_label": "conducted",
+                "endpoint_kinds": {"src": ["entity"], "dst": ["entity"]},
+                "payload_schema": None,
+            },
             "uses": facts["survey"],
             "evidence": [_data(f"{facts['survey']} surveys, each at exactly one facility")],
         },
     ]
 
+
+
+# ------------------------------------------------------------------- the edge harness
+#
+# UC2 and UC3 through the SHIPPED edge store, for the C18 group. Both read checked-in
+# fixtures: a contract test may not depend on a network, and `2A-RUN.md` 8.4 and
+# `EDGES.md` 11.3 record the same defect twice -- a query with a limit and no order
+# returns an arbitrary window, and a design test whose numbers move between runs is not
+# a design test.
+
+NYC_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "nyc_edge_sample.json"
+
+
+def cms_edges(path: Path = FIXTURE) -> dict:
+    """The three implicit relationships in the 400-row sample, as endpoint pairs.
+
+    `EDGES.md` 10.1 pre-registers the counts and they follow arithmetically from the
+    ground truth in `0.5-ground-truth-PREREGISTERED.md`: 10 facilities, 69 surveys, 400
+    citations, 92 deficiency tags, therefore 400 `issued_during`, 69 `conducted_at` and
+    400 `cites` edges over 92 distinct destinations. Computed here rather than
+    hard-coded, and asserted against the pre-registered numbers in `C18-01`.
+    """
+    header, rows = read_sample(path)
+    at = {name: i for i, name in enumerate(header)}
+    ccn, date, kind = (
+        at["CMS Certification Number (CCN)"],
+        at["Survey Date"],
+        at["Survey Type"],
+    )
+    tag = at["Deficiency Tag Number"]
+
+    issued_during: list[tuple[str, str]] = []
+    conducted_at: set[tuple[str, str]] = set()
+    cites: list[tuple[str, str]] = []
+    for index, row in enumerate(rows):
+        survey = f"{row[ccn]}|{row[date]}|{row[kind]}"
+        citation = str(index)
+        issued_during.append((citation, survey))
+        conducted_at.add((survey, row[ccn]))
+        cites.append((citation, row[tag]))
+    return {
+        "issued_during": issued_during,
+        # A set, because 400 rows describe 69 surveys: the edge is one fact per survey,
+        # and writing it 400 times would be 400 facts about the same thing.
+        "conducted_at": sorted(conducted_at),
+        "cites": cites,
+    }
+
+
+def nyc_edge_sample(path: Path = NYC_FIXTURE) -> dict:
+    """The pinned UC3 sample. Written by `docs/tools/pin_nyc_edge_sample.py`.
+
+    Carries its own provenance: the three dataset ids, each source's own
+    ``data_updated_at`` and the retrieval date -- so `EdgeProvenance.source_version` has
+    something true to say, which is the whole point of `EDGES.md` 5.3 taking that field.
+    """
+    import json
+
+    return json.loads(path.read_text(encoding="utf-8"))
 
 def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
     """Load the sample's vocabulary through the adapter and record its instance counts.

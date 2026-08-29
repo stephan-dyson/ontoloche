@@ -275,13 +275,22 @@ SPECS: tuple[FileSpec, ...] = (
     FileSpec(
         source="open_ontology/contract/_support.py",
         target="open_ontology/aio/contract/_support.py",
-        # The 153 KB CMS fixture is checked in once, under the sync suite, and read
-        # from where it lives. The generated copy sits elsewhere in the tree, so the
-        # only thing that changes is how it gets there -- not which file it reads.
+        # The two checked-in fixtures -- the 153 KB CMS sample and the pinned NYC edge
+        # sample -- live once, under the sync suite, and are read from where they live.
+        # The generated copy sits elsewhere in the tree, so the only thing that changes
+        # is how it gets there, not which file it reads.
+        #
+        # Anchored at the line start since row 4b: `NYC_FIXTURE = Path(...)` ends with
+        # the same text, so the unanchored pattern matched twice and the generator
+        # refused to guess which -- which is the behaviour that makes it trustworthy.
         pre_substitutions=(
             (
-                r'FIXTURE = Path\(__file__\)\.resolve\(\)\.parent / "fixtures"',
+                r'^FIXTURE = Path\(__file__\)\.resolve\(\)\.parent / "fixtures"',
                 'FIXTURE = Path(__file__).resolve().parents[2] / "contract" / "fixtures"',
+            ),
+            (
+                r'^NYC_FIXTURE = Path\(__file__\)\.resolve\(\)\.parent / "fixtures"',
+                'NYC_FIXTURE = Path(__file__).resolve().parents[2] / "contract" / "fixtures"',
             ),
         ),
     ),
