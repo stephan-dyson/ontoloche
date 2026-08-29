@@ -387,6 +387,9 @@ Every round below returned **NOT YET**. Not one finding was dismissed; each was 
 | 9 | INTERFACE | 1 BLOCKING | **`retire(force=True)` lost its audit guard on Tenshen's exact declared shape.** §7.3 B6 says in terms that on a backend with `stores_events=False` a forced retirement returns `Refusal("cannot_record_override")`. The check lived *inside* the `live_consumers` branch — and with `indexes_membership=False` (B3, and B3 says that is *correct*) `gates_on` is always empty, so the branch never ran. [Observed]: a type with a real registered gating consumer retired with **no refusal, no warning and no history**. `merge_types` has had the unconditional form since v0. `C9-08`. |
 | 5 | PACKAGE | 1 BLOCKING, 1 MAJOR | **The kill row itself.** §7.2b. And §3.2's central claim measured for the first time: §7.2c. |
 
+| 10 | INTERFACE | 1 MAJOR | **One fact, four answers.** §5.10 promises *"the old word still resolves"* after a merge; §5.3 says a retired match is never `existing`. Both held — and what reconciled them was an accident: a merge writes the old name into the survivor's `aliases` and the shipped resolver happens to score an exact alias 1.0. `retire(successor=)` writes no alias, and `PACKAGE.md` §2.6 calls a caller's own resolver **the production path**, so the promise held in one of four cells. Now the registry's answer, not the resolver's, down both lifecycle paths. `C3-11`. |
+| 6 | PACKAGE | 1 MAJOR, 1 MINOR | **The first defect found by asking the other question.** §7.4. |
+
 **Four findings, one error.** Round 1's empty `alternatives` for a cross-namespace word, §7.3's `retire` reading an unknowable `gates_on` as *"nothing gates on this"*, round 8's silent tombstone, and §7.2b's unknowable extent comparing *equal* are the same mistake four times: **a confident answer standing in for a fact the system either had in hand or could not have.** Rule U is the rule this project states most loudly and breaks most often in its own implementation. Neither a reviewer's eye nor a contract test caught the family — each instance was found only when someone drove the real registry through a real scenario, which is the practice worth carrying forward.
 
 ### 7.2 The finding that changed the design: `definitions_diverge` was backwards
@@ -443,6 +446,16 @@ That is **mechanism C — the silent per-consumer drop — committed by the call
 2. **The reviewer brief shapes the finding.** Rounds 1–6 produced mostly drift; round 7's brief said *"six rounds found almost nothing about whether the DESIGN survives the three fixtures — push there"*, and it returned the `definitions_diverge` result. A brief that does not say what has already been mined gets what has already been mined.
 3. **Two findings recurred across rounds** (Q4, and the capability-honesty family). The loop's own rule — a finding that recurs is a decision to take, not to defer — was the right call both times.
 4. **The suite was wrong more often than the specs were.** Of the eight contract tests added by this row, six exist because the suite claimed coverage it did not have (`C0-07`, `C0-08`, `C5-12`, `C6-07`, `C9-07`, `C15-08`). A conformance suite that is *the definition of conformance* deserves the same adversarial pressure as the document it enforces.
+
+### 7.4 The question nobody asked for eleven rounds
+
+Every brief carried two halves: *can a legitimate backend **fail** the suite?* and *can a broken backend **pass** it?* **Eleven rounds attacked the first and found five defects. Nobody attacked the second until round 6 on `PACKAGE.md`, and it found one immediately.**
+
+§3.3 gives `TypeQuery` a `limit` and an opaque `after` cursor and `TypePage` a `next_after`, ordered by `(namespace, kind, name)`, and spends real design ink justifying query objects over kwargs on exactly that machinery. **Nothing exercised any of it.** [Observed]: an adapter identical to the reference one except that it silently drops `limit` and `after` — so every page is the whole set, which in a real keyset consumer is a duplicate-forever loop — ran the whole suite to `119 passed, exit 0`, and printed the CONFORMANCE banner with no caveat. Both reference backends had implemented keyset pagination correctly since #3; nothing had ever checked.
+
+`C0-10` now pages seven rows at `limit=3` and asserts the pages are disjoint, ordered, exhaustive and terminating. The broken adapter fails it.
+
+**Why this is the more important half, and the one to lead with next time.** A suite that is too strict fails loudly and someone comes and asks why. **A suite that is too lax certifies something broken and nobody finds out until it is in production** — and ruling A5 makes this suite the gate that lets Tenshen depend on the package. Eleven rounds of "too strict" produced five real defects and were worth every one; the first round of "too lax" produced one in an afternoon. **The next spec's review brief should open with it.**
 
 ### 7.5 Convergence, honestly
 
