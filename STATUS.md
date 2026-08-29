@@ -13,12 +13,12 @@
 | #1 `docs/INTERFACE.md` v0 | ✅ done |
 | #2 `docs/PACKAGE.md` v0 | ✅ done |
 | #3 Phase 2A reference implementation | ✅ done — 229 tests green, both backends |
-| 3b Async adapter | 🔵 in flight — 2 of 3 increments landed |
+| 3b Async adapter | ✅ done — 267 tests green, both async backends; generated from the sync source, not forked ([docs/3B-ASYNC.md](docs/3B-ASYNC.md)) |
 | Docs folder reorg | ⏳ queued (after 3b) |
 | `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
 | 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ⏳ queued (after reorg) |
 | #4 `docs/EDGES.md` v0 | ⏳ queued (after 3c) |
-| #5 Phase 2B Tenshen migration (beacon) | ⏳ beacon row 21.1 spec in progress; 21.2 build waits on 3b |
+| #5 Phase 2B Tenshen migration (beacon) | ⏳ beacon row 21.1 spec in progress; **21.2 is no longer blocked — 3b landed** |
 | #6 Actions-registry spec | ⬜ not started |
 | #7 Phase 3 ingestion / mapping | ⬜ not started |
 | Phase 4 generalise | ⬜ not started |

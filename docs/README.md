@@ -33,13 +33,14 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 | Doc | Row | Result |
 |---|---|---|
 | [2A-RUN.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/2A-RUN.md) | #3 | **229 passed, 0 failed, 0 skipped** in one run — SQLite 113 + Postgres 16.14 113 + 3 backend-independent; CMS design test reproduces every pre-registered count; fourteen recorded deviations. |
+| [3B-ASYNC.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/3B-ASYNC.md) | 3b | **267 passed, 0 failed, 0 skipped** in one run — the **same 109 contract ids, same test-function names**, on async SQLite + async Postgres 16.14; sync suite still green (`229 passed`), both stacks in one process `496 passed`. The async tree is **generated** from the sync source by `tools/unasync.py`, not forked — a stale mirror fails the suite. Fourteen new deviations, the fourteen of 2A inherited. |
 
 ## Decisions — assumptions and rulings, each with what would revise it
 
 | Doc | What it settles |
 |---|---|
 | [2026-08-28-assumptions-in-lieu-of-office-answers.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md) | A1–A4: assumed answers to the Phase 0 office questions. **A5 (confirmed by the founder):** Tenshen will be rebuilt on top of open-ontology; it may depend on the package once Phase 2A passes contract tests on CMS data. |
-| [2026-08-28-package-v0-rulings.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/decisions/2026-08-28-package-v0-rulings.md) | R1 async adapter is roadmap row 3b; R2 `attribute_census` stays package-local; R3 `Refusal.reason` is a closed vocabulary. |
+| [2026-08-28-package-v0-rulings.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/decisions/2026-08-28-package-v0-rulings.md) | R1 async adapter is roadmap row 3b — **landed 2026-08-28, and its "mirroring is mechanical" assumption held**; R2 `attribute_census` stays package-local; R3 `Refusal.reason` is a closed vocabulary. |
 
 ## Tools and data
 
