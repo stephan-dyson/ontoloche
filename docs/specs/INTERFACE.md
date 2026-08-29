@@ -241,6 +241,8 @@ ConsumerReport:
 
 **Behaviour when uncertain.** `complete` is **always `false` in v0**, unconditionally, even when every consumer in a system is registered — because the registry cannot know that it is. A caller rendering `WALKTHROUGH.md` step 5 must therefore print *"3 known, there may be others"* and has no way to print *"3"*. **This is deliberate friction.** An impact list that misses a consumer is more dangerous than no list, because it promises safety it cannot deliver.
 
+**Two ways a consumer gates, and v0 computed one** *(corrected by row 3c, 2026-08-29, after an adversarial review round)*. For an `entity`, a consumer gates on it when the consumer's `gate` predicate **includes** it. **For a `kind="predicate"` entry, a consumer gates on it when the `gate` IS it** — and a predicate is essentially never a member of itself, so the membership test alone never matched. **[Observed]**, on a fully capable backend with nothing unknowable: `consumers("commentable")` returned `gates_on: []` and filed the consumer of `commentable` under **`would_drop`** — the exact opposite of the truth — and `retire("commentable")` then succeeded with no refusal. `predicates()` had the right query all along; this call did not, and §5.9 guards retirement with `consumers` and carves out no exception for predicates. That is mechanism **C** inside §2.3's *"single most load-bearing idea in this document"*. `C1-09`.
+
 **Unknown type:** raises `UnknownType`, never returns an empty report — an empty report reads as *"nothing gates on this"*, which is the exact false reassurance this call exists to prevent.
 
 ---

@@ -701,9 +701,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**121 tests in seventeen groups.** *(109 at #3; **twelve** added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C0-10`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**124 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
-**C0 — adapter conformance (10).** No interface call; this is the protocol itself.
+**C0 — adapter conformance (11).** No interface call; this is the protocol itself.
 
 | id | asserts | mech |
 |---|---|---|
@@ -713,12 +713,13 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C0-04 | **§3.1, by source inspection**: all **seven** of §3.1's identifiers — `Refusal`, `Rejection`, `Resolution`, `ConsumerReport`, `UsageReport`, `TypeEntry`, `Proposal` — appear nowhere in `adapter.py` or `backends/`. *(Row 3c: the test checked five of the seven; `ConsumerReport` and `UsageReport` were missing from it, though neither was ever present in the code)* | — |
 | C0-05 | `migrate()` is idempotent; the version row is written in the same transaction as the DDL | — |
 | C0-06 | every `*Record` round-trips; a field the backend cannot store comes back empty, not wrong | — |
+| C0-11 | **one name under two kinds is ambiguous, not arbitrary:** §4.1 blesses `facility` as an `entity` beside `facility` as a `value_set`, and §3.4 primitive 5 says `get_type(kind=None)` raises `AmbiguousKind` there. *(Row 3c: `AmbiguousKind` was raised by both reference backends and referenced by **no test in the repository**; an adapter returning `rows[0]` passed the whole suite — a silent wrong answer in the exact case the per-`(namespace, kind)` scoping exists to permit)* | — |
 | C0-10 | **keyset pagination actually pages:** seven rows at `limit=3` give three disjoint, ordered, exhaustive pages and a terminating `next_after`. *(Row 3c, and the first defect found by asking whether a BROKEN backend can PASS: an adapter that silently drops `limit` and `after` — a duplicate-forever loop in any real keyset consumer — ran the whole suite to `119 passed, exit 0`. Both reference backends had implemented it correctly and nothing had ever checked)* | — |
 | C0-09 | **`owns_schema=False` makes `migrate()` verify-only** (§9.3): against a store the host application owns, `migrate()` raises `SchemaMismatch` naming what is missing, issues no DDL to fix it, and once the owner has created the schema returns the version and is usable. *(Row 3c. B1 is the first Tenshen contortion and the enterprise-DBA posture is the reference deployment — both reference backends implemented this and nothing asserted it.)* | — |
 | C0-08 | **G1 and G2, RACED:** two adapters on one store and two real concurrent writers — one absent name (exactly one insert wins, one `AlreadyExists`, one row in the store) and one proposal approved twice (exactly one `TypeEntry`, one `Refusal("already_decided")`). *(Row 3c, §8b.5. `C0-02`/`C0-07` call the primitives sequentially, which a read-then-write check passes as happily as a constraint does — §3.5 says a read-then-write check is **not** sufficient, and until this test nothing held it to that. A thread race has no mechanical async form, so the sync module is excluded from `tools/unasync.py` and the async counterpart is hand-written; both claim this id and both are binding.)* | — |
 | C0-07 | **G1's key is *scoped*:** one word under three namespaces is three rows, each `expect_absent=True`, each retrievable with its own definition and attributes; the collision is still raised *within* a namespace; `TypeQuery(namespace=None)` returns all three. *(Row 3c, §8b.2 — the half of G1 that `INTERFACE.md` §2.6's answer to mechanism 4 rests on, and that nothing asserted)* | **4** |
 
-**C1 — `consumers` (8).** Mechanism **C**.
+**C1 — `consumers` (9).** Mechanism **C**.
 
 | id | asserts |
 |---|---|
@@ -730,6 +731,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C1-06 | `would_error` = gate excludes **and** `on_unknown == "error"`; `passthrough` appears in neither |
 | C1-07 | `known == len(gates_on) + len(would_drop) + len(would_error)` |
 | C1-08 | **the `capture` incident replay** (finding 0.1): register a consumer gating on a predicate whose extent excludes a newly-approved type; `would_drop` is non-empty and names it |
+| C1-09 | **a consumer whose gate IS a predicate gates on that predicate** — and `retire` on it refuses `live_consumers`. *(Row 3c, on a fully capable backend: `consumers("commentable")` returned `gates_on: []` and filed the consumer of `commentable` under **`would_drop`** — backwards — and the predicate was then retired with no refusal. "Which consumers gate on this?" has two answers and v0 computed one; a predicate is never a member of itself)* |
 
 **C2 — `predicates` (5).** Mechanisms **4** (defensively) and the `ROADMAP.md` kill row.
 
@@ -800,7 +802,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C6-06 | `unverified_semantics=True` enumerates exactly the entries carrying the warning |
 | C6-07 | **the census spans namespaces and a scoped listing says it did not:** `namespace=None` returns one word's three scoped entries with three definitions and `complete=True`; `namespace="dot"` returns one with **`complete=False`** and a `why_incomplete` naming the namespace *(row 3c, §8b.2)* |
 
-**C7 — `usage` (6).** Mechanism **3**.
+**C7 — `usage` (7).** Mechanism **3**.
 
 | id | asserts |
 |---|---|
@@ -810,6 +812,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C7-04 | `status="active"` + `last_seen < now - window` ⇒ `orphaned=True`, and `window` is reported |
 | C7-05 | `get_usage` returning `None` (nothing recorded) and returning `count=None` (not counted) produce **different** `UsageReport`s |
 | C7-06 | `record_use` on a non-counting backend is a no-op and `usage()` says so |
+| C7-07 | **`last_seen` never moves backwards**: a late or replayed `record_use` stamped with an older time leaves `last_seen` where it was. *(Row 3c: §3.4 primitive 12 states `max(last_seen, at)` unconditionally and nothing tested it; an adapter that overwrites instead passed the whole suite. **Not** the G3 carve-out — G3 waives serialisation under a race, not the `max()` semantic — and a regressed `last_seen` reports a live type as orphaned, which §5.7 calls the sensor for the venture's core bet)* |
 
 **C8 — `provenance` (5).** Mechanisms **1** and **3**.
 
@@ -956,7 +959,7 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 > *Corrected by row 3c after an adversarial review round.* This line read *"the three refusals this document adds are tested at C9-02, C10-08, C15-04"* — which names three ids covering **two** of the reasons, and left **`proposals_not_stored` with no test anywhere in either suite**. That is UC1's own path (§7.3 B4: a backend with no proposal table is conformant and `approve`/`reject` must refuse), so the capability the Tenshen design test most depends on was the one the suite never checked. `C5-12` closes it.
 
-**[Inferred]** the built suite will be larger than 121 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+**[Inferred]** the built suite will be larger than 124 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1297,7 +1300,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (121 tests, seventeen groups — 109 at #3, twelve added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (124 tests, seventeen groups — 109 at #3, fifteen added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |

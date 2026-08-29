@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from ..errors import UnknownType
-from ..types import Consumer
+from ..types import Consumer, Refusal
 from ._support import seed
 
 
@@ -124,3 +124,50 @@ def test_c1_08_the_capture_incident_replay(registry):
         "a human has to be able to go and look"
     )
     assert report.complete is False
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c1_09_a_consumer_that_gates_on_a_predicate_gates_on_that_predicate(registry):
+    """**Mechanism C, in the idea INTERFACE.md 2.3 calls "the single most load-bearing
+    in this document".**
+
+    "Which consumers gate on this?" has two answers and v0 computed one. For an
+    `entity`, a consumer gates on it when the consumer's gate predicate *includes* it.
+    **For a `predicate`, a consumer gates on it when the gate IS it** -- and a predicate
+    is essentially never a member of itself, so the membership test alone could never
+    match. [Observed], on a fully capable backend with nothing unknowable:
+
+        consumers("commentable").gates_on   == []                            # wrong
+        consumers("commentable").would_drop == ["comment_service.can_comment"]  # backwards
+        retire("commentable", ...)          -> TypeEntry(status="retired")   # no refusal
+
+    The consumer of `commentable` was reported as a consumer that would *silently drop*
+    `commentable`, and the predicate it gates on was then retired with no refusal at all.
+    `predicates()` had the right query all along (`c.gate == rec.name`); `consumers()`
+    did not, and 5.9 guards retirement with `consumers` and carves out no exception for
+    `kind="predicate"`.
+
+    Added by row 3c after an adversarial review round drove the one scenario the
+    document is organised around. `test_c9_retire.py`'s own fixture builds exactly this
+    shape and every C9 test retired the *member*, never the predicate.
+    """
+    seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
+    seed(registry, "task", definition="a unit of work", predicates=["commentable"])
+    registry.register_consumer(
+        Consumer(id="comment_service.can_comment", gate="commentable", on_unknown="drop")
+    )
+
+    report = registry.consumers("commentable")
+    assert [c.id for c in report.gates_on] == ["comment_service.can_comment"], (
+        "a consumer whose gate IS this predicate gates on it"
+    )
+    assert report.would_drop == (), "and is emphatically not a consumer that would drop it"
+
+    # `predicates()` and `consumers()` must agree -- they answer the same question.
+    [entry] = [p for p in registry.predicates() if p.name == "commentable"]
+    assert [c.id for c in entry.consumers] == [c.id for c in report.gates_on]
+
+    refusal = registry.retire("commentable", "tidying up", retired_by="user:sd")
+    assert isinstance(refusal, Refusal) and refusal.reason == "live_consumers", (
+        "5.9 guards retirement with consumers, and says nothing about kind"
+    )
