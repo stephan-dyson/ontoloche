@@ -36,11 +36,15 @@ __all__ = [
     "TypePage",
     "ProposalQuery",
     "ProposalPage",
+    "EdgeRecord",
+    "EdgeQuery",
+    "EdgePage",
     "StorageAdapter",
     "AttributeStore",
     "AttrSchemaRecord",
     "AttrObservedRecord",
     "CAPABILITY_FLAGS",
+    "EDGE_CAPABILITY_FLAGS",
     "TRANSACTION_SCOPES",
 ]
 
@@ -56,6 +60,27 @@ CAPABILITY_FLAGS = (
     "counts_usage",
     "timestamps_usage",
     "owns_schema",
+    # EDGES.md 6, row 4b. Four flags, and they are ORDINARY capability flags rather
+    # than a separate tuple: `check_capability_matrix.py` declines one flag at a time
+    # off this tuple, C0-01 requires a `why` off this tuple, and a `DegradedAdapter`
+    # validates its kwargs against this tuple. An edge flag that lived somewhere else
+    # would be an edge flag none of those three reached -- which is the shape of hole
+    # row 3c measured when six of eight optional flags turned out to be undeclinable.
+    "stores_edges",
+    "stores_edge_events",
+    "indexes_edges_by_family",
+    "stores_edge_attributes",
+)
+
+#: EDGES.md 6's four, named separately for the places that must talk about the edge
+#: store alone. `stores_edges=False` means there is no edge store, and the other three
+#: are then vacuous rather than declined -- so a backend that declares the first False
+#: is not required to explain the other three (`missing_why` below).
+EDGE_CAPABILITY_FLAGS = (
+    "stores_edges",
+    "stores_edge_events",
+    "indexes_edges_by_family",
+    "stores_edge_attributes",
 )
 
 #: The two that are not optional. False on either is non-conformant, full stop
@@ -86,6 +111,18 @@ class Capabilities:
     counts_usage: bool
     timestamps_usage: bool
     owns_schema: bool
+    #: EDGES.md 6, row 4b. Defaulted True-shaped? No -- `stores_edges` defaults to
+    #: **False**, and that is the load-bearing choice. An adapter written against the
+    #: fifteen-primitive protocol has no edge store; defaulting it True would make every
+    #: such adapter claim one, and the registry would then call `put_edge` on an object
+    #: that does not have it. The `edge_store_absent` refusal is the honest answer for a
+    #: backend that predates this row, and it is what the default produces. (Naming the
+    #: class it belongs to would trip C0-04, which forbids seven -- now twelve --
+    #: identifiers in this file even in prose. Caught by the suite, not by me.)
+    stores_edges: bool = False
+    stores_edge_events: bool = False
+    indexes_edges_by_family: bool = False
+    stores_edge_attributes: bool = False
     why: dict[str, str] = field(default_factory=dict)
     #: Ruling R5 / PACKAGE.md 3.5. ``"owned"`` -- this adapter owns the connection and
     #: ``transaction()`` commits at depth 0. ``"savepoint"`` -- the connection is the
@@ -102,6 +139,23 @@ class Capabilities:
     #: says; a key not listed, on a ``stores_attributes=False`` backend, comes back
     #: ABSENT with a why -- never wrong, never invented.
     attribute_projections: frozenset[str] = frozenset()
+    #: EDGES.md 6.2, ruling R5 inherited. The edge store may be a DIFFERENT store from
+    #: the type store -- a host-owned edge table beside a package-owned registry -- so
+    #: it gets its own declaration. One binding rule, checked by `scope_conflict()`
+    #: below: when the two share a connection they MUST agree, because an adapter
+    #: claiming that half its writes are the host's to commit and half are its own, on
+    #: one transaction, is claiming something that cannot be true.
+    edge_transaction_scope: Literal["owned", "savepoint"] = "owned"
+    #: EDGES.md 6.3 -- beacon finding U3's shape, reused verbatim for edge payloads.
+    #: `work_links` has `description` and `confidence` as real typed columns and no JSON
+    #: blob: `stores_edge_attributes=True` would silently lose arbitrary keys and False
+    #: alone would disclaim two the backend round-trips perfectly.
+    edge_attribute_projections: frozenset[str] = frozenset()
+    #: True when the edge store and the type store are the same store on one connection.
+    #: The reference backends put `oo_edge` in the same schema as `oo_type`, so it is
+    #: True there; a host-owned edge table beside a package-owned registry sets it False
+    #: and may then declare two different scopes.
+    edge_store_shares_connection: bool = True
 
     def missing_why(self) -> tuple[str, ...]:
         """Flags that are False with no sentence explaining it. Invariant C0-01.
@@ -111,14 +165,66 @@ class Capabilities:
         the write is atomic but not yet durable -- so ruling R5 requires the sentence
         that surfaces wherever a result would otherwise imply durability.
         """
+        skip: set[str] = set()
+        if not self.stores_edges:
+            # EDGES.md 6: `stores_edges=False` means there is no edge store behind this
+            # adapter. The other three flags are then not DECLINED, they are vacuous --
+            # asking a type-only registry to explain why it does not index edges by
+            # family teaches an adapter author to write three sentences nobody reads,
+            # which is how a `why` dict stops being the mechanism 3.2 says it is.
+            skip = {"stores_edge_events", "indexes_edges_by_family", "stores_edge_attributes"}
         missing = [
-            f for f in CAPABILITY_FLAGS if not getattr(self, f) and not self.why.get(f, "").strip()
+            f
+            for f in CAPABILITY_FLAGS
+            if f not in skip and not getattr(self, f) and not self.why.get(f, "").strip()
         ]
         if self.transaction_scope == "savepoint" and not self.why.get(
             "transaction_scope", ""
         ).strip():
             missing.append("transaction_scope")
+        # The same rule for the edge scope, and it is NOT a duplicate of the line above:
+        # EDGES.md 6.2 permits the two to differ when they are two connections, and it
+        # is then the edge scope's own sentence a caller needs -- "who commits an edge
+        # write" is a different question from "who commits a type write" the moment the
+        # answers differ.
+        if self.edge_transaction_scope == "savepoint" and not self.why.get(
+            "edge_transaction_scope", ""
+        ).strip():
+            missing.append("edge_transaction_scope")
         return tuple(missing)
+
+    def scope_conflict(self) -> str | None:
+        """EDGES.md 6.2's binding rule, as a value rather than as prose.
+
+        > When the edge store and the type store share a connection,
+        > ``edge_transaction_scope`` MUST equal ``transaction_scope``. A ``Capabilities``
+        > that declares two different scopes on one connection is non-conformant.
+
+        Returned as a sentence rather than raised, so the conformance suite can report
+        it the way it reports every other declaration problem, and so a `Capabilities`
+        stays a plain frozen record that a test can construct in any shape it likes.
+        """
+        if not self.edge_store_shares_connection:
+            return None
+        if self.edge_transaction_scope == self.transaction_scope:
+            return None
+        return (
+            f"edge_transaction_scope={self.edge_transaction_scope!r} and "
+            f"transaction_scope={self.transaction_scope!r} on ONE connection "
+            f"(edge_store_shares_connection=True): half the writes cannot be the "
+            f"host's to commit and half this adapter's, on one transaction "
+            f"(EDGES.md 6.2)"
+        )
+
+    def stores_edge_attribute(self, key: str) -> bool:
+        """Does THIS edge payload key survive a round trip? -- EDGES.md 6.3, U3's shape."""
+        return self.stores_edge_attributes or key in self.edge_attribute_projections
+
+    def surviving_edge_attributes(self, attributes: dict[str, Any]) -> dict[str, Any]:
+        """The subset of an edge payload this backend will hand back. EDGES.md 6.3."""
+        if self.stores_edge_attributes:
+            return dict(attributes)
+        return {k: v for k, v in attributes.items() if k in self.edge_attribute_projections}
 
     def reason(self, flag: str) -> str:
         """The adapter's own sentence for a False flag, verbatim."""
@@ -294,6 +400,87 @@ class ProposalPage:
     next_after: str | None = None
 
 
+# ----------------------------------------------------------------------- edges (7.1)
+#
+# EDGES.md 7.1. Flat, JSON-shaped, and deliberately NOT the facade objects: the store
+# holds `(family, src, dst)` with a blob of provenance and a `status` string it never
+# judges. The rich shapes -- the ones with structured references, a computed warnings
+# list and a depth-bounded report -- live in `open_ontology/edges.py` and are forbidden
+# here by 3.1, which C0-04 enforces by source inspection.
+
+
+@dataclass(frozen=True)
+class EdgeRecord:
+    """One stored relationship. EDGES.md 7.1.
+
+    ``edge_id`` is generated ABOVE the store, exactly as ``proposal_id`` and
+    ``event_id`` are (4.2), so there is no uniqueness flag for it to need and no
+    surrogate key for a rebuild to renumber.
+
+    The four retraction columns are here for the reason ``TypeRecord``'s are: a backend
+    with ``stores_edge_events=False`` still has to answer *"why is this retracted?"*.
+    EDGES.md 2.6 turns on that -- the record IS the audit trail, so an unrecordable
+    retraction warns rather than refusing, which is a deliberate departure from 3.6.
+    """
+
+    edge_id: str
+    namespace: str  # the FAMILY's namespace -- never the endpoints'. EDGES.md 2.2
+    family: str
+    src_namespace: str
+    src_kind: str
+    src_name: str
+    src_instance_id: str | None
+    dst_namespace: str
+    dst_kind: str
+    dst_name: str
+    dst_instance_id: str | None
+    attributes: dict[str, Any] = field(default_factory=dict)
+    attr_schema_version: int | None = None
+    provenance: dict[str, Any] = field(default_factory=dict)
+    status: str = "active"  # "active" | "retracted" -- STORED, never judged (3.1)
+    warnings: tuple[str, ...] = ()
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    retract_reason: str | None = None
+    retracted_by: str | None = None
+    retracted_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class EdgeQuery:
+    """EDGES.md 7.1. ``incident_to`` is what makes one call serve a whole depth level.
+
+    Traversal is deliberately NOT pushed down: an adapter that knew about ``depth``
+    would know about the report shape, and 3.1's source-inspection rule would have a new
+    identifier to police. The registry issues one ``find_edges`` per level with the whole
+    frontier in ``incident_to``, and pages it to exhaustion.
+    """
+
+    namespace: str | None = None  # the family's namespace. None = any
+    families: tuple[str, ...] | None = None
+    #: ``(namespace, kind, name, instance_id)`` per frontier node; ``instance_id`` is
+    #: ``None`` for a type-level reference, and that ``None`` is a value to match on,
+    #: not a wildcard -- a type node and an instance of it are two different endpoints.
+    incident_to: tuple[tuple[str, str, str, str | None], ...] | None = None
+    direction: str = "both"  # "both" | "out" | "in"
+    include_retracted: bool = False
+    edge_ids: tuple[str, ...] | None = None
+    limit: int | None = None  # the ADAPTER pages. R13: the facade does not
+    after: str | None = None  # opaque cursor; ordering is (created_at, edge_id)
+
+
+@dataclass(frozen=True)
+class EdgePage:
+    records: tuple[EdgeRecord, ...]
+    #: ``None`` = the backend cannot count. NOT ``0``. Rule U -- and unlike
+    #: the read seam's own ``known`` (a plain ``int``, because that report materialises
+    #: its edges) a store genuinely may be unable to count without materialising.
+    known: int | None
+    complete: bool
+    why_incomplete: str | None = None
+    next_after: str | None = None
+
+
 # -------------------------------------------------------------------------- protocol
 
 
@@ -370,7 +557,29 @@ class StorageAdapter(Protocol):
         kind: str | None = None,
         name: str | None = None,
         proposal_id: str | None = None,
+        edge_id: str | None = None,
     ) -> list[EventRecord]: ...
+
+    # ------------------------------------------------------------------ 16 to 18
+    # EDGES.md 7.1. Three, not eight -- and the count is the evidence that making a
+    # family an ordinary row of the vocabulary was the right decision, because families
+    # need no primitive at all: put_type/get_type/find_types already serve them.
+    #
+    # These are on the protocol rather than in a separate optional extension, because
+    # EDGES.md 6 puts the four flags on `Capabilities` and 7.1 gives them the
+    # `stores_proposals=False` treatment: the methods exist, `stores_edges=False`
+    # raises `NotSupported`, and the registry checks the capability first and never
+    # calls them. An adapter written before this row declares `stores_edges=False` by
+    # default and every edge call returns `edge_store_absent`.
+
+    # 16
+    def put_edge(self, rec: EdgeRecord, *, expect_absent: bool = False) -> EdgeRecord: ...
+
+    # 17
+    def get_edge(self, edge_id: str) -> EdgeRecord | None: ...
+
+    # 18
+    def find_edges(self, q: EdgeQuery) -> EdgePage: ...
 
 
 # ---------------------------------------------------------------- optional extension

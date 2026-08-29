@@ -8,6 +8,9 @@ v0, unstable. Every name here may change without a deprecation path.
 from .adapter import (
     Capabilities,
     ConsumerRecord,
+    EdgePage,
+    EdgeQuery,
+    EdgeRecord,
     EventRecord,
     ProposalPage,
     ProposalQuery,
@@ -19,6 +22,15 @@ from .adapter import (
     UsageRecord,
 )
 from .attributes import AttributeCensus, AttributeSchema, FieldSpec
+from .edges import (
+    Edge,
+    EdgeFamily,
+    EdgeProvenance,
+    InstanceRef,
+    NeighborEdge,
+    NeighborReport,
+    TypeRef,
+)
 from .errors import (
     AlreadyExists,
     AmbiguousKind,
@@ -86,6 +98,16 @@ __all__ = [
     "TypePage",
     "ProposalQuery",
     "ProposalPage",
+    "EdgeRecord",
+    "EdgeQuery",
+    "EdgePage",
+    "Edge",
+    "EdgeFamily",
+    "EdgeProvenance",
+    "InstanceRef",
+    "NeighborEdge",
+    "NeighborReport",
+    "TypeRef",
     "AlreadyExists",
     "AmbiguousKind",
     "NotSupported",

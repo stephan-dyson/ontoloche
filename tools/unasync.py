@@ -55,6 +55,12 @@ SEED_AWAIT_ATTRS = frozenset(
         "get_usage",
         "append_event",
         "read_events",
+        # EDGES.md 7.1's three, added by row 4b. Seeds, not derived: the fixpoint below
+        # picks up `neighbors`, `add_edge`, `retract_edge` and everything that calls
+        # them from these three.
+        "put_edge",
+        "get_edge",
+        "find_edges",
         # the optional AttributeStore extension (deviation D-2)
         "put_attr_schema",
         "get_attr_schema",
@@ -174,11 +180,15 @@ ADAPTER_EXTRA_HEADER = '''
 # One definition, two protocols over it.
 from open_ontology.adapter import (
     CAPABILITY_FLAGS,
+    EDGE_CAPABILITY_FLAGS,
     REQUIRED_CAPABILITIES,
     AttrObservedRecord,
     AttrSchemaRecord,
     Capabilities,
     ConsumerRecord,
+    EdgePage,
+    EdgeQuery,
+    EdgeRecord,
     EventRecord,
     ProposalPage,
     ProposalQuery,
@@ -204,7 +214,11 @@ __all__ = [
     "ProposalPage",
     "AttrSchemaRecord",
     "AttrObservedRecord",
+    "EdgeRecord",
+    "EdgeQuery",
+    "EdgePage",
     "CAPABILITY_FLAGS",
+    "EDGE_CAPABILITY_FLAGS",
     "REQUIRED_CAPABILITIES",
 ]
 '''

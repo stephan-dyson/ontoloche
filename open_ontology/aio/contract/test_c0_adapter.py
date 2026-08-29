@@ -114,6 +114,19 @@ FORBIDDEN = (
     "TypeEntry",
     "ConsumerReport",
     "UsageReport",
+    # Row 4b, EDGES.md 7.1. Five more, and the document asked for them by name:
+    # *"an adapter that knew about `depth` would know about `NeighborReport`, and
+    # C0-04's source-inspection test would have a new identifier to police."* The
+    # boundary EDGES.md calls "the strongest evidence that 2.3's decision was right"
+    # was, in the spec row's own probe kit, asserted and contradicted -- the kit's
+    # store handed back the rich facade object. It is policed here rather than
+    # asserted. `EdgeRecord`, `EdgeQuery` and `EdgePage` are storage shapes and live
+    # in `adapter.py`; `Edge` does not match them.
+    "Edge",
+    "EdgeProvenance",
+    "EdgeFamily",
+    "NeighborEdge",
+    "NeighborReport",
 )
 
 def test_c0_04_the_adapter_does_not_know_what_a_decision_is():
