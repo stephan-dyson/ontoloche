@@ -98,6 +98,14 @@ Two candidate second rules were considered and **not** taken, because two is whe
 - *`effects == []` ⇒ `reversibility` must be `reversible`.* Tempting and wrong: an action with no declared **protocol** effects may still change host state (§2.5's `host_state`), so the antecedent does not imply the consequent. The real check is at record time and it is `effect_undeclared` (§7).
 - *`approval_mode="auto"` ⇒ `min_auto_tier is not None`.* Almost right, and left out deliberately: a deployment running a single model tier has nothing to compare against, and forcing it to invent a tier string is how `model_tier`'s opaque-string posture (`INTERFACE.md` §2.7) gets quietly turned into a required ordering nobody defined. It is a **warning**, not a rule — §5.2.
 
+| # | rule | exercised by |
+|---|---|---|
+| 2.2-1 | The eight keys are all **required** except `min_auto_tier` and `payload_schema`; a family declaring none of `reversibility` / `approval_mode` is refused rather than defaulted | `C19-26` |
+| 2.2-2 | The one cross-field rule, in **R18**'s shape: `reversibility="irreversible"` ⇒ `approval_mode` MUST be `"human"`, refused at declaration with `human_approval_required` | `C19-27` |
+| 2.2-3 | No `InputSpec` may name `predicate` in `kinds`, at any ref level — `EDGES.md` §2.4.1's general rule inherited, and the `ROADMAP.md` kill row one indirection away | `C19-28` |
+| 2.2-4 | `created_by` and `namespace` are `TypeEntry`'s and are **not** restated in `attributes` | `prose-only:` an absence cannot be exercised by a test that does not know what to look for; the gate that catches a second home for one fact is `check_spec_drift.py` holding the printed shape against the code, which the build row extends |
+
+
 ### 2.3 `inputs` — three reference shapes, and the third is this document's
 
 [`EDGES.md`](EDGES.md) §2.1 defines two. An action takes a third.
@@ -347,6 +355,16 @@ with three new `event` values — `invocation_recorded`, `invocation_reviewed`, 
 
 **[Observed]** beacon already has the second shape and not the first: `add_task_stakeholder` returns `undo={"kind": "add_task_stakeholder", …}` which `/api/messages/{id}/undo` replays through the same dispatch path — a compensating call, recorded nowhere as a governed event.
 
+| # | rule | exercised by |
+|---|---|---|
+| 3-1 | `declared_effects` is **copied** from the family at invocation time, so amending the family does not re-describe an existing invocation's blast radius | `C19-29` |
+| 3-2 | `gate_verdict` has three values and `not_asked` is one of them; `False` would assert a refusal that never happened | `C19-30` |
+| 3-3 | `approved_by` is **never null** on an `applied` invocation; `"auto:<policy>"` when no human approved — `INTERFACE.md` §2.4's rule, inherited verbatim | `C19-31` |
+| 3-4 | `outcome="refused"` REQUIRES a `refusal`, whose `reason` is `INTERFACE.md` §5.12's closed vocabulary | `C19-32` |
+| 3-5 | An observed effect outside the declared set warns and the record is kept; an observed effect that is a **subset** of the declared set warns nothing | `C19-33` |
+| 3-6 | There is no `pending` outcome | `prose-only:` a value that does not exist cannot be asserted present; what a test could check is that the vocabulary has exactly four members, which is the closed-vocabulary assertion in rule 3-4 doing the same work under another name |
+
+
 ---
 
 ## 4. The registry does not execute, and what the gate is worth without an executor
@@ -529,6 +547,16 @@ def projection(
 
 Shape and rules in §10, because the argument for it is the tool-slot ceiling and not the call list.
 
+| # | rule | exercised by |
+|---|---|---|
+| 6-1 | `preflight` **records nothing** and is idempotent: calling it N times leaves the invocation store unchanged | `C19-34` |
+| 6-2 | Every `PreconditionResult` carries `evaluated_by` naming the existing call that answered it — §2.4's no-query-language claim, made mechanical | `C19-35` |
+| 6-3 | `holds=None` is refused, and the refusal's `detail` says **unknown** rather than **false**; unknown is never treated as satisfied | `C19-36` |
+| 6-4 | `record_invocation` does **not** re-evaluate preconditions, and an invocation whose gate refused is recorded rather than discarded | `C19-37` |
+| 6-5 | `InvocationReport.known` is `int | None` and `complete` is `False` whenever a filter suppressed rows or `limit` truncated the answer | `C19-38` |
+| 6-6 | `invocations` does not page | `prose-only:` ruling **R25** routed paging for every listing to Phase 3 *together*; a test asserting the absence of a cursor would pin a decision this document is explicitly not making |
+
+
 ---
 
 ## 7. Refusals — through `INTERFACE.md` §5.12, amended in this change
@@ -597,6 +625,15 @@ Ruling **R5** gives `transaction_scope: "owned" | "savepoint"`. The invocation s
 `action_store_shares_connection` is the **premise** of that rule and is declared up front rather than discovered. **[Observed]** `EDGES.md` §6's printed block omitted `edge_store_shares_connection` while `PACKAGE.md` §3.2 printed it and the code carried it — *a rule whose premise is unstated is a rule an adapter author can miss by reading* — and that omission cost an adversarial round. Repeating the finding one row later would be worse than the original.
 
 Under `"savepoint"`, a `record_invocation` result carries `not_durable_until_host_commits:<why>` — `INTERFACE.md` §5.4's existing value, unchanged, on one more carrier. **No new warning value**, and the row-3d lesson applies verbatim: it is stamped at the **write** call site and **not** on `invocations`, because a signal that never turns off is noise. And it is stamped by `record_invocation` **itself**, not carried forward from anywhere — `EDGES.md` §6.2 records `retract_edge` getting exactly that wrong, and it is the second time this repo has seen the bug.
+
+| # | rule | exercised by |
+|---|---|---|
+| 8-1 | `stores_invocations=False` makes **every** invocation call return `Refusal(reason="action_store_absent")`, never an empty report | `C19-39` |
+| 8-2 | Every `False` action flag carries a non-empty `Capabilities.why`, and when `stores_invocations` is `False` the other two are **vacuous rather than declined** — `C0-01`'s carve-out shape | `C19-40` |
+| 8-3 | With `action_store_shares_connection=True`, `action_transaction_scope` MUST equal `transaction_scope`; declaring two scopes on one connection is non-conformant | `C19-41` |
+| 8-4 | Under `action_transaction_scope="savepoint"`, `record_invocation` stamps `not_durable_until_host_commits` **itself**, and `invocations` does not | `C19-42` |
+| 8-5 | The action flags default `False`, so an adapter written against the eighteen-primitive protocol claims no invocation store | `C19-43` |
+
 
 ---
 
@@ -973,3 +1010,135 @@ await session.commit()
 | **ACT3** | **`add_task_stakeholder`'s two causes split unevenly**: *"already linked"* becomes a typed `edge_absent`; *"task not yours"* has no precondition kind and stays inside the action | §11.3 T1.2 | Authorization is §1's non-goal and **R24**'s ruling. Making it a precondition would put a permissions model in the registry through the side door |
 | **ACT4** | **A value-level precondition is not expressible**, and this is the **third** surface to reach for the same missing mechanism | §2.4, §12.3 T2.2 | Ruling **R22** routed it to Phase 3 with contortion 11. Taking it here would be a query language arriving in a design test. **Q35** carries it with the count |
 | **ACT5** | **A mid-action commit is invisible to `reversibility`.** `delete_person` commits an `unlink` before its own delete; one `not_durable_until_host_commits` warning would be false for the first half and true for the second | §11.3 T1.5 | Per-effect durability is a field on `Effect` and a mechanism with one fixture behind it. **[Observed]** once, in one host; one observation is not a design input |
+
+---
+
+## 14. Standing constraint 8, from the start — the planned `C19` group
+
+**Ruling R31** (standing constraint 8): *every numbered rule in a spec section ships with either (a) a contract id that exercises it, or (b) an explicit `prose-only` tag with the reason — and `check_spec_drift.py` fails on a rule with neither.* The ruling names this row by name: *"and to #6 (actions spec) as it is written."*
+
+**Every numbered rule in this document carries one or the other, from the first draft rather than retrofitted.** Eight sections, **47** numbered rules: **43** name a planned contract id, **4** carry a `prose-only:` tag with a reason.
+
+| section | rules | ids | prose-only |
+|---|---|---|---|
+| §2.2 the declared shape | 4 | `C19-26` … `C19-28` | 1 — an absence has no test that knows what to look for |
+| §2.4 preconditions | 6 | `C19-01` … `C19-05` | 1 — **ACT4**, routed to Phase 3 by **R22** |
+| §2.5 effects | 7 | `C19-06` … `C19-12` | 0 |
+| §3 invocations | 6 | `C19-29` … `C19-33` | 1 — a value that does not exist |
+| §5.2 the gate | 6 | `C19-13` … `C19-18` | 0 |
+| §6 the calls | 6 | `C19-34` … `C19-38` | 1 — **R25** routed paging |
+| §8 capability flags | 5 | `C19-39` … `C19-43` | 0 |
+| §10 the ceiling | 7 | `C19-19` … `C19-25` | 0 |
+| **total** | **47** | **43** | **4** |
+
+> **These ids are PLANNED and nothing claims them yet, and that has an operational consequence the build row must not trip over.** `check_spec_drift.py`'s `R31_SECTIONS` currently lists three `EDGES.md` sections, and its `_check_rule_coverage` fails a rule whose named id *"no test in the suite claims"*. **Pointing it at this document today would fail forty-three times.** So `ACTIONS.md` is **deliberately not added to `R31_SECTIONS` in this change** — the extension lands in the build row, in the same change that lands the tests, which is the only order in which the gate is ever telling the truth. **Stated because the alternative failure is worse than the obvious one**: a checker wired up early gets silenced, and a silenced checker is how `gate_unregistered` went eighteen-said-nineteen-meant for a row (`INTERFACE.md` §5.4).
+
+**What the build row inherits, precisely:** a `C19` group of **43** ids, section-mapped above and row-mapped in the eight tables; **4** `prose-only` tags whose reasons are the argument, not a shrug; and the four probes in [`docs/tools/`](../tools/), whose 54 checks are the executable form of most of the 43 and should be **transposed into the suite rather than re-derived** — that is row 4b's own recorded lesson, where ten BLOCKING findings had been fixed *only* in a throwaway probe kit the package does not import.
+
+---
+
+## 15. Which mechanism this is designed against, and what would change it
+
+### 15.1 The mechanism
+
+**Primarily mechanism 1 — no review — and that is `INTERFACE.md`'s answer rather than `EDGES.md`'s.** `EDGES.md` §12 inverts the ranking for edges and puts **C** first. Actions invert it back, and the reason is what an action *is*:
+
+| Mechanism | Status for ACTIONS | What answers it |
+|---|---|---|
+| **1** no review | **Dominant.** A verb is the highest-consequence thing anyone can add to a vocabulary: a noun that nobody reviewed describes something wrongly, and a verb that nobody reviewed *changes* something wrongly. **[Observed]** beacon's 222 actions arrive by *"drop a new file in `actions/`; no edits to this file required"* — a documented, deliberate, unreviewed-by-the-vocabulary write path | §2.1 — a family is a `TypeEntry`, so `propose_type` → `approve`/`reject` applies unchanged. §5.2's `approval_mode`, and §2.2's one cross-field rule making `irreversible` require a person |
+| **C** silent drop | **Co-dominant, and measured rather than assumed.** §10.1: the busiest page is at **127 of 127**, and beacon's own source excludes two routes on that arithmetic. A new family is silently unreachable on a full surface — 0.1's incident shape with a provider cap playing the allowlist | §10 — `reachability`, `projection`, `would_evict`, `consumers_at_risk`. **Cause C made visible, the way `consumers` makes it visible for types** |
+| **3** never retired | Present | Families retire like any type; `usage`/`orphaned` answers *"has anything invoked this in a year?"*, which **[Observed]** nothing in beacon can answer today |
+| **2** could not find | Present | `resolve_type` on `kind="action"` — with contortion **ACT2**'s caveat that a verb resolves on less signal than the mechanism was built for |
+| **4** collision | Present, and **not** aggravated | `namespace`. §13 shows an action refusing to manufacture an equivalence the edge layer refuses, which is mechanism 4 *not* arriving through the new door |
+
+**No single call is the centre, and for actions that is easiest to see of the three documents.** There are two writes, one read and one arithmetic call. The centre is the *family* — the decision that a verb is a governed word — which is not a call at all.
+
+### 15.2 What would change this
+
+| If… | Then | What changes here |
+|---|---|---|
+| **A family needs a field the registry must READ to decide what to RUN** | §2.1 is wrong | `kind="action"` stops being a word and wants its own table and its own calls. §2.5's `effects` is the pressure point, and it stays on the near side deliberately |
+| **A second fixture needs a value-level precondition** | **ACT4** stops being routable | The count reaches four surfaces and **R22**'s deferral should be revisited *for every surface at once*, never for this one alone — the reason R22 gave |
+| **A host reports `observed_effects` dishonestly, or not at all** | §3.3's mechanism is decorative | The ledger still exists; the blast-radius comparison does not. Nothing here can detect it, and the answer would be an executor, which is §1's first non-goal |
+| **Nobody ever runs `invocations(gate_verdict="refused", outcome="applied")`** | §4's argument is worth zero | The gate is advisory by construction and this is the assumption it rests on. **[Assumed]**, untested, and the same one `consumers`' `complete: false` friction rests on |
+| **The 128 ceiling moves, or a provider drops it** | §10 loses its motivating fixture | `reachability` and `projection` stay useful — a bounded surface is not only a provider's bound — but the urgency goes, and §10 should be re-argued from something other than beacon's arithmetic |
+| **R24 is revisited and the protocol gains a tenancy dimension** | §8's tenant-blindness is wrong | Every shape here gains a dimension and `projection` gains a filter. **Q38** says actions are a stronger test of R24 than edges were, and this row does not decide it |
+| **An `edge_reachable` precondition kind is proposed** | §13's T3.3 result is undone | **Refuse it.** Reachability is transitivity with extra steps, and §2.4's absence of that kind is what stopped an action from writing an equivalence nobody asserted |
+| **`approval_mode` needs a fourth value** *(a two-person rule, a quorum)* | §5.2's three are the wrong three | It is a policy language arriving one value at a time, and the right answer is probably to make `approved_by` a list before making the mode vocabulary bigger. Not taken; no fixture needs it |
+| **Beacon registers its actions as families for real** | the fixtures stop being read-only | Everything in §11 becomes a live integration rather than a walk-through, and **ACT5** (the mid-action commit) is the first thing that would bite |
+
+**Weaknesses named now so they are not discovered later:**
+
+- **`observed_effects` is unverifiable.** §3.3 says so; it is repeated here because it is the single most over-readable sentence in the document.
+- **The gate cannot enforce.** §4 says so at length. A deployment that never queries the overrides gets a ledger and no governance.
+- **`projection`'s admission rule is one host's convention.** `counts` is the rule-independent half and `fits`/`would_evict` are labelled — but a caller who reads only the latter is trusting beacon's category-dropping behaviour without knowing it.
+- **`min_auto_tier` assumes a total order per deployment**, inherited from `INTERFACE.md` §2.7's own **[Assumed]**, and it may be wrong for mixed vendors. §12 T2.7 makes the *absence* of an order honest; it does not make a partial order work.
+- **Nothing sizes the invocation ledger.** An append-only record of every invocation of every family grows without bound, and no retention story exists — the same weakness `EDGES.md` §13 records for retracted edges, one object along.
+
+---
+
+## 16. Questions for the supervisor — **Q35 onward**
+
+Numbering continues from Q34 (ruled as R39). None of these is taken on this document's authority.
+
+| # | Question | Recommendation | Founder-visible? |
+|---|---|---|---|
+| **Q35** | **A value-level condition now has THREE surfaces reaching for it** — `Consumer.gate` (contortion 11), edge consumer gates (Q17, ruled **R22**), and now `Precondition` (**ACT4**). R17 was granted on **two** fixtures reaching for one missing value | **Do not take it in a spec row; re-open R22 in Phase 3 with the count attached.** R22's own reasoning — *both would make `Consumer.gate` a query language* — is still right, and the third surface strengthens the case for deciding all three **together** rather than for deciding one now. The recommendation is that Phase 3's decision be scoped to *all* gates, not to preconditions | **Yes** — it is the third instance of one gap and it now blocks a design test's central case |
+| **Q36** | **`projection`'s admission rule is one host's convention** (§10.4). Is one rule enough for v0, or does the report need to carry two? | **One, for v0.** `counts` is rule-independent and a host with a different rule computes from it. A second rule invented before a second host exists is the framework-before-the-problem failure `ROADMAP.md` standing constraint 2 names | No |
+| **Q37** | **`InvocationProvenance` drops `imported_from`** (§3.2), so a host with a year of undo records has no way to import them as invocations | **Add it in v1, not now.** It is additive and defaults `None`, exactly as **R21**'s `source_version` was — but nothing needs it yet, and `Provenance` gained its field only when a *second* shape had it and drifted. Record the omission and take it when a migration asks | No |
+| **Q38** | **Does R24's tenancy ruling survive contact with actions?** R24 ruled the protocol tenant-blind on the reasoning that `namespace` scopes a vocabulary, not a tenant, and that a host filters inside its adapter. **An edge written for the wrong tenant is a wrong row; an action invoked for the wrong tenant is a wrong EFFECT** — and §11.4 shows beacon's enterprise blocker sitting exactly there | **Keep R24 for v0 and flag it as the ruling most likely to be revisited.** R24 is already explicitly provisional (*"Phase 4 may force a dimension"*). Nothing here should take it unilaterally, and beacon's 2B harness is the evidence that decides it | **Yes** — it gates the enterprise story, and R24 is founder-visible already |
+| **Q39** | **The gate is advisory by construction** (§4). Should a deployment be able to declare *"invocations of this family MUST carry a `gate_verdict` of `allowed`"* — i.e. `record_invocation` refusing an override? | **No in v0, and the reason is the one §2.5 gives twice.** Refusing to record an override destroys the evidence that the override happened, which is worse than recording it. The enforcement a deployment wants belongs at the executor, which this protocol does not have | No |
+| **Q40** | **A ninth key, `retention`, on the family.** The invocation ledger grows without bound (§15.2) and nothing sizes it | **Record it, do not take it.** It is the same question `EDGES.md` §13 records for retracted edges and `INTERFACE.md` has for events; three objects with one retention question want **one** answer, and taking it here would give the third object a mechanism the first two lack | No |
+
+---
+
+## 17. Kill-criterion check — required, and not skipped
+
+**`ROADMAP.md`'s kill row:** *"A capability predicate gets merged as a duplicate → Stop."* And the rule of the ordering: *nothing may take a shape because Tenshen has it.*
+
+**Neither is tripped, and here is the mechanical form of both.**
+
+**1. Can an action merge anything?** **No, and it is refused at the declaration door rather than at the write.** `merge_types` is one of the six governance calls §2.5 excludes from the effect vocabulary as a **general rule**, not a family's opt-in. §13 T3.4 declares a family with `Effect(op="merge_types", …)` and gets `Refusal(reason="effect_not_permitted", detail={"door": "declaration"})`. **This is a door no previous row had** — a verb is a governed, approved, tool-shaped wrapper, and a merge inside one would be the kill row with a permission slip.
+
+**2. Does the shipped `merge_types` still refuse with an action layer on top?** **Yes, checked against `open_ontology.Registry` rather than against the probe's model.** §13 T3.5: with the `equivalent_to` edge written, a `reconcile_borough` family declared and approved, and its `reconciled_with` edge written, `merge_types("borough", "borough", namespace="dpr", into_namespace="oti_311")` returns `Refusal(reason="cross_namespace_merge")` — **and again** under `acknowledge=["cross_namespace_merge","definitions_diverge"]`. `EDGES.md` T3.12, re-run one layer up.
+
+**3. Can a predicate be reached through an action?** **No, and the rule is general at both doors this document has.** An `InputSpec` may not name `predicate` in `kinds` (§2.3, checked in §13 T3.1b), and §2.4's `predicate_holds` asks about **one** type's membership rather than comparing two extents. **`merge_capabilities(commentable, searchable)` is the kill row spelled as a tool call**, and the input rule is what makes it unconstructible. `EDGES.md` §2.4.1 had to learn this the hard way — its first draft left the exclusion inside one family's declaration, and a round-1 reviewer walked straight through it — so the rule here is general from the first draft **because that round was already paid for**.
+
+**4. Did anything take its shape from Tenshen?** The eight keys, one at a time:
+
+| key | Whose need |
+|---|---|
+| `inputs`, `preconditions` | **UC2 and UC3.** `edge_absent` is the one key whose *sharpest* example is UC1's opaque `mutation_failed`, and it is in the vocabulary because a negated edge query costs nothing once `edge_exists` exists — not because beacon has the failure |
+| `effects` | **UC1, and it is the one place beacon's data drove a decision.** 15 FKs on `people.id` is what turned `effects` from a nice idea into the section with the longest argument. **Recorded as a Tenshen-shaped input rather than denied** — and the *rule* it produced (the six governance exclusions) came from UC3's kill-row test, not from beacon |
+| `reversibility` | **UC1**, three values where beacon has a boolean plus a hand-written undo payload. Same category as `effects`: the fixture showed the gap, and the three values are `INTERFACE.md` §2.4's honesty rule applied to it |
+| `approval_mode`, `min_auto_tier` | **UC2**, via `0.5-RESULTS.md`. The severity inversion is what makes tier a product parameter, and §12 is the end-to-end |
+| `reachability` | **UC1.** 127 of 128, measured **[Observed]** |
+| `payload_schema` | **UC2**, via `PACKAGE.md` §5.1's A–L ordering argument and **R10** |
+
+> **Three of the eight are shaped by beacon, and that is more than any previous row, so it is stated rather than minimised.** `EDGES.md` §15 could say *"zero are shaped by beacon"*; this document cannot. The reason is structural: **beacon is the only fixture in the three that HAS actions.** CMS is a CSV and NYC is a catalogue; neither has a verb. So UC1 is the only place a real action's shape could come from, and the honest framing is not *"nothing came from Tenshen"* but **"the shapes came from the one fixture that has actions, and every RULE constraining them came from CMS or NYC"** — the six governance exclusions from UC3's kill-row test, the precondition boundary from UC2's severity case, the tier gate from 0.5.
+>
+> **The check that matters is the direction of the one real conflict, and it runs against UC1's interest.** UC1 would be *served* by a `host_state` effect that needs no `why` — beacon's actions mutate host state constantly and 11 of `delete_person`'s 15 FKs are undeclarable — and §2.5 requires the sentence anyway, so beacon's largest action carries two `host_state` admissions rather than a silent zero. **CMS's rule beat UC1's convenience**, per the rule of the ordering.
+
+**5. Would deleting §10 leave the rest coherent?** Yes — §2–§9 stand without the ceiling section, and CMS and NYC need no `reachability` at all. That is the operational test of whether a design is centred on one host's constraint, and it is not: §10 is the part of this document that is *about* beacon, and it is separable.
+
+---
+
+## 18. Exit criteria — `ROADMAP.md` row #6, checked
+
+| Criterion | Where |
+|---|---|
+| A governed action layer over the registry and the edge store, specified | §2–§9. An action family **is** a `kind="action"` `TypeEntry`; four calls, none of them in `INTERFACE.md` §5; three adapter primitives |
+| `v0` and "unstable" in the header, and the assumptions line verbatim | Header, lines 3 and 5 |
+| **No executor and no scheduler** | §1's first two non-goals, and §4 states the consequence rather than hiding it: the gate is advisory by construction |
+| Invocations with append-only provenance | §3. `Invocation`, `InvocationProvenance` narrowing `Provenance` the *other* way from `EdgeProvenance`, `EventRecord.invocation_id`, three event values, and a correction that is a new event while a compensation is a new invocation |
+| Gating — families through the proposal loop, invocations through `approval_mode` / `min_auto_tier` | §5. And §5.3 states what `min_auto_tier` does **not** decide, per **R20** |
+| New `Refusal.reason` values through `INTERFACE.md` §5.12 in the same change (**R3**) | **Six** added: `action_family_unknown`, `precondition_unmet`, `human_approval_required`, `tier_below_action_policy`, `effect_not_permitted`, `action_store_absent`. §5.12 enumerates **twenty-seven**; `types.REFUSAL_REASONS` carries them in the same commit. A seventh (`unknown_invocation`) is argued and **not** taken |
+| New `warnings` values through `INTERFACE.md` §5.4 in the same change | **One**: `effect_undeclared:<op>:<target>`, §5.4 now **twenty-three** across nine carriers. The brief offered it as a *refusal*; the UC1 design test moved it |
+| Capability flags in `PACKAGE.md`'s style, with `why`; adapter primitives ≤ 4 | §8 (three flags, two declarations, three more argued **not** taken) and §9 (**three** primitives, 19–21) |
+| Tenancy: none in the protocol (**R24**) | §8, and §11.4 names the consequence for beacon's enterprise blocker instead of claiming a fix |
+| The tool-slot ceiling as a first-class design input | §10. Re-measured, not cited: 128 / 127 / 222 / 19 / 27, and `common 45 + task 48 + project 21 + person 13 = 127` reproduced arithmetically through `projection` |
+| A design-test section per use case, expected outcomes stated first | §11, §12, §13. **Thirty-two predictions, committed in a separate commit ahead of the results; five contortions recorded, none designed away**; **54 probe checks** across four probes, all passing |
+| Standing constraint 8 from the start | §14. **47** numbered rules across eight sections: **43** planned `C19` ids, **4** `prose-only` tags with reasons. `check_spec_drift.py`'s extension is the build row's, and §14 says why wiring it early would be worse than not wiring it |
+| Which mechanism it is designed against, and what would change it | §15 |
+| Kill-criterion check | §17. Not tripped, at **three** doors — the effect vocabulary, the input vocabulary, and the shipped `merge_types` — and the Tenshen-shape question answered honestly rather than favourably |
+| An adversarial review loop | §19 |
