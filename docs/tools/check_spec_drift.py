@@ -364,6 +364,9 @@ R31_SECTIONS = {
     # Row 4c, ruling R34: `payload_schema` stopped being inert, so its rules come under
     # the gate in the change that gave them behaviour rather than a row later.
     "2.5": "### 2.5",
+    # Row 4c, ruling R37: `edge_amended` was narrated with a worked example and written
+    # by nothing. The amend path lands with its rules under the gate.
+    "5.2": "### 5.2",
     "4.3": "### 4.3",
     "4.4": "### 4.4",
 }

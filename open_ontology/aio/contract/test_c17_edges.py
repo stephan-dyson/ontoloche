@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C17 -- the edge store and the read seam (40). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (43). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -1888,3 +1888,200 @@ async def test_c17_40_the_census_enumerates_edge_payload_keys_and_stays_tri_stat
         "and `declared_why` names the schema the answer depends on"
     )
     assert rows["role"].schema_versions == (1,)
+
+@pytest.mark.requires_capability(
+    "stores_edges", "stores_attributes", "stores_edge_events", "stores_events"
+)
+async def test_c17_41_an_amendment_is_a_new_event_carrying_the_old_and_new_values(registry):
+    """EDGES.md 5.2 verbatim, and it is that section's own worked example.
+
+    *"Changing an edge's `confidence` after a re-classification is a new `edge_amended`
+    event carrying the old and new values; it is not an edit of the first event, and the
+    first event's `created_by_actor` stays whatever it was."* Beacon's weekly job
+    re-running over the same pair is exactly this case, and today it has no trail at all.
+
+    So: the row carries the new value, the history carries both, and `edge_added` is
+    untouched -- INTERFACE.md 5.8's append-only rule, unchanged for edges.
+    """
+    await seed(registry, "task")
+    await blocks(registry)
+    origin = _payload_task()
+    edge = await registry.add_edge(
+        "blocks",
+        origin,
+        _payload_task(2),
+        "ai:haiku_classifier",
+        created_by="ai",
+        confidence=0.62,
+        model_tier="haiku",
+    )
+    assert not isinstance(edge, Refusal), edge
+
+    amended = await registry.amend_edge(
+        edge.edge_id,
+        "re-classified at a higher tier",
+        amended_by="ai:sonnet_classifier",
+        confidence=0.91,
+        model_tier="sonnet",
+    )
+    assert not isinstance(amended, Refusal), amended
+    assert amended.edge_id == edge.edge_id, "the same edge, corrected -- not a new one"
+    assert amended.provenance.confidence == 0.91
+    assert amended.provenance.model_tier == "sonnet"
+    assert amended.provenance.created_by_actor == "ai:haiku_classifier", (
+        "the first writer is not rewritten by the second -- 5.2's own sentence"
+    )
+
+    history = await registry.edge_provenance(edge.edge_id)
+    assert not isinstance(history, Refusal), history
+    events = [event.event for event in history.history]
+    assert events == ["edge_added", "edge_amended"], events
+    changed = history.history[-1].detail["changed"]
+    assert changed["confidence"] == {"before": 0.62, "after": 0.91}
+    assert changed["model_tier"] == {"before": "haiku", "after": "sonnet"}
+    assert history.history[-1].actor == "ai:sonnet_classifier"
+    assert history.history[-1].detail["reason"] == "re-classified at a higher tier"
+    assert history.history[0].actor == "ai:haiku_classifier", (
+        "append-only: the first event is not edited by the correction"
+    )
+
+@pytest.mark.requires_capability(
+    "stores_edges",
+    "stores_edge_events",
+    "stores_events",
+    "stores_attributes",
+    "stores_edge_attributes",
+)
+@pytest.mark.requires_attribute_store
+async def test_c17_42_an_amendment_is_not_a_second_write_path(registry):
+    """**The design test ruling R37 required before the path could be taken.**
+
+    R37 says decide the amend path *"unless a design test shows it is a second write
+    path in disguise"*, and that is not a rhetorical caution: the kill row's THIRD trip
+    (`05b8e04`) is exactly that shape -- `retire(successor=)` reaching `merge_types`'
+    outcome carrying none of `merge_types`' guards. Three properties, asserted rather
+    than promised:
+
+    1. **`family`, `src` and `dst` are not parameters**, so 2.4.1's endpoint rules have
+       nothing to be talked around. Re-pointing an edge is `retract_edge` + `add_edge`,
+       which 3.2 already names as the shape of re-assertion.
+    2. **The payload goes back through R34's validation on the same terms as the write.**
+       An amend that skipped it would be a guard written for one call over a fact more
+       than one call can change -- the third trip's diagnosis, verbatim.
+    3. **`status` is not a parameter and a retracted edge is refused.** A retracted edge
+       is no claim (3.2); un-retracting through the amend door is `retract_edge`'s guard
+       being walked around.
+    """
+    import inspect
+
+    parameters = set(inspect.signature(registry.amend_edge).parameters)
+    assert parameters == {
+        "edge_id",
+        "reason",
+        "amended_by",
+        "confidence",
+        "attributes",
+        "model_tier",
+        "source_version",
+        "evidence",
+    }, (
+        "an amend that could move an endpoint, change a family or set a status would be "
+        "add_edge and retract_edge with none of their guards -- this is the whole "
+        "design test, and it is structural rather than promised"
+    )
+
+    await _payload_family(registry)
+    await registry.register_attribute_schema(_schema("blocks_payload", mode="enforce"))
+    edge = await registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd", attributes={"role": "owner"}
+    )
+    assert not isinstance(edge, Refusal), edge
+
+    refused = await registry.amend_edge(
+        edge.edge_id,
+        "widen the role",
+        amended_by="user:sd",
+        attributes={"role": "nobody"},
+    )
+    assert isinstance(refused, Refusal), refused
+    assert refused.reason == "attributes_schema_violation"
+    assert refused.detail["kind"] == "edge_payload"
+    assert refused.detail["edge_id"] == edge.edge_id
+    assert refused.detail["violations"] == [
+        "role:'nobody' is not one of ['owner', 'reviewer']"
+    ]
+    still = await registry.edge_provenance(edge.edge_id)
+    assert [event.event for event in still.history] == ["edge_added"], (
+        "a refused amendment appends no event -- the refusal happens before the write"
+    )
+
+    await registry.retract_edge(edge.edge_id, "written in error", retracted_by="user:sd")
+    after = await registry.amend_edge(
+        edge.edge_id, "put it back", amended_by="user:sd", confidence=1.0
+    )
+    assert isinstance(after, Refusal), after
+    assert after.reason == "already_decided"
+    assert after.detail["status"] == "retracted"
+
+    with pytest.raises(ValueError):
+        await registry.amend_edge(edge.edge_id, "", amended_by="user:sd", confidence=1.0)
+    with pytest.raises(ValueError):
+        await registry.amend_edge(edge.edge_id, "nothing to change", amended_by="user:sd")
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+async def test_c17_43_an_amendment_that_cannot_be_recorded_is_refused_and_a_retraction_is_not(
+    adapter, make_registry
+):
+    """PACKAGE.md 3.6's rule, and **the one place amend does not follow `retract_edge`**.
+
+    EDGES.md 2.6 argues retraction past 3.6 because *"the record IS the row"*: `status`,
+    `retracted_by`, `retracted_at` and the reason are columns on the edge itself, so an
+    unrecordable retraction does not exist. **That argument does not transpose.** There
+    is no column holding an edge's PRIOR confidence, so on `stores_edge_events=False` an
+    amendment erases the old value with no record anywhere that it ever held one --
+    which is 3.6's rule verbatim, and `reinstate`'s shape exactly (3.6's own box: it
+    clears fields off the live row, which makes its event the only record).
+
+    **No new `Refusal.reason` is minted.** `cannot_record_override` is the fourth caller
+    of an argued rule rather than an exemption from it. And the contrast is asserted in
+    the same test, on the same store, because the two behaviours are only defensible
+    together: the retraction still succeeds and still warns.
+    """
+    degraded = AsyncDegradedAdapter(
+        adapter,
+        stores_edge_events=False,
+        why={
+            "stores_edge_events": (
+                "this host owns the link table and it has no event rows; a correction "
+                "would overwrite the confidence with nothing to say what it was"
+            )
+        },
+    )
+    registry = await make_registry(degraded)
+    await seed(registry, "task")
+    await blocks(registry)
+    edge = await registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "ai:classifier", created_by="ai",
+        confidence=0.62,
+    )
+    assert not isinstance(edge, Refusal), edge
+
+    refused = await registry.amend_edge(
+        edge.edge_id, "re-classified", amended_by="ai:classifier", confidence=0.91
+    )
+    assert isinstance(refused, Refusal), refused
+    assert refused.reason == "cannot_record_override"
+    assert refused.detail["flag"] == "stores_edge_events"
+    assert refused.detail["overridable"] is False
+    assert "no event rows" in refused.detail["why"]
+
+    retracted = await registry.retract_edge(
+        edge.edge_id, "superseded by a re-classification", retracted_by="ai:classifier"
+    )
+    assert not isinstance(retracted, Refusal), (
+        "EDGES.md 2.6 -- the record IS the row for a RETRACTION, and that half stands"
+    )
+    assert retracted.status == "retracted"
+    assert any(
+        w.startswith("retracted_without_event_trail:") for w in retracted.warnings
+    )

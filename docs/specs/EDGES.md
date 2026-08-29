@@ -470,7 +470,7 @@ EdgeProvenance:
 
 **`confidence` is `float | None` and `None` is not `0.0`.** Beacon types it `Float` nullable on both `WorkLink` and `PersonLink` **[Observed]**, and `interview_service` selects rows *"with a null `relationship_type` or confidence below 0.7"* — so null confidence is a live, meaningful state in the one host this must sit over. Coercing it to `0.0` would turn *"nothing scored this"* into *"scored zero"*, which is `INTERFACE.md` §5.3's `confidence: None ≠ 0.0` rule verbatim.
 
-### 5.2 Append-only, and what a correction is
+### 5.2 Append-only, and what a correction is — `amend_edge`, ruling **R37**
 
 `INTERFACE.md` §5.8: *"`history` is append-only: a correction is a new `ProvenanceEvent`, never an edit."* Unchanged for edges, with one addition that the shape forces.
 
@@ -485,7 +485,47 @@ class EventRecord:
 
 with three new `event` values — `edge_added`, `edge_retracted`, `edge_amended` — and the same rule as everything else in that vocabulary: the adapter **stores** the string and never judges the transition (`PACKAGE.md` §3.1).
 
-**Corrections in practice.** Changing an edge's `confidence` after a re-classification is a new `edge_amended` event carrying the old and new values; it is not an edit of the first event, and the first event's `created_by_actor` stays whatever it was. Beacon's weekly job re-running over the same pair is exactly this case, and today it has no trail at all.
+**Corrections in practice, and the call that makes them** *(ruling **R37**, row 4c)*. Changing an edge's `confidence` after a re-classification is a new `edge_amended` event carrying the old and new values; it is not an edit of the first event, and the first event's `created_by_actor` stays whatever it was. Beacon's weekly job re-running over the same pair is exactly this case, and until row 4c it had no trail at all — because **v0 had no amend call**. `edge_amended` was a vocabulary value nothing wrote, this section narrated it as landed behaviour, and row 4b recorded that as deviation **D-4b-13** and asked **Q32**: give edges an amend path, or delete the example.
+
+```python
+def amend_edge(
+    edge_id: str,
+    reason: str,                              # REQUIRED, non-empty
+    *,
+    amended_by: str,
+    confidence: float | None = UNCHANGED,
+    attributes: dict | None = UNCHANGED,
+    model_tier: str | None = UNCHANGED,
+    source_version: str | None = UNCHANGED,
+    evidence: list[Evidence] = UNCHANGED,
+) -> Edge | Refusal: ...
+```
+
+**`UNCHANGED` is a sentinel and not decoration.** §5.1 makes the point for the field that matters most: `confidence` is `float | None` and `None` is *"nothing scored it"*, never `0.0`. A default of `None` could not distinguish *leave it alone* from *a re-classification decided nothing scores this any more*, and the second is a correction beacon's `interview_service` selects on.
+
+> **R37's condition was a design test — *take the amend path unless it is a second write path in disguise* — and that is not a rhetorical caution.** The `ROADMAP.md` kill row's **third** trip (`05b8e04`) is precisely that shape: `retire(successor=)` reached `merge_types`' outcome carrying none of `merge_types`' guards. The test passed on three properties, and all three are **structural** rather than promised. `C17-42` asserts them, the first of them by reading the signature.
+
+1. **`family`, `src` and `dst` are not parameters.** An amend cannot move an endpoint, change a family, or reify anything, so §2.4.1's declaration-time and write-time checks have nothing to be talked around. Re-pointing an edge is `retract_edge` followed by `add_edge` — which §3.2 already names as the shape of re-assertion: *a retracted edge is no claim; re-asserting it is a new edge whose provenance cites the retracted one.*
+2. **`attributes` goes back through §2.5's payload validation on exactly `add_edge`'s terms**, and `attr_schema_version` is re-stamped with the version in force at the amendment. An amend that skipped it would be *a guard written for one call over a fact that more than one call can change*, which is the third trip's own diagnosis, one row later.
+3. **`status` is not a parameter, and a retracted edge is refused `already_decided`.** A retracted edge is no claim; amending one asserts something about a claim that was withdrawn, and un-retracting through the amend door is `retract_edge`'s guard being walked around.
+
+**It is REFUSED when the event cannot be recorded, and that is the one place it does not follow `retract_edge`.** §2.6 argues retraction past `PACKAGE.md` §3.6 because *"the record **is** the row"* — `status`, `retracted_by`, `retracted_at` and the reason are columns on the edge itself, so an unrecordable retraction does not exist. **That argument does not transpose.** There is no column holding an edge's *prior* confidence, so on `stores_edge_events=False` an amendment erases the old value with no record anywhere that it ever held one — which is §3.6's rule verbatim, *a destructive override that cannot be recorded is refused*, and it is `reinstate`'s shape exactly (§3.6's own box: `reinstate` clears fields off the live row, which makes its event the only record).
+
+So `amend_edge` returns `Refusal(reason="cannot_record_override")` on `stores_edge_events=False` **or** `stores_events=False` — both, per the lesson `edge_provenance` paid for, because `stores_events` gates the same `append_event` primitive and nothing ties the two declarations together. **No new `Refusal.reason` is minted:** this is the fourth caller of an argued rule rather than an exemption from it. The available path on such a store is `retract_edge` + `add_edge`, which §3.2 already blesses and which that store *can* record, because the record is the row. `C17-43` asserts both halves on one store — the amendment refused, the retraction still succeeding and still warning — because the two are only defensible together.
+
+**Two caller errors raise rather than refuse**, on §5.5's rule for a closed vocabulary: an empty `reason`, and an amendment that names no field to change. The second is not pedantry — an `edge_amended` event recording no amendment is a trail entry asserting a correction nobody made, and a call that quietly did nothing is the shape ruling **R4** forbade for `register_consumer`.
+
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. Held against the contract suite by [`check_spec_drift.py`](../tools/check_spec_drift.py).
+
+| # | rule | exercised by |
+|---|---|---|
+| 5.2-1 | A correction is a new `edge_amended` event carrying the old and new values; the row carries the new, the history carries both, and the first event is not edited | `C17-41` |
+| 5.2-2 | `family`, `src`, `dst` and `status` are not amendable — an amend is not a second write path, and the guarantee is the signature rather than a promise | `C17-42` |
+| 5.2-3 | An amended `attributes` is validated on `add_edge`'s exact terms (§2.5), and a refused amendment appends no event | `C17-42` |
+| 5.2-4 | Amending a retracted edge is refused `already_decided` | `C17-42` |
+| 5.2-5 | An amendment that cannot be recorded is refused `cannot_record_override`, while a retraction on the same store still succeeds and warns — §2.6's *"the record is the row"* covers retraction and does not transpose | `C17-43` |
+| 5.2-6 | An empty `reason`, or an amendment naming no field, raises `ValueError` | `C17-42` |
+| 5.2-7 | `EventRecord.edge_id` is the one shape amendment this section makes, and the adapter stores the `event` string without judging the transition | `C17-26` |
 
 ### 5.3 `source_version` — taken here, and the asymmetry recorded
 
@@ -516,7 +556,7 @@ In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabil
 | Flag | `False` means | `why` example | What the registry does |
 |---|---|---|---|
 | `stores_edges` | there is no edge store behind this adapter | *"this backend is a type registry only; no table holds relationships"* | **every** edge call returns `Refusal(reason="edge_store_absent")`. Never an empty report — §4.3 |
-| `stores_edge_events` | an edge event cannot be persisted | *"`work_links` has no event table and beacon owns the schema"* | `retract_edge` **succeeds** and warns `retracted_without_event_trail:<why>` (§2.6); `provenance(edge).history == []` with the `why` |
+| `stores_edge_events` | an edge event cannot be persisted | *"`work_links` has no event table and beacon owns the schema"* | `retract_edge` **succeeds** and warns `retracted_without_event_trail:<why>` (§2.6); `provenance(edge).history == []` with the `why`; **`amend_edge` REFUSES `cannot_record_override`** (§5.2, ruling R37) — the record is the row for a retraction and there is no column for a prior confidence |
 | `indexes_edges_by_family` | a family filter costs a scan of the node's edges | *"`work_links.relationship` is free text with no index"* | correctness is unchanged — the registry filters above the store. But a scan may hit a bound, and then `depth_reached < depth_requested`, `complete=False`, `why_incomplete` = this sentence |
 | `stores_edge_attributes` | an arbitrary payload key does not round-trip | *"`work_links` has `description` and `confidence` as columns and no JSON blob"* | `Edge.attributes` returns **only** the keys in `edge_attribute_projections`. **No warning value is minted for this**, deliberately: `PACKAGE.md` §3.4 primitive 4's mechanism is that the *returned record* is the signal — a key that did not round-trip is absent from it, and `Capabilities.why` says why — and the type side has no warning for it either. Adding one here would make the edge path and the type path report the same fact two different ways |
 
