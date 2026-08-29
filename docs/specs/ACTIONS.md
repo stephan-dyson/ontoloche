@@ -653,3 +653,98 @@ def find_invocations(
 **`compensates` is on the primitive and `compensated_by` is on the surface**, which is one fact stored one way and read the other. The store holds the forward pointer because the compensating invocation is written *after* the one it compensates and a store never rewrites a row (`INTERFACE.md` §5.8); the façade derives the backward pointer. **Stated because the asymmetry is real and a reader who saw only the surface would look for a field the store does not have.**
 
 **`Evidence` and `history` are not on the record.** Evidence goes through `append_event`'s existing path with `invocation_id` set (§3.5), which is where `Provenance.history` already lives (`PACKAGE.md` §3.4 primitive 15). Putting them on `InvocationRecord` would give one concept two homes and would make a backend that stores invocations but not events undescribable.
+
+---
+
+## 10. The tool-slot ceiling is a first-class design input
+
+### 10.1 The measurement, re-derived rather than cited
+
+**[Observed 2026-08-29**, re-measured from `C:\Users\steph\projects\beacon` at this row's start; method published so a reader can re-run it.**]**
+
+| fact | value | method |
+|---|---|---|
+| provider cap | `MAX_TOOLS_PER_REQUEST = 128` | `src/beacon/assistant/modes/multi_tool.py:2481` |
+| effective budget | **127** | `budget = MAX_TOOLS_PER_REQUEST - 1`, twice (`multi_tool.py:2600`, `:2813`) — the array also carries `finalize_reply` |
+| action modules | **222** | `ls src/beacon/assistant/actions/*.py`, excluding `_`-prefixed |
+| categories | **19**, all of them used | `ALL_CATEGORIES` in `assistant/_base.py:355`; per-module first `category="…"`, defaulting to `common` |
+| `task_detail`'s sum | common **45** + task **48** + project **21** + person **13** = **127** | the per-module count above; 45 = 14 explicit + 31 defaulted |
+| read-only actions | **27** | `grep -rl 'reads_only=True'` |
+
+The full per-category count, which sums to 222: task 48 · common 45 · calendar 23 · project 21 · shape 19 · person 13 · intake 10 · org 7 · report_source 6 · recurrence 6 · thing 4 · reminder 4 · aura 4 · goal 3 · connect_suggestion 3 · decision 2 · billing 2 · snooze 1 · pin 1.
+
+**So the busiest page sits at exactly the budget, and beacon's own source says what that costs**: *"a 49th `task` tool evicts `person` outright, so shipping a `reorder_subtasks` ActionSpec would trade 'chat can reorder sub-tasks' for 'chat can no longer add a person to this task' — a bad trade, and a silent one"* (`assistant/coverage.py`, the sub-task drag-reorder exclusion). **[Observed]** two routes are excluded from the product on that arithmetic alone.
+
+**This is mechanism C with a number attached.** A new action family is invisible on a surface that had no room for it, and the invisibility is silent — which is `FINDINGS-0.1`'s incident shape (*a producer emits a type; a consumer gates on its own private allowlist; the feature dies silently in the consumer that was not updated*) with a provider cap playing the allowlist. `INTERFACE.md` §5.1 exists because that failure was real; this section is the same failure, measured.
+
+### 10.2 `reachability`, and the rule about who decides
+
+`reachability: list[str]` on the family (§2.2) names the **surfaces** on which a host may expose it. The values are opaque strings in the host's own vocabulary — `INTERFACE.md` §2.7's posture for `model_tier`, and for the same reason: *the registry does not know what a surface is.* **[Observed]** beacon's `ActionSpec.category` is exactly this field, already present, already validated against a closed list, and already the unit its selector drops.
+
+> **The rule, and it is not negotiable by a later revision: the registry never decides which families reach a surface.** That is the host's, always. What the registry can do is arithmetic the host is currently doing in a comment — count the families per group, apply an admission rule the caller supplies, and name what falls off the end. **Cause C, made visible, exactly as `consumers` makes it visible for types.**
+
+### 10.3 `projection` — the call, and what it refuses to answer
+
+```python
+def projection(
+    surface: str,                        # a LABEL for the report: the context being assembled
+    *,
+    budget: int,
+    order: Sequence[str] | None = None,  # reachability groups, in the HOST's own drop order
+    reserved: int = 0,                   # slots the host reserves for non-action tools
+    namespace: str | None = None,
+) -> ProjectionReport | Refusal: ...
+```
+
+```
+ProjectionReport:
+    surface:          str
+    budget:           int
+    reserved:         int
+    counts:           dict[str, int]        # families per reachability group. RULE-INDEPENDENT
+    rule:             str                   # "greedy_whole_group" -- 10.4
+    order_source:     "caller" | None       # None = no order supplied. Rule U
+    fits:             tuple[str, ...]       # groups admitted, in order
+    would_evict:      tuple[str, ...]       # groups that do not fit, in order
+    over_by:          int                   # 0 when everything fits
+    consumers_at_risk: tuple[str, ...]      # consumer ids gating on an evicted family
+    known:            int | None            # families counted. None = backend cannot count
+    complete:         bool                  # Rule K
+    why_incomplete:   str | None
+```
+
+**Selection:** every registered, `active`, `kind="action"` family whose `reachability` intersects `order`. `surface` is a label recorded on the report, not a filter — a family does not know which *page* a host assembles, and asking it to would put the host's routing table in the registry.
+
+**With `order=None` the call answers `counts` and nothing else.** `fits` and `would_evict` are empty, `order_source` is `None`, `complete` is `False`, and `why_incomplete` reads *"no order supplied; the registry does not choose which families reach a surface"*. **That is §10.2's rule made structural rather than promised.** The one question this document most obviously *could* have answered — *which 128?* — is the one it is built to be unable to answer.
+
+**Refuses with `action_family_unknown`** when `order` names a group no registered family carries **and** `order` names nothing else either — a projection over an entirely unknown vocabulary is a typo, and an empty report for a typo is mechanism C committed by the call that exists to surface it. When `order` names a mix of known and unknown groups, the unknown ones appear in `counts` with `0` and `complete` goes `False` with a `why`, because a host legitimately assembles a context from groups that happen to be empty today.
+
+### 10.4 The admission rule is the host's convention, and the registry does one of them
+
+`rule="greedy_whole_group"`: groups are admitted **whole**, in the caller's order, while `used + len(group) ≤ budget − reserved`. The first group that does not fit, and every group after it, is `would_evict`.
+
+**Whole groups, because that is what the only observed host does.** **[Observed]** `_select_categories_for_context` *"bounds it by dropping whole categories"*, and the exclusions in `coverage.py` are written in exactly those terms (*"evicts `person` outright"*). A report computed under a rule the host does not use would be worse than no report.
+
+**And it is still a policy, which is why `counts` is separate.** `counts` is rule-independent: it is *how many families carry each group*, which is true whatever the host does with them. A host that admits partial groups, or re-orders by usage, or reserves per-group, computes its own answer from `counts` and ignores `fits`/`would_evict`. **The split is deliberate — the useful half of this call is the counting, and the opinionated half is labelled `rule` so a caller can see that it is one.** §16 carries **Q36**: whether a second admission rule is worth having in v1, and the recommendation there is no until a second host exists.
+
+### 10.5 `consumers_at_risk` — Cause C, one level along, and it is never complete
+
+For every family in `would_evict`, the registry reads the family's `TypeEntry.predicates` and asks `consumers` who gates on them — `EDGES.md` §8's move, with no new mechanism and no new call. The answer names the code paths that will stop being reached when that group is dropped.
+
+> **It is never complete, and the report says so.** `INTERFACE.md` §5.1: `ConsumerReport.complete` is **always `false`** in v0. So `consumers_at_risk` is a list of *known* casualties and never the list of *all* of them, `complete` on the `ProjectionReport` inherits the `false`, and a caller printing this number without the caveat is making a claim this document did not authorise. **That sentence is `EDGES.md` §13's first named weakness, and it applies here verbatim rather than being rediscovered.**
+
+### 10.6 What this section does NOT do
+
+- **It does not move the ceiling.** 128 is a provider's, and **[Observed, beacon spec §10.7]** the comment above the constant names OpenAI and Gemini's OpenAI-compat endpoint as both rejecting a larger array. Beacon's own document is careful that *"binds every live route"* is an inference with one unverified link (Azure Foundry's own cap is asserted by no source in that repo); this document inherits the caution rather than restating the claim more confidently than its source.
+- **It does not subsume tools.** **[Observed]** 27 of 222 actions are `reads_only=True`, and beacon's §5.6 reads that as *"a typed traversal tool is the one kind of new tool that could subsume several narrow reads"*. That is a beacon product decision, it is Q3 in beacon's own §7, and nothing here takes it.
+- **It does not rank.** No `priority`, no usage-weighted ordering, no *"drop the least-used"*. `usage()` exists and a host may order by it; the registry supplying an order would be deciding which 128.
+
+| # | rule | exercised by |
+|---|---|---|
+| 10-1 | `reachability` values are opaque strings in the host's vocabulary; the registry never interprets one | `C19-19` |
+| 10-2 | The registry never chooses which families reach a surface — with `order=None` the report carries `counts` only, `order_source=None`, `complete=False` and a `why` | `C19-20` |
+| 10-3 | `counts` is rule-independent and `fits`/`would_evict` are computed under the named `rule`; a caller may use one without the other | `C19-21` |
+| 10-4 | `rule="greedy_whole_group"` admits groups whole, in the caller's order, until `budget − reserved` is exhausted | `C19-22` |
+| 10-5 | `consumers_at_risk` inherits `ConsumerReport.complete == False` and can never be a complete casualty list | `C19-23` |
+| 10-6 | A projection whose `order` names only groups no family carries is refused with `action_family_unknown`, not answered with an empty report | `C19-24` |
+| 10-7 | The 128 ceiling is a provider's and the registry neither enforces nor assumes it — `budget` is a caller's argument with no default | `C19-25` |
