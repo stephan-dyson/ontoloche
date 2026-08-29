@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C9 -- ``retire`` and ``reinstate`` (12). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (15). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -222,9 +222,18 @@ async def test_c9_09_a_retired_name_can_be_reinstated_and_resolves_again(registr
     """
     from open_ontology.types import ResolveContext
 
+    # The retirement names a SUCCESSOR, and the successor is then retired too -- which
+    # is what makes the `successor` assertion below mean anything. [Observed, row 3e
+    # second adversarial round] this test used a retirement with no successor, so the
+    # `successor is None` leg was vacuous: a `reinstate` that kept the field ran the
+    # whole suite green, on the one field §5.9b spends a block quote on.
+    await seed(registry, "capture", definition="the word that replaced it")
     await seed(registry, "watch", definition="a thing a user watches")
-    retired = await registry.retire("watch", "classifier drift, we think", retired_by="user:sd")
+    retired = await registry.retire(
+        "watch", "classifier drift, we think", retired_by="user:sd", successor="capture"
+    )
     assert isinstance(retired, TypeEntry) and retired.status == "retired"
+    await registry.retire("capture", "and that one went too", retired_by="user:sd")
 
     gone = await registry.resolve_type("watch", ResolveContext(), tier="opus")
     assert gone.outcome != "existing", "C3-10: a retired name is not an existing one"
@@ -396,7 +405,8 @@ async def test_c9_12_reinstate_refuses_to_manufacture_two_live_words_for_one_mea
         "two active entries with one word between them is mechanism 4"
     )
     assert refusal.reason == "alias_collision"
-    assert refusal.detail["holds_the_live_name"] == "bike_lane"
+    assert refusal.detail["collides_with"] == "bike_lane"
+    assert refusal.detail["relation"] == "alias"
     assert refusal.detail["overridable"] is False
     assert "bike_lane" in refusal.detail["path_back"]
 
@@ -414,3 +424,141 @@ async def test_c9_12_reinstate_refuses_to_manufacture_two_live_words_for_one_mea
     blocked = await registry.reinstate("bike_lane", "and now this one", reinstated_by="user:dot")
     assert isinstance(blocked, Refusal)
     assert blocked.reason in ("alias_collision", "successor_active")
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
+async def test_c9_13_the_successor_relation_is_checked_through_the_chain_not_one_hop(registry):
+    """**The path back that `successor_active` itself names ended in the state the
+    refusal exists to forbid.** Row 3e, second adversarial round; reproduced on both
+    reference backends.
+
+    `retire(successor=...)` writes **no alias**, so `C9-12`'s guard does not see it, and
+    `reinstate` **clears `successor` off the live row** -- so a one-hop check on that
+    column is a check on a fact this very call deletes. Walk it:
+
+        retire bike_lane, successor=cycle_track
+        reinstate bike_lane        -> Refusal(successor_active), path_back="retire
+                                      'cycle_track' first"
+        retire cycle_track          # ...so the caller does exactly that
+        reinstate bike_lane        -> allowed          <- `C9-10` stopped HERE
+        reinstate cycle_track      -> both active, one meaning, no refusal
+
+    The guard is now read out of the `retired` EVENTS, transitively, in both
+    directions: forward (this word was replaced by something that is live) and backward
+    (something live was replaced by this word). Events are available because
+    `reinstate` refuses `cannot_record_override` first -- the order of the two guards
+    is load-bearing.
+    """
+    await seed(registry, "cycle_track", definition="A DOT bike facility, current term.")
+    await seed(registry, "bike_lane", definition="A DOT bike facility, older term.")
+    await registry.retire(
+        "bike_lane", "superseded by cycle_track", retired_by="user:tlc",
+        successor="cycle_track",
+    )
+
+    refused = await registry.reinstate("bike_lane", "we want it back", reinstated_by="user:tlc")
+    assert isinstance(refused, Refusal) and refused.reason == "successor_active"
+    assert "cycle_track" in refused.detail["path_back"]
+
+    # Follow the path the refusal names.
+    await registry.retire("cycle_track", "changed our minds", retired_by="user:dot")
+    back = await registry.reinstate("bike_lane", "we want it back", reinstated_by="user:tlc")
+    assert isinstance(back, TypeEntry) and back.status == "active"
+
+    blocked = await registry.reinstate("cycle_track", "and this one", reinstated_by="user:dot")
+    assert isinstance(blocked, Refusal), (
+        "two live words for one meaning, reached by following the documented path back"
+    )
+    assert blocked.reason == "alias_collision"
+    assert blocked.detail["collides_with"] == "bike_lane"
+    assert blocked.detail["relation"] == "predecessor"
+    assert sorted([t.name for t in (await registry.list_types()).types]) == ["bike_lane"]
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
+async def test_c9_14_the_chain_is_transitive_and_the_scan_is_namespace_scoped(registry):
+    """**Two hops, and one namespace.** Row 3e, second adversarial round.
+
+    *Transitive:* `street_name` replaced by `on_street` replaced by `corridor` needs no
+    second retirement at all -- reinstating `street_name` while `corridor` is live is
+    two live words for one meaning, two hops apart.
+
+    *Namespace-scoped:* the scan must not reach across namespaces. INTERFACE.md §2.6
+    makes scoping the answer to mechanism 4, so two agencies holding one word is the
+    state namespaces exist to **preserve** -- a guard that refused a legitimate
+    reinstatement because another agency's namespace holds the word would delete UC3's
+    whole premise. [Observed] a mutation dropping the `namespace` filter from the scan
+    ran the full suite green.
+    """
+    for name in ("street_name", "on_street", "corridor"):
+        await seed(registry, name, definition=f"the {name} of a DOT segment")
+    await registry.retire("street_name", "renamed", retired_by="user:dot", successor="on_street")
+    await registry.retire("on_street", "renamed again", retired_by="user:dot", successor="corridor")
+
+    two_hops = await registry.reinstate("street_name", "bring it back", reinstated_by="user:dot")
+    assert isinstance(two_hops, Refusal) and two_hops.reason == "alias_collision"
+    assert two_hops.detail["collides_with"] == "corridor"
+    assert two_hops.detail["relation"] == "successor"
+
+    # ...and the identical word live in ANOTHER namespace is not a collision.
+    await seed(registry, "corridor", namespace="dpr", definition="a parks corridor")
+    await seed(registry, "greenway", namespace="dpr", definition="a parks greenway")
+    await registry.retire("greenway", "renamed", retired_by="user:dpr", namespace="dpr",
+                    successor="corridor")
+    await registry.retire("corridor", "and that too", retired_by="user:dpr", namespace="dpr")
+    scoped = await registry.reinstate("greenway", "back please", reinstated_by="user:dpr",
+                                namespace="dpr")
+    assert isinstance(scoped, TypeEntry) and scoped.status == "active", (
+        "`default:corridor` is live and irrelevant -- 2.6 keeps namespaces apart"
+    )
+
+@pytest.mark.requires_capability("indexes_membership")
+async def test_c9_15_reinstate_says_when_it_could_not_look_and_when_it_is_not_yet_durable(
+    adapter, make_registry
+):
+    """**Three things §5.9b promises that nothing was checking.** Row 3e, second
+    adversarial round, where three separate mutations of `reinstate` ran the whole
+    suite green.
+
+    1. **`stores_aliases=False`** -- every alias list is empty, so finding no collision
+       means *we could not look*. Rule U: the entry comes back carrying
+       `reinstate_alias_check_unavailable:<why>`.
+    2. **A backend that pages** -- the collision scan reads `find_types` to exhaustion
+       via `next_after`, and if the backend still declares the answer partial the same
+       warning carries its reason. Reproduced before the fix: the exact end state
+       `C9-12` asserts is refused, reached with **no refusal and no warning**.
+    3. **A savepoint scope** -- `reinstate` is a WRITE, so ruling R5's durability
+       sentence belongs on its result like every other write's. Reproduced before the
+       fix: dropping `_written` from this call was conformant, because no leg drove
+       `reinstate` over a borrowed connection.
+    """
+    from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
+
+    blind = await make_registry(AsyncDegradedAdapter(adapter, stores_aliases=False))
+    await seed(blind, "watch", definition="a thing a user watches")
+    await blind.retire("watch", "drift", retired_by="user:sd")
+    if (await blind.adapter.capabilities()).stores_events:
+        entry = await blind.reinstate("watch", "put it back", reinstated_by="user:sd")
+        assert isinstance(entry, TypeEntry)
+        assert any(
+            w.startswith("reinstate_alias_check_unavailable:") for w in entry.warnings
+        ), "we could not look, and an absence we could not check is not an absence"
+
+    paging = await make_registry(AsyncDegradedAdapter(adapter, page_cap=1))
+    await seed(paging, "first_word", definition="one")
+    await seed(paging, "second_word", definition="two")
+    await paging.retire("second_word", "drift", retired_by="user:sd")
+    if (await paging.adapter.capabilities()).stores_events:
+        entry = await paging.reinstate("second_word", "put it back", reinstated_by="user:sd")
+        assert isinstance(entry, TypeEntry)
+        assert any(
+            w.startswith("reinstate_alias_check_unavailable:") for w in entry.warnings
+        ), "the backend said its page was partial; an absence over it is not an absence"
+
+    borrowed = await make_registry(AsyncDegradedAdapter(adapter, transaction_scope="savepoint"))
+    await seed(borrowed, "third_word", definition="three")
+    await borrowed.retire("third_word", "drift", retired_by="user:sd")
+    if (await borrowed.adapter.capabilities()).stores_events:
+        entry = await borrowed.reinstate("third_word", "put it back", reinstated_by="user:sd")
+        assert isinstance(entry, TypeEntry)
+        assert any(
+            w.startswith("not_durable_until_host_commits:") for w in entry.warnings
+        ), "a write over a borrowed connection is not durable until the host commits"

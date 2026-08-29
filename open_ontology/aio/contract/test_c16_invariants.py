@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C16 -- whole-store invariants (4).
+"""C16 -- whole-store invariants (5).
 
 PACKAGE.md 6.2 describes these as running once at suite end over everything the suite
 wrote. The suite's adapters are function-scoped so that a failure in one test cannot
@@ -23,6 +23,8 @@ from datetime import timedelta
 import pytest
 from open_ontology.aio.adapter import TypeQuery
 from open_ontology.types import (
+    CREATED_BY,
+    STATUSES,
     Consumer,
     ConsumerReport,
     MergeResult,
@@ -152,3 +154,24 @@ async def test_c16_04_every_list_shaped_result_carries_complete_and_known(exerci
     for entry in predicate_entries:
         # A predicate's extent carries the same honesty in its own two fields.
         assert entry.extent_size is not None or entry.why_extent_incomplete
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
+async def test_c16_05_every_created_by_is_in_the_closed_vocabulary(exercised, adapter):
+    """**INTERFACE.md §2.1 prints `created_by` as a four-value vocabulary and nothing
+    enforced it.** Row 3e, second adversarial round.
+
+    `Refusal.reason`, `Evidence.kind`, `Consumer.on_unknown` and `NotAType.reason` all
+    raise on an unknown value in `__post_init__`; `created_by` did not, and no
+    invariant checked it -- so a third-party backend's garbage flowed straight out to a
+    caller through `list_types`. Pre-existing, and ruling **R17** is what made this
+    vocabulary extensible, which is when an unenforced closed list starts to matter.
+    `kind` is deliberately **not** checked here: §2.2 says it is an OPEN vocabulary.
+    """
+    page = await adapter.find_types(TypeQuery(include_retired=True))
+    assert page.records
+    for rec in page.records:
+        assert rec.created_by in CREATED_BY, (
+            f"{rec.name} has created_by={rec.created_by!r}, which INTERFACE.md 2.1 "
+            f"does not define"
+        )
+        assert rec.status in STATUSES, f"{rec.name} has status={rec.status!r}"

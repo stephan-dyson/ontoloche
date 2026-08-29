@@ -1864,57 +1864,6 @@ class Registry:
         # exists to prevent rather than preserve. The path back is named in the detail,
         # and it is a real one: retire the other word, which is an ordinary recorded
         # call.
-        holder, held = self._alias_collisions(namespace, rec)
-        if holder is not None or held is not None:
-            return Refusal(
-                "alias_collision",
-                {
-                    "type": type,
-                    "namespace": namespace,
-                    "held_as_alias_by": holder,
-                    "holds_the_live_name": held,
-                    "why": (
-                        f"reinstating {type!r} would leave two ACTIVE entries with one "
-                        f"word between them: "
-                        + (
-                            f"{holder!r} is active and carries {type!r} as an alias"
-                            if holder is not None
-                            else f"{type!r} carries the alias {held!r}, which is an "
-                            f"active type"
-                        )
-                        + " (INTERFACE.md 5.9b; mechanism 4)"
-                    ),
-                    "overridable": False,
-                    "path_back": (
-                        f"retire {(holder or held)!r} first, or leave this word retired"
-                    ),
-                },
-            )
-
-        # Rule U on the check above. On a backend that cannot store aliases every alias
-        # list is empty, so finding no collision means *we could not look* -- the same
-        # shape as `retire` reading an unknowable `gates_on` as "nothing gates on this"
-        # (5.9). It warns rather than refuses: unlike the event record below, nothing is
-        # destroyed by proceeding, and refusing would make the call unreachable on a
-        # backend whose only failing is that it does not keep prior names.
-        alias_warnings: tuple[str, ...] = ()
-        if not self.caps.stores_aliases:
-            alias_warnings = (
-                "reinstate_alias_check_unavailable:"
-                + (self.caps.reason("stores_aliases") or "this backend stores no aliases"),
-            )
-
-        # **A lifecycle fact that is REMOVED and cannot be recorded is refused**, on the
-        # rule PACKAGE.md 3.6 states for `cannot_record_override`. Every other call in
-        # this surface only ever appends: `retire` adds a tombstone, `merge_types` adds
-        # an alias and a tombstone, and nothing is deleted. This one clears the four
-        # retirement fields off the record, so the event IS the record -- on a backend
-        # that cannot store one, a name would come back to life with nothing anywhere
-        # saying it had ever been retired or by whom.
-        #
-        # Stated cost: a `stores_events=False` store cannot un-burn a name. That is the
-        # state of the world BEFORE this row, unchanged -- and it is consistent, because
-        # `retire(force=True)` is already refused on such a store for the same reason.
         if not self.caps.stores_events:
             return Refusal(
                 "cannot_record_override",
@@ -1930,6 +1879,66 @@ class Registry:
                 },
             )
 
+        collides_with, relation, partial_why = self._lifecycle_collisions(namespace, rec)
+        if collides_with is not None:
+            explanation = {
+                "alias": f"{collides_with!r} is active and one of you carries the "
+                f"other's name as an alias",
+                "successor": f"{type!r} was retired in favour of {collides_with!r} "
+                f"(directly or through a chain of successions) and "
+                f"{collides_with!r} is active",
+                "predecessor": f"{collides_with!r} is active and was itself retired in "
+                f"favour of {type!r} (directly or through a chain of "
+                f"successions)",
+            }[relation or "alias"]
+            return Refusal(
+                "alias_collision",
+                {
+                    "type": type,
+                    "namespace": namespace,
+                    "collides_with": collides_with,
+                    "relation": relation,
+                    "why": (
+                        f"reinstating {type!r} would leave two ACTIVE entries with one "
+                        f"word between them: " + explanation +
+                        " (INTERFACE.md 5.9b; mechanism 4)"
+                    ),
+                    "overridable": False,
+                    "path_back": (
+                        f"retire {collides_with!r} first, or leave this word retired"
+                    ),
+                },
+            )
+
+        # Rule U on the check above, twice. On a backend that cannot store aliases every
+        # alias list is empty, and on one that could not answer the scan in full the
+        # absence is over rows we never read -- both mean *we could not look*, which is
+        # the same shape as `retire` reading an unknowable `gates_on` as "nothing gates
+        # on this" (5.9). Both WARN rather than refuse: unlike the event record below,
+        # nothing is destroyed by proceeding, and refusing would make the call
+        # unreachable on a backend whose only failing is that it pages or does not keep
+        # prior names. The scan already pages to exhaustion, so this is what is left
+        # when a backend declares a page partial and offers no way to read the rest.
+        alias_warnings: list[str] = []
+        if not self.caps.stores_aliases:
+            alias_warnings.append(
+                "reinstate_alias_check_unavailable:"
+                + (self.caps.reason("stores_aliases") or "this backend stores no aliases")
+            )
+        if partial_why:
+            alias_warnings.append("reinstate_alias_check_unavailable:" + partial_why)
+
+        # **A lifecycle fact that is REMOVED and cannot be recorded is refused**, on the
+        # rule PACKAGE.md 3.6 states for `cannot_record_override`. Every other call in
+        # this surface only ever appends: `retire` adds a tombstone, `merge_types` adds
+        # an alias and a tombstone, and nothing is deleted. This one clears the four
+        # retirement fields off the record, so the event IS the record -- on a backend
+        # that cannot store one, a name would come back to life with nothing anywhere
+        # saying it had ever been retired or by whom.
+        #
+        # Stated cost: a `stores_events=False` store cannot un-burn a name. That is the
+        # state of the world BEFORE this row, unchanged -- and it is consistent, because
+        # `retire(force=True)` is already refused on such a store for the same reason.
         now = self._now()
         reinstated = TypeRecord(
             **{
@@ -1969,30 +1978,113 @@ class Registry:
                     "successor": successor,
                 },
             )
-        return self._written(self._entry(stored, extra_warnings=alias_warnings))
+        return self._written(self._entry(stored, extra_warnings=tuple(alias_warnings)))
 
-    def _alias_collisions(
-        self, namespace: str, rec: TypeRecord
-    ) -> tuple[str | None, str | None]:
-        """``(the active type holding this name as an alias, the live name this type holds)``.
+    def _active_page(self, namespace: str) -> tuple[list, str | None]:
+        """Every ACTIVE type in a namespace, paged to exhaustion, plus a ``why`` if
+        the backend still could not answer in full.
 
-        Both directions of one collision, because a merge writes the alias onto the
-        survivor and either side can be the one being reinstated. Read over the whole
-        namespace: this is a governance call, not a hot path, and the alternative is a
-        collision the registry could see and did not look for.
+        **The page is not one page.** ``TypePage`` carries ``complete``/``next_after``
+        so a backend may cap an unlimited query (PACKAGE.md 3.3, 3.4 primitive 6), and
+        the first cut of the collision scan below read one page and reported "no
+        collision" over it -- a confident absence built on a look the backend had
+        already said was partial, in the one call where that page decides a **refusal**.
+        Rule U, in the call whose whole job is to refuse on a collision. Reproduced over
+        a paging adapter in row 3e's second adversarial round: the exact end state
+        ``C9-12`` asserts is refused, reached with no refusal and no warning.
+
+        UC3 is the scale where a backend pages: one namespace, dozens of agencies,
+        thousands of active types.
         """
-        page = self.adapter.find_types(TypeQuery(namespace=namespace, status="active"))
-        mine = {a for a in (rec.aliases or ())}
-        holder: str | None = None
-        held: str | None = None
-        for other in page.records:
+        records: list = []
+        after: str | None = None
+        why: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = self.adapter.find_types(
+                TypeQuery(namespace=namespace, status="active", after=after)
+            )
+            records.extend(page.records)
+            if page.complete:
+                why = None
+                break
+            why = page.why_incomplete or "the backend could not answer this query in full"
+            cursor = page.next_after
+            # No cursor, or a cursor we have already followed, means there is no way to
+            # read the rest. Say so rather than loop or pretend.
+            if not cursor or cursor in seen_cursors:
+                break
+            seen_cursors.add(cursor)
+            after = cursor
+        return records, why
+
+    def _lifecycle_collisions(
+        self, namespace: str, rec: TypeRecord
+    ) -> tuple[str | None, str | None, str | None]:
+        """``(colliding type, which relation, why the look was partial)``.
+
+        Two live words for one meaning can be reached down two different relations, and
+        the first cut of this guard only knew one of them.
+
+        **Aliases** -- written by ``merge_types`` onto the survivor. Checked both ways,
+        because either side of a merge can be the one coming back.
+
+        **Successors** -- written by ``retire(successor=…)``, which writes *no* alias at
+        all, and **transitively**, because a word replaced by a word that was itself
+        replaced is two hops from a live meaning. Read out of the ``retired`` events
+        rather than off the live ``successor`` column, because **this call erases that
+        column** -- so a one-hop check on it is a check on a fact ``reinstate`` itself
+        deletes. [Observed, row 3e second adversarial round] following the path back
+        that ``successor_active``'s own ``detail["path_back"]`` instructs a caller to
+        take -- retire the successor, then reinstate -- ended in exactly the state the
+        refusal exists to forbid, and ``C9-10`` stopped one call short of finding it.
+        Events are always available here: ``reinstate`` has already refused
+        ``cannot_record_override`` on a store that cannot keep them.
+        """
+        records, why = self._active_page(namespace)
+        active = {r.name for r in records}
+
+        mine = set(rec.aliases or ())
+        for other in records:
             if other.name == rec.name and other.kind == rec.kind:
                 continue
-            if holder is None and rec.name in (other.aliases or ()):
-                holder = other.name
-            if held is None and other.name in mine:
-                held = other.name
-        return holder, held
+            if rec.name in (other.aliases or ()):
+                return other.name, "alias", why
+            if other.name in mine:
+                return other.name, "alias", why
+
+        # The succession graph, as RECORDED. One read; the walk is over a dict.
+        succeeds: dict[str, set[str]] = {}
+        preceded: dict[str, set[str]] = {}
+        for event in self.adapter.read_events(namespace):
+            if event.event != "retired":
+                continue
+            successor = (event.detail or {}).get("successor")
+            if not successor or not event.name:
+                continue
+            succeeds.setdefault(event.name, set()).add(successor)
+            preceded.setdefault(successor, set()).add(event.name)
+
+        def _walk(start: str, graph: dict[str, set[str]]) -> str | None:
+            seen = {start}
+            frontier = list(graph.get(start, ()))
+            while frontier:
+                node = frontier.pop()
+                if node in seen:
+                    continue
+                seen.add(node)
+                if node in active:
+                    return node
+                frontier.extend(graph.get(node, ()))
+            return None
+
+        forward = _walk(rec.name, succeeds)
+        if forward is not None:
+            return forward, "successor", why
+        backward = _walk(rec.name, preceded)
+        if backward is not None:
+            return backward, "predecessor", why
+        return None, None, why
 
     # =========================================================== 5.10 merge_types
     def merge_types(
@@ -2334,6 +2426,24 @@ class Registry:
             for key in ("visibility", "groups"):
                 if key in row:
                     attributes[key] = row[key]
+
+            # **An import does not un-retire a local name.** A retired row is a
+            # governance decision this deployment made; a foreign dump saying the word
+            # is active is not a reversal of it, and overwriting the tombstone wiped
+            # `retire_reason`, `retired_by`, `retired_at` and `successor` with no
+            # `reinstated` event and none of 5.9b's three guards -- so `import_types`
+            # was a fourth, unguarded door into mechanism 4, and it falsified 5.9b's
+            # own claim that `reinstate` was the only one. Row 3e, second adversarial
+            # round. The behaviour is `propose_type`'s, verbatim (5.9, `C4-08`): the
+            # retired entry comes back with `name_previously_retired` and nothing is
+            # written. `reinstate` is the call that reverses a retirement, and it is
+            # the call that carries the guards.
+            standing = self.adapter.get_type(namespace, name, kind=row.get("kind", kind))
+            if standing is not None and standing.status == "retired" and status != "retired":
+                out.append(
+                    self._entry(standing, extra_warnings=("name_previously_retired",))
+                )
+                continue
 
             imported_from = {"system": system}
             for key in ("apiName", "rid"):

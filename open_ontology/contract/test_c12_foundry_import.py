@@ -1,4 +1,4 @@
-"""C12 -- the Foundry import mapping (4). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping (5). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``Registry.import_types``, a method beyond the twelve, because no 5.x
@@ -8,6 +8,8 @@ call performs it -- deviation D-8 in docs/runs/2A-RUN.md.
 from __future__ import annotations
 
 import pytest
+
+from ._support import seed
 
 FOUNDRY_ROWS = [
     {
@@ -87,3 +89,44 @@ def test_c12_04_visibility_and_groups_land_in_attributes(imported):
     entry = [t for t in imported.list_types().types if t.name == "gate_assignment"][0]
     assert entry.attributes["visibility"] == "PROMINENT"
     assert entry.attributes["groups"] == ["ops"]
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c12_05_an_import_does_not_un_retire_a_local_name(registry, adapter):
+    """**The fourth door into mechanism 4, and it was open.** Row 3e, second
+    adversarial round.
+
+    `import_types` writes a fresh `TypeRecord` per row, so a name this deployment had
+    **retired** came back `active` with `retire_reason`, `retired_by`, `retired_at` and
+    `successor` all wiped, `created_by` reset to `seed`, definition and provenance
+    overwritten -- in one call, with **none** of §5.9b's three guards and no
+    `reinstated` event. That falsified two sentences: §5.9b's claim that mechanism 4
+    "was unreachable through the surface", and its stated cost that a
+    `stores_events=False` store "cannot un-burn a name".
+
+    A retired row is a governance decision this deployment made; a foreign dump saying
+    the word is active is not a reversal of it. The behaviour is now `propose_type`'s,
+    verbatim (§5.9, `C4-08`): the retired entry comes back carrying
+    `name_previously_retired` and **nothing is written**. `reinstate` is the call that
+    reverses a retirement, and it is the call that carries the guards.
+    """
+    seed(registry, "cycle_track", definition="A DOT bike facility, current term.")
+    seed(registry, "bike_lane", definition="A DOT bike facility, older term.")
+    registry.retire(
+        "bike_lane", "superseded by cycle_track", retired_by="user:tlc",
+        successor="cycle_track",
+    )
+
+    imported = registry.import_types(
+        [{"name": "bike_lane", "status": "active", "definition": "from the dump"}]
+    )
+    assert len(imported) == 1
+    assert imported[0].status == "retired", "an import does not reverse a retirement"
+    assert "name_previously_retired" in imported[0].warnings
+
+    stored = adapter.get_type("default", "bike_lane", kind="entity")
+    assert stored is not None and stored.status == "retired"
+    assert getattr(stored, "retire_reason", None) == "superseded by cycle_track", (
+        "and the tombstone was not overwritten"
+    )
+    assert sorted(t.name for t in registry.list_types().types) == ["cycle_track"]
