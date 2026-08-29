@@ -1,4 +1,4 @@
-"""C9 -- ``retire`` and ``reinstate`` (11). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (12). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -210,7 +210,7 @@ def test_c9_08_force_is_refused_when_it_cannot_be_recorded_whichever_guard_it_ov
 
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership")
-def test_c9_09_a_retired_name_can_be_reinstated_and_resolves_again(registry):
+def test_c9_09_a_retired_name_can_be_reinstated_and_resolves_again(registry, adapter):
     """**The round trip, and the classifier shape from row 3c's round 8.**
 
     propose -> approve -> retire -> reinstate, then `resolve_type` on the name returns
@@ -254,6 +254,21 @@ def test_c9_09_a_retired_name_can_be_reinstated_and_resolves_again(registry):
     assert events[0].detail["retire_reason"] == "classifier drift, we think", (
         "the retirement is cleared from the row and kept in the history, never lost"
     )
+
+    # **The clearing itself, asserted on the STORED RECORD.** `TypeEntry` has no
+    # retirement fields, so the only surface where the difference is visible is
+    # `TypeRecord` -- which is exactly the surface a third-party backend implements.
+    # [Observed, row 3e first adversarial round] a `reinstate` identical to the shipped
+    # one except that it kept all four fields on the live row ran the whole suite green.
+    # That is the half of R11 §5.9b spends a block quote on, and the sole premise of the
+    # `cannot_record_override` refusal `C9-11` covers, so leaving it unasserted made
+    # that refusal buy nothing testable.
+    stored = adapter.get_type("default", "watch", kind="entity")
+    assert stored is not None and stored.status == "active"
+    for field in ("retire_reason", "retired_by", "retired_at", "successor"):
+        assert getattr(stored, field, None) is None, (
+            f"{field} is a statement about a retirement that is no longer in force"
+        )
 
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership")
@@ -341,3 +356,72 @@ def test_c9_11_reinstate_is_refused_where_it_cannot_be_recorded_and_never_no_ops
     assert isinstance(same, TypeEntry)
     assert same.status == "active"
     assert "reinstate_no_op:not_retired" in same.warnings, "never a silent no-op"
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+def test_c9_12_reinstate_refuses_to_manufacture_two_live_words_for_one_meaning(registry):
+    """**`alias_collision` -- the twenty-first `Refusal.reason`, and the door R11
+    opened.** Row 3e, first adversarial round; reproduced on the UC3 fixture.
+
+    `merge_types` refuses by default and carries four non-overridable refusals;
+    `propose_type` on a name a live type holds as an alias returns the tombstone. So
+    mechanism 4 -- two active entries with one word between them -- was unreachable
+    through the surface. `reinstate` opened it, in **four ordinary calls**:
+
+        merge bike_lane into cycle_track    # cycle_track gains the alias `bike_lane`
+        retire cycle_track                  # ...so `successor_active` no longer bites
+        reinstate bike_lane                 # allowed: its successor is retired
+        reinstate cycle_track               # BOTH now active, and cycle_track still
+                                            #   carries `bike_lane` as an alias
+
+    [Observed] the fourth call succeeded with no refusal and no warning, leaving a
+    consumer's alias map saying `bike_lane -> cycle_track` while the registry's own
+    `resolve_type` answered `bike_lane -> bike_lane` at confidence 1.0. That is the
+    kill-criterion state, created by the registry whose thesis is detecting it.
+
+    **Refused, not warned.** This is not an uncertainty -- it is a collision the
+    registry can see, inside ONE namespace, which is the case §2.6 says scoping exists
+    to prevent rather than preserve. The refusal names a real path back (retire the
+    other word) and both directions of the collision are checked, because either side
+    of a merge can be the one being reinstated.
+    """
+    seed(registry, "bike_lane", definition="A DOT bike facility.")
+    seed(registry, "cycle_track",
+         definition="A DOT bike facility. The newer term for the same thing.")
+    merged = registry.merge_types(
+        "bike_lane", "cycle_track", "one word for one facility", merged_by="user:dot",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    registry.retire("cycle_track", "we changed our minds", retired_by="user:dot")
+
+    back = registry.reinstate("bike_lane", "the merge was a mistake", reinstated_by="user:dot")
+    assert isinstance(back, TypeEntry) and back.status == "active", (
+        "reinstating the merged-away word is legal: its successor is retired"
+    )
+
+    refusal = registry.reinstate(
+        "cycle_track", "and we want this one back too", reinstated_by="user:dot"
+    )
+    assert isinstance(refusal, Refusal), (
+        "two active entries with one word between them is mechanism 4"
+    )
+    assert refusal.reason == "alias_collision"
+    assert refusal.detail["holds_the_live_name"] == "bike_lane"
+    assert refusal.detail["overridable"] is False
+    assert "bike_lane" in refusal.detail["path_back"]
+
+    live = sorted(t.name for t in registry.list_types().types)
+    assert live == ["bike_lane"], "and nothing was written"
+
+    # The other direction: the same collision reached with the reinstatements swapped.
+    # `successor_active` catches the first step there, which is why BOTH guards are
+    # needed and neither is redundant.
+    other_way = registry.retire("bike_lane", "put it back the way it was",
+                                retired_by="user:dot")
+    assert isinstance(other_way, TypeEntry)
+    revived = registry.reinstate("cycle_track", "take two", reinstated_by="user:dot")
+    assert isinstance(revived, TypeEntry) and revived.status == "active"
+    blocked = registry.reinstate("bike_lane", "and now this one", reinstated_by="user:dot")
+    assert isinstance(blocked, Refusal)
+    assert blocked.reason in ("alias_collision", "successor_active")

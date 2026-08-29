@@ -339,6 +339,31 @@ def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_path):
     version = guest.migrate()
     assert isinstance(version, int) and version >= 1
 
+    # 2b. **A host schema that is BEHIND is named, not discovered later.** Row 3e,
+    # first adversarial round: a host store laid down from an older revision of this
+    # package's DDL passed `migrate()` with no complaint and then died on a raw driver
+    # error at the first write, because `_required_columns()` listed `oo_type` and
+    # nothing else. It now derives the proposal and attribute-schema tables from this
+    # backend's own column tuples, so a column a future store version adds is covered
+    # the moment it is added. Note what is deliberately NOT the check: the version
+    # NUMBER. When `owns_schema=False` that row is the host's statement about a schema
+    # the host maintains and need not track this package's migration numbering at all --
+    # `sqlite_minimal` is a correct five-table host schema that says version 1 -- so
+    # refusing on the number would punish an honest host whose columns are all present,
+    # which is the failure ruling R14 named. The columns are the fact.
+    if backend == "sqlite":
+        import sqlite3 as _sqlite3
+
+        behind = str(tmp_path / "behind.sqlite")
+        SQLiteAdapter(behind).migrate()
+        with _sqlite3.connect(behind) as _conn:
+            _conn.execute("ALTER TABLE oo_proposal DROP COLUMN source_version")
+        with pytest.raises(SchemaMismatch) as stale:
+            SQLiteAdapter(behind, owns_schema=False).migrate()
+        assert "source_version" in str(stale.value), (
+            "the refusal names the missing column, not a version number"
+        )
+
     # 3. And it is usable: verify-only is not read-only.
     guest.put_type(_type(name="facility"), expect_absent=True)
     assert guest.get_type("default", "facility", kind="entity") is not None

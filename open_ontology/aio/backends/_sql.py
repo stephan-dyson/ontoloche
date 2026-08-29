@@ -226,8 +226,27 @@ class AsyncBaseSqlAdapter:
         return None
 
     def _required_columns(self) -> dict[str, tuple[str, ...]]:
-        """What a verify-only migrate() insists on when the schema belongs elsewhere."""
-        return {
+        """What a verify-only migrate() insists on when the schema belongs elsewhere.
+
+        The version comparison in ``migrate()`` is the general guard; this list is the
+        specific one, and it exists because a host schema may carry **no version row at
+        all** -- a store built by hand from this package's DDL has nothing to compare.
+        Row 3e's first adversarial round found the gap by building exactly that: a host
+        store laid down from the v1 DDL, on which ``migrate()`` returned a version, said
+        nothing, and the first ``register_attribute_schema`` died on a raw driver error.
+
+        **The version NUMBER is deliberately not the check.** Comparing
+        ``oo_schema_version`` against this package's latest migration looks like the
+        one-line fix and is wrong here: when ``owns_schema=False`` the version row is the
+        HOST's statement about a schema the host maintains, and it need not track this
+        package's migration numbering at all -- ``sqlite_minimal`` is a live example, a
+        five-table host schema that says version 1 and is entirely correct. Refusing on
+        the number would punish an honest host whose columns are all present, which is
+        the failure ruling R14 named. The columns are the fact; the number is a claim.
+        """
+        required = {
+            # Hand-listed, because a backend over a schema it does not own may
+            # legitimately have FEWER `oo_type` columns and project the rest (5.7).
             "oo_type": (
                 "namespace",
                 "kind",
@@ -238,6 +257,21 @@ class AsyncBaseSqlAdapter:
                 "provenance_json",
             ),
         }
+        # **Derived from this backend's own column tuples, not hand-listed**, so a
+        # column added by a future store version is covered here the moment it is added
+        # and nobody has to remember. Unconditional in THIS class because this class's
+        # own ``capabilities()`` declares ``stores_proposals`` and ``stores_attributes``
+        # True for every adapter built on it; a backend that declines either has no such
+        # table and must not be failed for the absence (PACKAGE.md 3.2), which it says
+        # by overriding this method -- ``sqlite_minimal`` does exactly that. (Reading the
+        # flags off ``capabilities()`` here would be tidier and is wrong: it is one of
+        # the fifteen primitives, so the async mirror makes it awaitable, and a subclass
+        # override that does not await it breaks the base's ``migrate()``.)
+        required["oo_proposal"] = PROPOSAL_COLUMNS
+        required["oo_attr_schema"] = tuple(
+            c.strip() for c in self._ATTR_SCHEMA_COLS.split(",")
+        )
+        return required
 
     async def migrate(self) -> int:
         migrations = self._migration_sql()

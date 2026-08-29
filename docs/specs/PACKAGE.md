@@ -684,12 +684,22 @@ Stored in an eighth table, `oo_attr_schema (namespace, kind, name, version)` —
 
 1. **Shadowing is replacement, never merge.** A name-level schema's `fields` are the whole schema for that type; the per-kind schema's fields — including its `required` ones — do not come along. A merge of two field maps produces a third schema **nobody wrote and nobody versioned**, which is the unversioned accumulation this whole section exists to stop, one level up. The cost is stated: a deployment that wants the common fields in an override writes them there.
 2. **Fallback is per lookup, not per field.** `(namespace, kind, name)` if one exists, else `(namespace, kind)`, else no schema. One of the two governs a write; never both.
-3. **An override is a schema, not an exemption.** Its own `required` fields, `enum`s and `additional` rule apply with full force in `enforce` mode. `C15-10` asserts an override refusing its own write.
+3. **An override is a schema, not an exemption — the fields are replaced and the strictness is a FLOOR.** Its own `required` fields and `enum`s apply with full force (`C15-10` asserts an override refusing its own write), and its `mode` and `additional` are raised to the per-kind schema's whenever the per-kind schema is stricter. **[Observed, row 3e first adversarial round]** the first cut shadowed `mode` and `additional` along with `fields`, so a name-level schema with `fields={}`, `additional="allow"`, `mode="off"` **turned a strictly enforced kind completely off for one name** — no refusal, no warning, and nothing in the census to show it. In UC3 that is one agency's one-line, unreviewed opt-out of a rule dozens of agencies publish under; the softer form (a `warn` override under an `enforce` kind) silently downgrades a refusal to a warning. **The floor is applied when a write is validated, not when a schema is registered**, because a registration-time check is bypassed by registering the weak override first and the strict per-kind schema second — a rule whose ordering the caller picks is not a rule. `C15-12`.
 4. **`Refusal(reason="attributes_schema_violation").detail` names which schema refused**, as `schema_name` (`None` = the per-kind one) beside `schema_version`. With two schemas in play *"which one refused me"* became a question a caller has to be able to answer.
 
 **Storage, and the one sentinel.** `name` is a `NOT NULL` column whose empty string means *the per-kind schema*. No type name can be empty — `INTERFACE.md` §2.1 requires `^[a-z][a-z0-9_]{0,63}$` — so one column carries both cases, the primary key stays a primary key rather than a partial index over a nullable column, and the two are never confusable. `AttributeSchema(name="")` raises rather than quietly meaning "per-kind": the sentinel belongs to the store, not to the caller. **This is the opposite decision from §5.7's projected `None`**, and deliberately so: there the colliding column belongs to the *host* and writing our sentinel into it is what `owns_schema=False` forbids; here the column is ours.
 
-**`attribute_census`'s `declared` still asks the per-kind schema**, and that is not an oversight. A census row is `(kind, key)` over every type of that kind, so a name-level schema declares a key for one type and not for the rest — answering `True` off one override would be a claim about types it never covered.
+**`attribute_census`'s `declared` is tri-state, and Rule U is why** *(corrected after row 3e's first adversarial round)*. A census row is `(kind, key)` over **every** type of that kind, so after this ruling a key can be declared by a name-level schema for one name and by nothing for the rest. `True` would claim it for types the override never covered — the reason the first cut asked only the per-kind schema. But `False` is the symmetric error and it is the one that fires: **[Observed]** with the natural post-R10 CMS configuration — a strict per-kind `value_set` schema plus the `deficiency_corrected_status` override — the census reported that override's **required** `values` key as *undeclared*, a confident negative on the call whose whole job is making the escape hatch enumerable, in the fixture this ruling exists for. So:
+
+| `declared` | means |
+|---|---|
+| `True` | the per-kind schema declares it, so it is declared for every name of that kind |
+| `False` | neither the per-kind schema nor any name-level schema of that kind declares it |
+| `None` | the per-kind schema does not and at least one name-level schema does, so **the answer depends on which type** — `declared_why` names them |
+
+`C15-12`.
+
+**One consequence of the key change, stated rather than discovered: `attr_schema_version` no longer identifies a schema on its own.** Two entries of one kind written under two different schemas can both record `attr_schema_version = 1`, because the version sequence is per `(namespace, kind, name)` and the per-kind sequence starts at 1 as well. **The version is meaningful together with the entry's own name**, which is how a reader resolves it: look for `(namespace, kind, name, version)` first, then `(namespace, kind, version)`. §5.4's promise — that an entry says which *generation* of `attributes` it belongs to — still holds under that reading, and `oo_attr_observed.schema_versions` likewise mixes the two sequences. **The residual case, named:** a name-level schema registered *after* an entry was written makes that lookup attribute the entry to the override it was not written under. Recorded in §11.3 rather than fixed, because the fix is a second column on `oo_type` and the ambiguity is resolvable by a reader who knows the rule above.
 
 **Store version 2.** See §9.6.
 
@@ -821,7 +831,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**137 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`), `C4-10` (ruling **R17**, `created_by="derived"`) and `C8-06` (ruling **R21**, `Provenance.source_version`).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**140 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`), `C4-10` (ruling **R17**, `created_by="derived"`) and `C8-06` (ruling **R21**, `Provenance.source_version`). **Three more** by row 3e's first adversarial round — `C3-13`, `C9-12`, `C15-12`.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (14).** No interface call; this is the protocol itself.
 
@@ -866,7 +876,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C2-04 | `include_retired` |
 | C2-05 | a predicate is not a supertype: membership of `commentable` implies nothing about `searchable` |
 
-**C3 — `resolve_type` (12).** Mechanisms **2**, and **1** as the gate.
+**C3 — `resolve_type` (13).** Mechanisms **2**, and **1** as the gate.
 
 | id | asserts | note |
 |---|---|---|
@@ -882,6 +892,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C3-11 | **a retired name with a live successor resolves to the successor** — registry-guaranteed, down both lifecycle paths and whatever resolver is supplied. *(Row 3c: §5.10's "the old word still resolves" was kept only by accident — a merge writes an alias and the shipped resolver happens to score it 1.0. `retire(successor=)` writes no alias, and §2.6's production path is a caller's own resolver, so one fact had four answers and three were wrong)* |
 | C3-10 | **a retired name is named in the resolution**, with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score — never a bare *"nothing fits"*. *(Row 3c: `resolve_type` read the tombstone and discarded it, answering with a confident negative about a word it knew was burned — Rule U, in the call designed against mechanism 2)* |
 | C3-12 | **a word taken in another namespace is found when the caller asks** (`INTERFACE.md` §5.3.1, ruling **R6**): the default `search_namespaces=None` reads nothing and still reports `complete=False`; naming a namespace lands the taken name in `alternatives` as `"<namespace>:<name>"` and in `reason`, **without** changing the outcome; and `complete` is `True` only once every namespace that has a type in it was named, with the omitted ones named by name when it is not. *(Row 3e. This is UC3's W1.3 verbatim — `status` registered in `dpr`, asked for in `oti_311`, answered *"nothing in the vocabulary fits"* with an empty `alternatives` while the same context in `dpr` returned `existing` at 1.0. Mechanism **2** reintroduced by §2.6's answer to mechanism **4**, in the call designed against mechanism 2.)* |
+| C3-13 | **a truncated page cannot support a completeness claim** (`INTERFACE.md` §5.3.1 rule 8): against a backend that caps an unlimited query and says so, `complete` is `False` and `why_incomplete` carries the backend's own reason. *(Row 3e, first adversarial round. `TypePage.complete` exists for exactly this and `_extent` had honoured it since v0; the cross-namespace search read the records and ignored the flag — harmless while `Resolution.complete` was hard-wired `False`, not harmless once R6 made it a claim. Observed: five types in one namespace, a cap of two, the exact match at row four, answered `complete=True`.)* |
 
 **C4 — `propose_type` (10).** Mechanism **1**.
 
@@ -950,7 +961,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C8-05 | `model_tier` is never overwritten by a later approval or amendment |
 | C8-06 | **`source_version` is the SOURCE's version and round-trips from proposal to provenance** (`INTERFACE.md` §2.4a, ruling **R21**): supplied to `propose_type`, readable on the `Proposal` before approval, present on `Provenance` after it, and `None` — never invented, never our own timestamp — when no caller supplied one. *(Row 3e, §10b.5 contortion 12. `EdgeProvenance` had the field and `Provenance` did not: two shapes for one concept, which is the drift the drift-check exists to catch, pointing inward.)* |
 
-**C9 — `retire` and `reinstate` (11).** Mechanism **3**.
+**C9 — `retire` and `reinstate` (12).** Mechanism **3**.
 
 | id | asserts |
 |---|---|
@@ -965,6 +976,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C9-09 | **the round trip, and the classifier shape**: propose → approve → retire → `reinstate`, and `resolve_type` on the name is back to `existing` at confidence `1.0`. The retirement is **cleared from the live row and kept in the history** — the `reinstated` event carries `retire_reason`, `retired_by`, `retired_at` and `successor`. *(Row 3e, `INTERFACE.md` §5.9b, ruling **R11**. Row 3c's round 8 found `resolve_type` answering *"nothing in the vocabulary fits"* about a word it had just read the tombstone of; a name that still read as burned after being brought back is the same wrong answer pointing the other way.)* |
 | C9-10 | **`successor_active`, the twentieth `Refusal.reason`**: reinstating a word whose retirement named a successor that is **itself active** is refused, non-overridably, with the path back named in `detail`; retiring the successor first then lets the reinstatement through. *(Row 3e. Two live words on one meaning is mechanism **4** arriving through the lifecycle.)* |
 | C9-11 | **`reinstate` is refused where it cannot be recorded, and never no-ops silently**: on `stores_events=False` it returns `Refusal("cannot_record_override")` with the fields it would have cleared in `detail`, and nothing is written; on a type that is **not** retired it returns the entry carrying `reinstate_no_op:not_retired`. *(Row 3e. This is the only call in §5 that REMOVES a lifecycle fact from the live row, so §3.6's rule applies to it — and the second half is ruling R4's rule that a call which quietly did nothing is mechanism C committed by the registry. Needs `indexes_membership` as scaffolding: on a store that cannot compute an extent there is no way to reach a retired row at all, `C9-07` + `C9-08`.)* |
+| C9-12 | **`reinstate` refuses to manufacture two live words for one meaning** — `Refusal("alias_collision")`, the twenty-first reason (`INTERFACE.md` §5.9b). *(Row 3e, first adversarial round, reproduced on the UC3 fixture: merge `bike_lane` into `cycle_track`, retire `cycle_track`, reinstate `bike_lane`, reinstate `cycle_track` — four ordinary calls ending with both active and `cycle_track` still holding `bike_lane` as an alias, with no refusal and no warning. `merge_types` refuses by default and `propose_type` on a live type's alias returns the tombstone; `reinstate` was the one door left open to mechanism 4, in the registry whose thesis is detecting it. Both directions of the collision are checked, because either side of a merge can be the one coming back.)* |
 
 **C10 — `merge_types` (8).** Mechanism **4**.
 
@@ -1020,7 +1032,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C14-06 | 6 | zero registered consumers ⇒ `known=0, complete=False` — a null result reported as a null result |
 | C14-07 | 7 | **the package ships no default type**: no name `default_type`, no fallback constant, anywhere in the public surface. The `related_to` fallback is caller policy and stays there |
 
-**C15 — the `attributes` mechanism (11).** §5 of this document.
+**C15 — the `attributes` mechanism (12).** §5 of this document.
 
 | id | asserts |
 |---|---|
@@ -1035,6 +1047,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C15-07 | **one schema per kind cannot serve both CMS `value_set`s:** with `ordering` required, `deficiency_corrected_status` is refused for lacking an order it has no business having; with `ordering` optional, `scope_severity_code` may be created claiming an order and declaring none — the pollution §5.1 says the mechanism exists to prevent. Both horns asserted. *(Row 3c, §5.6 — a limitation of the mechanism, not of any backend)* |
 | C15-10 | **a name-level schema shadows the per-kind one** (§5.2b, ruling **R10**): with the strict per-kind schema in force, `scope_severity_code` still obeys it and `deficiency_corrected_status` is still refused **by it** (`detail["schema_name"] is None`); registering a `(namespace, kind, name)` schema for that one name lets it through **judged by its own fields**, and the per-kind schema's `required` `ordering` does **not** come along — shadowing is replacement, never merge. *(Row 3e. `C15-07`'s two horns, closed on CMS's own two value sets.)* |
 | C15-11 | **the per-kind schema still governs every name without an override** (§5.2b rule 2): a third `value_set` with no override is refused by the per-kind schema, and the refusal names which schema refused it. *(Row 3e. The failure mode a name-level key invites is that one exception quietly relaxes the kind; this is the test that would catch it.)* |
+| C15-12 | **an override may not weaken the kind, and the census says when `declared` depends on the name** (§5.2b rules 3 and the tri-state table): a name-level schema with `mode="off"` and no fields under an `enforce` kind still refuses; and a key only a name-level schema declares comes back `declared=None` with a `declared_why` naming it. *(Row 3e, first adversarial round. The first cut shadowed `mode` and `additional` with the fields, so an override was a one-line opt-out of a kind's governance; and `declared=False` was a confident negative about a key that is required somewhere — Rule U, on the CMS fixture R10 exists for.)* |
 
 **C16 — whole-store invariants (4).** *(Amended by row 3c: this said "run once at suite end, over everything the suite wrote". The shipped group is **function-scoped** — a fixture drives one store through representative write paths and each test then inspects it. Recorded at 2A as deviation D-9 and never brought inline here. It matters because "everything the suite wrote" would be a stronger claim than the tests make.)*
 
@@ -1485,6 +1498,10 @@ If `oo_schema_version.version` is **higher** than the package knows, `migrate()`
 
 `Capabilities.owns_schema=False` (§7, B1) makes `migrate()` **verify-only**: it checks the columns the adapter needs and raises `SchemaMismatch` naming what is missing, and issues no DDL. This covers beacon's Alembic-owned table and the enterprise Postgres deployment where the DBA owns DDL and the application role has no `CREATE`.
 
+**What "the columns the adapter needs" means, and why it is derived rather than listed** *(row 3e, first adversarial round)*. Until that round the check listed seven `oo_type` columns and nothing else — so the first migration to touch any other table (store version 3, `oo_proposal.source_version`) was **unverifiable on exactly this path**: **[Observed]** a host store laid down from an older revision of this package's DDL passed `migrate()` with no complaint and then died on a raw driver error at the first `propose_type`. The check now derives the other two tables from this backend's own column tuples — `oo_proposal` when it declares `stores_proposals`, `oo_attr_schema` when it declares `stores_attributes` — so a column a future store version adds is covered the moment it is added and nobody has to remember. `oo_type` stays hand-listed, because a backend over a schema it does not own may legitimately have fewer of those and project the rest (§5.7).
+
+> **The version NUMBER is deliberately not the check.** Comparing `oo_schema_version` against this package's latest migration looks like the one-line version of the same fix and is wrong here: when `owns_schema=False` that row is the **host's** statement about a schema the host maintains, and it need not track this package's migration numbering at all — `sqlite_minimal` is a live example, a correct five-table host schema that says version 1. Refusing on the number would fail an honest host whose columns are all present, which is the shape ruling **R14** named when it declined to punish an adapter for having no borrowed mode. **The columns are the fact; the number is a claim.** `C0-09`.
+
 ### 9.4 v0 stores may be dropped rather than migrated — stated explicitly
 
 **Standing constraint 4:** *an interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.* The same applies to the store.
@@ -1519,7 +1536,7 @@ The first store-schema revision this package has shipped, and it is the case §9
 
 **What survives is chosen, not incidental.** `oo_type.attr_schema_version` is untouched, so an entry written under a schema this migration drops **still says which generation of `attributes` it belongs to** (§5.4: entries are never rewritten and never retroactively invalidated), and `oo_attr_observed` keeps the spread of versions per key, so `attribute_census` still reports what was written and under what. A migration that dropped those too would have made §5.4's promise unkeepable, which is a different and much worse thing than dropping a config table.
 
-**A store still at version 1 is not read under version-2 assumptions.** `migrate()` applies `0002` in one transaction with its version row (§9.1); a store at version 2 opened by an older package is refused outright (§9.2). `owns_schema=False` stores are unaffected — `migrate()` issues no DDL there and the host owns the column (§9.3).
+**A store still at version 1 is not read under version-2 assumptions.** `migrate()` applies `0002` in one transaction with its version row (§9.1); a store at version 2 opened by an older package is refused outright (§9.2). **An `owns_schema=False` store gets no migration and is therefore checked instead, by column** — see §9.3, which is the half of this that row 3e's first adversarial round found missing.
 
 ### 9.7 Store version 3 — `oo_proposal` gains `source_version` *(ruling **R21**, row 3e, 2026-08-29)*
 
@@ -1533,7 +1550,7 @@ The first store-schema revision this package has shipped, and it is the case §9
 
 **`ALTER`, not drop-and-recreate — and the contrast with §9.6 is the point.** This column is additive and nullable, so there is nothing to lose and no permission to spend. §9.4's licence to drop a v0 store is a real permission and it is spent only where it **buys** something: §9.6 spends it to change a primary key, on the one table whose contents are reproducible by definition. Reaching for it here, where an `ALTER` does the job, would be treating a stated allowance as a default.
 
-A backend with `stores_proposals=False` has no `oo_proposal` table and is unaffected — such a store returns a `TypeEntry` from `propose_type` (§7.3 B4), so the value goes straight into `provenance_json` with no row to survive on.
+A backend with `stores_proposals=False` has no `oo_proposal` table and is unaffected — such a store returns a `TypeEntry` from `propose_type` (§7.3 B4), so the value goes straight into `provenance_json` with no row to survive on. An `owns_schema=False` store that *does* declare `stores_proposals` is checked by column at `migrate()` (§9.3).
 
 ---
 
@@ -1582,6 +1599,8 @@ A backend with `stores_proposals=False` has no `oo_proposal` table and is unaffe
 - **B8 — `C3-08` and `C3-09` assert resolver behaviour, which §2.6 says no contract test may do** (§8b.3). The same `location`-rebuilt-from-its-parts pathology returns `not_a_type/redundant_projection` on CMS's postal-address sibling set and `proposal` on NYC's `latitude`/`longitude` one, because `_PROJECTION_FAMILIES` is a lookup table fitted to the first dataset. A deployment shipping its own resolver — which §2.6 calls the production path — therefore fails the suite that defines conformance for a non-storage reason. **Ruling wanted:** mark the two non-binding the way `C15-02` is, or move them out of the conformance definition. See [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 
 ### 11.3 Weaknesses of this design, named now so they are not discovered later
+
+- **`attr_schema_version` is only meaningful next to the entry's own name** *(row 3e, ruling R10)*. Two entries of one kind can carry `attr_schema_version = 1` under two different schemas, because the version sequence is per `(namespace, kind, name)`. §5.2b states the lookup rule that resolves it and the one residual case it does not — a name-level schema registered after an entry was written. The fix is a second column on `oo_type`; it is not taken, and this is the record of that.
 
 - **Attribute schemas have no proposal→approval loop.** They are deployment configuration, not vocabulary (§5.2). A deployment can therefore change how `value_set` attributes validate with no review — which is mechanism **1**, one level down, in the mechanism built to answer §11's worry about mechanism 1. The dogfooding fix (register a schema as a `TypeEntry`) was rejected for a good reason and the cost is real.
 - **`list_types(orphaned=)` and `list_types(unverified_semantics=)` are O(types)** on every backend (§3.3), because pushing them into the adapter would put policy in the backend.

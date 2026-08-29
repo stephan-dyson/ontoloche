@@ -62,6 +62,7 @@ class _DegradedBase:
         *,
         why: dict[str, str] | None = None,
         pages_countable: bool = True,
+        page_cap: int | None = None,
         read_only_consumers: bool = False,
         attribute_projections: frozenset[str] | tuple[str, ...] | None = None,
         **flags: bool,
@@ -72,6 +73,12 @@ class _DegradedBase:
         self.inner = inner
         self._flags = flags
         self._pages_countable = pages_countable
+        #: PACKAGE.md 3.3's other honest page: a backend that caps an unlimited query
+        #: and SAYS SO (``complete=False`` plus a ``why``). Not a capability flag --
+        #: nothing is declined, the answer is simply partial. Added by row 3e's first
+        #: adversarial round, which found `resolve_type` ignoring the flag entirely and
+        #: reporting `complete=True` over a page the backend had truncated.
+        self._page_cap = page_cap
         self._read_only_consumers = read_only_consumers
         # U3: not a flag -- a declared set of keys this backend owns as typed columns.
         self._attribute_projections = (
@@ -151,6 +158,16 @@ class _DegradedBase:
                 known=None,
                 complete=False,
                 why_incomplete="this backend cannot count a result set",
+            )
+        if self._page_cap is not None and len(records) > self._page_cap:
+            return TypePage(
+                records=records[: self._page_cap],
+                known=self._page_cap,
+                complete=False,
+                why_incomplete=(
+                    f"this backend caps an unlimited query at {self._page_cap} rows"
+                ),
+                next_after="cursor",
             )
         return TypePage(
             records=records,

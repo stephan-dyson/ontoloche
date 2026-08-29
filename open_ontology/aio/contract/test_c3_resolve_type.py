@@ -267,3 +267,71 @@ async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_
     assert set(whole.searched_namespaces) == {"oti_311", "dpr", "default"}
     assert "dpr:status" in [name for name, _ in whole.alternatives]
     assert whole.known == len(whole.alternatives), "Rule K"
+
+    # 4. **`kind=` narrows the SCORING and must not hide the collision.** UC3's own
+    # shape: DPR publishes `status` as a `value_set`, the 311 team asks for `status` as
+    # an `entity`. The first cut passed `kind=` into the cross-namespace probe, so the
+    # taken word vanished and `complete=True` sealed the answer -- contortion 8's own
+    # sentence, now stamped as a whole search, which is worse than what R6 replaced.
+    # Uniqueness is per `(namespace, kind)` (§2.1), so the other entry is not the same
+    # entry; it is the same WORD, and that is what R6 owes the caller. Row 3e, round 1.
+    await seed(registry, "permit", namespace="dob", kind="value_set",
+         definition="the DOB permit states")
+    kinded = await registry.resolve_type(
+        "permit", ResolveContext(), namespace="oti_311", tier="opus",
+        kind="entity", search_namespaces=["dob", "dpr", "default"],
+    )
+    assert "dob:permit" in [name for name, _ in kinded.alternatives], (
+        "a name taken under ANOTHER kind is still a name that is taken"
+    )
+    assert "TAKEN" in kinded.reason
+
+    # 5. **A namespace whose only type is RETIRED still counts as a namespace.**
+    # Retirement burns the name permanently (§5.9); a namespace somebody published into
+    # and then emptied is still a place we did not look, and calling the search complete
+    # without it is a claim about it. Row 3e, round 1 -- a mutation that dropped
+    # `include_retired` from the census ran the whole suite green.
+    await seed(registry, "old_word", namespace="archive", definition="a word nobody uses now")
+    await registry.retire("old_word", "no longer published", retired_by="user:sd",
+                    namespace="archive")
+    without = await registry.resolve_type(
+        "status", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr", "default", "dob"],
+    )
+    assert without.complete is False, "'archive' holds only a retired type and was omitted"
+    assert "archive" in without.why_incomplete
+    named = await registry.resolve_type(
+        "status", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr", "default", "dob", "archive"],
+    )
+    assert named.complete is True
+
+async def test_c3_13_a_truncated_page_cannot_support_a_completeness_claim(adapter, make_registry):
+    """**Rule U, in the one call that gained a `complete=True` to get wrong.**
+
+    `TypePage` carries `complete` / `why_incomplete` / `next_after` precisely so a
+    backend may cap an unlimited query and *say so* (PACKAGE.md 3.3), and `_extent`
+    already honours it. `resolve_type`'s cross-namespace search did not: it read the
+    records off the page and reported `complete=True` over rows the backend had told it
+    were missing. Harmless while `Resolution.complete` was hard-wired `False`; not
+    harmless once ruling R6 made it a claim.
+
+    [Observed, row 3e first adversarial round] with five types in `dpr` and a backend
+    capping at two, the exact match was row four and was never reached -- and the answer
+    came back `complete=True, why_incomplete=""`.
+    """
+    from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
+
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=2))
+    for name in ("alpha", "beta", "gamma", "status", "delta"):
+        await seed(capped, name, namespace="dpr", definition=f"the {name} of a work order")
+
+    resolution = await capped.resolve_type(
+        "statuses", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert resolution.complete is False, (
+        "the backend said its page was partial; a completeness claim over it is a lie"
+    )
+    assert resolution.why_incomplete, "and Rule U wants the reason, not just the flag"
+    assert "cap" in resolution.why_incomplete
