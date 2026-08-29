@@ -184,6 +184,7 @@ class Capabilities:
     owns_schema:          bool     # False when the schema belongs to the host app (§9.3)
     why: dict[str, str]            # one sentence per False flag — surfaced verbatim as Rule U's `why`
     transaction_scope: Literal["owned", "savepoint"] = "owned"   # who owns the commit. §3.5, R5
+    attribute_projections: frozenset[str] = frozenset()          # keys owned as typed columns. §5.7
 ```
 
 **The `why` dict is the mechanism, not decoration.** When a flag is `False`, the registry does not invent an explanation; it surfaces the adapter's sentence. `usage("blocks")` on beacon's table returns `last_seen=None, orphaned=None, why="work_link_types has no last_used_at column"` — which is `INTERFACE.md` §9 contortion 2, reported by the system rather than discovered by a human.
@@ -193,6 +194,8 @@ class Capabilities:
 > **Measured, not asserted** *(row 3c, 2026-08-29)*. That sentence was **false for six of the eight optional flags** for four deliverables: declining any one of `stores_events`, `stores_attributes`, `stores_aliases`, `indexes_membership`, `counts_usage` or `timestamps_usage` — **one at a time, nothing else degraded** — failed the suite outright, from 1 failure to 24. Two of those turned out to be defects in the *registry*, not the suite (§8b.5); the rest were tests using a capability as scaffolding for a scenario about something else, which now carry `requires_capability` and skip with a reason. [`docs/tools/check_capability_matrix.py`](../tools/check_capability_matrix.py) runs the whole suite against all nine declined configurations and prints the table; the contract suite runs it, `nonbinding`. **All nine now conform.** What it does *not* cover is several capabilities declined **at once** — that is question **Q7** and it is open.
 
 **Invariant, tested (`C0-01`):** every `False` flag has a non-empty entry in `why` — and so does `transaction_scope="savepoint"`, which is not a bool but is the one declaration that changes what a *successful* return means (§3.5). *(Row 3d, [Observed]: both reference backends returned an **empty** `why` for `owns_schema=False`, because every fixture backend is `owns_schema=True` and the one test that built such a backend asserted `why.get("owns_schema") or True`. The first borrowed-connection adapter hit it on its first call. Fixed in the backends and the assertion given teeth — `C0-09`, `C0-12`.)*
+
+> **`attribute_projections` is a declaration, not a flag either** *(row 3d, beacon finding **U3**)*. `stores_attributes` was **binary**, and that made one real backend undescribable: a host-owned store with pre-existing typed columns cannot say *"I store no arbitrary keys **and** I own two named ones faithfully"* — it had to claim `True` and lose the arbitrary ones silently, or claim `False` and disclaim keys it round-trips perfectly. `attribute_projections` names the keys the backend owns **as typed columns**; those round-trip through the column, not through the JSON blob. Everything else is unchanged: a key that is neither stored nor projected comes back **absent, with a `why`**. `Capabilities.stores_attribute(key)` and `.surviving_attributes(dict)` are the two derived answers a caller actually wants, so nobody has to re-derive the rule. §5.7, `C0-06`.
 
 > **`transaction_scope` is a declaration, not a flag** *(row 3d, ruling **R5**)*. It is `Literal["owned","savepoint"]` rather than a `bool` because the two values are not "can" and "cannot": both are fully transactional, and what differs is **who issues the commit**. It is therefore not in `CAPABILITY_FLAGS` and not part of the two-non-negotiable rule; `transactional` stays REQUIRED `True` in both scopes.
 
@@ -333,7 +336,7 @@ Groups writes. Re-entrant calls join the outermost scope. **Uncertainty:** none 
 
 **4. `put_type(rec: TypeRecord, *, expect_absent: bool = False) -> TypeRecord`**
 Upsert on `(namespace, kind, name)`. With `expect_absent=True`, raises `AlreadyExists` if the key is present — **and that must come from a real constraint, not from a read-then-write check** (guarantee **G1**, §3.5). Returns the record as stored, so a backend that could not store `attributes` or `aliases` returns them empty and the registry can tell.
-**Uncertainty:** if `stores_attributes` is `False`, the returned record has `attributes={}` — the caller must not assume the write round-tripped; the suite tests exactly this (`C0-06`).
+**Uncertainty:** if `stores_attributes` is `False`, the returned record has `attributes=` **only the keys named in `Capabilities.attribute_projections`** — `{}` when it declares none, which is what every backend declared before row 3d. The caller must not assume the rest round-tripped; the suite tests exactly this (`C0-06`), including the mixed case where one key of a two-key write survives and the other does not. *(Amended row 3d, beacon finding **U3** — §5.7.)*
 
 **5. `get_type(namespace: str, name: str, *, kind: str | None = None) -> TypeRecord | None`**
 `None` means *absent*, which here is a fact, not an unknown — the adapter always knows whether a key exists. With `kind=None`, returns the single match or raises `AmbiguousKind` when the same name exists under two kinds (legal: uniqueness is per `(namespace, kind)`).
@@ -386,6 +389,8 @@ Required by §5.4 (*name already taken → return the existing entry*) and §5.9
 `approve` writes four things: the proposal's decision, the new `TypeEntry`, its membership rows, and a `ProvenanceEvent`. A half-commit produces either an approved proposal with no type (an approval nobody can see) or an active type with no approval record — and the second violates `INTERFACE.md` §2.4's rule that `approved_by` is never null on an `active` type, which is the rubber-stamping failure arriving through the data model. `reject`, `retire` and `merge_types` have the same shape.
 
 > **G2 holds in both transaction scopes, and durability is a separate question** *(row 3d, ruling **R5**)*. Over a **borrowed** connection (`transaction_scope="savepoint"`) `transaction()` opens `SAVEPOINT oo_<n>` at depth 0, `RELEASE`s it on clean exit and `ROLLBACK TO`s it on exception; nested calls join the outermost savepoint. The four writes of an `approve` are still all-or-nothing — **that is G2, and it is preserved** — but the outer commit belongs to the host and this adapter never issues it. `transactional` therefore stays REQUIRED `True` for a savepoint adapter: it *is* transactional. What it is not is *durable at clean exit*, and `Capabilities.why["transaction_scope"]` is the sentence the registry surfaces wherever a result would imply otherwise. **What "no" would have cost, recorded so the choice is reviewable:** a host that shares a connection without sharing a transaction, or a second connection and no shared transaction at all — both worse than either honest option (R5 point 5). `C0-12`.
+
+**A projection is not a fourth guarantee.** `attribute_projections` (§3.2, §5.7) says *where* a key is stored, not that storage is atomic or unique — G1 and G2 are untouched by it, and no new guarantee is required to implement it. It is named here only because a reader looking for "what must the storage layer promise" should not have to go to §5 to find that the answer is still two.
 
 **G3 — monotonic `last_seen` under concurrent `record_use`: NOT required.**
 Named here so it is a decision rather than an omission. `usage` is advisory; a lost update costs one count and at most a slightly-stale `last_seen`, and the orphan judgement already degrades to `None` under uncertainty. Requiring serialisation here would make `record_use` — the highest-frequency call in the surface — take a write lock for no safety gain.
@@ -685,6 +690,27 @@ This is the same move as `ConsumerReport.complete = False`: it does not solve th
 - It does not validate cross-field rules (*"a symmetric edge must have no inverse label"*). `FieldSpec` is per-field on purpose; a rule language here would be a schema language, which is a much larger thing than v0 needs.
 - **It cannot serve two `value_set`s of one dataset differently, and that includes the two this section is justified on** *(recorded by row 3c, 2026-08-28, after an adversarial review round)*. A schema is keyed `(namespace, kind, version)` — **one per kind, not per type name** — and CMS has two `kind="value_set"` entries with different shapes: `scope_severity_code` must be made to declare an `ordering` (§5.1's whole argument) and `deficiency_corrected_status` has no order to declare. A deployment gets one of two wrong answers and there is no third: `ordering` required refuses the unordered set for lacking a field it has no business having, and `ordering` optional lets the ordered set be created with no ordering — **which is the CMS severity scale back inside somebody's transform, unversioned, which is the exact thing §5.1 says this mechanism exists to prevent.** Both horns are asserted by `C15-07`. The fix — key schemas `(namespace, kind, name)`, or allow a name-level override — is a change to §5.2's storage shape and **wants a ruling**; see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 - It does not stop a deployment from writing `attributes={"stuff": {...}}` and putting an entire nested world in one declared `dict` field. Nothing can, short of a schema language.
+
+### 5.7 Projected keys — when the backend owns the column *(row 3d, beacon finding U3)*
+
+Everything above assumes `attributes` is one opaque JSON document the adapter never reads (§4.5). For the two reference backends that is exactly true. It is **not** true for a backend sitting on a schema somebody else designed, which is the deployment §9.3 and §7 are both about: beacon's `work_link_types` has `is_symmetric` and `inverse_label` as real typed columns, and an adapter over it round-trips those two keys **perfectly** while storing no arbitrary key at all.
+
+`stores_attributes` could not describe that backend. It had two answers and both were wrong:
+
+| answer | what it claims | what actually happens |
+|---|---|---|
+| `True` | every key round-trips | arbitrary keys are silently lost — Rule U's named failure |
+| `False` | no key round-trips | two keys it stores faithfully are disclaimed, and the registry reports an unknown where it has a fact |
+
+**So the declaration is split.** `stores_attributes` keeps its meaning — *an **arbitrary** dict survives a round trip* — and `attribute_projections: frozenset[str]` names the keys the backend owns as typed columns. The rules, in full:
+
+1. A key in `attribute_projections` **round-trips through the column**, whatever `stores_attributes` says. It is not in the JSON blob; on a backend with no blob at all there is no blob for it to be in.
+2. A key that is neither stored nor projected comes back **absent, with the `why` from `stores_attributes`** — unchanged from v0, and still never invented and never a value shaped like an unknown.
+3. `attribute_projections` is **not** a `Capabilities` flag: there is nothing to decline. A backend that projects nothing declares `frozenset()`, which is the default and is what both reference backends declare.
+4. **The census (§5.5) counts projected keys and says it is partial.** `attribute_census` used to refuse outright when `stores_attributes` was `False`; a projected key is a key that *was written*, so refusing hid a fact it had. It now returns those entries with `complete=False` and a `why_incomplete` naming the projected keys — the `ConsumerReport.complete=False` move, applied to the census.
+5. **No `INTERFACE.md` change.** A caller of `list_types` sees `attributes` and its warnings exactly as before; this is a storage-layer declaration about where a key lives, not a new surface.
+
+**What it does not do.** It does not let the registry *ask* for a projection, and it does not migrate a key into a column. The set is the backend's own statement about a schema it did not choose. Tested by `C0-06` — a projected key survives and a non-projected key on the same write does not — and by [`check_capability_matrix.py`](../tools/check_capability_matrix.py)'s tenth configuration, `stores_attributes=False` **plus** a declared projection.
 
 ---
 

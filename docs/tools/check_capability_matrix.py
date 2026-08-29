@@ -79,7 +79,7 @@ def _run(factory) -> tuple[int, dict[str, int]]:
 def main() -> int:
     print("PACKAGE.md 3.2 -- every OPTIONAL capability, declined one at a time.")
     print(f"required and never declinable: {', '.join(REQUIRED_CAPABILITIES)}\n")
-    print(f"  {'configuration':28s} {'verdict':9s} passed  skipped  failed")
+    print(f"  {'configuration':30s} {'verdict':9s} passed  skipped  failed")
 
     failures: list[str] = []
     cases: list[tuple[str, object]] = [
@@ -90,6 +90,20 @@ def main() -> int:
     # Capabilities entry a backend could set. PACKAGE.md 5.5 and ruling R2 say
     # declining it leaves a backend fully conformant, so it belongs in this matrix.
     cases.append(("no AttributeStore", lambda: WithoutAttributeStore(_fresh())))
+    # Beacon finding U3: `stores_attributes=False` PLUS a declared projection -- the
+    # host-owned backend that stores no arbitrary keys and owns two named ones as typed
+    # columns. Not a tenth flag; a tenth SHAPE of the ninth, and the one the U3 branch
+    # of C0-06 exists for. Row 3d.
+    cases.append(
+        (
+            "stores_attributes=False +proj",
+            lambda: DegradedAdapter(
+                _fresh(),
+                stores_attributes=False,
+                attribute_projections=("primary_key", "ordered"),
+            ),
+        )
+    )
 
     for label, factory in cases:
         code, tally = _run(factory)
@@ -97,7 +111,7 @@ def main() -> int:
         if code != 0:
             failures.append(label)
         print(
-            f"  {label:28s} {verdict:9s} {tally.get('passed', 0):6d}  "
+            f"  {label:30s} {verdict:9s} {tally.get('passed', 0):6d}  "
             f"{tally.get('skipped', 0):7d}  {tally.get('failed', 0):6d}"
         )
 
