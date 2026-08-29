@@ -23,7 +23,7 @@ It is not a schema store and it is not a graph. It holds names, definitions, pro
 - **No storage.** No tables, no SQL, no migrations, no adapter protocol. → deliverable **#2, `docs/specs/PACKAGE.md`**.
 - **No HTTP.** No routes, no auth, no pagination-over-the-wire. → **#2**.
 - **No package layout.** No module names, no `pip` name, no conformance test suite. → **#2**.
-- **No relationships or edges.** No `neighbors()`, no traversal, no edge storage — a *relationship type* can be registered here as a type, but the edges themselves are → deliverable **#4, `docs/EDGES.md`**.
+- **No relationships or edges.** No `neighbors()`, no traversal, no edge storage — a *relationship type* can be registered here as a type, but the edges themselves are → deliverable **#4, [`docs/specs/EDGES.md`](EDGES.md)** — **landed 2026-08-29**.
 - **No actions.** Action types are deliverable **#6** and Tenshen's actions stay in code (beacon spec §10.7).
 - **No instance resolution.** *"I already know 38 of these facilities"* (`WALKTHROUGH.md` step 2) is **entity** resolution, not **type** resolution. `resolve_type` resolves the word *facility*; it does not resolve `"BURNS NURSING HOME, INC."` against 14,627 CCNs. See §10.3 — this is a named gap, not an oversight.
 
