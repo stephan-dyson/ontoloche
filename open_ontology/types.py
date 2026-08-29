@@ -98,6 +98,10 @@ REFUSAL_REASONS = (
     "edge_family_unknown",      # EDGES 4.3 -- a named family is not a registered kind="edge"
     "endpoint_kind_mismatch",   # EDGES 2.4.1 -- wrong endpoint kind, or wrong level
     "edge_store_absent",        # EDGES 6 -- the adapter declares stores_edges=False
+    # Round #4 adversarial round 3 -- the nineteenth. retract_edge on an edge_id
+    # that does not exist reused `edge_family_unknown`, which names a different
+    # failure. That is 2.3's Cause B: one word, two meanings.
+    "unknown_edge",             # EDGES 2.6 -- no such edge
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

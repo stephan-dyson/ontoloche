@@ -167,6 +167,8 @@ def retract_edge(edge_id: str, reason: str, *, retracted_by: str) -> Edge | Refu
 
 - `stores_edge_events=False` ⇒ the returned edge carries `warnings: ["retracted_without_event_trail:<why>"]`, `<why>` verbatim from `Capabilities.why`.
 
+**`retract_edge` on an `edge_id` the store does not hold returns `Refusal(reason="unknown_edge")`** — the nineteenth value of `INTERFACE.md` §5.12, added by this change per **R3**, and the exact shape of `unknown_proposal` one object along. *(It reused `edge_family_unknown` until round 3, which names a different failure: §2.3's Cause B, committed inside a document that argues at length against reusing `kind_mismatch` for two things.)*
+
 **There is no `delete_edge` in v0, and no reinstatement.** Deletion is out because nothing else in this project deletes. Reinstatement is out because ruling **R11** is already specifying `reinstate` for types in row 3e, and inventing a second, differently-shaped reinstatement for edges one row ahead of it is how two calls come to mean nearly the same thing. **Recorded as Q14** — 3e should decide whether `reinstate` covers edges.
 
 **A retracted edge is invisible to `neighbors` by default** and reachable with `include_retracted=True`, mirroring `list_types(include_retired=)` — including its Rule K consequence: a default that hides things sets `complete=False` (§4.3).
@@ -307,6 +309,8 @@ NeighborEdge:
 
 **`depth_reached` counts levels that found something NEW, and the word is load-bearing.** Under the default `direction="both"`, the frontier at level 2 contains the node reached at level 1 — and that node is incident on the very edge the walk arrived on. A `depth_reached` computed from *"did the scan return any records"* therefore reports `depth_reached == depth_requested` on a genuine dead end, because the walk re-found its own arriving edge and counted that as progress. **[Observed]** in round 2 (§17): a one-edge graph walked to depth 2 reported `depth_reached=2`, and the probe written to test dead ends missed it because it hard-coded `direction="out"`, which structurally cannot re-find an incoming edge. **The dead-end rule of §4.3 was therefore true only for the one direction nobody defaults to.** Both directions are now exercised.
 
+**Two corner cases, stated because they are reachable and were not** *(round 3)*. **A self-loop** (`src == dst`) counts in `known` and contributes **nothing** to `nodes`, because both its endpoints are the origin and `nodes` excludes the origin — so `known=1, nodes=()` is a correct report of one real edge, not an inconsistency. **`at_depth` is a property of the edge's discovery, not of a newly-reached node**: in a triangle `A→B, A→C, B→C` walked from `A`, the `B→C` edge is `at_depth=2` although both of its endpoints were reached at depth 1. Both are exercised in `edges_capability_probe.py`.
+
 **`known` is a plain `int`, and `INTERFACE.md` §3 is why.** That section already settles the case: *"`ConsumerReport.known` and `Resolution.known` are plain `int` because both are lengths of lists this document has already materialised — there is nothing there to fail to count."* `NeighborReport.edges` is materialised in the report, so `known` is its length and a backend has nothing to decline. **`int | None` here would be a Rule-U field with no reachable `None`** — decoration shaped like honesty. *(It was `int | None` in the first draft; a round-1 reviewer reported being unable to produce the `None`, which is the right way to find a field that cannot happen.)* The adapter's own `EdgePage.known` (§7.1) **is** `int | None`, because a store genuinely may not be able to count without materialising.
 
 `namespace` is **required and keyword-only**, and it names the namespace **the `edge_families` argument is resolved in** — *not* the origin's, which the origin carries itself (§2.1), and *not* a filter on results (§4.5). Making it required rather than defaulting to `"default"` is deliberate: UC3's whole subject is that `"default"` is a wrong answer nobody notices.
@@ -332,7 +336,11 @@ NeighborEdge:
 **Two things follow, and both are specified rather than left open:**
 
 1. **The registry exhausts the adapter's pages for a level.** `EdgeQuery.limit`/`after` and `EdgePage.next_after` exist (§7.1); a level assembled from one page of five would be silently partial, which is exactly what Rule K exists to prevent. So `neighbors` loops `find_edges` until `next_after` is `None`, per depth level. **[Observed]**: 300 edges on one node, assembled from 64-row pages, `known=300, complete=True`.
-2. **A deployment MAY configure an assembly bound**, and hitting it is an *incomplete report with a `why`*, never a shorter one. **[Observed]**: 2,000 edges on one node with a bound of 500 gives `known=500`, **`complete=False`**, and `why_incomplete` naming the bound. **This is not paging** — the caller gets no cursor and cannot ask for the next 500, because R13 says the façade does not page in v0 and this document does not quietly reverse that. It is a circuit breaker that tells the truth.
+2. **The assembly bound is ON by default**, and hitting it is an *incomplete report with a `why`*, never a shorter one. **It counts DISTINCT edges** — see the two boxes below, both of which were round-3 findings. **[Observed]**: 2,000 edges on one node with a bound of 500 gives `known=500`, **`complete=False`**, and `why_incomplete` naming the bound. **This is not paging** — the caller gets no cursor and cannot ask for the next 500, because R13 says the façade does not page in v0 and this document does not quietly reverse that. It is a circuit breaker that tells the truth.
+
+> **The bound counts distinct edges, and getting that wrong is worse than not having a bound.** **[Observed]** in round 3: the bound was compared against each *raw page*, and at depth ≥ 2 a frontier legitimately re-finds edges already counted at depth 1 — so a walk of **19 distinct edges under a bound of 20** stopped at depth 1, returned **15**, and reported `complete=False` with a `why` naming a bound **nothing had crossed**. Two failures in one: four real edges silently dropped, and a false claim in the one field §4.2 promises will tell the truth. The page is deduplicated against what the walk has already seen *before* the bound is consulted.
+
+> **The bound is not opt-in, and that was a round-3 finding too.** An earlier draft said *"a deployment MAY configure"* one. **A circuit breaker nobody has to switch on is not a circuit breaker** — with none configured, the default behaviour of `neighbors` is to loop `find_edges` until the cursor is exhausted, which is precisely the unbounded materialisation R13 exists to prevent, on the 9.7M-degree node this section just measured. **A bound is in force by default; disabling it is a deliberate act** (`max_edges=None`), and a deployment that does so has chosen the unbounded fetch rather than inherited it.
 
 **What it does not do, stated plainly:** a caller who needs all 9.7M neighbours cannot get them from this surface. **Q21** asks whether that is acceptable for Phase 3 or whether the façade must page after all — which is R13's question, re-opened by real data rather than by preference, and it is the supervisor's to answer.
 
@@ -344,7 +352,7 @@ NeighborEdge:
 | A named family in `edge_families` is not a registered `kind="edge"` entry | **`Refusal(reason="edge_family_unknown", detail={"families": [...]})`**. The whole call, not a partial answer: a caller that names a family and gets a report back is entitled to believe the family was searched, and a typo'd name returning a clean empty set is mechanism **C** committed by the read seam |
 | A named family exists but is **retired** | Not a refusal. It is searched (its edges were not deleted), and the report carries `warnings: ["edge_family_retired:<name>"]` |
 | `edge_families=None` | Every family the store can answer, **across every namespace** (§4.1). `families_searched` echoes exactly which, and `complete` is about *those* — §4.4 |
-| The store cannot count | `known=None`, never `0`. `PACKAGE.md` §3.4's uniform uncertainty rule |
+| The **adapter** cannot count | `EdgePage.known=None`, never `0` — `PACKAGE.md` §3.4's uniform uncertainty rule. **`NeighborReport.known` is never `None`** (§4.1): the report materialises its edges, so its `known` is a length. *(This row said `known=None` about the report itself until round 3 — leftover prose from before §4.1's own correction, contradicting it two sections apart.)* |
 | **The walk ran out of graph** — a leaf, a sink, a node with no edges at all | `depth_reached < depth_requested` **with `complete=True`** and no `why_incomplete`. This is the *common* case in real data and it is **not** an incomplete answer: the walk saw everything there was |
 | **The walk was cut short** — a scan bound, a store that timed out, a page it could not exhaust | `depth_reached < depth_requested` **with `complete=False`**, and `why_incomplete` names the bound. **Never a silently shallower answer** |
 | `include_retracted=False` (the default) and a retracted edge was suppressed | `complete=False`, because a default that hides things is `list_types`' rule (`INTERFACE.md` §5.6) |
@@ -474,6 +482,8 @@ Otherwise the adapter is claiming that half its writes are the host's to commit 
 
 Under `"savepoint"`, an edge write result carries `not_durable_until_host_commits:<why>` — `INTERFACE.md` §5.4's existing warning value, unchanged, on one more carrier. **No new warning value is needed**, and the row-3d lesson applies verbatim: it is stamped at the *write* call sites (`add_edge`, `retract_edge`) and **not** on `neighbors`, because a signal that never turns off is noise.
 
+> **Each write call site stamps it ITSELF, and the word *itself* is the finding.** **[Observed]** in round 3: `retract_edge` carried the warning forward from the edge's prior state instead of applying it, so **retracting an edge the host had already committed came back with no warning at all** — a write over a borrowed connection that looked exactly as durable as one over an owned connection. That is `PACKAGE.md` §3.4 primitive 3 note 2's own recorded bug class — *"`register_consumer` and `reject` construct their results directly and skipped the stamp"* — reproduced one layer up, in the call this section names by name. Every write checks `edge_transaction_scope` on its own behalf.
+
 ### 6.3 `edge_attribute_projections` — beacon finding U3's shape, reused
 
 `stores_edge_attributes` is binary and the same argument that split `stores_attributes` (U3, `PACKAGE.md` §5.7) splits this one: `task_stakeholders.role` and `work_links.description` are **real typed columns** that round-trip perfectly on a backend that stores no arbitrary key at all. `True` would silently lose arbitrary keys; `False` would disclaim two the backend owns.
@@ -546,9 +556,11 @@ The one call behind `neighbors`. **Traversal is not pushed into the adapter**: t
 
 **Why the two differ.** The type case has no bound: the alternative to an index is scanning the whole type table, so the honest answer is *"I cannot answer this"*. The edge case is already bounded by `q.incident_to` — the frontier is a handful of nodes — so the backend genuinely **can** return a complete answer to a slightly wider question, and the registry narrows it. The page it returns *is* complete for what it was asked. **A backend that could not even do that returns `complete=False` with the `why`, and the general rule applies again.**
 
+> **The boundary is exercised, not only asserted** *(round 3)*. This section calls the three-primitive count *"the strongest evidence that §2.3's decision was right"*, and `PACKAGE.md` §3.1 makes the boundary a **testable** rule — `C0-04` inspects the source and fails if `adapter.py` so much as names `Refusal`. **[Observed]** the probe kit's own `EdgeStore` was storing and returning `Edge` — the rich façade object with structured `NodeRef`s and computed warnings — so the boundary this section leans on was asserted here and contradicted by the one runnable artifact. It now stores `EdgeRecord`, takes an `EdgeQuery`, returns an `EdgePage`, and `assert_adapter_boundary()` checks it by source inspection the way `C0-04` checks the real one. *(The rewrite immediately paid: writing this document's own `EventRecord` amendment into `adapter.py` tripped `C0-04` for a **comment** mentioning the forbidden identifier. The rule is enforced, not decorative.)*
+
 **No fourth primitive for retraction, and no fifth for counting.** Retraction is `put_edge` with a changed `status`; counting is `EdgePage.known`. Both were considered and dropped, because a primitive that only exists to express a policy transition is a policy inside the adapter.
 
-**One amendment to an existing shape:** `EventRecord.edge_id: str | None = None` (§5.2). Additive, defaulted, and it costs the reference backends one nullable column.
+**One amendment to an existing shape:** `EventRecord.edge_id: str | None = None` (§5.2). Additive, defaulted, and it costs the reference backends one nullable column. **[Landed in this change]** — in `PACKAGE.md` §3.3 *and* in `open_ontology/adapter.py`, together with the three new `event` values. *(Round 3 found both sentences claiming an amendment that had reached neither file. `check_spec_drift.py` could not catch it: PACKAGE.md and the code agreed with each other on the old shape, so a third document asserting a change nobody made was invisible to a two-way diff. Recorded as a named limit of that checker.)*
 
 ### 7.2 A host-owned table as an edge backend — `work_links`
 
@@ -979,7 +991,7 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 | Type-to-type edges (**R7**) | §3. `equivalent_to`, symmetric, non-transitive, non-merging — and the non-merging half checked against the shipped registry |
 | `v0` and "unstable" in the header | Header, line 3 |
 | A design-test section per use case, expected outcomes stated first | §9, §10, §11. **Thirty-four predictions, committed in a separate commit ahead of the results; eleven contortions recorded, none designed away** |
-| An adversarial review loop | §17. **Two rounds so far, four fresh reviewers**, six BLOCKING and seven MAJOR findings, every one reproduced by running code. **Neither round was clean, so the stop rule is not yet met** — §17.1 carries the live count and §17.4 the state |
+| An adversarial review loop | §17. **Three rounds, six fresh reviewers, ten BLOCKING and ten MAJOR findings**, every one reproduced by running code. **No round was clean.** Closed at the brief's three-round cap with a convergence note (§17.5), the same way rows 3c and 3d closed |
 | Every new `warnings` value goes through `INTERFACE.md` §5.4 in the same change | §2.8. Five added; §5.4 now enumerates sixteen across four carriers |
 | New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | Three added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent`. §5.12 now enumerates eighteen |
 
@@ -993,8 +1005,9 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 
 | Round | Reviewers | Verdicts | BLOCKING | MAJOR | Outcome |
 |---|---|---|---|---|---|
-| **1** | real-data lens · coherence lens | NOT YET · NOT YET | **3** (2 found independently by both) | **4** | Every finding reproduced by running code. Fixes below; a fourth probe added |
+| **1** | real-data lens · coherence lens | NOT YET · NOT YET | **3** (**1** found independently by both) | **4** | Every finding reproduced by running code. Fixes below; a fourth probe added. *(This cell said “2 found independently by both” until round 3 counted it against §17.2's own prose, which supports one. The audit trail miscounting itself, a third time — §17.5.)* |
 | **2** | real-data lens · coherence lens | NOT YET · NOT YET | **3** | **3** + 1 MINOR | Two live defects in the read seam, one measured scale limit, and one false claim in this document's own exit-criteria table. §17.3 |
+| **3** | real-data lens · coherence lens | NOT YET · NOT YET | **4** | **3** + 2 MINOR | Two of them defects in round 2's *own fixes*; one an unexercised boundary this document calls its strongest evidence; one an amendment claimed and never made. §17.4 |
 
 ### 17.2 Round 1 — what it found
 
@@ -1047,7 +1060,49 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 | M8 | **§4.4 claimed `NeighborReport` was *"the first Rule-K carrier in this project that can be `True`"*.** False: `registry.py`'s `list_types` computes `complete=bool(page.complete and not applied)`, so an unfiltered census — the exact call `INTERFACE.md` §5.6 recommends — is already `complete=True` | Overclaim removed. The comparison that holds is with the two carriers that are *always* `False`, and it reads that way now |
 | m | §6 justified having no uniqueness flag by citing `PACKAGE.md` §3.5's **G1**, which is defined narrowly as uniqueness *in the type store* | Rewritten to stand on §4.2's `proposal_id`/`event_id` precedent alone, which is where the argument actually lives |
 
-### 17.4 What the loop says about the process
+### 17.4 Round 3 — what it found
+
+**Four BLOCKING. Two of them were defects in round 2's own fixes**, which is the single most useful thing this loop produced.
+
+**B7 — the assembly bound double-counted re-found edges, dropping real data and lying about why.** Round 2 added the bound; round 3 walked a hub whose leaves are also connected to each other — *the ordinary topology of the 9.7M-degree node §4.2 is built around*. **[Reproduced]**: 19 distinct edges under a bound of 20 returned **15**, `complete=False`, and a `why_incomplete` naming a bound nothing had crossed. The check compared the bound against each *raw page*, and a depth-2 frontier legitimately re-finds the edges it arrived on. **A circuit breaker that fires early and then explains itself falsely is worse than no circuit breaker**, because the deployment reading it concludes the bound is too tight when the store had the whole answer.
+
+**B8 — the bound was opt-in, so the default was the unbounded fetch R13 exists to prevent.** §4.2 had measured the hazard, specified a mitigation, and left it switched off. It is now on by default; disabling it is a deliberate act.
+
+**B9 — `retract_edge` inherited the savepoint durability warning instead of stamping it.** §6.2 says the stamp is applied at *every* write call site and names `retract_edge`. **[Reproduced]**: retracting an edge the host had already committed returned **no warning at all** — a borrowed-connection write that looked exactly as durable as an owned one. This is `PACKAGE.md` §3.4 primitive 3 note 2's *own recorded bug class*, arriving one layer up.
+
+**B10 — §4.3's behaviour table still said `known=None, never 0`** about `NeighborReport`, which §4.1 had corrected to a plain `int` in round 1, with an argument. Two sections, opposite instructions, and the table is the part a reader consults.
+
+**The three MAJOR and two MINOR.**
+
+| # | Finding | Resolution |
+|---|---|---|
+| M9 | **The three adapter primitives were never instantiated by any probe.** §7.1 calls the three-primitive count *"the strongest evidence that §2.3's decision was right"* and `PACKAGE.md` §3.1 makes the boundary a testable rule — yet the kit's `EdgeStore` stored and returned `Edge`, the rich façade object. **The boundary this document leans on was contradicted by its own runnable artifact** | `EdgeStore` now stores `EdgeRecord`, takes an `EdgeQuery` and returns an `EdgePage`; `assert_adapter_boundary()` checks it by source inspection the way `C0-04` does. **The rewrite paid immediately**: landing the `EventRecord` amendment tripped `C0-04` on a *comment* naming the forbidden identifier |
+| M10 | **The `EventRecord.edge_id` amendment was claimed in two places and made in neither.** §5.2 specified it and §7.1 said *"one amendment to an existing shape… it costs the reference backends one nullable column"*, and it had reached neither `PACKAGE.md` §3.3 nor `adapter.py`. `check_spec_drift.py` could not see it: the doc and the code agreed with **each other** on the old shape, so a *third* document asserting a change nobody made is invisible to a two-way diff | Landed in both, with the three `event` values. The checker's limit is recorded rather than papered over — it compares two sides, and this was a claim from a third |
+| M11 | **§17.1's own round-1 count said two defects were found by both reviewers; §17.2's prose supports one** | Corrected. It is the **third** self-accounting error in this section |
+| m | `retract_edge` on a missing `edge_id` reused `edge_family_unknown` | `unknown_edge`, the nineteenth value of `INTERFACE.md` §5.12, added in this change per R3 |
+| m | Self-loops and the triangle case for `at_depth` were reachable and unstated | Both stated in §4.1 and exercised |
+
+### 17.5 Convergence — honestly, and the loop did **not** converge
+
+**Three rounds, six fresh reviewers, six NOT YET verdicts.** The brief's stop rule was *two consecutive clean rounds, or three rounds plus an honest convergence note*. **The second branch applies.** This is the same close rows 3c and 3d took, and it should be read the same way: as a fact about the process, not a formality.
+
+**What the defect class did over three rounds, which is the only real evidence of convergence:**
+
+| Round | The defects were… |
+|---|---|
+| 1 | **The rules were not enforced.** §2.4.1 stated three clauses; two were guarded only by each family's own declaration. A stated rule with no enforcement point |
+| 2 | **The rules were enforced, on the wrong axis.** Capabilities were probed on default parameters; the defects were in the parameters on default capabilities |
+| 3 | **The fixes were wrong at the edges, and the evidence did not match the claim.** Two defects inside round 2's own fixes; one boundary asserted and contradicted by the probe; one amendment claimed and never made |
+
+**That is narrowing** — from *"the mechanism does not exist"* to *"the mechanism is right and one edge of it is wrong"* — and it is the same trajectory row 3d recorded. It is **not** convergence, and three rounds of this loop have not once produced a clean reader.
+
+**The residual risk, stated rather than eliminated.** Every round found something in the part the previous round had not run, *including the round that was added specifically to close that gap*. **[Inferred]** a fourth synthetic round would find a fourth such corner rather than none — and the honest reading of that is not that the loop should continue, but that **prose-plus-probe review has a floor, and this document has reached it.** The next signal with real information is the same one ruling **R15** identified for row 3d: **a real consumer over a real store.** For EDGES that is beacon's slice 1 building `neighbors` against `work_links`, and its findings should be routed back the way beacon 21.1's were.
+
+**Two things this loop did that are worth keeping.** Every one of the ten BLOCKING findings was **reproduced by running code before it was believed**, and three of them were defects in the *previous round's fix* — which is only visible because each round got a reader with no stake in the last one. And the loop twice caught **this document lying about its own verification** (§16's round count, §17.1's reviewer count, §7.1's phantom amendment). *A document that self-reports its own evidence needs an adversary pointed at the self-report, not only at the design.*
+
+### 17.6 What the loop says about the process
+
+
 
 
 
