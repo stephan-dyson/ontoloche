@@ -16,6 +16,12 @@ dependencies = []
 [project.optional-dependencies]
 postgres = ["psycopg>=3.1,<4"]
 contract = ["pytest>=8"]
+# Deliverable 3b. The async mirror needs a driver for SQLite (SQLite has no async C
+# API, so every async SQLite story in Python is a thread offload -- aiosqlite is the
+# standard one) and the asyncio plugin to run the async conformance suite. Async
+# Postgres needs nothing new: psycopg v3 already ships AsyncConnection.
+aio = ["aiosqlite>=0.19"]
+contract-aio = ["pytest>=8", "pytest-asyncio>=0.23", "aiosqlite>=0.19"]
 
 [tool.setuptools.packages.find]
 include = ["open_ontology*"]
@@ -25,7 +31,13 @@ include = ["open_ontology*"]
 "open_ontology.contract" = ["fixtures/*.csv"]
 
 [tool.pytest.ini_options]
-testpaths = ["open_ontology/contract"]
+testpaths = ["open_ontology/contract", "open_ontology/aio/contract"]
+# Deliverable 3b, deviation D-A2. pytest-asyncio resolves its `asyncio` marker during
+# collection, so a marker a conftest adds later is too late; auto mode is the supported
+# way to run a suite of plain `async def test_*` functions. A third party running the
+# suite from an installed wheel gets the same setting without an ini of ours, because
+# `run_async_contract_suite` passes `--asyncio-mode=auto` itself.
+asyncio_mode = "auto"
 markers = [
     "cms: the CMS design test (PACKAGE.md 8); needs the checked-in 400-row fixture",
     "nonbinding: asserted but outside the conformance definition (ruling R2)",

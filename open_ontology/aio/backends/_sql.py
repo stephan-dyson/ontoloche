@@ -1,0 +1,643 @@
+# ---------------------------------------------------------------------------------
+# GENERATED FILE -- do not edit. Edit open_ontology/backends/_sql.py and run:
+#
+#     python tools/unasync.py
+#
+# The sync module is the single source of truth; this is its mechanical async mirror
+# (deliverable 3b). open_ontology/aio/contract/test_generated_matches_source.py fails
+# if this file and its source have drifted apart.
+# ---------------------------------------------------------------------------------
+
+"""PRIVATE. Row <-> record mapping shared by the two reference backends.
+
+The two backends differ in exactly three places -- JSON storage, timestamps, and how a
+read inside a write transaction is serialised -- and those differences are the adapter's
+*content*, not something to abstract away. So they live in a small ``_Dialect`` object
+and everything else is shared, which is the only honest way to have two backends that
+are provably the same thing.
+
+Nothing in this file knows what an approval or a refusal is.
+"""
+
+from __future__ import annotations
+import json
+from datetime import UTC, datetime
+from typing import Any, Iterable
+from open_ontology.aio.adapter import (
+    AttrObservedRecord,
+    AttrSchemaRecord,
+    ConsumerRecord,
+    EventRecord,
+    ProposalRecord,
+    TypeRecord,
+    UsageRecord,
+)
+import re
+from contextlib import asynccontextmanager
+from pathlib import Path
+from open_ontology.aio.adapter import (
+    Capabilities,
+    ProposalPage,
+    ProposalQuery,
+    TypePage,
+    TypeQuery,
+)
+from open_ontology.errors import AlreadyExists, AmbiguousKind, SchemaMismatch, StoreVersionUnknown
+
+# The row <-> record mapping, the dialects and the migration loader are pure functions
+# of a dialect object; the async mirror borrows them rather than copying them.
+__all__ = ["AsyncBaseSqlAdapter"]
+
+# Pure module-level helpers with no I/O in them, borrowed not copied.
+from open_ontology.backends._sql import (
+    CONSUMER_COLUMNS,
+    Dialect,
+    EVENT_COLUMNS,
+    PROPOSAL_COLUMNS,
+    SqlStore,
+    TYPE_COLUMNS,
+    decode_cursor,
+    encode_cursor,
+    load_migrations,
+    split_statements,
+)
+
+
+class AsyncBaseSqlAdapter:
+    """The fifteen primitives over a DB-API connection, shared by both backends.
+
+    Subclasses supply a connection, a dialect, and the three things that genuinely
+    differ: how a transaction begins, which exception a uniqueness constraint raises,
+    and whether a read inside a write transaction needs an explicit lock.
+    """
+
+    backend_name = "generic"
+    _owns_schema = True
+
+    def __init__(self, dialect: Dialect):
+        self.d = dialect
+        self.m = SqlStore(dialect)
+        self._depth = 0
+        self._failed = False
+
+    # ------------------------------------------------------------------ subclass API
+    async def _execute(self, sql: str, params: tuple | list = ()) -> Any:
+        raise NotImplementedError
+
+    async def _fetchall(self, sql: str, params: tuple | list = ()) -> list[tuple]:
+        raise NotImplementedError
+
+    async def _fetchone(self, sql: str, params: tuple | list = ()) -> tuple | None:
+        raise NotImplementedError
+
+    async def _begin(self) -> None:
+        raise NotImplementedError
+
+    async def _commit(self) -> None:
+        raise NotImplementedError
+
+    async def _rollback(self) -> None:
+        raise NotImplementedError
+
+    @property
+    def _integrity_errors(self) -> tuple[type[BaseException], ...]:
+        raise NotImplementedError
+
+    def _lock_clause(self) -> str:
+        """Appended to the proposal read so ``already_decided`` stops being a race."""
+        return ""
+
+    async def _columns_of(self, table: str) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    # ---------------------------------------------------------------- 1 capabilities
+    async def capabilities(self) -> Capabilities:
+        return Capabilities(
+            enforces_unique_name=True,
+            transactional=True,
+            stores_proposals=True,
+            stores_events=True,
+            stores_attributes=True,
+            stores_aliases=True,
+            indexes_membership=True,
+            counts_usage=True,
+            timestamps_usage=True,
+            owns_schema=self._owns_schema,
+            why={},
+        )
+
+    # -------------------------------------------------------------------- 2 migrate
+    def _migration_sql(self) -> list[tuple[int, str, str]]:
+        return load_migrations(self.backend_name)
+
+    async def _current_version(self) -> int | None:
+        try:
+            row = await self._fetchone("SELECT max(version) FROM oo_schema_version")
+        except Exception:
+            await self._recover_from_failed_probe()
+            return None
+        return None if row is None else row[0]
+
+    async def _recover_from_failed_probe(self) -> None:
+        """Postgres aborts the whole transaction on a failed statement; SQLite does not."""
+        return None
+
+    def _required_columns(self) -> dict[str, tuple[str, ...]]:
+        """What a verify-only migrate() insists on when the schema belongs elsewhere."""
+        return {
+            "oo_type": (
+                "namespace",
+                "kind",
+                "name",
+                "definition",
+                "created_by",
+                "status",
+                "provenance_json",
+            ),
+        }
+
+    async def migrate(self) -> int:
+        migrations = self._migration_sql()
+        latest = max(v for v, _, _ in migrations)
+        current = await self._current_version()
+
+        if not self._owns_schema:
+            # Verify-only. Never issues DDL against a schema it does not own.
+            missing: list[str] = []
+            for table, columns in self._required_columns().items():
+                have = set(await self._columns_of(table))
+                if not have:
+                    missing.append(f"{table} (table absent)")
+                    continue
+                missing.extend(f"{table}.{c}" for c in columns if c not in have)
+            if missing:
+                raise SchemaMismatch("store is missing: " + ", ".join(sorted(missing)))
+            return current if current is not None else latest
+
+        if current is not None and current > latest:
+            raise StoreVersionUnknown(
+                f"store is at version {current}; this package knows up to {latest}"
+            )
+
+        for version, slug, sql in migrations:
+            if current is not None and version <= current:
+                continue
+            async with self.transaction():
+                for statement in split_statements(sql):
+                    await self._execute(statement)
+                await self._execute("DELETE FROM oo_schema_version")
+                await self._execute(
+                    f"INSERT INTO oo_schema_version (version, applied_at, note) "
+                    f"VALUES ({self.d.ph}, {self.d.ph}, {self.d.ph})",
+                    (version, self.d.enc_ts(datetime.now(UTC)), slug),
+                )
+            current = version
+        return latest
+
+    # ---------------------------------------------------------------- 3 transaction
+    @asynccontextmanager
+    async def transaction(self):
+        """Re-entrant: an inner call joins the outermost transaction."""
+        if self._depth == 0:
+            await self._begin()
+            self._failed = False
+        self._depth += 1
+        try:
+            yield
+        except BaseException:
+            self._depth -= 1
+            if self._depth == 0:
+                await self._rollback()
+                self._failed = False
+            else:
+                self._failed = True
+            raise
+        else:
+            self._depth -= 1
+            if self._depth == 0:
+                if self._failed:
+                    self._failed = False
+                    await self._rollback()
+                else:
+                    await self._commit()
+
+    # ------------------------------------------------------------------- 4 put_type
+    async def put_type(self, rec: TypeRecord, *, expect_absent: bool = False) -> TypeRecord:
+        now = datetime.now(UTC)
+        stamped = TypeRecord(
+            **{
+                **rec.__dict__,
+                "created_at": rec.created_at or now,
+                "updated_at": rec.updated_at or now,
+            }
+        )
+        values = self.m.type_values(stamped)
+        cols = ", ".join(TYPE_COLUMNS)
+        marks = self.m.marks(len(TYPE_COLUMNS))
+        ph = self.d.ph
+        async with self.transaction():
+            if expect_absent:
+                try:
+                    await self._execute(f"INSERT INTO oo_type ({cols}) VALUES ({marks})", values)
+                except self._integrity_errors as exc:
+                    raise AlreadyExists(
+                        f"({rec.namespace}, {rec.kind}, {rec.name}) is already taken"
+                    ) from exc
+            else:
+                updates = ", ".join(f"{c} = excluded.{c}" for c in TYPE_COLUMNS[3:])
+                await self._execute(
+                    f"INSERT INTO oo_type ({cols}) VALUES ({marks}) "
+                    f"ON CONFLICT (namespace, kind, name) DO UPDATE SET {updates}",
+                    values,
+                )
+            await self._execute(
+                f"DELETE FROM oo_type_predicate WHERE namespace = {ph} "
+                f"AND member_kind = {ph} AND member_name = {ph}",
+                (rec.namespace, rec.kind, rec.name),
+            )
+            for predicate in dict.fromkeys(rec.predicates):
+                await self._execute(
+                    f"INSERT INTO oo_type_predicate "
+                    f"(namespace, member_kind, member_name, predicate_name) "
+                    f"VALUES ({ph}, {ph}, {ph}, {ph})",
+                    (rec.namespace, rec.kind, rec.name, predicate),
+                )
+            stored = await self.get_type(rec.namespace, rec.name, kind=rec.kind)
+        assert stored is not None
+        return stored
+
+    # ------------------------------------------------------------------- 5 get_type
+    async def _predicates_for(self, namespace: str, kind: str, name: str) -> tuple[str, ...]:
+        ph = self.d.ph
+        rows = await self._fetchall(
+            f"SELECT predicate_name FROM oo_type_predicate WHERE namespace = {ph} "
+            f"AND member_kind = {ph} AND member_name = {ph} ORDER BY predicate_name",
+            (namespace, kind, name),
+        )
+        return tuple(r[0] for r in rows)
+
+    async def get_type(
+        self, namespace: str, name: str, *, kind: str | None = None
+    ) -> TypeRecord | None:
+        ph = self.d.ph
+        cols = ", ".join(TYPE_COLUMNS)
+        if kind is None:
+            rows = await self._fetchall(
+                f"SELECT {cols} FROM oo_type WHERE namespace = {ph} AND name = {ph}",
+                (namespace, name),
+            )
+            if len(rows) > 1:
+                kinds = sorted(r[1] for r in rows)
+                raise AmbiguousKind(f"{name!r} exists under kinds {kinds} in {namespace!r}")
+        else:
+            rows = await self._fetchall(
+                f"SELECT {cols} FROM oo_type WHERE namespace = {ph} AND name = {ph} "
+                f"AND kind = {ph}",
+                (namespace, name, kind),
+            )
+        if not rows:
+            return None
+        row = rows[0]
+        return self.m.type_from_row(row, await self._predicates_for(namespace, row[1], row[2]))
+
+    # ----------------------------------------------------------------- 6 find_types
+    async def find_types(self, q: TypeQuery) -> TypePage:
+        ph = self.d.ph
+        cols = ", ".join(f"t.{c}" for c in TYPE_COLUMNS)
+        where: list[str] = []
+        params: list[Any] = []
+        joins = ""
+        if q.predicate is not None:
+            joins = (
+                " JOIN oo_type_predicate p ON p.namespace = t.namespace "
+                "AND p.member_kind = t.kind AND p.member_name = t.name"
+            )
+            where.append(f"p.predicate_name = {ph}")
+            params.append(q.predicate)
+        if q.namespace is not None:
+            where.append(f"t.namespace = {ph}")
+            params.append(q.namespace)
+        if q.kind is not None:
+            where.append(f"t.kind = {ph}")
+            params.append(q.kind)
+        if q.status is not None:
+            where.append(f"t.status = {ph}")
+            params.append(q.status)
+        elif not q.include_retired:
+            where.append("t.status <> 'retired'")
+        if q.created_by is not None:
+            where.append(f"t.created_by = {ph}")
+            params.append(q.created_by)
+        if q.name_in is not None:
+            if not q.name_in:
+                return TypePage(records=(), known=0, complete=True)
+            where.append(f"t.name IN ({self.m.marks(len(q.name_in))})")
+            params.extend(q.name_in)
+        if q.after is not None:
+            ns, kind, name = decode_cursor(q.after)
+            where.append(f"(t.namespace, t.kind, t.name) > ({ph}, {ph}, {ph})")
+            params.extend([ns, kind, name])
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        limit = f" LIMIT {int(q.limit) + 1}" if q.limit is not None else ""
+        rows = await self._fetchall(
+            f"SELECT {cols} FROM oo_type t{joins}{clause} "
+            f"ORDER BY t.namespace, t.kind, t.name{limit}",
+            params,
+        )
+        more = q.limit is not None and len(rows) > q.limit
+        if more:
+            rows = rows[: q.limit]
+        records = tuple([
+            self.m.type_from_row(row, await self._predicates_for(row[0], row[1], row[2]))
+            for row in rows
+        ])
+        next_after = (
+            encode_cursor(records[-1].namespace, records[-1].kind, records[-1].name)
+            if more and records
+            else None
+        )
+        return TypePage(
+            records=records,
+            known=len(records),
+            complete=not more,
+            why_incomplete="a page limit was applied" if more else None,
+            next_after=next_after,
+        )
+
+    # --------------------------------------------------------------- 7 put_proposal
+    async def put_proposal(
+        self, rec: ProposalRecord, *, expect_absent: bool = False
+    ) -> ProposalRecord:
+        cols = ", ".join(PROPOSAL_COLUMNS)
+        marks = self.m.marks(len(PROPOSAL_COLUMNS))
+        values = self.m.proposal_values(rec)
+        async with self.transaction():
+            if expect_absent:
+                try:
+                    await self._execute(f"INSERT INTO oo_proposal ({cols}) VALUES ({marks})", values)
+                except self._integrity_errors as exc:
+                    raise AlreadyExists(f"proposal {rec.proposal_id} already exists") from exc
+            else:
+                updates = ", ".join(f"{c} = excluded.{c}" for c in PROPOSAL_COLUMNS[1:])
+                await self._execute(
+                    f"INSERT INTO oo_proposal ({cols}) VALUES ({marks}) "
+                    f"ON CONFLICT (proposal_id) DO UPDATE SET {updates}",
+                    values,
+                )
+            stored = await self.get_proposal(rec.proposal_id)
+        assert stored is not None
+        return stored
+
+    # --------------------------------------------------------------- 8 get_proposal
+    async def get_proposal(self, proposal_id: str) -> ProposalRecord | None:
+        cols = ", ".join(PROPOSAL_COLUMNS)
+        lock = self._lock_clause() if self._depth > 0 else ""
+        row = await self._fetchone(
+            f"SELECT {cols} FROM oo_proposal WHERE proposal_id = {self.d.ph}{lock}",
+            (proposal_id,),
+        )
+        return None if row is None else self.m.proposal_from_row(row)
+
+    # ------------------------------------------------------------- 9 find_proposals
+    async def find_proposals(self, q: ProposalQuery) -> ProposalPage:
+        ph = self.d.ph
+        cols = ", ".join(PROPOSAL_COLUMNS)
+        where: list[str] = []
+        params: list[Any] = []
+        if q.namespace is not None:
+            where.append(f"namespace = {ph}")
+            params.append(q.namespace)
+        if q.name is not None:
+            where.append(f"name = {ph}")
+            params.append(q.name)
+        if q.status is not None:
+            where.append(f"status = {ph}")
+            params.append(q.status)
+        if q.after is not None:
+            where.append(f"proposal_id > {ph}")
+            params.append(q.after)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        limit = f" LIMIT {int(q.limit) + 1}" if q.limit is not None else ""
+        rows = await self._fetchall(
+            f"SELECT {cols} FROM oo_proposal{clause} ORDER BY proposed_at, proposal_id{limit}",
+            params,
+        )
+        more = q.limit is not None and len(rows) > q.limit
+        if more:
+            rows = rows[: q.limit]
+        records = tuple(self.m.proposal_from_row(r) for r in rows)
+        return ProposalPage(
+            records=records,
+            known=len(records),
+            complete=not more,
+            why_incomplete="a page limit was applied" if more else None,
+            next_after=records[-1].proposal_id if more and records else None,
+        )
+
+    # -------------------------------------------------------------- 10 put_consumer
+    async def put_consumer(self, rec: ConsumerRecord) -> ConsumerRecord:
+        cols = ", ".join(CONSUMER_COLUMNS)
+        marks = self.m.marks(len(CONSUMER_COLUMNS))
+        updates = ", ".join(f"{c} = excluded.{c}" for c in CONSUMER_COLUMNS[2:])
+        await self._execute(
+            f"INSERT INTO oo_consumer ({cols}) VALUES ({marks}) "
+            f"ON CONFLICT (namespace, consumer_id) DO UPDATE SET {updates}",
+            self.m.consumer_values(rec),
+        )
+        return (await self.find_consumers(rec.namespace, consumer_id=rec.consumer_id))[0]
+
+    # ------------------------------------------------------------ 11 find_consumers
+    async def find_consumers(
+        self, namespace: str, *, gate: str | None = None, consumer_id: str | None = None
+    ) -> list[ConsumerRecord]:
+        ph = self.d.ph
+        cols = ", ".join(CONSUMER_COLUMNS)
+        where = [f"namespace = {ph}"]
+        params: list[Any] = [namespace]
+        if gate is not None:
+            where.append(f"gate = {ph}")
+            params.append(gate)
+        if consumer_id is not None:
+            where.append(f"consumer_id = {ph}")
+            params.append(consumer_id)
+        rows = await self._fetchall(
+            f"SELECT {cols} FROM oo_consumer WHERE {' AND '.join(where)} ORDER BY consumer_id",
+            params,
+        )
+        return [self.m.consumer_from_row(r) for r in rows]
+
+    # ---------------------------------------------------------------- 12 bump_usage
+    async def bump_usage(
+        self,
+        namespace: str,
+        kind: str,
+        name: str,
+        *,
+        at: datetime | None,
+        by: str | None,
+    ) -> None:
+        ph = self.d.ph
+        stamp = self.d.enc_ts(at or datetime.now(UTC))
+        await self._execute(
+            f"INSERT INTO oo_usage (namespace, kind, name, count, first_seen, last_seen) "
+            f"VALUES ({ph}, {ph}, {ph}, 1, {ph}, {ph}) "
+            f"ON CONFLICT (namespace, kind, name) DO UPDATE SET "
+            f"count = COALESCE(oo_usage.count, 0) + 1, "
+            f"first_seen = COALESCE(oo_usage.first_seen, excluded.first_seen), "
+            f"last_seen = CASE WHEN oo_usage.last_seen IS NULL "
+            f"OR excluded.last_seen > oo_usage.last_seen "
+            f"THEN excluded.last_seen ELSE oo_usage.last_seen END",
+            (namespace, kind, name, stamp, stamp),
+        )
+
+    # ----------------------------------------------------------------- 13 get_usage
+    async def get_usage(self, namespace: str, kind: str, name: str) -> UsageRecord | None:
+        ph = self.d.ph
+        row = await self._fetchone(
+            f"SELECT namespace, kind, name, count, first_seen, last_seen FROM oo_usage "
+            f"WHERE namespace = {ph} AND kind = {ph} AND name = {ph}",
+            (namespace, kind, name),
+        )
+        return None if row is None else self.m.usage_from_row(row)
+
+    # -------------------------------------------------------------- 14 append_event
+    async def append_event(self, rec: EventRecord) -> None:
+        cols = ", ".join(EVENT_COLUMNS)
+        marks = self.m.marks(len(EVENT_COLUMNS))
+        await self._execute(f"INSERT INTO oo_event ({cols}) VALUES ({marks})", self.m.event_values(rec))
+
+    # --------------------------------------------------------------- 15 read_events
+    async def read_events(
+        self,
+        namespace: str,
+        *,
+        kind: str | None = None,
+        name: str | None = None,
+        proposal_id: str | None = None,
+    ) -> list[EventRecord]:
+        ph = self.d.ph
+        cols = ", ".join(EVENT_COLUMNS)
+        where = [f"namespace = {ph}"]
+        params: list[Any] = [namespace]
+        if kind is not None:
+            where.append(f"kind = {ph}")
+            params.append(kind)
+        if name is not None:
+            where.append(f"name = {ph}")
+            params.append(name)
+        if proposal_id is not None:
+            where.append(f"proposal_id = {ph}")
+            params.append(proposal_id)
+        rows = await self._fetchall(
+            f"SELECT {cols} FROM oo_event WHERE {' AND '.join(where)} "
+            f"ORDER BY {self.d.event_order}",
+            params,
+        )
+        return [self.m.event_from_row(r) for r in rows]
+
+    # ------------------------------------------------- optional attribute extension
+    _ATTR_SCHEMA_COLS = (
+        "namespace, kind, version, fields_json, additional, mode, registered_at, registered_by"
+    )
+
+    async def put_attr_schema(self, rec: AttrSchemaRecord) -> AttrSchemaRecord:
+        marks = self.m.marks(8)
+        updates = (
+            "fields_json = excluded.fields_json, additional = excluded.additional, "
+            "mode = excluded.mode, registered_at = excluded.registered_at, "
+            "registered_by = excluded.registered_by"
+        )
+        await self._execute(
+            f"INSERT INTO oo_attr_schema ({self._ATTR_SCHEMA_COLS}) VALUES ({marks}) "
+            f"ON CONFLICT (namespace, kind, version) DO UPDATE SET {updates}",
+            self.m.attr_schema_values(rec),
+        )
+        got = await self.get_attr_schema(rec.namespace, rec.kind, version=rec.version)
+        assert got is not None
+        return got
+
+    async def get_attr_schema(
+        self, namespace: str, kind: str, *, version: int | None = None
+    ) -> AttrSchemaRecord | None:
+        ph = self.d.ph
+        if version is None:
+            row = await self._fetchone(
+                f"SELECT {self._ATTR_SCHEMA_COLS} FROM oo_attr_schema "
+                f"WHERE namespace = {ph} AND kind = {ph} ORDER BY version DESC LIMIT 1",
+                (namespace, kind),
+            )
+        else:
+            row = await self._fetchone(
+                f"SELECT {self._ATTR_SCHEMA_COLS} FROM oo_attr_schema "
+                f"WHERE namespace = {ph} AND kind = {ph} AND version = {ph}",
+                (namespace, kind, version),
+            )
+        return None if row is None else self.m.attr_schema_from_row(row)
+
+    async def observe_attributes(
+        self,
+        namespace: str,
+        kind: str,
+        attributes: dict[str, Any],
+        *,
+        at: datetime,
+        schema_version: int | None,
+    ) -> None:
+        ph = self.d.ph
+        stamp = self.d.enc_ts(at)
+        for key, value in (attributes or {}).items():
+            existing = await self._fetchone(
+                f"SELECT n, schema_versions_json FROM oo_attr_observed "
+                f"WHERE namespace = {ph} AND kind = {ph} AND key = {ph}",
+                (namespace, kind, key),
+            )
+            versions = list(self.d.dec_json(existing[1]) or []) if existing else []
+            if schema_version not in versions:
+                versions.append(schema_version)
+            if existing is None:
+                await self._execute(
+                    f"INSERT INTO oo_attr_observed (namespace, kind, key, n, first_seen, "
+                    f"last_seen, example_json, schema_versions_json) "
+                    f"VALUES ({ph}, {ph}, {ph}, 1, {ph}, {ph}, {ph}, {ph})",
+                    (
+                        namespace,
+                        kind,
+                        key,
+                        stamp,
+                        stamp,
+                        self.d.enc_json(value),
+                        self.d.enc_json(versions),
+                    ),
+                )
+            else:
+                await self._execute(
+                    f"UPDATE oo_attr_observed SET n = n + 1, last_seen = {ph}, "
+                    f"example_json = {ph}, schema_versions_json = {ph} "
+                    f"WHERE namespace = {ph} AND kind = {ph} AND key = {ph}",
+                    (
+                        stamp,
+                        self.d.enc_json(value),
+                        self.d.enc_json(versions),
+                        namespace,
+                        kind,
+                        key,
+                    ),
+                )
+
+    async def read_attr_observed(
+        self, namespace: str, *, kind: str | None = None
+    ) -> list[AttrObservedRecord]:
+        ph = self.d.ph
+        cols = (
+            "namespace, kind, key, n, first_seen, last_seen, example_json, schema_versions_json"
+        )
+        where = [f"namespace = {ph}"]
+        params: list[Any] = [namespace]
+        if kind is not None:
+            where.append(f"kind = {ph}")
+            params.append(kind)
+        rows = await self._fetchall(
+            f"SELECT {cols} FROM oo_attr_observed WHERE {' AND '.join(where)} ORDER BY kind, key",
+            params,
+        )
+        return [self.m.attr_observed_from_row(r) for r in rows]
