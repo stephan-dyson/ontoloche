@@ -761,7 +761,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**126 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Two** added by row 3d — `C0-12` (ruling R5 / beacon finding U1) and `C15-09` (beacon finding U3).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**127 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Three** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C15-09` (beacon finding U3) and `C11-05` (ruling R8).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (12).** No interface call; this is the protocol itself.
 
@@ -911,7 +911,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C10-07 | **both consumer sets empty ⇒ `Refusal("no_consumer_evidence")`** — the one place "we do not know" blocks rather than warns |
 | C10-08 | every `acknowledge` is recorded in `history`; on `stores_events=False` the merge is refused with `cannot_record_override` |
 
-**C11 — `register_consumer` / `record_use` (4).** Mechanism **C**.
+**C11 — `register_consumer` / `record_use` (5).** Mechanism **C**.
 
 | id | asserts |
 |---|---|
@@ -919,6 +919,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C11-02 | a consumer may gate on a predicate that does not exist; it registers, and the type shows up in `would_drop` |
 | C11-03 | `record_use` advances `last_seen` when `timestamps_usage=True` |
 | C11-04 | a read-only consumer source (a config file) ⇒ `register_consumer` returns a refusal, never a silent no-op |
+| C11-05 | **a gate naming no registered predicate raises `gate_unregistered:<gate>`** in `ConsumerReport.warnings`, and `would_drop` still lists the consumer. *(Row 3d, ruling **R8**. `C11-02` says such a registration must be accepted — it IS mechanism C — but the report then read as a fact about a live gate: `would_drop` implies *the extent excludes this type*, when the truth is that there is no extent and **every** type would drop. A registered-but-retired predicate raises nothing: the tombstone is an entry. `INTERFACE.md` §5.1)* |
 
 **C12 — Foundry import mapping (4).** From 0.3 consequence 2 / `INTERFACE.md` §2.5.
 

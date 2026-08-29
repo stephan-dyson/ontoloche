@@ -374,7 +374,57 @@ class Registry:
             known=len(gates_on) + len(would_drop) + len(would_error),
             complete=False,
             why_incomplete=CONSUMERS_WHY_INCOMPLETE,
+            warnings=self._gate_warnings(rec.namespace, rows),
         )
+
+    def _gate_warnings(
+        self, namespace: str, rows: Sequence[ConsumerRecord]
+    ) -> tuple[str, ...]:
+        """``gate_unregistered:<gate>`` per gate that names no registered predicate.
+
+        **Ruling R8 (row 3d), and it is a Rule U problem wearing a product hat.**
+        PACKAGE.md 3.4 primitive 10 says a consumer's ``gate`` *"may name a predicate
+        that does not exist; the adapter does not check"*, and it is right that it does
+        not -- a consumer gating on a word nobody registered is mechanism **C** itself,
+        and refusing the registration would hide it (`C11-02`).
+
+        But the *report* then says ``would_drop: [aura_render]`` about that consumer,
+        and a reader takes that as a fact about a live gate: *this consumer gates on
+        `commentable` and this type is not in it.* The truth is weaker and more
+        alarming -- **there is no `commentable`**, so the extent is not "excludes this
+        type", it is undefined, and every type in the namespace would drop. One word
+        in the report, two very different situations.
+
+        So the report carries a warning naming the gate. Neither of ruling R8's two
+        rejected options is taken: ``gate_values`` (Phase 3 -- it makes the registry
+        know what a *value* is, which INTERFACE.md 2.1 refuses on purpose) and dropping
+        the consumer from ``would_drop`` (which would delete mechanism-C visibility,
+        the thing `C11-02` exists for).
+
+        **The uncertainty rule applies to the warning too.** If the backend cannot
+        answer the lookup completely, no warning is emitted: "this gate is unregistered"
+        is a positive claim, and a page that came back incomplete does not support one.
+        """
+        gates = {row.gate for row in rows if row.gate}
+        if not gates:
+            return ()
+        page = self.adapter.find_types(
+            TypeQuery(
+                namespace=namespace,
+                kind="predicate",
+                name_in=tuple(sorted(gates)),
+                status=None,
+                include_retired=True,
+            )
+        )
+        if not page.complete:
+            # Rule U: we did not look successfully, so we do not assert an absence.
+            return ()
+        # `include_retired=True` on purpose: a RETIRED predicate is still a registered
+        # entry -- the tombstone is there, `resolve_type` reads it (C3-10), and calling
+        # it unregistered would be a different and wrong claim.
+        registered = {r.name for r in page.records}
+        return tuple(f"gate_unregistered:{g}" for g in sorted(gates - registered))
 
     def _usage_report(self, rec: TypeRecord) -> UsageReport:
         policy = self.policy(rec.namespace)

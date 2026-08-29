@@ -181,6 +181,10 @@ class ConsumerReport:
     known: int
     complete: bool
     why_incomplete: str
+    #: Ruling R8, row 3d. ``gate_unregistered:<gate>`` for every consumer whose gate
+    #: names no registered ``kind="predicate"`` entry -- so ``would_drop`` is not read
+    #: as a fact about a live gate when the gate is a word nobody has registered.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
