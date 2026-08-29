@@ -3583,6 +3583,43 @@ class Registry:
                 # inside a document that argues at length against reusing `kind_mismatch`
                 # for two things.
                 return Refusal("unknown_edge", {"edge_id": edge_id})
+            if rec.status != "active":
+                # **Ruling R39, row 4c.** A second retraction used to OVERWRITE the
+                # first's reason, actor and timestamp on the row -- and on
+                # `stores_edge_events=False` the first retraction was then gone
+                # entirely, because 2.6's whole argument for not refusing an
+                # unrecordable retraction is that *the record IS the row*. That argument
+                # silently assumes retraction happens once. Deviation D-4b-16, Q34.
+                #
+                # It is not made idempotent, and that is the ruling rather than an
+                # implementation choice: **idempotency would hide a real double
+                # decision.** Two people deciding to withdraw one edge for two different
+                # reasons is a fact about the deployment, and a call that silently
+                # returns the first decision has answered a question nobody asked. A
+                # refusal names it -- and the value is INTERFACE.md 5.5's existing
+                # `already_decided`, which says exactly this about a proposal one object
+                # along. `detail` carries the standing decision so the caller can see
+                # whose it was without a second call.
+                #
+                # Read INSIDE the transaction, as `approve`'s `already_decided` is, and
+                # for the same reason: it is what turns a race into a refusal rather
+                # than a lost write.
+                return Refusal(
+                    "already_decided",
+                    {
+                        "edge_id": edge_id,
+                        "status": rec.status,
+                        "retracted_by": rec.retracted_by,
+                        "retracted_at": _iso(rec.retracted_at),
+                        "retract_reason": rec.retract_reason,
+                        "why": (
+                            "this edge was already retracted; a second retraction would "
+                            "overwrite the first's reason, actor and timestamp, and on a "
+                            "backend with no edge event table the first decision would "
+                            "be gone entirely (EDGES.md 2.6, ruling R39)"
+                        ),
+                    },
+                )
             now = self._now()
             # The edge's own warnings are carried VERBATIM, duplicates included: two
             # `endpoint_type_unregistered` entries mean two endpoints were unregistered,
