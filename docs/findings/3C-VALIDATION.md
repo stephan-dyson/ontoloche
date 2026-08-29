@@ -457,6 +457,15 @@ Every brief carried two halves: *can a legitimate backend **fail** the suite?* a
 
 **Why this is the more important half, and the one to lead with next time.** A suite that is too strict fails loudly and someone comes and asks why. **A suite that is too lax certifies something broken and nobody finds out until it is in production** — and ruling A5 makes this suite the gate that lets Tenshen depend on the package. Eleven rounds of "too strict" produced five real defects and were worth every one; the first round of "too lax" produced one in an afternoon. **The next spec's review brief should open with it.**
 
+### 7.4b Rounds 11 and 7 — the last two, and both found real defects
+
+| # | Spec | Findings | What it caught |
+|---|---|---|---|
+| 11 | INTERFACE | 1 BLOCKING | **`retire()` could not see a consumer gating on the predicate being retired.** On a *fully capable* backend, nothing unknowable: `consumers("commentable")` returned `gates_on: []` and filed the consumer of `commentable` under **`would_drop`** — backwards — and `retire("commentable")` then succeeded with no refusal. *"Which consumers gate on this?"* has two answers and v0 computed one: for an `entity` the gate predicate must **include** it; for a **predicate** the gate **is** it, and a predicate is never a member of itself. `predicates()` had the right query all along. **Mechanism C inside §2.3's "single most load-bearing idea in this document"**, and `test_c9_retire.py`'s own fixture builds the exact shape — every C9 test retired the *member*, never the predicate. `C1-09`. |
+| 7 | PACKAGE | 2 MAJOR | **Two more broken backends that passed.** (a) §3.4 primitive 12 states `max(last_seen, at)` unconditionally; nothing tested it, and an adapter that overwrites instead ran clean — a replayed or out-of-order `record_use` drags `last_seen` into the past and reports a live type as **orphaned**, which §5.7 calls the sensor for the venture's core bet. Not the G3 carve-out: G3 waives serialisation under a race, not the semantic. `C7-07`. (b) `AmbiguousKind` was raised by both reference backends and referenced by **no test in the repository**; an adapter returning `rows[0]` passed — a silent wrong answer in the exact `facility`-as-entity-beside-`facility`-as-value_set case §4.1 blesses by name. `C0-11`. |
+
+**The capability matrix caught one of my own fixes within a minute of writing it.** `C7-07` asserts a count as well as a timestamp, so it failed on a `counts_usage=False` backend — the guard built two rounds earlier flagged the new test before it was committed. That is what these checks are for.
+
 ### 7.5 Convergence, honestly
 
 **The loop is being closed on the round cap, not on two clean passes.** The protocol asks for two consecutive fresh reviewers with no BLOCKING or MAJOR findings; **that did not happen.** Every round returned NOT YET, and the last round on each document still found real defects.

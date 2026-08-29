@@ -328,7 +328,23 @@ class Registry:
             if consumers is not None
             else self.adapter.find_consumers(rec.namespace)
         )
+        # "Which consumers gate on this?" has TWO answers, and v0 only computed one.
+        # For an `entity`, a consumer gates on it when the consumer's gate predicate
+        # includes it -- `consumer.gate in rec.predicates`. **For a `predicate`, a
+        # consumer gates on it when the gate IS it.** A predicate is essentially never a
+        # member of itself, so the membership test alone can never match a consumer that
+        # names this very predicate, and [Observed] `consumers("commentable")` filed the
+        # consumer of `commentable` under `would_drop` -- *the exact opposite of the
+        # truth* -- while `retire("commentable")` sailed through with no refusal at all.
+        # On a fully capable backend, with nothing unknowable.
+        #
+        # That is mechanism C in 2.3's "single most load-bearing idea in this document":
+        # a predicate is a first-class TypeEntry with a lifecycle like anything else, and
+        # 5.9 guards retirement with `consumers` and carves out no exception for it.
+        # `predicates()` had the right query all along (`c.gate == rec.name`); this call
+        # did not. Row 3c, after an adversarial review round drove it.
         member_of = set(rec.predicates)
+        gates_directly = rec.kind == "predicate"
         gates_on: list[Consumer] = []
         would_drop: list[Consumer] = []
         would_error: list[Consumer] = []
@@ -341,7 +357,7 @@ class Registry:
                 registered_at=row.registered_at,
                 locator=row.locator,
             )
-            if consumer.gate in member_of:
+            if consumer.gate in member_of or (gates_directly and consumer.gate == rec.name):
                 gates_on.append(consumer)
             elif consumer.on_unknown == "drop":
                 would_drop.append(consumer)

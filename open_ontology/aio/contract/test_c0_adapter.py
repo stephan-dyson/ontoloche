@@ -26,7 +26,7 @@ from open_ontology.aio.adapter import (
     TypeQuery,
     TypeRecord,
 )
-from open_ontology.errors import AlreadyExists, NotSupported
+from open_ontology.errors import AlreadyExists, AmbiguousKind, NotSupported
 from open_ontology.aio.contract._support import snapshot
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -366,3 +366,33 @@ async def test_c0_10_keyset_pagination_actually_pages(adapter):
 
     assert seen == names, "the pages must partition the result set, in key order"
     assert pages == 3, "7 rows at limit=3 is three pages, the last one short"
+
+async def test_c0_11_one_name_under_two_kinds_is_ambiguous_not_arbitrary(adapter):
+    """§3.4 primitive 5: `get_type(kind=None)` *"returns the single match or raises
+    `AmbiguousKind` when the same name exists under two kinds (legal: uniqueness is per
+    `(namespace, kind)`)"*. **`AmbiguousKind` was raised by both reference backends and
+    referenced by no test in the repository**, and [Observed] an adapter that returns
+    `rows[0]` instead of checking ran the whole suite to a clean conformant pass.
+
+    The scenario is the one §4.1 blesses by name -- *"`facility` as an `entity` and
+    `facility` as a `value_set` may coexist"* -- so this is a silent wrong answer in the
+    exact case the per-`(namespace, kind)` scoping exists to permit. Rule U: an arbitrary
+    pick from two candidates is a confident answer to a question with no single answer.
+    Added by row 3c after an adversarial review round built the arbitrary-pick adapter.
+    """
+    await adapter.migrate()
+    await adapter.put_type(_type(name="facility", kind="entity"), expect_absent=True)
+    await adapter.put_type(
+        _type(name="facility", kind="value_set", definition="an enumerated set"),
+        expect_absent=True,
+    )
+
+    with pytest.raises(AmbiguousKind):
+        await adapter.get_type("default", "facility")
+
+    # ...and naming the kind answers it, which is what makes the ambiguity legal.
+    entity = await adapter.get_type("default", "facility", kind="entity")
+    value_set = await adapter.get_type("default", "facility", kind="value_set")
+    assert entity is not None and entity.kind == "entity"
+    assert value_set is not None and value_set.kind == "value_set"
+    assert entity.definition != value_set.definition, "two rows, two meanings"

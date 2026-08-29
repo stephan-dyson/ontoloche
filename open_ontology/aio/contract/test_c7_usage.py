@@ -108,3 +108,38 @@ async def test_c7_06_record_use_on_a_non_counting_backend_is_a_no_op_that_says_s
     assert report.why == NO_COUNTER["counts_usage"]
     # And nothing leaked into the underlying store either.
     assert await adapter.get_usage("default", "entity", "blocks") is None
+
+@pytest.mark.requires_capability("timestamps_usage", "counts_usage")
+async def test_c7_07_last_seen_never_moves_backwards(adapter, clock, make_registry):
+    """§3.4 primitive 12 states it unconditionally: `bump_usage` *"advances `last_seen`
+    to `max(last_seen, at)`"*. **Nothing tested it**, and [Observed] an adapter that
+    simply overwrites instead of taking the max ran the whole suite to a clean
+    conformant pass. Added by row 3c after an adversarial review round built one.
+
+    This is **not** the G3 carve-out. G3 (§3.5) waives *serialisation under a race* --
+    a lost update costs one count -- and explicitly does not waive the `max()` semantic,
+    which is what stops a late or replayed write from dragging `last_seen` into the past.
+
+    Why it matters beyond tidiness: `orphaned` is *"the sensor for the venture's core
+    bet"* (INTERFACE.md 5.7), and it is computed from `last_seen < now - window`. A
+    regressed `last_seen` reports a live type as dead. Out-of-order arrival is the normal
+    case for both remaining fixtures -- UC2 is a 419,479-row bulk export whose
+    `record_use` calls need not be in temporal order, and UC3 is dozens of agencies
+    loading independently, with replays.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", definition="a Medicare-certified nursing home")
+
+    await registry.record_use("facility")
+    live = (await registry.usage("facility")).last_seen
+    assert live == clock.now()
+
+    # A backfill arriving late, stamped with the time it happened, not the time it landed.
+    await registry.record_use("facility", at=clock.now() - timedelta(days=240))
+
+    after = await registry.usage("facility")
+    assert after.last_seen == live, (
+        "last_seen moved backwards: a replayed or out-of-order write dragged the "
+        "orphan sensor into the past, and a live type now reads as dead"
+    )
+    assert after.count == 2, "the count still counts it -- only the clock is monotonic"
