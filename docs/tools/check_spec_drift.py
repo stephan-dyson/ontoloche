@@ -54,6 +54,7 @@ sys.path.insert(0, str(ROOT))
 
 from open_ontology import adapter as adapter_module  # noqa: E402
 from open_ontology import attributes as attributes_module  # noqa: E402
+from open_ontology.contract import harness as harness_module  # noqa: E402
 from open_ontology import registry as registry_module  # noqa: E402
 from open_ontology import types as types_module  # noqa: E402
 
@@ -113,6 +114,11 @@ PACKAGE_SHAPES = {
     "ProposalQuery": (adapter_module, "ProposalQuery"),
     "FieldSpec": (attributes_module, "FieldSpec"),
     "AttributeSchema": (attributes_module, "AttributeSchema"),
+    # 6.4 prints the two harness shapes a third-party author builds. They were
+    # described only in a module 2.2 calls private until row 3d's third adversarial
+    # round; printing them here means they cannot drift from the dataclasses either.
+    "BorrowedHarness": (harness_module, "BorrowedHarness"),
+    "SchemaHarness": (harness_module, "SchemaHarness"),
 }
 
 #: Same rule as SPEC_OMITS, for PACKAGE.md. An entry is a decision on the record.
