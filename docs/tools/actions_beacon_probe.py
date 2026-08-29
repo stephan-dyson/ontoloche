@@ -33,15 +33,21 @@ MODELS_DIR = BEACON / "src" / "beacon" / "models"
 MULTI_TOOL = BEACON / "src" / "beacon" / "assistant" / "modes" / "multi_tool.py"
 
 #: The measurement as PINNED at 2026-08-29 13:05, when ACTIONS.md 10.1 was
-#: written. beacon is a LIVE repository and it moved under this design test
-#: during the row -- `manage_life_event.py` landed at 15:37 the same day. So the
-#: module and category counts are a DATED OBSERVATION and drift from them is
-#: reported rather than failed; the two numbers that are load-bearing (the
-#: categories sum to the module count, and task_detail sums to the budget) are
-#: INVARIANTS and are asserted. Row #4's rule -- a design test whose numbers move
-#: between runs is not a design test -- is honoured by pinning the observation and
-#: naming the movement, which is the only form available when the fixture is
-#: somebody else's live codebase.
+#: written. beacon is a LIVE repository and it moved under this design test during
+#: the row -- `manage_life_event.py` landed at 15:37 the same day, in commit
+#: `b274e715`. So the module and category counts are a DATED observation, drift
+#: from them is REPORTED rather than failed, and the two numbers that are
+#: load-bearing (the categories sum to the module count, and task_detail sums to
+#: the budget) are INVARIANTS and are asserted.
+#:
+#: The pin is a COMMIT, not a clock reading. Round 3's founder lens called the
+#: first version's excuse -- "it cannot be pinned, it is somebody else's
+#: repository" -- and was right: `git -C <beacon> rev-parse HEAD` pins it exactly,
+#: and read-only access is all that takes. A reader who wants the 13:05 tree can
+#: check out `PINNED_AT`. Row #4's rule (a design test whose numbers move between
+#: runs is not a design test) is honoured by pinning what CAN be pinned and
+#: reporting what moves.
+PINNED_AT = "a895a872"          # beacon HEAD when 10.1's numbers were re-verified
 PINNED = {"modules": 222, "categories": 19, "reads_only": 27,
           "page": {"common": 45, "task": 48, "project": 21, "person": 13}}
 
@@ -89,6 +95,17 @@ def measure() -> dict:
     }
 
 
+def head() -> str | None:
+    """beacon's current commit, read-only. `None` if git is unavailable."""
+    import subprocess
+    try:
+        out = subprocess.run(["git", "-C", str(BEACON), "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or None
+    except Exception:
+        return None
+
+
 def people_fks() -> dict:
     """T1.4's number: every foreign key that references ``people.id``."""
     total = cascade = setnull = 0
@@ -112,7 +129,7 @@ def main() -> int:
     print("UC1 -- beacon, read-only. ACTIONS.md 11\n")
 
     m = measure()
-    print("10.1 measurement:")
+    print(f"10.1 measurement (pinned at beacon {PINNED_AT}, observed at {head() or '?'}):")
     check("T1.7a  MAX_TOOLS_PER_REQUEST == 128", m["cap"] == 128, str(m["cap"]))
     check("T1.7b  budget = cap - 1, in the source twice", m["budget_lines"] == 2,
           f"{m['budget_lines']} occurrences")
