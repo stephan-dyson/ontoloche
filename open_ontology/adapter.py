@@ -94,6 +94,14 @@ class Capabilities:
     #: the host's transaction; durability at clean exit belongs to the host, and
     #: ``why["transaction_scope"]`` is the sentence that says so.
     transaction_scope: Literal["owned", "savepoint"] = "owned"
+    #: Beacon finding U3 / PACKAGE.md 3.2 and 5. The attribute keys this backend owns as
+    #: TYPED COLUMNS: they round-trip through the column, not through the JSON blob.
+    #: ``stores_attributes`` was binary, and a host-owned schema with pre-existing typed
+    #: columns could not say "I own two named keys faithfully AND store no arbitrary
+    #: ones". A key listed here survives a round trip whatever ``stores_attributes``
+    #: says; a key not listed, on a ``stores_attributes=False`` backend, comes back
+    #: ABSENT with a why -- never wrong, never invented.
+    attribute_projections: frozenset[str] = frozenset()
 
     def missing_why(self) -> tuple[str, ...]:
         """Flags that are False with no sentence explaining it. Invariant C0-01.
@@ -115,6 +123,21 @@ class Capabilities:
     def reason(self, flag: str) -> str:
         """The adapter's own sentence for a False flag, verbatim."""
         return self.why.get(flag) or f"this backend does not provide {flag}"
+
+    def stores_attribute(self, key: str) -> bool:
+        """Does THIS key survive a round trip? -- beacon finding U3.
+
+        ``stores_attributes`` answers for arbitrary keys; ``attribute_projections``
+        answers for the ones the backend owns as typed columns. A caller asking about a
+        single key wants this, not either field alone.
+        """
+        return self.stores_attributes or key in self.attribute_projections
+
+    def surviving_attributes(self, attributes: dict[str, Any]) -> dict[str, Any]:
+        """The subset of ``attributes`` this backend will hand back. U3."""
+        if self.stores_attributes:
+            return dict(attributes)
+        return {k: v for k, v in attributes.items() if k in self.attribute_projections}
 
 
 # --------------------------------------------------------------------------- records

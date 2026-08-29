@@ -1617,7 +1617,10 @@ class AsyncRegistry:
         does not solve the escape hatch, it makes it enumerable.
         """
         store = self._attribute_store()
-        if store is None or not self.caps.stores_attributes:
+        # U3: projections are keys this backend DOES store, so a backend with
+        # stores_attributes=False and a non-empty projection set has a real, if partial,
+        # census. It is reported as partial below rather than refused here.
+        if store is None or not (self.caps.stores_attributes or self.caps.attribute_projections):
             why = (
                 self.caps.reason("stores_attributes")
                 if not self.caps.stores_attributes
@@ -1641,6 +1644,22 @@ class AsyncRegistry:
                     declared=bool(schema and row.key in schema.fields),
                     schema_versions=tuple(row.schema_versions),
                 )
+            )
+        if not self.caps.stores_attributes:
+            # U3 + Rule U. Only the projected keys were ever written, so this census is
+            # a census of those keys and of nothing else. Saying `complete=True` here
+            # would be the confident wrong answer the whole capability system exists to
+            # stop -- an empty-looking census reads as "nothing was ever written".
+            return AttributeCensus(
+                namespace=namespace,
+                entries=tuple(entries),
+                known=len(entries),
+                complete=False,
+                why_incomplete=(
+                    self.caps.reason("stores_attributes")
+                    + " -- only the keys it owns as typed columns are counted: "
+                    + ", ".join(sorted(self.caps.attribute_projections))
+                ),
             )
         return AttributeCensus(
             namespace=namespace, entries=tuple(entries), known=len(entries), complete=True
@@ -1688,12 +1707,17 @@ class AsyncRegistry:
 
     async def _observe(self, rec: TypeRecord) -> None:
         store = self._attribute_store()
-        if store is None or not self.caps.stores_attributes or not rec.attributes:
+        # U3: a backend that stores no arbitrary attributes may still own some keys as
+        # typed columns, and those keys ARE written -- so the census must see them. The
+        # gate used to be `not stores_attributes`, which made a projected key invisible
+        # to the one call whose job is enumerating what got written (5.5).
+        observed = self.caps.surviving_attributes(rec.attributes or {})
+        if store is None or not observed:
             return
         await store.observe_attributes(
             rec.namespace,
             rec.kind,
-            dict(rec.attributes),
+            observed,
             at=self._now(),
             schema_version=rec.attr_schema_version,
         )

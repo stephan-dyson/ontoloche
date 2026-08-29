@@ -165,7 +165,6 @@ def test_c0_05_migrate_is_idempotent_and_atomic(adapter):
         adapter._fetchone("SELECT count(*) FROM oo_half_applied")
 
 
-@pytest.mark.requires_capability("stores_proposals")
 def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter):
     """The title's second half is the point, and until row 3c only its first half was
     tested: this asserted every field came back *populated*, which is true only of a
@@ -173,6 +172,19 @@ def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter):
     `stores_attributes` -- conformant per PACKAGE.md 3.2 -- failed it for storing
     exactly what it said it would. **A gap must come back empty, not wrong**, and that
     is what is asserted now.
+
+    **The projected-key case -- beacon finding U3, row 3d.** `stores_attributes` was
+    binary, so a host-owned backend with pre-existing typed columns could not say *"I
+    store no arbitrary keys AND I own two named ones faithfully"*. It now can:
+    `Capabilities.attribute_projections` names the keys the backend owns as typed
+    columns. A projected key **survives** whatever `stores_attributes` says; a key that
+    is neither stored nor projected comes back **absent, with a why** -- unchanged.
+
+    **The `requires_capability("stores_proposals")` marker is gone**, and that is part
+    of U3 rather than housekeeping: the body has always returned early when there is no
+    proposal store, so the marker skipped the whole test -- including the type
+    round-trip and the projection case -- on exactly the natively-degraded backend those
+    assertions exist for (PACKAGE.md 6, third reference leg).
     """
     caps = adapter.capabilities()
     stored = adapter.put_type(_type(), expect_absent=True)
@@ -185,7 +197,29 @@ def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter):
     # Each of these is stored faithfully, or comes back EMPTY -- never wrong.
     assert stored.predicates == (("searchable",) if caps.indexes_membership else ())
     assert stored.aliases == (("nursing_home",) if caps.stores_aliases else ())
-    assert stored.attributes == ({"primary_key": ["ccn"]} if caps.stores_attributes else {})
+
+    # --- attributes: three outcomes, and the middle one is U3's.
+    written = {"primary_key": ["ccn"], "sensitivity": "public"}
+    probe = adapter.put_type(
+        _type(name="projection_probe", attributes=dict(written)), expect_absent=True
+    )
+    survives = caps.surviving_attributes(written)
+    assert probe.attributes == survives, (
+        "an attribute either round-trips or comes back absent. Never a different value, "
+        "and never a projected key silently dropped"
+    )
+    for key in sorted(caps.attribute_projections):
+        assert caps.stores_attribute(key)
+        if key in written:
+            assert probe.attributes.get(key) == written[key], (
+                f"{key!r} is DECLARED as a typed column this backend owns, so it must "
+                "round trip through that column -- U3"
+            )
+    if not caps.stores_attributes:
+        # ...and the keys it does not own are absent WITH a why, as before U3.
+        assert set(probe.attributes) == set(caps.attribute_projections) & set(written)
+        assert caps.reason("stores_attributes").strip()
+    assert stored.attributes == caps.surviving_attributes({"primary_key": ["ccn"]})
 
     if not caps.stores_proposals:
         return  # the proposal half needs a proposal store; C5-12 is its subject
@@ -264,8 +298,14 @@ def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter):
     # A field the backend cannot store comes back EMPTY, not wrong -- so the caller can
     # tell the write did not round-trip instead of believing it did.
     degraded = DegradedAdapter(adapter, stores_attributes=False, stores_aliases=False)
+    dcaps = degraded.capabilities()
     got = degraded.get_type("default", "facility", kind="entity")
-    assert got.attributes == {}
+    # U3: "empty" means every key the backend does not own. A DECLARED projection is a
+    # key it does own, so it survives -- and a wrapper that dropped it would be making
+    # the same mistake in the other direction.
+    assert got.attributes == dcaps.surviving_attributes(stored.attributes)
+    if not dcaps.attribute_projections:
+        assert got.attributes == {}
     assert got.aliases == ()
     assert got.definition == stored.definition  # nothing else was disturbed
 

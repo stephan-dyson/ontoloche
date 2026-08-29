@@ -63,6 +63,7 @@ class _DegradedBase:
         why: dict[str, str] | None = None,
         pages_countable: bool = True,
         read_only_consumers: bool = False,
+        attribute_projections: frozenset[str] | tuple[str, ...] | None = None,
         **flags: bool,
     ):
         unknown = set(flags) - set(CAPABILITY_FLAGS)
@@ -72,6 +73,10 @@ class _DegradedBase:
         self._flags = flags
         self._pages_countable = pages_countable
         self._read_only_consumers = read_only_consumers
+        # U3: not a flag -- a declared set of keys this backend owns as typed columns.
+        self._attribute_projections = (
+            None if attribute_projections is None else frozenset(attribute_projections)
+        )
         self._why = dict(why or {})
         for flag, value in flags.items():
             if not value:
@@ -90,6 +95,11 @@ class _DegradedBase:
             **values,
             why={**base.why, **self._why},
             transaction_scope=base.transaction_scope,
+            attribute_projections=(
+                base.attribute_projections
+                if self._attribute_projections is None
+                else self._attribute_projections
+            ),
         )
 
     async def migrate(self) -> int:
@@ -105,7 +115,9 @@ class _DegradedBase:
         caps = await self.capabilities()
         changes: dict[str, Any] = {}
         if not caps.stores_attributes:
-            changes["attributes"] = {}
+            # U3: a projected key lives in its own typed column and survives; everything
+            # else comes back ABSENT rather than wrong.
+            changes["attributes"] = caps.surviving_attributes(rec.attributes or {})
         if not caps.stores_aliases:
             changes["aliases"] = ()
         if not caps.indexes_membership:
