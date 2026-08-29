@@ -838,7 +838,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**140 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`), `C4-10` (ruling **R17**, `created_by="derived"`) and `C8-06` (ruling **R21**, `Provenance.source_version`). **Three more** by row 3e's first adversarial round — `C3-13`, `C9-12`, `C15-12`.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**145 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`), `C4-10` (ruling **R17**, `created_by="derived"`) and `C8-06` (ruling **R21**, `Provenance.source_version`). **Three more** by row 3e's first adversarial round — `C3-13`, `C9-12`, `C15-12` — and **five** by its second: `C9-13`, `C9-14`, `C9-15`, `C12-05`, `C16-05`.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (14).** No interface call; this is the protocol itself.
 
@@ -984,6 +984,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C9-10 | **`successor_active`, the twentieth `Refusal.reason`**: reinstating a word whose retirement named a successor that is **itself active** is refused, non-overridably, with the path back named in `detail`; retiring the successor first then lets the reinstatement through. *(Row 3e. Two live words on one meaning is mechanism **4** arriving through the lifecycle.)* |
 | C9-11 | **`reinstate` is refused where it cannot be recorded, and never no-ops silently**: on `stores_events=False` it returns `Refusal("cannot_record_override")` with the fields it would have cleared in `detail`, and nothing is written; on a type that is **not** retired it returns the entry carrying `reinstate_no_op:not_retired`. *(Row 3e. This is the only call in §5 that REMOVES a lifecycle fact from the live row, so §3.6's rule applies to it — and the second half is ruling R4's rule that a call which quietly did nothing is mechanism C committed by the registry. Needs `indexes_membership` as scaffolding: on a store that cannot compute an extent there is no way to reach a retired row at all, `C9-07` + `C9-08`.)* |
 | C9-12 | **`reinstate` refuses to manufacture two live words for one meaning** — `Refusal("alias_collision")`, the twenty-first reason (`INTERFACE.md` §5.9b). *(Row 3e, first adversarial round, reproduced on the UC3 fixture: merge `bike_lane` into `cycle_track`, retire `cycle_track`, reinstate `bike_lane`, reinstate `cycle_track` — four ordinary calls ending with both active and `cycle_track` still holding `bike_lane` as an alias, with no refusal and no warning. `merge_types` refuses by default and `propose_type` on a live type's alias returns the tombstone; `reinstate` was the one door left open to mechanism 4, in the registry whose thesis is detecting it. Both directions of the collision are checked, because either side of a merge can be the one coming back.)* |
+| C9-13 | **the successor relation is checked through the CHAIN, not one hop** (`INTERFACE.md` §5.9b): following the path back `successor_active`'s own `detail["path_back"]` names — retire the successor, then reinstate — is refused at the last step with `alias_collision` / `relation="predecessor"`. *(Row 3e, second adversarial round. `retire(successor=)` writes no alias, and `reinstate` CLEARS `successor` off the live row, so a one-hop check on that column checks a fact the call itself deletes. `C9-10` stopped one call short of this.)* |
+| C9-14 | **the chain is transitive and the scan is namespace-scoped**: `retire a→b; retire b→c; reinstate a` is refused with `collides_with=c`; and the identical word live in ANOTHER namespace is **not** a collision, because §2.6 makes that the state scoping exists to preserve. *(Row 3e. A mutation dropping the namespace filter ran the full suite green.)* |
+| C9-15 | **`reinstate` says when it could not look, and when it is not yet durable**: `stores_aliases=False` and a backend that pages both yield `reinstate_alias_check_unavailable:<why>` on the returned entry; a `transaction_scope="savepoint"` adapter yields `not_durable_until_host_commits:<why>`. *(Row 3e, second adversarial round — three separate mutations of `reinstate` ran the whole suite green, including one that dropped ruling R5's durability sentence from the fourteenth call.)* |
 
 **C10 — `merge_types` (8).** Mechanism **4**.
 
@@ -1008,7 +1011,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C11-04 | a read-only consumer source (a config file) ⇒ `register_consumer` returns a refusal, never a silent no-op |
 | C11-05 | **a gate naming no registered predicate raises `gate_unregistered:<gate>`** in `ConsumerReport.warnings`, and `would_drop` still lists the consumer. *(Row 3d, ruling **R8**. `C11-02` says such a registration must be accepted — it IS mechanism C — but the report then read as a fact about a live gate: `would_drop` implies *the extent excludes this type*, when the truth is that there is no extent and **every** type would drop. A registered-but-retired predicate raises nothing: the tombstone is an entry. `INTERFACE.md` §5.1)* |
 
-**C12 — Foundry import mapping (4).** From 0.3 consequence 2 / `INTERFACE.md` §2.5.
+**C12 — Foundry import mapping (5).** From 0.3 consequence 2 / `INTERFACE.md` §2.5.
 
 | id | asserts |
 |---|---|
@@ -1016,6 +1019,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C12-02 | `deprecated` ⇒ `retired` with `retire_reason="imported: foundry deprecated"` |
 | C12-03 | `apiName` and `rid` land in `provenance.imported_from`, not in fields of our own |
 | C12-04 | `visibility` and `groups` land in `attributes` |
+| C12-05 | **an import does not un-retire a local name**: `import_types` over a name this deployment retired returns the retired entry with `name_previously_retired` and writes nothing. *(Row 3e, second adversarial round: it used to overwrite the tombstone — status, `retire_reason`, `retired_by`, `retired_at`, `successor`, `created_by`, definition and provenance — in one call, with none of §5.9b's three guards and no `reinstated` event. A fourth door into mechanism 4, and it falsified §5.9b's own claim that there were none.)* |
 
 **C13 — the CMS design test (5).** Uses the 0.5 sample; see §8.
 
@@ -1056,7 +1060,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C15-11 | **the per-kind schema still governs every name without an override** (§5.2b rule 2): a third `value_set` with no override is refused by the per-kind schema, and the refusal names which schema refused it. *(Row 3e. The failure mode a name-level key invites is that one exception quietly relaxes the kind; this is the test that would catch it.)* |
 | C15-12 | **an override may not weaken the kind, and the census says when `declared` depends on the name** (§5.2b rules 3 and the tri-state table): a name-level schema with `mode="off"` and no fields under an `enforce` kind still refuses; and a key only a name-level schema declares comes back `declared=None` with a `declared_why` naming it. *(Row 3e, first adversarial round. The first cut shadowed `mode` and `additional` with the fields, so an override was a one-line opt-out of a kind's governance; and `declared=False` was a confident negative about a key that is required somewhere — Rule U, on the CMS fixture R10 exists for.)* |
 
-**C16 — whole-store invariants (4).** *(Amended by row 3c: this said "run once at suite end, over everything the suite wrote". The shipped group is **function-scoped** — a fixture drives one store through representative write paths and each test then inspects it. Recorded at 2A as deviation D-9 and never brought inline here. It matters because "everything the suite wrote" would be a stronger claim than the tests make.)*
+**C16 — whole-store invariants (5).** *(Amended by row 3c: this said "run once at suite end, over everything the suite wrote". The shipped group is **function-scoped** — a fixture drives one store through representative write paths and each test then inspects it. Recorded at 2A as deviation D-9 and never brought inline here. It matters because "everything the suite wrote" would be a stronger claim than the tests make.)*
 
 | id | asserts |
 |---|---|
@@ -1064,6 +1068,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C16-02 | no retired name was reused |
 | C16-03 | no event's bytes changed after it was written |
 | C16-04 | every list-shaped result produced during the run carried both `complete` and `known` |
+| C16-05 | **every returned `created_by` is one of `INTERFACE.md` §2.1's four values, and every `status` one of §2.5's three**. *(Row 3e, second adversarial round. `Refusal.reason`, `Evidence.kind`, `Consumer.on_unknown` and `NotAType.reason` all raise on an unknown value and `created_by` did not — a third-party backend's garbage flowed straight out through `list_types`. `kind` is deliberately not checked: §2.2 makes it an OPEN vocabulary.)* |
 
 ### 6.3 Coverage check against `INTERFACE.md` §5
 

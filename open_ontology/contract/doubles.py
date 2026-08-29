@@ -60,6 +60,7 @@ class _DegradedBase:
         why: dict[str, str] | None = None,
         pages_countable: bool = True,
         page_cap: int | None = None,
+        transaction_scope: str | None = None,
         read_only_consumers: bool = False,
         attribute_projections: frozenset[str] | tuple[str, ...] | None = None,
         **flags: bool,
@@ -76,6 +77,13 @@ class _DegradedBase:
         #: adversarial round, which found `resolve_type` ignoring the flag entirely and
         #: reporting `complete=True` over a page the backend had truncated.
         self._page_cap = page_cap
+        #: Ruling R5's declaration, forced rather than inherited. Not a capability --
+        #: nothing is declined -- but a wrapper that can only ever carry ``"owned"``
+        #: through cannot exercise the durability warning that every WRITE result is
+        #: supposed to gain over a borrowed connection, and row 3e's second adversarial
+        #: round found `reinstate` unchecked for it: a mutation dropping ``_written``
+        #: from the fourteenth call ran the whole suite green.
+        self._transaction_scope = transaction_scope
         self._read_only_consumers = read_only_consumers
         # U3: not a flag -- a declared set of keys this backend owns as typed columns.
         self._attribute_projections = (
@@ -98,7 +106,7 @@ class _DegradedBase:
         return Capabilities(
             **values,
             why={**base.why, **self._why},
-            transaction_scope=base.transaction_scope,
+            transaction_scope=self._transaction_scope or base.transaction_scope,
             attribute_projections=(
                 base.attribute_projections
                 if self._attribute_projections is None
@@ -164,7 +172,9 @@ class _DegradedBase:
                 why_incomplete=(
                     f"this backend caps an unlimited query at {self._page_cap} rows"
                 ),
-                next_after="cursor",
+                # No cursor: this double is the shape where the rest CANNOT be read,
+                # which is the residual case after a caller pages to exhaustion.
+                next_after=None,
             )
         return TypePage(
             records=records,
