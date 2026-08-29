@@ -84,6 +84,7 @@ from open_ontology.registry import (
     _evidence_from_dict,
     _evidence_to_dict,
     _has_external_doc,
+    _iso,
     _prov_from_dict,
     _prov_to_dict,
     _ts,
@@ -92,10 +93,11 @@ from open_ontology.registry import (
 
 
 class AsyncRegistry:
-    """The thirteen calls of INTERFACE.md 5, plus three package-local helpers.
+    """The fourteen calls of INTERFACE.md 5, plus three package-local helpers.
 
     The counting note from PACKAGE.md 2.2 stands: INTERFACE.md says *twelve calls* and
-    enumerating 5.1-5.11 yields thirteen functions. Nothing here depends on which
+    enumerating 5.1-5.11 yields thirteen, and row 3e's `reinstate` (5.9b, ruling R11)
+    makes fourteen. Nothing here depends on which
     number is right.
     """
 
@@ -1484,6 +1486,137 @@ class AsyncRegistry:
                     "successor": successor,
                     "forced": bool(force and report.gates_on),
                     "overrode": [c.id for c in report.gates_on] if force else [],
+                },
+            )
+        return self._written(await self._entry(stored))
+
+    # ============================================================= 5.9b reinstate
+    async def reinstate(
+        self,
+        type: str,
+        reason: str,
+        *,
+        reinstated_by: str,
+        namespace: str = "default",
+    ) -> TypeEntry | Refusal:
+        """The other end of the retirement story -- ruling **R11**, row 3e.
+
+        INTERFACE.md 5.9 used to justify proceeding with a retirement under an unknown
+        orphan state on the grounds that *"retiring is reversible-ish"*, and said reuse
+        *"requires an explicit ``reinstate`` decision by the approver"*. **There was no
+        such call.** It appeared once, in a subordinate clause, and nowhere else in the
+        repository -- so a retired name was burned for everyone, permanently, by one
+        actor, with no recorded path back. Row 3c corrected the justification and left
+        the governance defect standing as Q6; this is the call.
+
+        **Ruling R19: this covers edge FAMILIES and never edge instances.** An edge
+        family *is* a ``kind="edge"`` ``TypeEntry`` (EDGES.md 2.3), so it arrives here
+        with no second mechanism and no special case in this method. An edge *instance*
+        is never reinstated: a retracted edge is no claim (EDGES.md 3.2), and
+        re-asserting it is a **new** edge whose provenance cites the retracted one.
+
+        Refuses ``successor_active`` when the retirement named a successor and that
+        successor is itself active. Not overridable, and it does not need to be: the
+        path back is to retire the successor first, which is an ordinary call that
+        records who did it. Reinstating a word whose replacement is in use is
+        mechanism 4 arriving through the lifecycle -- two live words for one meaning,
+        which is the thing this registry exists to detect.
+        """
+        if not reason or not reason.strip():
+            raise ValueError("reinstate requires a non-empty reason")
+        rec = await self._require(namespace, type)
+
+        if rec.status != "retired":
+            # Never a silent no-op. The desired state already holds, so this is not a
+            # refusal -- nothing was prevented -- but a call that quietly did nothing is
+            # the shape ruling R4 forbade for `register_consumer`, and the caller asked
+            # a question that deserves an answer.
+            return await self._entry(rec, extra_warnings=("reinstate_no_op:not_retired",))
+
+        successor = getattr(rec, "successor", None)
+        if successor:
+            live = await self.adapter.get_type(namespace, successor)
+            if live is not None and live.status != "retired":
+                return Refusal(
+                    "successor_active",
+                    {
+                        "type": type,
+                        "namespace": namespace,
+                        "successor": successor,
+                        "retire_reason": getattr(rec, "retire_reason", None),
+                        "why": (
+                            f"{type!r} was retired with {successor!r} as its successor "
+                            f"and {successor!r} is active; reinstating would put two "
+                            f"live words on one meaning (INTERFACE.md 5.9b)"
+                        ),
+                        "overridable": False,
+                        "path_back": f"retire {successor!r} first",
+                    },
+                )
+
+        # **A lifecycle fact that is REMOVED and cannot be recorded is refused**, on the
+        # rule PACKAGE.md 3.6 states for `cannot_record_override`. Every other call in
+        # this surface only ever appends: `retire` adds a tombstone, `merge_types` adds
+        # an alias and a tombstone, and nothing is deleted. This one clears the four
+        # retirement fields off the record, so the event IS the record -- on a backend
+        # that cannot store one, a name would come back to life with nothing anywhere
+        # saying it had ever been retired or by whom.
+        #
+        # Stated cost: a `stores_events=False` store cannot un-burn a name. That is the
+        # state of the world BEFORE this row, unchanged -- and it is consistent, because
+        # `retire(force=True)` is already refused on such a store for the same reason.
+        if not self.caps.stores_events:
+            return Refusal(
+                "cannot_record_override",
+                {
+                    "type": type,
+                    "namespace": namespace,
+                    "why": self.caps.reason("stores_events"),
+                    "would_clear": {
+                        "retire_reason": getattr(rec, "retire_reason", None),
+                        "retired_by": getattr(rec, "retired_by", None),
+                        "successor": successor,
+                    },
+                },
+            )
+
+        now = self._now()
+        reinstated = TypeRecord(
+            **{
+                **rec.__dict__,
+                "status": "active",
+                # Cleared, not kept. `retire_reason` on an ACTIVE row is a statement
+                # about a retirement that is no longer in force, and a stale `successor`
+                # on a live entry is a pointer a later call would read as current. The
+                # history is where the retirement lives now -- 5.8's append-only rule
+                # says a correction is a new event, never an edit, and the event below
+                # carries every field this clears.
+                "retire_reason": None,
+                "retired_by": None,
+                "retired_at": None,
+                "successor": None,
+                "warnings": tuple(
+                    w
+                    for w in rec.warnings
+                    if w not in ("retired_without_usage_evidence", "name_previously_retired")
+                ),
+                "updated_at": now,
+            }
+        )
+        async with self.adapter.transaction():
+            stored = await self.adapter.put_type(reinstated)
+            await self._append_event(
+                namespace,
+                "reinstated",
+                reinstated_by,
+                kind=rec.kind,
+                name=rec.name,
+                detail={
+                    "reason": reason,
+                    "retire_reason": getattr(rec, "retire_reason", None),
+                    "retired_by": getattr(rec, "retired_by", None),
+                    "retired_at": _iso(getattr(rec, "retired_at", None)),
+                    "successor": successor,
                 },
             )
         return self._written(await self._entry(stored))

@@ -65,7 +65,7 @@ NOT_A_TYPE_REASONS = (
     "instance_not_type",
 )
 
-# INTERFACE.md 5.12, rulings R3 and R4 -- CLOSED. Eighteen values, no more. A project
+# INTERFACE.md 5.12, rulings R3, R4 and R11 -- CLOSED. A project
 # whose thesis is that governed vocabularies resist rot does not ship an open-ended
 # reason string in its own contract. Adding a value requires amending INTERFACE.md 5.12
 # in the same change -- which is how the fifteenth got here (R4, row 3c) and how the
@@ -102,6 +102,11 @@ REFUSAL_REASONS = (
     # that does not exist reused `edge_family_unknown`, which names a different
     # failure. That is 2.3's Cause B: one word, two meanings.
     "unknown_edge",             # EDGES 2.6 -- no such edge
+    # R11, row 3e -- the twentieth, and the SIXTEENTH that any v0 code path returns
+    # (the four above are introduced by a spec and returned by nothing yet).
+    # `reinstate` on a retirement whose successor is itself active: reinstating a word
+    # whose replacement is in use is mechanism 4 arriving through the lifecycle.
+    "successor_active",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

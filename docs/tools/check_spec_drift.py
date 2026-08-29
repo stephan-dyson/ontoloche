@@ -90,6 +90,7 @@ CALLS = (
     "usage",
     "provenance",
     "retire",
+    "reinstate",
     "merge_types",
     "register_consumer",
     "record_use",
