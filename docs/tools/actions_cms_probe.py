@@ -173,7 +173,8 @@ def main() -> int:
                         namespace="cms", actor="ai:haiku_classifier", tier="haiku")
     check("T2.5   a haiku invocation is refused tier_below_action_policy",
           low.verdict == "refused" and low.refusal.reason == "tier_below_action_policy"
-          and low.refusal.detail == {"tier": "haiku", "min_auto_tier": "sonnet"},
+          and low.refusal.detail == {"state": "false", "tier": "haiku",
+                                     "min_auto_tier": "sonnet"},
           str(low.refusal.detail))
     high = reg.preflight("flag_facility_for_review", {"facility": facility},
                          namespace="cms", actor="ai:opus_classifier", tier="opus")
@@ -195,6 +196,28 @@ def main() -> int:
           and blind.refusal.reason == "tier_below_action_policy"
           and blind.refusal.detail.get("state") == "unknown",
           blind.refusal.detail.get("why", ""))
+
+    # Round 1: three more tier states, each UNKNOWN rather than a confident below.
+    for label, kw, expect in (
+        ("no tier supplied", {"tier": None}, "no tier was supplied"),
+        ("a tier outside the order", {"tier": "gemini-flash"}, "not in this deployment"),
+    ):
+        r = reg.preflight("flag_facility_for_review", {"facility": facility},
+                          namespace="cms", actor="ai:x", **kw)
+        check(f"R1-A9  {label} is UNKNOWN, not a confident below",
+              r.verdict == "refused" and r.refusal.detail.get("state") == "unknown"
+              and expect in r.refusal.detail.get("why", ""),
+              r.refusal.detail.get("why", ""))
+
+    # Round 1 BLOCKING 2: the ledger must never fabricate an approval.
+    unapproved = reg.record_invocation(
+        "flag_facility_for_review", {"facility": facility}, namespace="cms",
+        actor="ai:reaper", outcome="applied", gate_verdict="not_asked")
+    check("R1-B2  an applied invocation with no approver is null + warned, NOT fabricated",
+          unapproved.provenance.approved_by is None
+          and "approval_unrecorded" in unapproved.warnings,
+          f"approved_by={unapproved.provenance.approved_by!r} "
+          f"warnings={unapproved.warnings}")
 
     # T2.9 -- an effect naming an unregistered edge family.
     try:

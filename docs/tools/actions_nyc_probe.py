@@ -141,13 +141,54 @@ def main() -> int:
         check("T3.4   merge_types as an EFFECT is refused at declaration", False, "accepted")
     except DeclarationRefused as exc:
         check("T3.4   merge_types as an EFFECT is refused at declaration",
-              exc.reason == "effect_not_permitted" and exc.detail["door"] == "declaration",
-              f"{exc.reason} {exc.detail['why']}")
+              exc.reason == "effect_not_permitted"
+              and exc.detail["door"] == "propose_type",
+              f"{exc.reason} at door={exc.detail['door']}")
+
+    # Round 1 BLOCKING 3: the shipped rule is enforced at THREE doors, because
+    # "a rule with one enforcement point is a rule with one door left open".
+    doors = {}
+    for door in ("propose_type", "approve", "import_types"):
+        try:
+            reg.declare(ActionFamily(
+                name=f"merge_borough_{door}", reversibility="irreversible",
+                approval_mode="human",
+                effects=(Effect(op="merge_types", namespace="dpr", kind="value_set"),)),
+                door=door)
+            doors[door] = "ACCEPTED"
+        except DeclarationRefused as exc:
+            doors[door] = exc.detail.get("warning", exc.reason)
+    check("R1-B3  refused at ALL THREE doors, and import_types warns rather than refusing",
+          set(doors) == {"propose_type", "approve", "import_types"}
+          and doors["propose_type"] == "effect_not_permitted"
+          and doors["approve"] == "effect_not_permitted"
+          and doors["import_types"] == "import_refused:effect_not_permitted",
+          str(doors))
+
+    # Round 1 BLOCKING 1: the kill row, at the INVOCATION door this time.
+    reg.declare(ActionFamily(
+        name="merge_capabilities", reversibility="reversible", approval_mode="auto",
+        inputs=(InputSpec("a", "type"), InputSpec("b", "type")),
+        effects=(Effect(op="host_state", why="collapses two capability sets"),)))
+    pred_a = TypeRef("core", "predicate", "commentable")
+    pred_b = TypeRef("core", "predicate", "searchable")
+    kill = reg.preflight("merge_capabilities", {"a": pred_a, "b": pred_b},
+                         actor="user:sd")
+    kill2 = reg.record_invocation("merge_capabilities", {"a": pred_a, "b": pred_b},
+                                  actor="user:sd", outcome="applied",
+                                  approved_by="user:sd")
+    check("R1-B1  merge_capabilities(commentable, searchable) is REFUSED at preflight",
+          getattr(kill, "refused", False) and kill.reason == "input_kind_mismatch"
+          and kill.detail["problem"] == "predicate",
+          f"{getattr(kill, 'reason', kill)} {getattr(kill, 'detail', {})}")
+    check("R1-B1b ...and at record_invocation too, so there is no way round it",
+          getattr(kill2, "refused", False) and kill2.reason == "input_kind_mismatch",
+          f"{getattr(kill2, 'reason', kill2)}")
 
     # T3.5 -- against the SHIPPED registry, not the probe's model.
     inv = reg.record_invocation(
         "reconcile_borough", {"a": boroughs["dpr"], "b": boroughs["oti_311"]},
-        actor="derived:catalogue_rule", created_by="derived", outcome="applied",
+        actor="derived:catalogue_rule", outcome="applied",
         gate_verdict="allowed", approved_by="auto:action_policy",
         observed_effects=(Effect(op="add_edge", family="reconciled_with"),),
         source_version=(f"{DATASETS['dpr'][0]}@{DATASETS['dpr'][1]} / "
@@ -213,10 +254,30 @@ def main() -> int:
           proj.counts["catalogue_console"] == 3 and proj.would_evict == (),
           f"counts={proj.counts}")
 
-    # `review` mode: approved by policy, and enumerable until reviewed.
-    check("       review mode records approved_by='auto:<policy>' and stays enumerable",
-          inv.provenance.approved_by == "auto:action_policy",
-          inv.provenance.approved_by)
+    # Round 1 MAJOR 8: `review` mode and compensation were specified and executed
+    # by nothing, and 11.5 claimed UC3 showed the second. Both run here now.
+    before = reg.invocations(unreviewed=True)
+    reg.review(inv.invocation_id, reviewed_by="user:sd")
+    after = reg.invocations(unreviewed=True)
+    check("R1-A8a review mode is enumerable until an invocation_reviewed event",
+          len(before.invocations) == 1 and len(after.invocations) == 0
+          and before.complete is False,
+          f"{len(before.invocations)} -> {len(after.invocations)}, "
+          f"complete={before.complete} ({before.why_incomplete})")
+    comp = reg.record_invocation(
+        "reconcile_borough", {"a": boroughs["dpr"], "b": boroughs["oti_311"]},
+        actor="user:sd", outcome="applied", approved_by="user:sd",
+        gate_verdict="not_asked", compensates=inv.invocation_id)
+    original = [i for i in reg.invocations().invocations
+                if i.invocation_id == inv.invocation_id][0]
+    check("R1-A8b a compensation makes the original `compensated` and links both ways",
+          original.outcome == "compensated"
+          and original.compensated_by == comp.invocation_id
+          and comp.compensates == inv.invocation_id,
+          f"{original.outcome} <-> {comp.invocation_id}")
+    check("R1-A4  a FILTERED invocations() answer is never `complete` -- a floor, not a total",
+          before.complete is False and reg.invocations().complete is True,
+          f"filtered={before.complete} unfiltered={reg.invocations().complete}")
 
     print()
     failed = [c for c in CHECKS if not c[1]]
