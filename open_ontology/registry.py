@@ -329,6 +329,18 @@ class Registry:
             )
         )
 
+    def _write_warnings(self) -> tuple[str, ...]:
+        """The warnings every successful WRITE result carries. Empty on an owned store.
+
+        Row 3d, third adversarial round: the first pass attached the durability sentence
+        in ``_entry`` and ``_proposal`` only, and ``register_consumer`` and ``reject``
+        build their results directly -- so a consumer registration or a rejection made
+        over a borrowed connection came back looking exactly as done as a durable write
+        and then vanished on host rollback with no trace. A consumer registration that
+        silently does not stick is mechanism **C** itself.
+        """
+        return (self._durability_warning,) if self._durability_warning else ()
+
     # ------------------------------------------------------------------ projections
     def _consumer_report(
         self,
@@ -1203,6 +1215,7 @@ class Registry:
             rejected_at=now,
             reason=reason,
             superseded_by=superseded_by,
+            warnings=self._write_warnings(),
         )
 
     # ============================================================ 5.6 list_types
@@ -1686,6 +1699,7 @@ class Registry:
             owner=stored.owner,
             registered_at=stored.registered_at,
             locator=stored.locator,
+            warnings=self._write_warnings(),
         )
 
     def record_use(

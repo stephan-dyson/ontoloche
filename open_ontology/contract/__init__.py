@@ -30,6 +30,7 @@ def run_contract_suite(
     *,
     resolver_factory: Callable[[], Any] | None = None,
     borrowed_factory: Callable[[], Any] | None = None,
+    schema_harness_factory: Callable[[], Any] | None = None,
     args: Sequence[str] = (),
     include_nonbinding: bool = False,
 ) -> int:
@@ -53,6 +54,11 @@ def run_contract_suite(
     after an adversarial reviewer got a deliberately-lying savepoint adapter to a clean
     CONFORMANT verdict.
 
+    ``schema_harness_factory`` is its sibling for ``owns_schema=False`` -- a store
+    whose schema does not exist yet, plus the host's own migration -- so ``C0-09``
+    can prove that your ``migrate()`` really is verify-only. Same rule: without it the
+    declaration is taken on trust and the run says so.
+
     ``include_nonbinding=False`` (the default) deselects tests marked ``nonbinding``,
     which are the ones PACKAGE.md declares outside the conformance definition. Pass
     ``True`` to run them anyway -- useful when you want the whole picture, never when
@@ -66,12 +72,15 @@ def run_contract_suite(
     previous = _support.EXTERNAL_FACTORY
     previous_resolver = _support.EXTERNAL_RESOLVER
     previous_borrowed = _support.EXTERNAL_BORROWED
+    previous_schema = _support.EXTERNAL_SCHEMA_HARNESS
     _support.EXTERNAL_FACTORY = adapter_factory
     _support.EXTERNAL_RESOLVER = resolver_factory
     _support.EXTERNAL_BORROWED = borrowed_factory
+    _support.EXTERNAL_SCHEMA_HARNESS = schema_harness_factory
     try:
         return int(pytest.main(["--pyargs", "open_ontology.contract", *marker, *args]))
     finally:
         _support.EXTERNAL_FACTORY = previous
         _support.EXTERNAL_RESOLVER = previous_resolver
         _support.EXTERNAL_BORROWED = previous_borrowed
+        _support.EXTERNAL_SCHEMA_HARNESS = previous_schema

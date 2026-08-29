@@ -104,10 +104,16 @@ class Coverage:
         if start == -1 or not nodeid.endswith("]"):
             return None
         parts = nodeid[start + 1 : -1].split("-")
-        for leg in self.legs:
-            if leg in parts:
-                return leg
-        return None
+        # The backend axis is parametrised first, so it is the first component. Falling
+        # back to "any component that happens to be a leg name" mis-attributes a test
+        # whose OTHER parametrised axis takes a value equal to a leg name -- reproduced
+        # in row 3d's third adversarial round with `[postgres-sqlite]`, which was
+        # counted against sqlite. It could not produce a false CONFORMANT (the closure
+        # check catches the hole it leaves) but it sends a reader to the wrong backend.
+        if parts and parts[0] in self.legs:
+            return parts[0]
+        matches = [leg for leg in self.legs if leg in parts]
+        return matches[0] if len(matches) == 1 else None
 
     def record(self, report) -> None:
         cid = contract_id_of(report.nodeid)
@@ -162,11 +168,20 @@ class Coverage:
             "or --borrowed to have it checked",
         ),
         (
+            "transaction_scope",
+            lambda v: v == "savepoint",
+            "C0-13",
+            "the host-transaction PRECONDITION the savepoint scope rests on -- supply "
+            "a BorrowedHarness with an idle_adapter (and an aborted_adapter where the "
+            "engine has that state) so PACKAGE.md 3 item 3 consequence 1 is checked",
+        ),
+        (
             "owns_schema",
             lambda v: v is False,
             "C0-09",
-            "owns_schema=False (this adapter says migrate() issues no DDL) -- verified "
-            "only for the reference backends, which build the host schema themselves",
+            "owns_schema=False (this adapter says migrate() issues no DDL) -- supply a "
+            "SchemaHarness via run_contract_suite(schema_harness_factory=...) or "
+            "--schema-harness to have it checked",
         ),
     )
 

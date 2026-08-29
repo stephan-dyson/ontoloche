@@ -443,6 +443,7 @@ from ..errors import (
     AlreadyExists,
     AmbiguousKind,
     HostTransactionRequired,
+    SavepointOutOfOrder,
     SchemaMismatch,
     StoreVersionUnknown,
 )
@@ -485,6 +486,20 @@ def load_migrations(backend: str) -> list[tuple[int, str, str]]:
         out.append((int(version_text), slug, path.read_text(encoding="utf-8")))
     out.sort(key=lambda item: item[0])
     return out
+
+
+#: Open savepoints per BORROWED connection, keyed by ``id(conn)``.
+#:
+#: Per connection and not per adapter, because the database's savepoint stack is per
+#: connection: ``RELEASE SAVEPOINT a`` destroys every savepoint opened after ``a``, so
+#: two adapters sharing one borrowed connection can silently destroy each other's scopes
+#: (reproduced on both engines, row 3d third adversarial round -- on Postgres it poisons
+#: the whole connection). An entry exists **only while at least one savepoint is open**,
+#: and a connection with an open savepoint is held by the adapter that opened it, so the
+#: object cannot be collected and its ``id`` cannot be reused while the entry lives.
+#: ``sqlite3.Connection`` is not weak-referenceable, which is why this is not a
+#: ``WeakKeyDictionary``.
+_SAVEPOINT_STACKS: dict[int, list[str]] = {}
 
 
 class BaseSqlAdapter:
@@ -689,18 +704,32 @@ class BaseSqlAdapter:
         self._savepoint_n += 1
         return f"{prefix}_{self._savepoint_token}_{self._savepoint_n}"
 
-    def _host_transaction_open(self) -> bool | None:
-        """Is the BORROWED connection currently inside the host's transaction?
+    def _host_transaction_state(self) -> str | None:
+        """``"open"``, ``"none"``, ``"aborted"``, or ``None`` when the driver cannot tell.
 
-        ``None`` means this driver cannot tell, and the check is then skipped rather
-        than guessed -- Rule U applies to the adapter's own preconditions too.
+        ``"aborted"`` is a separate state and not a detail: a connection whose
+        transaction has already failed is *in* a transaction and cannot take a
+        SAVEPOINT, so treating it as open produced exactly the raw driver exception
+        ``HostTransactionRequired`` exists to replace -- and, worse, out of the adapter's
+        own constructor, before the caller could do anything about it. Reproduced in row
+        3d's third adversarial round. Rule U's shape: three answers plus "I cannot tell".
         """
         return None
 
     def _require_host_transaction(self) -> None:
         if not self._borrowed:
             return
-        if self._host_transaction_open() is False:
+        state = self._host_transaction_state()
+        if state == "aborted":
+            raise HostTransactionRequired(
+                "this adapter was opened over a connection it does not own, and that "
+                "connection's transaction has ALREADY FAILED -- every statement on it "
+                "is being ignored until the host ends the transaction. There is nothing "
+                "this adapter can do inside an aborted transaction, including take a "
+                "SAVEPOINT. Roll back (or roll back to your own savepoint) before "
+                "handing the connection over (PACKAGE.md 3 item 3, consequence 1)."
+            )
+        if state == "none":
             raise HostTransactionRequired(
                 "this adapter was opened over a connection it does not own, and that "
                 "connection has no transaction on it. transaction() is a SAVEPOINT and "
@@ -711,11 +740,39 @@ class BaseSqlAdapter:
                 "(PACKAGE.md 3 item 3, consequence 1)."
             )
 
+    def _scope_stack(self) -> list[str]:
+        return _SAVEPOINT_STACKS.setdefault(id(self.conn), [])
+
+    def _leave_scope_stack(self) -> None:
+        """Pop this adapter's savepoint, refusing if it is not the top of the stack.
+
+        Checked BEFORE the statement is issued, because the statement is the damage:
+        both engines release cascadingly, so ending an outer scope while an inner one is
+        open destroys the inner one and (on Postgres) poisons the connection.
+        """
+        stack = _SAVEPOINT_STACKS.get(id(self.conn))
+        if stack is None or self._savepoint not in stack:
+            return
+        if stack[-1] != self._savepoint:
+            above = stack[stack.index(self._savepoint) + 1 :]
+            raise SavepointOutOfOrder(
+                f"this scope ({self._savepoint}) is not the innermost one open on this "
+                f"borrowed connection -- {len(above)} opened after it are still open "
+                f"({', '.join(above)}). Ending it now would destroy them, because both "
+                "engines RELEASE and ROLLBACK TO cascadingly. Two adapters may share one "
+                "borrowed connection, but their scopes must nest: the one opened last "
+                "must finish first (PACKAGE.md 3 item 3, consequence 4)."
+            )
+        stack.pop()
+        if not stack:
+            _SAVEPOINT_STACKS.pop(id(self.conn), None)
+
     def _open_scope(self) -> None:
         """Depth 0 entry. Owned: BEGIN. Borrowed: SAVEPOINT -- ruling R5."""
         if self._borrowed:
             self._require_host_transaction()
             self._savepoint = self._next_savepoint()
+            self._scope_stack().append(self._savepoint)
             self._execute(f"SAVEPOINT {self._savepoint}")
         else:
             self._begin()
@@ -724,6 +781,7 @@ class BaseSqlAdapter:
         """Depth 0 clean exit. Owned: COMMIT. Borrowed: RELEASE -- the outer commit is
         the host's and this adapter never issues it."""
         if self._borrowed:
+            self._leave_scope_stack()
             self._execute(f"RELEASE SAVEPOINT {self._savepoint}")
             self._savepoint = None
         else:
@@ -733,6 +791,7 @@ class BaseSqlAdapter:
         """Depth 0 failure. Owned: ROLLBACK. Borrowed: ROLLBACK TO, then RELEASE, which
         leaves the HOST's transaction open with everything before the savepoint intact."""
         if self._borrowed:
+            self._leave_scope_stack()
             self._execute(f"ROLLBACK TO SAVEPOINT {self._savepoint}")
             self._execute(f"RELEASE SAVEPOINT {self._savepoint}")
             self._savepoint = None

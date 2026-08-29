@@ -30,7 +30,7 @@ import pytest
 
 from .._clock import FixedClock
 from ..adapter import TypeQuery, TypeRecord
-from ..errors import AlreadyExists, SchemaMismatch
+from ..errors import AlreadyExists, HostTransactionRequired, SchemaMismatch
 from ..policy import NamespacePolicy
 from ..registry import Registry
 from ..types import Refusal, TypeEntry
@@ -272,8 +272,41 @@ def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_path):
         owner = PostgresAdapter(dsn, schema=schema)
         owner._execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
         guest = PostgresAdapter(dsn, schema=schema, owns_schema=False)
+    elif _support.EXTERNAL_SCHEMA_HARNESS is not None:
+        # A third party proves their own verify-only migrate(), the way --borrowed lets
+        # them prove transaction_scope. Row 3d, third adversarial round: C0-12 was
+        # generalised and C0-09 was not, so `owns_schema=False` -- the other declaration
+        # PACKAGE.md 7 (B1) calls load-bearing, and beacon's own shape -- could be
+        # declared by anyone and checked by nobody. An adapter declaring it while running
+        # the full DDL path ran the whole suite green.
+        harness = _support.EXTERNAL_SCHEMA_HARNESS()
+        try:
+            guest = harness.guest()
+            caps = guest.capabilities()
+            assert caps.owns_schema is False, (
+                "a SchemaHarness is for an owns_schema=False adapter; this one declares True"
+            )
+            assert caps.why.get("owns_schema", "").strip()
+            with pytest.raises(SchemaMismatch) as raised:
+                guest.migrate()
+            assert "oo_type" in str(raised.value), "the refusal names what is missing"
+            with pytest.raises(SchemaMismatch):
+                guest.migrate()  # still missing -- nothing was created behind our back
+            harness.create_host_schema()
+            version = guest.migrate()
+            assert isinstance(version, int) and version >= 1
+            guest.put_type(_type(name="facility"), expect_absent=True)
+            assert guest.get_type("default", "facility", kind="entity") is not None
+        finally:
+            harness.teardown()
+        return
     else:
-        pytest.skip("PENDING -- owns_schema is a property of the reference backends")
+        pytest.skip(
+            "PENDING -- this adapter supplied no SchemaHarness, so its owns_schema "
+            "declaration cannot be verified here. Pass "
+            "run_contract_suite(schema_harness_factory=...) or --schema-harness to "
+            "verify it; until then the run reports it as NOT VERIFIED (PACKAGE.md 6.4)."
+        )
 
     assert guest.capabilities().owns_schema is False
     # C0-01's invariant, held to properly. This line used to read
@@ -358,8 +391,23 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
         def teardown():
             host.close()
 
+        def idle_adapter():
+            # A connection with NO transaction on it -- the state C0-13 is about.
+            idle = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+            idle.execute("PRAGMA busy_timeout = 2000")
+            return SQLiteAdapter.open(connection=idle, owns_schema=False)
+
         return _support.BorrowedHarness(
-            guest, outsider, host_begin, host_open, host_commit, teardown
+            guest,
+            outsider,
+            host_begin,
+            host_open,
+            host_commit,
+            teardown,
+            idle_adapter=idle_adapter,
+            # SQLite has no aborted-transaction state: a failed statement does not
+            # poison the transaction the way Postgres does.
+            aborted_adapter=None,
         )
 
     if backend == "sqlite_minimal":
@@ -384,6 +432,11 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
             finally:
                 other.close()
 
+        def minimal_idle():
+            idle = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+            idle.execute("PRAGMA busy_timeout = 2000")
+            return MinimalSQLiteAdapter(path, connection=idle)
+
         return _support.BorrowedHarness(
             guest,
             outsider,
@@ -391,6 +444,7 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
             lambda: bool(host.in_transaction),
             lambda: host.execute("COMMIT"),
             host.close,
+            idle_adapter=minimal_idle,
         )
 
     if backend == "postgres":
@@ -433,13 +487,45 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
         def host_commit():
             host.commit()
 
+        made = [host]
+
         def teardown():
-            host.close()
+            for conn in made:
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001 - teardown must not mask an assertion
+                    pass
             owner._execute('DROP SCHEMA IF EXISTS "' + schema + '" CASCADE')
             owner.close()
 
+        def idle_adapter():
+            # autocommit=True leaves the connection IDLE: in no transaction at all.
+            idle = psycopg.connect(dsn, autocommit=True)
+            made.append(idle)
+            return PostgresAdapter.open(connection=idle, owns_schema=False)
+
+        def aborted_adapter():
+            # A transaction the HOST has already broken. Postgres ignores every further
+            # statement on it, including SAVEPOINT -- so it is in a transaction and
+            # there is nothing this adapter can do inside it.
+            broken = psycopg.connect(dsn)
+            made.append(broken)
+            with broken.cursor() as cur:
+                try:
+                    cur.execute("SELECT no_such_column_at_all")
+                except Exception:  # noqa: BLE001 - breaking it IS the setup
+                    pass
+            return PostgresAdapter.open(connection=broken, owns_schema=False)
+
         return _support.BorrowedHarness(
-            guest, outsider, host_begin, host_open, host_commit, teardown
+            guest,
+            outsider,
+            host_begin,
+            host_open,
+            host_commit,
+            teardown,
+            idle_adapter=idle_adapter,
+            aborted_adapter=aborted_adapter,
         )
 
     if _support.EXTERNAL_BORROWED is not None:
@@ -567,3 +653,63 @@ def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(backend, 
         assert outsider("doomed") == 0 and outsider("outer") == 0
     finally:
         teardown()
+
+
+def test_c0_13_a_borrowed_connection_with_no_usable_transaction_is_refused(
+    backend, tmp_path
+):
+    """**The precondition `C0-12` rests on, and until row 3d nothing tested it.**
+
+    PACKAGE.md 3 item 3, consequence 1: an adapter over a borrowed connection opens no
+    transaction of its own, so the connection must already be inside the host's. Two
+    ways it can fail to be, and the engines disagree about both:
+
+    * **no transaction at all.** Postgres refuses a `SAVEPOINT` outside a transaction
+      block. SQLite **starts** a transaction on the outermost `SAVEPOINT` and
+      **commits** it on `RELEASE` -- silently granting a durability nobody asked for, on
+      the backend PACKAGE.md 4.3 calls the zero-config default.
+    * **a transaction that has already failed.** Postgres ignores every statement on it,
+      `SAVEPOINT` included, so being "in a transaction" is not the same as being in a
+      usable one. SQLite has no such state.
+
+    Both are refused with `HostTransactionRequired`, so the two backends fail the same
+    documented way instead of one failing cryptically and the other failing silently.
+
+    **Why this is its own id rather than an assertion inside `C0-12`.** [Observed, row
+    3d third adversarial round] **every harness in the suite called `host_begin()` before
+    handing the connection over**, so an adapter that omits the check entirely passed all
+    127 ids with no caveat -- while being able to commit on its own on SQLite. Giving the
+    precondition its own id means a backend that cannot exercise it says so in the
+    coverage report (ruling R12) instead of passing quietly.
+    """
+    harness = _borrowed_pair(backend, tmp_path)
+    if harness.idle_adapter is None and harness.aborted_adapter is None:
+        harness.teardown()
+        pytest.skip(
+            "PENDING -- this adapter's BorrowedHarness supplies neither an idle_adapter "
+            "nor an aborted_adapter, so the host-transaction precondition cannot be "
+            "driven here. Supply one to have PACKAGE.md 3 item 3 consequence 1 checked."
+        )
+    try:
+        if harness.idle_adapter is not None:
+            idle = harness.idle_adapter()
+            with pytest.raises(HostTransactionRequired) as raised:
+                with idle.transaction():
+                    idle.put_type(_type(name="never_written"), expect_absent=True)
+            assert "transaction" in str(raised.value).lower()
+            # ...and nothing was written, which is the point: on SQLite the unchecked
+            # path would have committed this row with nobody issuing a commit.
+            assert harness.outsider("never_written") == 0
+
+        if harness.aborted_adapter is not None:
+            aborted = harness.aborted_adapter()
+            with pytest.raises(HostTransactionRequired) as raised:
+                with aborted.transaction():
+                    aborted.put_type(_type(name="never_written_either"), expect_absent=True)
+            assert "already failed" in str(raised.value).lower(), (
+                "an aborted transaction is a DIFFERENT mistake from no transaction, and "
+                "the message a host reads has to say which one it made"
+            )
+            assert harness.outsider("never_written_either") == 0
+    finally:
+        harness.teardown()

@@ -65,12 +65,51 @@ class BorrowedHarness:
     host_open: Callable[[], Any]
     host_commit: Callable[[], Any]
     teardown: Callable[[], Any]
+    #: An adapter over a connection with **no transaction on it**, or None if this
+    #: driver cannot produce that state. ``C0-13``'s subject: PACKAGE.md 3 item 3
+    #: consequence 1 says such a connection is refused with ``HostTransactionRequired``,
+    #: and [Observed, row 3d third adversarial round] **nothing in either suite ever
+    #: handed an adapter a connection without calling ``host_begin`` first** -- so an
+    #: adapter that simply omits the check passed all 127 ids while being able to
+    #: silently commit on SQLite, which is the failure the check is named after.
+    idle_adapter: Callable[[], Any] | None = None
+    #: An adapter over a connection whose transaction has already FAILED, or None where
+    #: the engine has no such state (SQLite has none). Also ``C0-13``.
+    aborted_adapter: Callable[[], Any] | None = None
+
+
+@dataclass(frozen=True)
+class SchemaHarness:
+    """What ``C0-09`` needs in order to verify an ``owns_schema=False`` claim.
+
+    The sibling of :class:`BorrowedHarness`, and it exists for the same reason one round
+    later. ``C0-12`` was generalised so a third party could *prove* a
+    ``transaction_scope`` declaration; ``C0-09`` was not, so ``owns_schema=False`` --
+    the other declaration PACKAGE.md 7 (B1) calls load-bearing, and beacon's own shape --
+    could be declared by anyone and checked by nobody. [Observed, row 3d third
+    adversarial round] an adapter declaring ``owns_schema=False`` while running the full
+    DDL path ran the whole suite green. The coverage report said the claim was
+    unverified, which was honest; it could never become verified, which was the gap.
+
+    ``guest()`` returns an adapter over a store **whose schema does not exist yet**;
+    ``create_host_schema()`` is the host's own migration; ``teardown()`` disposes.
+    """
+
+    guest: Callable[[], Any]
+    create_host_schema: Callable[[], Any]
+    teardown: Callable[[], Any]
 
 
 #: Set by ``run_contract_suite(borrowed_factory=...)`` / ``--borrowed``. A zero-argument
 #: callable returning a :class:`BorrowedHarness`. ``None`` means the suite cannot verify
 #: a ``transaction_scope="savepoint"`` declaration for this adapter, and says so.
 EXTERNAL_BORROWED: Callable[[], Any] | None = None
+
+#: Set by ``run_contract_suite(schema_harness_factory=...)`` / ``--schema-harness``.
+#: A zero-argument callable returning a :class:`SchemaHarness`. ``None`` means an
+#: ``owns_schema=False`` declaration cannot be verified for this adapter, and the run
+#: says so rather than printing a clean verdict over it.
+EXTERNAL_SCHEMA_HARNESS: Callable[[], Any] | None = None
 
 #: The 400-row public CMS sample. Present or the C13 group skips (PACKAGE.md 8.4).
 FIXTURE_NAME = "cms_sample_400.csv"
