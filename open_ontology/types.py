@@ -139,6 +139,16 @@ REFUSAL_REASONS = (
     "effect_not_permitted",      # ACTIONS 2.5 -- an effect outside the closed four, or one
                                  #   of the six governance calls that may never be an effect
     "action_store_absent",       # ACTIONS 8 -- the adapter declares stores_invocations=False
+    # ACTIONS.md v0, row #6, adversarial round 1 -- the twenty-eighth, and the one
+    # that closes the kill row. `InputSpec.kinds` was enforced at DECLARATION and by
+    # nothing at invocation, so an approved family could be handed two
+    # `kind="predicate"` refs and the gate said `allowed`: a reviewer constructed
+    # `merge_capabilities(commentable, searchable)` end to end. EDGES.md 2.4.1 binds
+    # at BOTH layers and ACTIONS claimed to inherit it "unchanged" while inheriting
+    # one. `endpoint_kind_mismatch` is NOT reused: that value is about an EDGE's
+    # endpoint, and one word for two objects is 2.3's Cause B.
+    "input_kind_mismatch",       # ACTIONS 2.3 -- a supplied input is not what the
+                                 #   family declared, or is a predicate at any door
 )
 
 # INTERFACE.md 5.4 -- CLOSED, the same rule R3 gives for REFUSAL_REASONS and for the
@@ -203,6 +213,15 @@ WARNING_VALUES = (
     # the undeclared effect happened. Carried on `Invocation`, one per surplus effect;
     # `invocations(effect_undeclared=True)` enumerates them. No v0 code path emits it.
     "effect_undeclared",
+    # ACTIONS.md v0, row #6, adversarial round 1 -- the twenty-fourth. `Invocation`,
+    # when `outcome="applied"` and no approver is known: the gate was not asked, or
+    # was asked and refused, and the host ran it anyway. The first draft FABRICATED
+    # `approved_by="auto:<policy>"` in that case, which asserts an approval nobody
+    # performed -- the exact thing EDGES.md 5.1 dropped `approved_by` from
+    # `EdgeProvenance` to avoid ("a field whose only honest value is a lie"). A null
+    # plus this warning is the honest form; the never-null rule binds only where the
+    # gate actually decided.
+    "approval_unrecorded",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

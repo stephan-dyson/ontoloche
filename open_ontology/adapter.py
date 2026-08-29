@@ -346,6 +346,20 @@ class EventRecord:
     #: The three event values that go with it are `edge_added`,
     #: `edge_retracted` and `edge_amended` -- stored, never judged (PACKAGE 3.1).
     edge_id: str | None = None
+    #: ACTIONS.md 3.5 -- the invocation this event concerns, if any. Same shape and
+    #: same reason as the line above, one object along: `EventRecord` had no slot for
+    #: an invocation, so an invocation event had nowhere to go and
+    #: `InvocationProvenance.history` would have been permanently empty with a
+    #: fabricated `why`. Additive, defaulted, and set by no v0 code path, because row
+    #: #6 is a spec. The three event values that go with it are
+    #: `invocation_recorded`, `invocation_reviewed` and `invocation_compensated` --
+    #: stored, never judged (PACKAGE 3.1).
+    #:
+    #: Added by row #6's FIRST adversarial round, which found the specification
+    #: describing this field, `read_events`' filter for it and a `review` mode that
+    #: reads it -- while the change that landed six refusal values never touched this
+    #: file. The edge line above is the precedent it failed to follow.
+    invocation_id: str | None = None
     detail: dict[str, Any] = field(default_factory=dict)
 
 
@@ -558,6 +572,7 @@ class StorageAdapter(Protocol):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
+        invocation_id: str | None = None,
     ) -> list[EventRecord]: ...
 
     # ------------------------------------------------------------------ 16 to 18

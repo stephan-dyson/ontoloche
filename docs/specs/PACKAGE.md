@@ -296,9 +296,17 @@ class EventRecord:
     # is drift whichever side moved -- ruling R3's argument about
     # `Refusal.reason`, applied to a record.
     edge_id: str | None = None
+    # ACTIONS.md 3.5 -- the invocation this event concerns, if any. Same shape,
+    # same reason, one object along; set by no v0 code path, because row #6 is a
+    # spec. Added by that row's FIRST adversarial round, which found ACTIONS.md
+    # describing this field, a `read_events` filter for it and a `review` mode
+    # that reads it, in a change that never touched `adapter.py`.
+    invocation_id: str | None = None
     event: str                      # "proposed"|"approved"|"rejected"|"retired"|"merged"|
                                     #   "amended"|"override"|"imported"|"used"|
-                                    #   "edge_added"|"edge_retracted"|"edge_amended"
+                                    #   "edge_added"|"edge_retracted"|"edge_amended"|
+                                    #   "invocation_recorded"|"invocation_reviewed"|
+                                    #   "invocation_compensated"
     detail: dict
 ```
 
@@ -462,8 +470,8 @@ Increments the count and advances `last_seen` to `max(last_seen, at)`; sets `fir
 **14. `append_event(rec: EventRecord) -> None`**
 Append-only. **The adapter must have no update or delete path for events** — `INTERFACE.md` §5.8: *a correction is a new event, never an edit*. `NotSupported` when `stores_events=False`.
 
-**15. `read_events(namespace: str, *, kind: str | None = None, name: str | None = None, proposal_id: str | None = None, edge_id: str | None = None) -> list[EventRecord]`**
-*(`edge_id` added by row 4b — `EventRecord.edge_id` (EDGES §5.2) gives an edge event somewhere to live and nothing to read it back by. Additive and defaulted: a caller that never passes it sees exactly the pre-4b behaviour, and `read_events(namespace)` with no filter still returns edge events, because they are events. **This line was stale for two adversarial rounds** — deviation D-4b-2 said the signature had been amended here and it had not, and a third-party author implementing `read_events` literally from this block hit a `TypeError` on the first `edge_provenance` call. `check_spec_drift.py` now diffs all eighteen printed primitive signatures against the Protocol, which is what should have caught it.)*
+**15. `read_events(namespace: str, *, kind: str | None = None, name: str | None = None, proposal_id: str | None = None, edge_id: str | None = None, invocation_id: str | None = None) -> list[EventRecord]`**
+*(`edge_id` added by row 4b — `EventRecord.edge_id` (EDGES §5.2) gives an edge event somewhere to live and nothing to read it back by. Additive and defaulted: a caller that never passes it sees exactly the pre-4b behaviour, and `read_events(namespace)` with no filter still returns edge events, because they are events. **This line was stale for two adversarial rounds** — deviation D-4b-2 said the signature had been amended here and it had not, and a third-party author implementing `read_events` literally from this block hit a `TypeError` on the first `edge_provenance` call. `check_spec_drift.py` now diffs all eighteen printed primitive signatures against the Protocol, which is what should have caught it. **`invocation_id` added by row #6 on exactly the same grounds** — `ACTIONS.md` §3.5 and §9 both read an invocation's history through this call, and neither the field nor the filter existed until that row's first adversarial round asked for the history and found it unreachable.)*
 Ordered by `at`, then by insertion. **Uncertainty:** `stores_events=False` ⇒ the registry returns `Provenance.history == []` **with a `why`**, and — see §3.6 — refuses any destructive override that it cannot record.
 
 ---

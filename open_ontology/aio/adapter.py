@@ -156,6 +156,7 @@ class AsyncStorageAdapter(Protocol):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
+        invocation_id: str | None = None,
     ) -> list[EventRecord]: ...
 
     # ------------------------------------------------------------------ 16 to 18
