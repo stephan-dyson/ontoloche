@@ -22,7 +22,7 @@ The contract suite is not a test of the package. **It is the definition of confo
 ## 1. Non-goals — one line each
 
 - **No HTTP/API server.** A server is a *consumer* of `Registry`, never part of it; nothing in this package imports a web framework.
-- **No relationships or edges.** `kind="edge"` rows are names, definitions, provenance and lifecycle only. Edge shape and edge instances are deliverable **#4, `docs/EDGES.md`**.
+- **No relationships or edges.** `kind="edge"` rows are names, definitions, provenance and lifecycle only. Edge shape and edge instances are deliverable **#4, [`docs/specs/EDGES.md`](EDGES.md)** — **landed 2026-08-29**.
 - **No ingestion or mapping.** Landed rows → typed entities is **Phase 3**; this package is handed a decided vocabulary, not a CSV.
 - **No instance resolution.** *"I already know 38 of these facilities"* is entity resolution and belongs to **Phase 3 ingestion** (`INTERFACE.md` §10.3; `ROADMAP.md` Phase 3, supervisor's provisional assignment 2026-08-28, founder may move it). Mentioned once, here, and not designed.
 - **No ORM is mandated** — see §2.5. The protocol is defined over dataclasses, so a third-party adapter *may* be written with one.
