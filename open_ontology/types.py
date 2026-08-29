@@ -124,6 +124,21 @@ REFUSAL_REASONS = (
     # `reinstate` was the one door left open, in the registry whose thesis is detecting
     # exactly this.
     "alias_collision",
+    # ACTIONS.md v0, row #6, 2026-08-29 -- twenty-two through twenty-seven. Introduced by
+    # a SPEC, not by code, exactly as EDGES.md v0's four were: row #6 ships no action
+    # store, so nothing in this package returns any of the six yet. They are enumerated
+    # here anyway because R3's rule is that the vocabulary is closed and amended in the
+    # change that introduces a value. (The EDGES four ARE returned now -- row 4b
+    # implemented them -- so twenty-one of the twenty-seven are reachable by code today.)
+    "action_family_unknown",     # ACTIONS 7 -- no such kind="action" entry
+    "precondition_unmet",        # ACTIONS 2.4 -- a declared condition is false OR unknown
+    "human_approval_required",   # ACTIONS 2.2/5.2 -- irreversible declared non-human, or
+                                 #   a human-mode family invoked with no human approver
+    "tier_below_action_policy",  # ACTIONS 5.2 -- the INVOKING actor's tier is below the
+                                 #   family's min_auto_tier. Not the proposal-side gate
+    "effect_not_permitted",      # ACTIONS 2.5 -- an effect outside the closed four, or one
+                                 #   of the six governance calls that may never be an effect
+    "action_store_absent",       # ACTIONS 8 -- the adapter declares stores_invocations=False
 )
 
 # INTERFACE.md 5.4 -- CLOSED, the same rule R3 gives for REFUSAL_REASONS and for the
@@ -182,6 +197,12 @@ WARNING_VALUES = (
     # invisible to a query over it*. Across a merge there is, and now the report says
     # so and stops claiming completeness.
     "endpoint_type_merged",
+    # ACTIONS.md v0, row #6, 2026-08-29 -- the twenty-third. The brief offered it as a
+    # Refusal.reason; the UC1 design test moved it here, because refusing to RECORD an
+    # invocation whose host reported an undeclared effect destroys the only evidence that
+    # the undeclared effect happened. Carried on `Invocation`, one per surplus effect;
+    # `invocations(effect_undeclared=True)` enumerates them. No v0 code path emits it.
+    "effect_undeclared",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
