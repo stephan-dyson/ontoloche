@@ -1301,6 +1301,21 @@ class AsyncRegistry:
             if schema and schema.mode == "warn":
                 warnings.extend(f"attributes_invalid:{v}" for v in violations)
 
+        if kind == "predicate":
+            # **Ruling R40, row 4c.** A capability predicate is the one kind where an
+            # auto-approval policy approving is the `ROADMAP.md` kill row, and **two of
+            # the three kill-row trips began with a predicate that went live without a
+            # human** -- row #6's second round merged two predicates proposed by an
+            # `ai:` actor at Haiku into an auto-approving namespace, both live, neither
+            # reviewed. Belt-and-braces over `C10-09` and `C9-18`, which guard the
+            # MERGE: this guards the door the merge's operands came through.
+            #
+            # It is a warning and not a refusal because the proposal is perfectly valid
+            # -- INTERFACE.md 5.4's own rule is that `propose_type` refuses two things
+            # and warns about everything else, because refusing a near-duplicate is how
+            # you flatten a capability predicate. What R40 removes is the AUTO path, not
+            # the proposal.
+            warnings.append("predicate_requires_review")
         if not evidence:
             warnings.append("no_evidence")
         if _asserts_domain_semantic(definition, kind, attributes) and not _has_external_doc(
@@ -1341,7 +1356,13 @@ class AsyncRegistry:
             source_version=source_version,
         )
 
-        auto = policy.approval_policy == "auto" or not self.caps.stores_proposals
+        # Ruling **R40**: `kind="predicate"` never takes the auto path, whatever the
+        # namespace policy says. The proposal is stored and comes back PENDING, which is
+        # the outcome 2.7's tier gate already produces for a different reason -- so no
+        # caller learns a new shape, only that this kind always needs a human.
+        auto = (
+            policy.approval_policy == "auto" or not self.caps.stores_proposals
+        ) and kind != "predicate"
         below = policy.tier_is_below_minimum(tier)
 
         if not self.caps.stores_proposals:
@@ -1357,6 +1378,19 @@ class AsyncRegistry:
                         + self.caps.reason("stores_proposals"),
                     },
                 )
+            # **The one place R40 cannot be honoured, stated rather than hidden.** There
+            # is no proposal table, so there is nowhere to hold a predicate for review:
+            # the alternatives are to write it with the warning, or to refuse `kind=
+            # "predicate"` on this backend entirely. Refusing would mean a conformant
+            # `stores_proposals=False` backend -- which PACKAGE.md 7.4 calls conformant
+            # "as a third backend", and which is beacon's own shape -- cannot hold a
+            # capability predicate at all. That is a product decision about what this
+            # registry refuses to serve, not an implementation one, so it is **raised as
+            # a question rather than taken** (4C-RUN, Q50) and the fact is made
+            # enumerable meanwhile: the entry carries `predicate_requires_review`, which
+            # says a predicate went live without the review R40 requires. PACKAGE.md
+            # 7.3 B4's sentence, one kind along -- the price of a review step is exactly
+            # one table, and that price is legible rather than invisible.
             return await self._write_approved(
                 rec, approved_by=f"auto:{policy.auto_policy_name}", note=None, store_proposal=False
             )

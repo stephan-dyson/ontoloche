@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C10 -- ``merge_types`` (8). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the door its operands come through (10). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -18,7 +18,7 @@ warns.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import Consumer, MergeResult, Refusal
+from open_ontology.types import Consumer, MergeResult, Refusal, TypeEntry
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -284,3 +284,71 @@ async def test_c10_09_two_empty_extents_are_not_a_byte_identical_extent(registry
         merged_by="user:sd", acknowledge=["no_consumer_evidence"],
     )
     assert not isinstance(merged, Refusal), merged
+
+async def test_c10_10_a_predicate_proposal_never_takes_the_auto_path(adapter, make_registry):
+    """Ruling **R40**, row 4c. **Belt-and-braces over `C10-09` and `C9-18`.**
+
+    Those two guard the **merge**: a predicate pair may not be collapsed unless their
+    extents are non-empty and identical, whether the collapse arrives through
+    `merge_types` or through `retire(successor=)`. This guards the door the merge's
+    operands came through. *"A capability predicate is the one kind where an
+    auto-approval policy approving is the kill row"* -- and it is not a hypothesis: **two
+    of the three kill-row trips began with a predicate that went live without a human**,
+    the second one with two `ai:`-proposed predicates auto-approved at Haiku into an
+    auto-approving namespace and then merged under two acknowledgements.
+
+    `propose_type(kind="predicate")` therefore returns a **pending `Proposal` regardless
+    of the policy**, warning `predicate_requires_review`. It is a warning and not a
+    refusal because the proposal is perfectly valid -- INTERFACE.md 5.4 refuses two
+    things and warns about everything else, *because refusing a near-duplicate is how you
+    flatten a capability predicate*. What R40 removes is the auto path, not the proposal.
+
+    Three things are asserted, and the third is the one that would rot: an `entity` in
+    the same auto namespace still auto-approves, so this is a rule about **one kind** and
+    not a policy that quietly stopped working.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_proposals:
+        # PACKAGE.md 7.3 B4: no proposal table means no review step, so there is nowhere
+        # to hold a predicate. The entry is written and SAYS SO -- which is what makes
+        # "a predicate went live without the review R40 requires" enumerable rather than
+        # silent -- and asserting that here is the honest unknown, not a skip.
+        entry = await registry.propose_type(
+            "commentable", "things a user may comment on", [], "user:sd", kind="predicate"
+        )
+        assert isinstance(entry, TypeEntry), entry
+        assert "predicate_requires_review" in entry.warnings, (
+            "the one place R40 cannot be honoured says so on the entry it wrote"
+        )
+        return
+
+    proposal = await registry.propose_type(
+        "commentable", "things a user may comment on", [], "ai:haiku_classifier",
+        kind="predicate", tier="haiku",
+    )
+    assert not isinstance(proposal, TypeEntry), (
+        "R40 -- an auto-approving namespace does NOT auto-approve a capability predicate, "
+        "and this is the shape two of the three kill-row trips began with"
+    )
+    assert not isinstance(proposal, Refusal), proposal
+    assert proposal.status == "pending"
+    assert "predicate_requires_review" in proposal.warnings
+
+    # The human review still works, and it is the only way through.
+    approved = await registry.approve(proposal.id, "user:sd")
+    assert isinstance(approved, TypeEntry), approved
+    assert approved.status == "active"
+    assert approved.provenance.approved_by == "user:sd", (
+        "never `auto:<policy>` -- the point of the ruling is that a person signed off"
+    )
+
+    # And the rule is about ONE KIND. An entity in the same namespace under the same
+    # policy still auto-approves, so a policy that quietly stopped working would fail
+    # here rather than pass silently.
+    entity = await registry.propose_type(
+        "task", "a unit of work", [], "user:sd", kind="entity"
+    )
+    assert isinstance(entity, TypeEntry), (
+        "R40 narrows `propose_type` for predicates and for nothing else"
+    )
+    assert "predicate_requires_review" not in entity.warnings

@@ -240,6 +240,16 @@ WARNING_VALUES = (
     # end. Rule U in one value: **the payload was not validated, and here is the name
     # nobody registered.**
     "payload_schema_unregistered",
+    # INTERFACE.md 5.4, ruling **R40**, row 4c -- the twenty-seventh. `Proposal`, on
+    # every `kind="predicate"` proposal, and on the `TypeEntry` of one written by a
+    # backend with no proposal table (the one place the ruling cannot be honoured, and
+    # the warning is what makes that enumerable rather than silent).
+    #
+    # A capability predicate is the one kind where an auto-approval policy approving is
+    # the ROADMAP.md kill row: **two of the three kill-row trips began with a predicate
+    # that went live without a human.** C10-09 and C9-18 guard the merge; this guards
+    # the door the merge's operands came through.
+    "predicate_requires_review",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
