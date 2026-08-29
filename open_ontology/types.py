@@ -65,10 +65,11 @@ NOT_A_TYPE_REASONS = (
     "instance_not_type",
 )
 
-# INTERFACE.md 5.12, rulings R3 and R4 -- CLOSED. Fifteen values, no more. A project
+# INTERFACE.md 5.12, rulings R3 and R4 -- CLOSED. Eighteen values, no more. A project
 # whose thesis is that governed vocabularies resist rot does not ship an open-ended
 # reason string in its own contract. Adding a value requires amending INTERFACE.md 5.12
-# in the same change -- which is how the fifteenth got here (R4, row 3c).
+# in the same change -- which is how the fifteenth got here (R4, row 3c) and how the
+# last three did (EDGES.md v0, row #4).
 REFUSAL_REASONS = (
     "different_consumer_sets",
     "predicate_merge",
@@ -88,6 +89,15 @@ REFUSAL_REASONS = (
     # source. Deviation D-1 wanted a reason that says this honestly; none of the
     # fourteen did, and reusing one would be the confident wrong answer Rule U forbids.
     "consumer_source_read_only",
+    # EDGES.md v0, row #4, 2026-08-29 -- sixteen, seventeen, eighteen. Introduced by a
+    # SPEC, not by code: row #4 ships no edge implementation, so nothing in this package
+    # returns any of the three yet. They are enumerated here anyway because R3's rule is
+    # that the vocabulary is closed and amended in the change that introduces a value --
+    # a reason specified in a spec and absent from this tuple is the same drift the
+    # spec-drift checker exists to catch, pointing the other way.
+    "edge_family_unknown",      # EDGES 4.3 -- a named family is not a registered kind="edge"
+    "endpoint_kind_mismatch",   # EDGES 2.4.1 -- wrong endpoint kind, or wrong level
+    "edge_store_absent",        # EDGES 6 -- the adapter declares stores_edges=False
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
