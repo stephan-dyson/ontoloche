@@ -17,3 +17,9 @@ It is derivable from stored data, contract-bears nothing, and no second consumer
 An open `reason` vocabulary in a project whose thesis is *governed vocabularies resist rot* would be the product's own disease in its own contract. The three PACKAGE-introduced values are adopted into INTERFACE.md (new §5.12), which now enumerates all fourteen and states that additions require amending that section in the same change that introduces them.
 
 The fourteen: `different_consumer_sets`, `predicate_merge`, `kind_mismatch`, `cross_namespace_merge`, `retired_operand`, `definitions_diverge`, `no_consumer_evidence`, `live_consumers`, `tier_below_auto_approve_policy`, `already_decided`, `unknown_proposal`, `proposals_not_stored`, `cannot_record_override`, `attributes_schema_violation`.
+
+## R4 — D-1 gets a fifteenth `Refusal.reason`: `consumer_source_read_only` *(added 2026-08-28 21:20 after 3b landed)*
+
+**The finding [Observed, `2A-RUN.md` §4 D-1, inherited unchanged by `3B-ASYNC.md`]:** `register_consumer` against a read-only consumer source raises `NotSupported` instead of returning a `Refusal`, because none of R3's fourteen reasons says this honestly, and PACKAGE §3.4 primitive 10 / test C11-04 require a `Refusal`, never a silent no-op.
+
+**Ruling:** R3's own amendment rule applies — add the fifteenth value **`consumer_source_read_only`** to INTERFACE §5.12 in the same change that makes `register_consumer` return `Refusal(reason="consumer_source_read_only")` in the sync registry (the async mirror regenerates from it). Not an open vocabulary; one more closed value, named for the actual condition. **Assigned to row 3c** (the use-case validation pass), which is already amending INTERFACE/PACKAGE; the change lands with a C11-04 assertion on the new reason in both suites.
