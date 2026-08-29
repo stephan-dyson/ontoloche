@@ -15,14 +15,22 @@ from . import run_async_contract_suite
 
 
 def _load(spec: str):
+    """``pkg.mod:Name`` or ``pkg.mod:Class.classmethod``.
+
+    The dotted form is not decoration. An async adapter's entry point is usually a
+    classmethod, because ``__init__`` cannot await a connection (deviation D-A1), so
+    ``AsyncSQLiteAdapter.open`` is the *normal* shape here rather than an exception.
+    """
     module_name, _, attribute = spec.partition(":")
     if not attribute:
-        raise SystemExit(f"--adapter wants pkg.mod:Class, got {spec!r}")
-    module = importlib.import_module(module_name)
-    try:
-        return getattr(module, attribute)
-    except AttributeError as exc:
-        raise SystemExit(f"{module_name} has no {attribute!r}") from exc
+        raise SystemExit(f"--adapter wants pkg.mod:Name or pkg.mod:Class.method, got {spec!r}")
+    target = importlib.import_module(module_name)
+    for part in attribute.split("."):
+        try:
+            target = getattr(target, part)
+        except AttributeError as exc:
+            raise SystemExit(f"{module_name}:{attribute} -- no {part!r}") from exc
+    return target
 
 
 def main(argv: list[str] | None = None) -> int:

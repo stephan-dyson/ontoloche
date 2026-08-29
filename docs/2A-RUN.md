@@ -280,8 +280,10 @@ is conformant without weakening conformance* — is exercised by `DegradedAdapte
 is a wrapper this repository wrote, not a third party's store. **The first real test of
 that claim is `work_link_types` behind the adapter, which is 2B.**
 
-Nothing async exists, per ruling **R1**: that is row **3b** and it remains the blocking
-prerequisite of **#5**.
+Nothing async exists *in this deliverable*, per ruling **R1**: that is row **3b**, which
+**landed 2026-08-28** — see [`3B-ASYNC.md`](3B-ASYNC.md). The async mirror is generated
+from the code recorded here, so **all fourteen deviations below are inherited by it
+unchanged**, D-1's wanted ruling included.
 
 ---
 

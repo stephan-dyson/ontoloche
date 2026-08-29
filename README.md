@@ -3,7 +3,14 @@
 An open ontology and pipeline layer — typed entities, typed relationships, and
 governed actions that AI agents can safely call.
 
-**Status: pre-code, specs in progress.** Phase 0 discovery is closed and Phase 1's interface contract is written. No implementation yet.
+**Status: Phase 2A shipped, plus its async mirror.** Phase 0 discovery is closed, Phase 1's interface contract is written, and the reference implementation exists: the `open_ontology` package, a fifteen-primitive storage adapter over SQLite and Postgres, and **109 contract tests that are the definition of conformance** — green on both backends, synchronously and asynchronously, in one run.
+
+```bash
+pip install -e ".[contract]"
+pytest --pyargs open_ontology.contract          # the sync conformance suite
+pip install -e ".[contract-aio]"
+pytest --pyargs open_ontology.aio.contract      # the same 109 ids, awaited
+```
 
 ## Start here
 
@@ -19,6 +26,15 @@ governed actions that AI agents can safely call.
   contract, `v0` and unstable.** Twelve calls built around a proposal→approval loop, with
   `consumers(type)` — *"if I add this, what will silently ignore it?"* — first-class. Includes
   the Tenshen and CMS design tests, and the conflicts both produced.
+- [`docs/PACKAGE.md`](docs/PACKAGE.md) — **the Phase 2 deliverable: the package contract.** The
+  fifteen-primitive storage-adapter protocol built on one rule — *the adapter stores records and
+  does not know what a proposal, an approval or a refusal is* — the nine table shapes, and the
+  109 contract tests enumerated id by id.
+- [`docs/2A-RUN.md`](docs/2A-RUN.md) and [`docs/3B-ASYNC.md`](docs/3B-ASYNC.md) — **the run
+  records.** What was actually executed, with the verbatim pytest output and every deviation
+  from the specs recorded rather than silently resolved. `3B-ASYNC.md` also carries the async
+  design: the async tree is *generated* from the sync source by `tools/unasync.py`, so there is
+  one implementation of the registry rather than two that drift.
 - [`docs/0.3-prior-art.md`](docs/0.3-prior-art.md) — what the two visible prior interfaces
   actually look like, read on 2026-08-28. Verdict: no interface worth matching call-for-call;
   Foundry's status vocabulary worth matching field-for-field.
