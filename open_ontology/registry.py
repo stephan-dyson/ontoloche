@@ -595,6 +595,29 @@ class Registry:
         policy = self.policy(namespace)
 
         exact = self.adapter.get_type(namespace, candidate, kind=kind)
+        # A retired exact match is NOT an `existing` outcome -- 5.9 makes the name
+        # permanently unusable -- but it is a fact the registry has in hand, and
+        # discarding it here made `resolve_type` answer "nothing in the vocabulary fits
+        # this" about a word it had just read the tombstone of. That is Rule U's
+        # confident negative, in the call designed against mechanism 2. It is surfaced
+        # the way 5.5 already surfaces a prior rejection: in `reason`, and in
+        # `alternatives` with a `None` score because nothing scored it.
+        # Row 3c, after an adversarial review round reproduced it.
+        retired_note: str | None = None
+        retired_alt: tuple[Alternative, ...] = ()
+        if exact is not None and exact.status == "retired":
+            retired_alt = ((exact.name, None),)
+            retired_note = (
+                f"{candidate!r} was retired and the name is not reusable "
+                f"({getattr(exact, 'retire_reason', None) or 'no reason recorded'}"
+                + (
+                    f", successor {exact.successor!r}"
+                    if getattr(exact, "successor", None)
+                    else ""
+                )
+                + "); "
+                f"propose_type will return the retired entry, not create a new one"
+            )
         if exact is not None and exact.status != "retired":
             return Resolution(
                 outcome="existing",
@@ -613,7 +636,7 @@ class Registry:
                 tier=tier,
                 scoped_to=namespace,
                 confidence=None,
-                alternatives=self._prior_rejections(namespace, candidate)[0],
+                alternatives=self._prior_rejections(namespace, candidate)[0] + retired_alt,
             )
 
         page = self.adapter.find_types(TypeQuery(namespace=namespace, kind=kind, status="active"))
@@ -622,9 +645,12 @@ class Registry:
         alternatives: list[Alternative] = [(n, s) for n, s in scored[:5]]
         rejections, rejection_note = self._prior_rejections(namespace, candidate)
         alternatives.extend(rejections)
+        alternatives.extend(retired_alt)
 
         best_name, best_score = (scored[0] if scored else (None, None))
         reason_bits: list[str] = []
+        if retired_note:
+            reason_bits.append(retired_note)
         if rejection_note:
             reason_bits.append(rejection_note)
 
@@ -688,7 +714,11 @@ class Registry:
             warnings=(),
             near_matches=tuple(alternatives),
         )
-        reason_bits.insert(0, f"nothing in the vocabulary fits {candidate!r}")
+        # The retirement, when there is one, is the decisive fact and leads.
+        if retired_note:
+            reason_bits.insert(0, f"nothing ACTIVE in the vocabulary fits {candidate!r}")
+        else:
+            reason_bits.insert(0, f"nothing in the vocabulary fits {candidate!r}")
         return Resolution(
             outcome="proposal",
             reason="; ".join(reason_bits),
