@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C17 -- the edge store and the read seam (46). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (47). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -2327,3 +2327,72 @@ async def test_c17_46_retire_with_a_successor_is_followed_exactly_as_a_merge_is(
     assert plain.known == 1 and plain.complete is True
     assert plain.edges[0].via_successor is None
     assert not any(w.startswith("endpoint_type_merged") for w in plain.warnings)
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+async def test_c17_47_a_second_retraction_is_refused_and_the_first_decision_survives(registry):
+    """Ruling **R39**, row 4c. Deviation **D-4b-16**, question **Q34**, closed.
+
+    `EDGES.md` §2.6 argues past `PACKAGE.md` §3.6 -- an unrecordable retraction is not
+    refused -- on one sentence: *"the record **is** the row."* `status`, `retracted_by`,
+    `retracted_at` and the reason are columns on the edge itself, so the audit trail
+    survives with no event table.
+
+    **That argument silently assumes retraction happens once.** A second retraction
+    overwrote the first's reason, actor and timestamp on the row, and on
+    `stores_edge_events=False` the first decision was then gone entirely -- so the
+    justification stopped holding at the exact moment the case occurred. Narrow (it
+    needs a caller error, and the worst version needs a declined event store) but not
+    hypothetical: two people withdrawing one edge for two different reasons is a fact
+    about a deployment.
+
+    **It is refused rather than made idempotent, and that is the ruling.** Idempotency
+    would hide a real double decision -- a call that silently returns the first
+    decision has answered a question nobody asked. `already_decided` is
+    `INTERFACE.md` §5.5's existing value, which says precisely this about a proposal one
+    object along, so no value is minted. `detail` carries the standing decision, so the
+    caller learns whose it was without a second call.
+    """
+    await seed(registry, "task")
+    await blocks(registry)
+    edge = await registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd"
+    )
+    assert not isinstance(edge, Refusal), edge
+
+    first = await registry.retract_edge(
+        edge.edge_id, "the classifier was wrong about this pair", retracted_by="user:sd"
+    )
+    assert not isinstance(first, Refusal), first
+    assert first.status == "retracted"
+
+    second = await registry.retract_edge(
+        edge.edge_id, "duplicate of another link", retracted_by="user:other"
+    )
+    assert isinstance(second, Refusal), second
+    assert second.reason == "already_decided"
+    assert second.detail["edge_id"] == edge.edge_id
+    assert second.detail["status"] == "retracted"
+    assert second.detail["retracted_by"] == "user:sd", (
+        "the standing decision is in the refusal, so the caller does not need a second "
+        "call to learn whose it was"
+    )
+    assert second.detail["retract_reason"] == "the classifier was wrong about this pair"
+
+    standing = await registry.edge_provenance(edge.edge_id)
+    assert not isinstance(standing, Refusal), standing
+    assert standing.retracted_by == "user:sd", (
+        "and the first decision is untouched -- EDGES.md 2.6's 'the record IS the row' "
+        "argument only holds while nothing overwrites the row"
+    )
+    assert standing.retract_reason == "the classifier was wrong about this pair"
+    if registry.caps.stores_edge_events and registry.caps.stores_events:
+        assert [event.event for event in standing.history] == [
+            "edge_added",
+            "edge_retracted",
+        ], "one retraction happened, so one retraction is recorded"
+
+    unknown = await registry.retract_edge("no_such_edge", "x", retracted_by="user:sd")
+    assert isinstance(unknown, Refusal) and unknown.reason == "unknown_edge", (
+        "an edge that never existed is a different failure from one already decided, "
+        "and reusing one value for both would be INTERFACE.md 2.3's Cause B"
+    )

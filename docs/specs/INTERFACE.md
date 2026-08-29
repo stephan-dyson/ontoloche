@@ -574,7 +574,7 @@ Rejection:
 
 **Behaviour when uncertain:**
 - `mode="auto"` and the proposal's `tier` is below the namespace's `min_auto_approve_tier` → **`Refusal`**, not an exception. The caller may escalate to a human. This is 0.5 consequence 2 made operational.
-- Proposal already decided → `Refusal(reason="already_decided")`. Idempotent, not an error.
+- Proposal already decided → `Refusal(reason="already_decided")`. Idempotent, not an error. *(The value has a **second** subject as of ruling **R39**, row 4c: a second `retract_edge` on one edge ([`EDGES.md`](EDGES.md) §2.6). That is deliberately **not** idempotent — an edge's retraction reason, actor and timestamp are columns on the row, so a second retraction overwrites the first, and idempotency would hide a real double decision. Same word, same meaning — *this was already decided, and here is what was decided* — on two objects, which is why no value was minted.)*
 - Approving a proposal whose `warnings` include `unverified_semantics` **succeeds**, and the resulting `TypeEntry` keeps the warning on `provenance`. v0 does **not** block on it — blocking would be a claim that the registry can tell when a definition needs a citation, which it cannot.
 
 ---
