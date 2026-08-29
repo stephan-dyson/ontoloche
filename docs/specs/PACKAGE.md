@@ -329,7 +329,7 @@ Used by `resolve_type` to surface a prior rejection in `alternatives` (§5.5) an
 
 **10. `put_consumer(rec: ConsumerRecord) -> ConsumerRecord`**
 Upsert on `(namespace, consumer_id)`. The `gate` may name a predicate that does not exist yet; the adapter does not check. **[Inferred]** this is correct: a consumer that gates on a word nobody registered is precisely mechanism **C**, and refusing the registration would hide it.
-**Uncertainty:** none. A consumer source that is read-only (a config file — see §7) raises `NotSupported` and the registry surfaces that as a `Refusal` from `register_consumer`, not as a silent no-op.
+**Uncertainty:** none. A consumer source that is read-only (a config file — see §7) raises `NotSupported` and the registry surfaces that as `Refusal(reason="consumer_source_read_only")` from `register_consumer`, not as a silent no-op. *(Amended by ruling **R4**, row 3c 2026-08-28: the reason is the fifteenth value of `INTERFACE.md` §5.12, added in the same change per R3. Before R4 the registry raised, because no honest reason existed — deviation D-1, now resolved.)*
 
 **11. `find_consumers(namespace: str, *, gate: str | None = None, consumer_id: str | None = None) -> list[ConsumerRecord]`**
 The one call behind `consumers()` and `PredicateEntry.consumers`.
@@ -389,11 +389,13 @@ Named here so it is a decision rather than an omission. `usage` is advisory; a l
 | §5.9 `retired_without_usage_evidence` warning | registry | no |
 | §5.10 all six merge refusals + `no_consumer_evidence` | registry, entirely | no |
 
-**Three new refusal reasons this document introduces**, all of them consequences of a backend that cannot do something rather than of a policy — flagged in §11 for #1 to adopt or reject:
+**Three new refusal reasons this document introduces**, all of them consequences of a backend that cannot do something rather than of a policy — flagged in §11 for #1 to adopt or reject *(all three adopted by ruling R3; a fourth of the same shape followed under R4 — see below)*:
 
 - **`proposals_not_stored`** — `approve`/`reject` on a backend with `stores_proposals=False` (§7, B4). Reusing `unknown_proposal` here would be a confident wrong answer, which Rule U forbids.
 - **`cannot_record_override`** — see below.
 - **`attributes_schema_violation`** — §5, `enforce` mode only.
+
+> **A fourth capability refusal, added by ruling R4 (row 3c, 2026-08-28): `consumer_source_read_only`.** `register_consumer` against a read-only consumer source (§7.3) returns it, and `register_consumer`'s return type is therefore `Consumer | Refusal`. It belongs in this list by shape — a backend that cannot do something, not a policy decision — and it is enumerated in `INTERFACE.md` §5.12, which is now fifteen values. `C11-04` asserts it in both suites.
 
 **The rule behind `cannot_record_override`, which is a design consequence rather than a mechanism:**
 
@@ -1008,7 +1010,7 @@ The projection is worth naming precisely: on read, `attributes = json.loads(attr
 **Resolution — the rule stated in §3.6: a destructive override that cannot be recorded is refused.** `retire(force=True)` and `merge_types(acknowledge=[…])` return `Refusal(reason="cannot_record_override")`. The backend stays conformant; the suite tests the refusal (C9-02, C10-08), not the capability.
 **[Inferred]** this is the right trade: an unrecorded, unattributable destructive change is precisely what this registry exists to prevent, and a store that cannot keep an audit trail has not earned the right to be overridden.
 
-**And one non-contortion worth more than several of the contortions.** `find_consumers` needs **no table at all**. `INTERFACE.md` §5.11 explicitly declines to specify how a consumer gets registered; a `ConfigConsumerSource` reading a checked-in file — `consumer_id`, `gate`, `on_unknown`, `owner`, `locator` — is a legitimate adapter implementation, and it is how beacon gains `consumers()` for the cost of one config file and the work of writing down its seven allowlists. `INTERFACE.md` §9 contortion 6 says it plainly: *the registration is the work; the call is trivial.* **This is the highest-value thing in the whole Tenshen path and it needs zero schema change.** (`register_consumer` against a read-only source returns a refusal rather than a silent no-op — C11-04.)
+**And one non-contortion worth more than several of the contortions.** `find_consumers` needs **no table at all**. `INTERFACE.md` §5.11 explicitly declines to specify how a consumer gets registered; a `ConfigConsumerSource` reading a checked-in file — `consumer_id`, `gate`, `on_unknown`, `owner`, `locator` — is a legitimate adapter implementation, and it is how beacon gains `consumers()` for the cost of one config file and the work of writing down its seven allowlists. `INTERFACE.md` §9 contortion 6 says it plainly: *the registration is the work; the call is trivial.* **This is the highest-value thing in the whole Tenshen path and it needs zero schema change.** (`register_consumer` against a read-only source returns `Refusal(reason="consumer_source_read_only")` rather than a silent no-op — C11-04, ruling R4.)
 
 ### 7.4 Tenshen verdict
 
@@ -1148,7 +1150,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 
 ## 11. Open items, and what would change this
 
-> **Deliverable #3 landed 2026-08-28.** The whole suite is green on both reference backends in one run (`229 passed`) and the CMS design test executes. Fourteen deviations are recorded in [`2A-RUN.md`](../runs/2A-RUN.md) §4; the one wanting a founder ruling is **D-1** — §3.4 primitive 10 and `C11-04` require a `Refusal` for a read-only consumer source, and ruling R3's closed fourteen has no honest value for it. Item 1 below (async) was answered by ruling **R1** as new row 3b, **which landed 2026-08-28** ([`3B-ASYNC.md`](../runs/3B-ASYNC.md), `267 passed`); items 2 and 3 by **R2** and **R3**.
+> **Deliverable #3 landed 2026-08-28.** The whole suite is green on both reference backends in one run (`229 passed`) and the CMS design test executes. Fourteen deviations are recorded in [`2A-RUN.md`](../runs/2A-RUN.md) §4; the one that wanted a founder ruling was **D-1** — §3.4 primitive 10 and `C11-04` require a `Refusal` for a read-only consumer source, and ruling R3's closed fourteen had no honest value for it. **Resolved 2026-08-28 by ruling R4**, which added `consumer_source_read_only` as the fifteenth value of `INTERFACE.md` §5.12 in the same change that made the registry return it. Item 1 below (async) was answered by ruling **R1** as new row 3b, **which landed 2026-08-28** ([`3B-ASYNC.md`](../runs/3B-ASYNC.md), `267 passed`); items 2 and 3 by **R2** and **R3**.
 
 ### 11.1 For the founder to rule on
 

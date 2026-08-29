@@ -173,7 +173,15 @@ the docs and the conflict is recorded here rather than resolved silently.** Wher
 two documents disagree with each other, `PACKAGE.md`'s own header rule applies:
 **`INTERFACE.md` wins.**
 
-### 4.1 The one that wants a founder ruling
+### 4.1 The one that wanted a founder ruling — **resolved by R4**
+
+> **RESOLVED 2026-08-28 by ruling R4** ([`decisions/2026-08-28-package-v0-rulings.md`](../decisions/2026-08-28-package-v0-rulings.md)),
+> implemented in row **3c**. Option 1 below was taken: `consumer_source_read_only` is the
+> fifteenth value of `INTERFACE.md` §5.12, added in the same change that made
+> `register_consumer` return `Refusal(reason="consumer_source_read_only")` — which is R3's
+> own amendment rule, not an exception to it. `C11-04` asserts the reason in both the sync
+> and the async suite; both stayed green. The record below is left as written so the
+> reasoning that produced the ruling is still readable.
 
 **D-1 — `register_consumer` against a read-only consumer source raises `NotSupported`;
 it does not return a `Refusal`.**
@@ -283,7 +291,8 @@ that claim is `work_link_types` behind the adapter, which is 2B.**
 Nothing async exists *in this deliverable*, per ruling **R1**: that is row **3b**, which
 **landed 2026-08-28** — see [`3B-ASYNC.md`](3B-ASYNC.md). The async mirror is generated
 from the code recorded here, so **all fourteen deviations below are inherited by it
-unchanged**, D-1's wanted ruling included.
+unchanged**, D-1's wanted ruling included — **and D-1's resolution by R4 is likewise
+inherited, because the async mirror regenerates from the sync source.**
 
 ---
 
@@ -292,7 +301,7 @@ unchanged**, D-1's wanted ruling included.
 | Brief item | Where |
 |---|---|
 | Package skeleton per `PACKAGE.md` §2, project venv, generated data out of git | `pyproject.toml`, `open_ontology/`, `.gitignore`; the 165 MB CMS source is ignored, the 153 KB derivative is the fixture |
-| The registry layer — the twelve calls, refusals per §5 and §5.12 | `open_ontology/registry.py`; `Refusal` validates against the closed fourteen at construction |
+| The registry layer — the twelve calls, refusals per §5 and §5.12 | `open_ontology/registry.py`; `Refusal` validates against the closed vocabulary at construction (fourteen values at 2A; **fifteen since ruling R4**) |
 | SQLite backend, whole suite green in one run | ✅ `113 passed` |
 | The contract suite — all 109, parametrised exactly as §6 specifies | ✅ `test_manifest.py` proves all 109 ids exist |
 | Postgres backend, conformance leg | ✅ **green**, not pending — Postgres 16.14 via Docker, no system-level install |

@@ -538,15 +538,17 @@ def record_use(type: str, *, by: str | None = None, at: datetime | None = None,
 
 ---
 
-### 5.12 `Refusal.reason` is a closed vocabulary *(added by ruling R3, 2026-08-28)*
+### 5.12 `Refusal.reason` is a closed vocabulary *(added by ruling R3, 2026-08-28; fifteenth value added by ruling R4, row 3c, 2026-08-28)*
 
-A project whose thesis is that governed vocabularies resist rot does not ship an open-ended `reason` string in its own contract. `Refusal.reason` takes exactly these fourteen values — eleven defined in this document, three introduced by [`PACKAGE.md`](PACKAGE.md) v0 and adopted here:
+A project whose thesis is that governed vocabularies resist rot does not ship an open-ended `reason` string in its own contract. `Refusal.reason` takes exactly these **fifteen** values — eleven defined in this document, three introduced by [`PACKAGE.md`](PACKAGE.md) v0 and adopted here, one added by ruling **R4**:
 
-`different_consumer_sets` · `predicate_merge` · `kind_mismatch` · `cross_namespace_merge` · `retired_operand` · `definitions_diverge` · `no_consumer_evidence` · `live_consumers` · `tier_below_auto_approve_policy` · `already_decided` · `unknown_proposal` · `proposals_not_stored` · `cannot_record_override` · `attributes_schema_violation`
+`different_consumer_sets` · `predicate_merge` · `kind_mismatch` · `cross_namespace_merge` · `retired_operand` · `definitions_diverge` · `no_consumer_evidence` · `live_consumers` · `tier_below_auto_approve_policy` · `already_decided` · `unknown_proposal` · `proposals_not_stored` · `cannot_record_override` · `attributes_schema_violation` · **`consumer_source_read_only`**
 
 **Adding a value requires amending this section in the same change that introduces it.** A `Refusal` whose `reason` is not in this list is a conformance failure, and the contract suite (`PACKAGE.md` §6) should assert it. Ruling record: [`decisions/2026-08-28-package-v0-rulings.md`](../decisions/2026-08-28-package-v0-rulings.md).
 
-> **Recorded by deliverable #3, 2026-08-28 — a conflict this closure creates, ruling wanted.** `PACKAGE.md` §3.4 primitive 10 and contract test `C11-04` require `register_consumer` against a **read-only consumer source** (a checked-in config file) to return a `Refusal` rather than a silent no-op. **None of the fourteen says that honestly** — `proposals_not_stored` is about proposals, `cannot_record_override` is about an audit trail, and reusing either is the confident wrong answer Rule U forbids. Phase 2A therefore **raises `NotSupported`**, which is a loud failure and satisfies what `C11-04` is actually about, and records the conflict rather than adding a fifteenth value unilaterally. **Ruling wanted: add a fifteenth reason (e.g. `consumer_source_read_only`), amending this section in the same change per R3 — or confirm the exception.** See [`2A-RUN.md`](../runs/2A-RUN.md) §4.1, deviation D-1.
+**`consumer_source_read_only` — what it means and where it comes from.** `register_consumer` against a consumer *source* that cannot be written to — a checked-in config file, the shape `PACKAGE.md` §7.3 shows beacon using — returns `Refusal(reason="consumer_source_read_only")`. It is not a policy refusal like the other fourteen; it is a **capability** refusal, the third of that shape after `proposals_not_stored` and `cannot_record_override`. `register_consumer` therefore returns `Consumer | Refusal`, and never a silent no-op: a registration that quietly did not happen is mechanism **C** committed by the registry that exists to detect it.
+
+> **Deviation D-1, resolved.** `PACKAGE.md` §3.4 primitive 10 and contract test `C11-04` required a `Refusal` here; none of R3's fourteen said it honestly, so Phase 2A raised `NotSupported` and recorded the conflict instead of adding a value unilaterally ([`2A-RUN.md`](../runs/2A-RUN.md) §4.1, inherited by [`3B-ASYNC.md`](../runs/3B-ASYNC.md) §5). **Ruling R4 added the fifteenth value**, amending this section in the same change that made the registry return it, per R3's own rule. `C11-04` now asserts the reason in both the sync and the async suite.
 
 ## 6. Which mechanism this is designed against
 

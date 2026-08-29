@@ -1241,14 +1241,17 @@ class AsyncRegistry:
         )
 
     # ============================ 5.11 register_consumer / record_use
-    async def register_consumer(self, consumer: Consumer, *, namespace: str = "default") -> Consumer:
+    async def register_consumer(
+        self, consumer: Consumer, *, namespace: str = "default"
+    ) -> Consumer | Refusal:
         """The registration is the work; the call is trivial.
 
-        A read-only consumer source raises ``NotSupported`` rather than returning a
-        ``Refusal``: PACKAGE.md 3.4 primitive 10 asks for a refusal, but the closed
-        fourteen of INTERFACE.md 5.12 has no value that says this honestly, and
-        INTERFACE.md wins where the two documents disagree. A loud exception is not a
-        silent no-op, which is what C11-04 is actually about. Deviation D-1.
+        A read-only consumer source -- a checked-in config file, PACKAGE.md 7.3 --
+        returns ``Refusal(reason="consumer_source_read_only")``, the fifteenth value of
+        INTERFACE.md 5.12's closed vocabulary. Never a silent no-op, which is what
+        C11-04 is about. This was deviation D-1: PACKAGE.md 3.4 primitive 10 asked for a
+        refusal and R3's fourteen had no value that said it honestly, so 2A raised
+        ``NotSupported`` and asked for a ruling. Ruling **R4** added the value.
         """
         rec = ConsumerRecord(
             namespace=namespace,
@@ -1259,7 +1262,17 @@ class AsyncRegistry:
             registered_at=consumer.registered_at or self._now(),
             locator=consumer.locator,
         )
-        stored = await self.adapter.put_consumer(rec)
+        try:
+            stored = await self.adapter.put_consumer(rec)
+        except NotSupported as why:
+            return Refusal(
+                reason="consumer_source_read_only",
+                detail={
+                    "namespace": namespace,
+                    "consumer_id": consumer.id,
+                    "why": str(why),
+                },
+            )
         return Consumer(
             id=stored.consumer_id,
             gate=stored.gate,

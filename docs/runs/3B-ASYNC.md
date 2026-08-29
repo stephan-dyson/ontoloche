@@ -305,8 +305,11 @@ registry logic.**
 Same rule as 2A: where the docs and the implementation could not both be satisfied, the
 conflict is **recorded here rather than resolved silently.** The fourteen deviations of
 [`2A-RUN.md`](2A-RUN.md) §4 are **inherited unchanged** — the async mirror reproduces
-them exactly, because it is generated from the code that implements them. D-1 still
-wants the same founder ruling it wanted in 2A, and now wants it in two places.
+them exactly, because it is generated from the code that implements them. D-1 wanted the
+same founder ruling it wanted in 2A, in two places. **Both were answered at once by ruling
+R4 (row 3c, 2026-08-28): `consumer_source_read_only` is the fifteenth `Refusal.reason`,
+`register_consumer` returns it, and `C11-04` asserts it in this suite as well as the sync
+one — because this suite is generated from that source. D-1 is resolved in both.**
 
 ### 5.1 The one that changes a caller's code
 
