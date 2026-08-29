@@ -1492,7 +1492,7 @@ class AsyncRegistry:
         )
 
     # ---------------------------------------------------------------- construction
-    #: Deviation D-A1 (docs/3B-ASYNC.md). ``__init__`` cannot be a coroutine, so the
+    #: Deviation D-A1 (docs/runs/3B-ASYNC.md). ``__init__`` cannot be a coroutine, so the
     #: two calls the sync constructor makes -- ``capabilities()`` and ``migrate()`` --
     #: have nowhere to be awaited. The sync ``__init__`` is transformed into ``_open``
     #: and construction goes through this classmethod. It is the ONLY place the async

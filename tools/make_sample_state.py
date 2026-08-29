@@ -3,11 +3,11 @@
 
 PACKAGE.md 8.4 records the gap this closes: the 400-row `sample_state.csv` that Phase
 0.5 actually used was described in the ground truth but never checked in, and
-`docs/make_sample.py` regenerates a *different* file (a seeded 300-row national
+`docs/tools/make_sample.py` regenerates a *different* file (a seeded 300-row national
 reservoir sample). Standing constraint 0 argues for fixing that: the data is public CMS
 data, and a test that cannot be run on public data is a test this project does not run.
 
-What the sample is, per `docs/0.5-ground-truth-PREREGISTERED.md`: **the first 400
+What the sample is, per `docs/findings/0.5-ground-truth-PREREGISTERED.md`: **the first 400
 Montana rows, contiguous** -- chosen to resemble what a regional office actually exports
 (repeat facilities, multiple surveys each) rather than a random national sample, which
 gave 298 distinct facilities in 300 rows and would not test entity resolution at all.
@@ -128,7 +128,7 @@ def main() -> None:
         print(
             f"NOTE: source is {size:,} bytes; the ground truth was cut from a file of "
             f"{SOURCE_BYTES:,} bytes. CMS republishes monthly, so the counts below may "
-            f"no longer match docs/0.5-ground-truth-PREREGISTERED.md.",
+            f"no longer match docs/findings/0.5-ground-truth-PREREGISTERED.md.",
             file=sys.stderr,
         )
 

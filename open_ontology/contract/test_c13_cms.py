@@ -24,7 +24,7 @@ pytestmark = [
     ),
 ]
 
-# PACKAGE.md 8.2, from docs/0.5-ground-truth-PREREGISTERED.md, frozen before any
+# PACKAGE.md 8.2, from docs/findings/0.5-ground-truth-PREREGISTERED.md, frozen before any
 # proposal was generated. [Observed] -- counted in the test file.
 PREREGISTERED = {
     "facility": 10,

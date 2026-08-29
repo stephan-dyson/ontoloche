@@ -77,7 +77,7 @@ def test_c11_04_a_read_only_consumer_source_fails_loudly_not_silently(
     INTERFACE.md wins where the two documents disagree -- so the registry raises
     ``NotSupported`` instead. What C11-04 is actually about is that this is **never a
     silent no-op**, and a raised exception is the loudest available answer. Recorded as
-    deviation D-1 in docs/2A-RUN.md; a founder ruling is wanted.
+    deviation D-1 in docs/runs/2A-RUN.md; a founder ruling is wanted.
     """
     read_only = make_registry(DegradedAdapter(adapter, read_only_consumers=True))
     with pytest.raises(NotSupported):

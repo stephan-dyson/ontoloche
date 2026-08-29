@@ -2,7 +2,7 @@
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``Registry.import_types``, a method beyond the twelve, because no 5.x
-call performs it -- deviation D-8 in docs/2A-RUN.md.
+call performs it -- deviation D-8 in docs/runs/2A-RUN.md.
 """
 
 from __future__ import annotations

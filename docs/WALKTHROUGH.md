@@ -1,7 +1,7 @@
 # Walkthrough — how a non-technical person gets from a spreadsheet to an action
 
 **Status:** Draft v0.1, 2026-08-27. Written to be argued with, not implemented.
-**Companions:** [`../VISION.md`](../VISION.md) (thesis), [`../ROADMAP.md`](../ROADMAP.md) (sequence), [`FINDINGS-0.1-tenshen-archaeology.md`](FINDINGS-0.1-tenshen-archaeology.md) (why step 5 exists)
+**Companions:** [`../VISION.md`](../VISION.md) (thesis), [`../ROADMAP.md`](../ROADMAP.md) (sequence), [`FINDINGS-0.1-tenshen-archaeology.md`](findings/FINDINGS-0.1-tenshen-archaeology.md) (why step 5 exists)
 
 ---
 

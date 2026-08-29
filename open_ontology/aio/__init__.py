@@ -12,7 +12,7 @@ drifted apart. What *is* hand-written is the part that genuinely differs: the tw
 drivers (``aiosqlite`` and ``psycopg``'s ``AsyncConnection``), because a driver's
 connection layer is the one thing a mechanical transformation cannot invent.
 
-The one shape difference, and why -- deviation D-A1 in ``docs/3B-ASYNC.md``::
+The one shape difference, and why -- deviation D-A1 in ``docs/runs/3B-ASYNC.md``::
 
     registry = await AsyncRegistry.open(adapter)     # not AsyncRegistry(adapter)
 
