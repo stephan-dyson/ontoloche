@@ -51,6 +51,8 @@ from open_ontology.aio.backends.sqlite import AsyncSQLiteAdapter
 from open_ontology.aio.registry import AsyncRegistry
 from open_ontology.policy import NamespacePolicy
 
+from open_ontology.contract._coverage import Coverage
+
 from . import _support
 
 POSTGRES_DSN = os.environ.get("OO_POSTGRES_DSN")
@@ -275,9 +277,12 @@ async def registry(adapter, make_registry):
 
 _EXERCISED: set[str] = set()
 _EXEMPTED: set[str] = set()
+#: Ruling R12, row 3d: which contract ids each leg could not exercise, and why.
+_COVERAGE = Coverage(BACKENDS)
 
 
 def pytest_runtest_logreport(report):
+    _COVERAGE.record(report)
     if report.when != "call" or report.outcome not in ("passed", "failed"):
         return
     for name in BACKENDS + ("external",):
@@ -321,3 +326,8 @@ def pytest_terminal_summary(terminalreporter):
         )
     else:
         write("  nonbinding tests excluded from the verdict: none")
+    # Ruling R12. "329 passed" is the truth about the assertions and not about the
+    # coverage: a backend that declines capabilities cannot exercise every id, and a
+    # run that does not say which is claiming more than it checked.
+    for line in _COVERAGE.lines():
+        write(line)

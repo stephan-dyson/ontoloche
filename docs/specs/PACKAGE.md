@@ -1025,6 +1025,44 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 ---
 
+### 6.4 The coverage report — *a conformance claim without its coverage line is not a claim*
+
+**Ruling R12, row 3d.** §6.1's verdict used to be *"the whole suite passed"*. On a backend that declines capabilities that sentence is true and misleading at once: a declined flag makes some contract ids **unexercisable**, the suite skips them with a reason, and a run that reports `330 passed` has told the truth about the assertions and nothing about the coverage. So the verdict is now two clauses:
+
+> **the whole suite passed; N ids exercised, M not exercisable on this backend, listed.**
+
+Same move as `ConsumerReport.complete=False` (`INTERFACE.md` §5.1), and for the same reason: a report that omits what it could not see promises a completeness it does not have. Every run prints, after the `CONFORMANCE` block:
+
+```
+  coverage, per leg (PACKAGE.md 6.4 / ruling R12):
+    sqlite          CONFORMANT: 123 ids exercised, 1 not exercisable on this backend (listed)
+                      1: PACKAGE.md 5.7 -- this backend stores arbitrary attributes, so a census
+                        restricted to its projections has no subject here. C15-02 is the full case.
+                         C15-09
+    postgres        CONFORMANT: 123 ids exercised, 1 not exercisable on this backend (listed)
+                      …
+    sqlite_minimal  CONFORMANT: 61 ids exercised, 63 not exercisable on this backend (listed)
+                      21: PACKAGE.md 3.2 -- this backend declares stores_proposals=False, which 3.2
+                        says is conformant. This test needs it as scaffolding, not as its subject:
+                        this store has no proposal table: a decision is recorded on the type row and
+                        a pending proposal has nowhere to live
+                         C15-03, C15-06, C3-06, C3-07, C4-02, C4-04, C4-05, C5-01, …
+                      …
+    (+2 backend-independent, run once: C0-04, C14-07)
+  A conformance claim without its coverage line is not a claim (ruling R12).
+```
+
+Four things about it are deliberate:
+
+1. **The reasons are the tests', not the report's.** `open_ontology/contract/_coverage.py` aggregates skip reasons and invents none. The `requires_capability` fixture already named the flag and quoted the backend's own `why`; this prints it.
+2. **It is grouped by reason, wrapped, and never truncated.** The informative half of a `requires_capability` reason is the backend's `why`, which is at the *end* of the sentence — the first version clipped the line and cut off exactly that.
+3. **The arithmetic must close.** Exercised + not-exercisable + backend-independent = §6.2's enumeration, on every leg. It did not on the first run: `C4-09` is parametrised over malformed names *as well as* over backends, so its node ids read `[sqlite-name0]`, matched no leg by substring, and **three contract ids went missing from every leg's count**. Found by the report's own arithmetic failing to add up — which is the argument for the report in one sentence.
+4. **A failing leg says `NOT CONFORMANT` and names the ids.** The report is not a way to be conformant with failures in it.
+
+**What it changed the moment it existed** *(row 3d, [Observed])*: `C0-09`, whose entire subject is `owns_schema=False`, was being **skipped on the one leg that declares `owns_schema=False`**, with the reason *"owns_schema is a property of the reference backends"*. `C0-08` was skipped there with the reason *"no adapter factory"*. Both were written before the third leg existed and neither was visible in `330 passed`. Both are now exercised on that leg — `C0-08` for its G1 half, and it says in its skip reason that the G2 half has no proposal to race.
+
+---
+
 ## 7. The Tenshen design test for #2 — can `work_link_types` sit behind the adapter?
 
 **A design *test*, not a design *input*** (`ROADMAP.md`, rule of the ordering). Read read-only on 2026-08-28 from `beacon/src/beacon/models/work_link_type.py` and `beacon/src/beacon/services/work_link_service.py`. **Nothing in beacon was edited.** **[Observed]** unless marked.
