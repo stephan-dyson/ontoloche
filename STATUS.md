@@ -1,6 +1,6 @@
 # STATUS — where we are, at a glance
 
-**Updated:** 2026-08-29 07:10 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
+**Updated:** 2026-08-29 06:10 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
 
 | Roadmap item | Status |
 |---|---|
