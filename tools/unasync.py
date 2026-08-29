@@ -440,6 +440,33 @@ def fixpoint(modules: list[Module]) -> tuple[set[str], set[str], set[int]]:
                         attrs.add(fn.name)
                 elif isinstance(parent, ast.Module):
                     names.add(fn.name)
+                else:
+                    # **A NESTED function that must become a coroutine is refused**
+                    # (row 4c). Neither branch above fires for one -- it is not a method,
+                    # so its name never enters `attrs`, and its parent is not the module,
+                    # so it never enters `names` -- so it was rewritten to `async def`
+                    # and **every call to it was left un-awaited**. That is a silent
+                    # mistranslation, in the tool whose first stated property is that it
+                    # *"refuses to emit code it cannot prove is right"*.
+                    #
+                    # [Observed, row 4c] one helper nested inside `Registry.neighbors`
+                    # produced `TypeError: cannot unpack non-iterable coroutine object`
+                    # in 66 async tests. The async suite caught it -- which is the whole
+                    # reason both suites run -- but a nested helper whose result nothing
+                    # unpacks would have been a coroutine quietly discarded.
+                    #
+                    # Refusing rather than fixing is deliberate: awaiting a nested name
+                    # correctly means tracking shadowing and closure scope, and this
+                    # translator is trustworthy because it declines what it cannot prove.
+                    # The fix at the call site is one line -- hoist the helper to a
+                    # method -- and it is the author's to make.
+                    raise TransformError(
+                        f"{module.spec.source}:{fn.lineno}: `{fn.name}` is a NESTED "
+                        f"function that must become `async def`, and this translator "
+                        f"cannot prove where to await it -- its name is neither a "
+                        f"method attribute nor a module-level name. Hoist it to a "
+                        f"method (`self._{fn.name.lstrip('_')}`) and it translates"
+                    )
         if not changed:
             return attrs, names, async_ids
     raise TransformError("the awaitable fixpoint did not converge")

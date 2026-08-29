@@ -316,6 +316,20 @@ class NeighborEdge:
     #: and the intermediate one appears twice, with no error and no ``complete=False``.
     #: **Mechanism C, inside the example written to show a consumer how to avoid it.**
     reached: NodeRef | None = None
+    #: **Rule K, and it is the honesty rule ruling R38 comes with.** ``None`` when this
+    #: edge was found under the very reference the walk was given; otherwise the
+    #: reference it was actually found under -- a name now joined to the origin's by a
+    #: merge or a retirement-with-successor.
+    #:
+    #: R38 makes an edge endpoint reference resolve to *the identity it now belongs to*
+    #: rather than to *the reference that was written*, which is what makes
+    #: ``merge_types`` safe on a store with edges in it: without it a merge silently
+    #: orphans every edge ever written against the merged-away name. **The written
+    #: reference stays readable** -- ``edge.src`` and ``edge.dst`` are untouched, because
+    #: nothing in this package edits a stored reference -- so a caller can always tell a
+    #: written reference from a followed one, which is the whole point of this field.
+    #: ``complete`` stays about what was SEARCHED and says nothing about this.
+    via_successor: str | None = None
 
 
 @dataclass(frozen=True)

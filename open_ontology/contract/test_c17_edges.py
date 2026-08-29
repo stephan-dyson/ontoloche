@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (43). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (46). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -48,12 +48,17 @@ from ..edges import (
     TypeRef,
 )
 from ..errors import NotSupported
+from ..registry import _IDENTITY_CHAIN_CAP
 from ..types import Evidence, Refusal, TypeEntry
 from ._support import edge_family, seed
 from .doubles import DegradedAdapter
 
 TASK = TypeRef("tenshen", "entity", "task")
 PERSON = TypeRef("tenshen", "entity", "person")
+
+#: One more than `registry._IDENTITY_CHAIN_CAP`, imported rather than hard-coded so the
+#: test moves with the cap instead of quietly stopping to exercise it.
+_CHAIN_BEYOND_CAP = _IDENTITY_CHAIN_CAP + 2
 
 NO_EDGES = {
     "stores_edges": "this backend is a type registry only; no table holds relationships"
@@ -1476,8 +1481,8 @@ def test_c17_32_a_callers_mistake_arrives_as_the_documented_error(registry):
     "stores_edges", "stores_attributes", "stores_events", "indexes_membership"
 )
 def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registry):
-    """EDGES.md 4.3, rule `4.3-14` -- and it was a **confident, complete, false
-    negative** until row 4b's third adversarial round.
+    """EDGES.md 4.3, rule `4.3-14` -- **rewritten by ruling R38, row 4c.** The walk
+    FOLLOWS the chain now, and this id holds the new rule as it held the old one.
 
     `merge_types` is the registry's sanctioned answer to mechanism **4**, which
     `EDGES.md` 12 calls **co-dominant** for this row: it retires one word with the other
@@ -1485,17 +1490,25 @@ def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registr
     no edge** -- `src`/`dst` are references by identity triple (2.1) and nothing in this
     package edits a stored reference.
 
-    So a caller who does the CORRECT thing after a merge -- resolve to the canonical
-    type, exactly as `resolve_type` teaches, and then walk -- got `known=0`,
-    **`complete=True`** and an empty `warnings`, about edges sitting in the store under
-    the other name. That is the shape 2.2's `direction` finding calls unacceptable, and
-    it contradicts 4.4's own argument for why `complete` may ever be `True`: *"there is
-    no edge that exists in the store and is invisible to a query over it."* Across a
-    merge there is.
+    Row 4b found that a caller who did the CORRECT thing after a merge -- resolve to the
+    canonical type, then walk -- got `known=0`, `complete=True` and an empty `warnings`,
+    about edges sitting in the store under the other name. It made the report honest
+    (`complete=False` plus a `why`) and deliberately did **not** close the gap, because
+    whether an edge written under a merged word is an edge of its survivor is a decision
+    above that row. **R38 is that decision, and it is founder-visible:** without it a
+    merge silently orphans every edge ever written against the merged-away name, so this
+    is what makes `merge_types` safe on a store with edges in it.
 
-    **The walk still does not follow the chain**, and that is deliberate: whether an edge
-    written under a merged word is an edge of its survivor is a decision above this row.
-    Deviation **D-4b-15**, question **Q33**. What it does is stop claiming otherwise.
+    Four things, and the third is Rule K:
+
+    * a walk from the **survivor** finds the edges written against the absorbed name;
+    * a walk from the **absorbed** name finds the survivor's, because `resolve_type`
+      redirects it at confidence 1.0 and INTERFACE.md 5.3 calls that a guarantee;
+    * every edge reached through a successor hop carries `via_successor` naming the
+      reference it was actually found under, and **`edge.src`/`edge.dst` still read what
+      was written** -- so a caller can always tell a written reference from a followed
+      one;
+    * `complete` stays about what was SEARCHED. Nothing was hidden, so it is `True`.
     """
     blocks(registry)
     seed(registry, "facility_old", definition="a nursing home, as we first called it")
@@ -1512,6 +1525,7 @@ def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registr
 
     clean = registry.neighbors(InstanceRef(old, "F1"), ["blocks"], 1, namespace="default")
     assert clean.known == 1 and clean.complete is True, "before the merge, nothing is hidden"
+    assert clean.edges[0].via_successor is None, "and nothing was followed to find it"
 
     merged = registry.merge_types(
         "facility_old", "facility_new", "one word for one facility", merged_by="user:sd",
@@ -1519,29 +1533,44 @@ def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registr
     )
     assert not isinstance(merged, Refusal), merged
 
-    # The survivor: the edge is in the store, under the other name, and invisible here.
+    # The survivor: the edge is in the store under the other name, and it is FOUND.
     survivor = registry.neighbors(InstanceRef(new, "F1"), ["blocks"], 1, namespace="default")
-    assert survivor.known == 0
-    assert survivor.complete is False, (
-        "an empty answer about a node whose edges are in the store under a word this "
-        "one absorbed is not a complete answer"
+    assert survivor.known == 1, (
+        "R38 -- an edge endpoint reference resolves to the identity it now belongs to, "
+        "so the merge did not orphan this edge"
+    )
+    assert survivor.complete is True, "nothing was hidden, so nothing is claimed hidden"
+    assert survivor.why_incomplete is None
+    assert survivor.edges[0].via_successor == f"{old}#F1", (
+        "Rule K -- the caller is told this was reached by following, and under which name"
+    )
+    assert str(survivor.edges[0].edge.dst) == f"{old}#F1", (
+        "and the WRITTEN reference is still readable: nothing edits a stored endpoint"
     )
     assert f"endpoint_type_merged:{new}" in survivor.warnings
-    assert "facility_old" in survivor.why_incomplete
+    assert survivor.nodes == (InstanceRef(cit, "C1"),), (
+        "the origin under a former name is still the ORIGIN -- reporting facility_old#F1 "
+        "as a neighbour of facility_new#F1 would say the origin is its own neighbour"
+    )
+    assert survivor.edges[0].reached == InstanceRef(cit, "C1")
 
-    # And the predecessor, walked directly: the edges are there, and the report still
-    # says the identity is split, because a caller reading it needs to know either way.
+    # And the absorbed name, walked directly: 5.3's redirect is a guarantee, so the
+    # identity resolves the same way from the other end.
     predecessor = registry.neighbors(
         InstanceRef(old, "F1"), ["blocks"], 1, namespace="default"
     )
     assert predecessor.known == 1
-    assert predecessor.complete is False
+    assert predecessor.complete is True
+    assert predecessor.edges[0].via_successor is None, (
+        "this edge was written under the very name the caller walked from"
+    )
     assert f"endpoint_type_merged:{old}" in predecessor.warnings
 
     # A type nobody merged says nothing of the kind.
     ordinary = registry.neighbors(InstanceRef(cit, "C1"), ["blocks"], 1, namespace="default")
     assert ordinary.complete is True
     assert not any(w.startswith("endpoint_type_merged") for w in ordinary.warnings)
+    assert all(ne.via_successor is None for ne in ordinary.edges)
 
 
 @pytest.mark.requires_capability("stores_edges", "stores_attributes")
@@ -2151,3 +2180,231 @@ def test_c17_43_an_amendment_that_cannot_be_recorded_is_refused_and_a_retraction
     assert any(
         w.startswith("retracted_without_event_trail:") for w in retracted.warnings
     )
+
+
+# ---------------------------------------- 4c: the walk follows the chain, ruling R38
+#
+# **Founder-visible.** `resolve_type` has followed the successor chain since row 3c and
+# `INTERFACE.md` §5.3 calls the confidence-1.0 redirect a GUARANTEE; `neighbors` did
+# not. One identity model per call is a defect rather than a choice, and the cost of the
+# defect is that `merge_types` silently orphans every edge ever written against the
+# merged-away name. `C17-33` holds the headline; these three hold the parts of it that a
+# single scenario cannot.
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_events")
+def test_c17_44_the_chain_is_followed_at_every_hop_not_only_at_the_origin(registry):
+    """Ruling **R38** at depth 2. A rule that held for the first hop and not the second
+    would be *"one identity model per call"* moved one level down.
+
+    The graph is `EDGES.md` §4.2's own justification for the cap of 2 -- beacon's
+    flagship query, *"who is blocking anything due this week?"*, `task --blocks--> task
+    --stakeholder--> person` -- with the person merged after the first edge was written.
+    That is beacon slice 1's shape exactly: a consumer calling `neighbors` after a
+    `merge_types`.
+
+    The far endpoint of a **second-hop** edge is the one no depth-1 test can reach, and
+    it is orphaned by a merge in precisely the same way the origin is.
+    """
+    seed(registry, "task")
+    seed(registry, "person_old", definition="a person who works here")
+    seed(registry, "person_new", definition="a person who works here")
+    blocks(registry)
+    edge_family(registry, "stakeholder")
+    task_ref = TypeRef("default", "entity", "task")
+    old = TypeRef("default", "entity", "person_old")
+    new = TypeRef("default", "entity", "person_new")
+
+    registry.add_edge(
+        "blocks", InstanceRef(task_ref, "1"), InstanceRef(task_ref, "2"), "user:sd"
+    )
+    registry.add_edge(
+        "stakeholder", InstanceRef(task_ref, "2"), InstanceRef(old, "7"), "user:sd"
+    )
+    merged = registry.merge_types(
+        "person_old", "person_new", "one word for one person", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    # Walking from the MERGED person at depth 2: hop 1 is the edge written under the
+    # absorbed name, hop 2 is everything that edge's far end reaches.
+    report = registry.neighbors(
+        InstanceRef(new, "7"), ["blocks", "stakeholder"], 2, namespace="default"
+    )
+    assert report.complete is True
+    by_depth = {ne.at_depth: ne for ne in report.edges}
+    assert set(by_depth) == {1, 2}, (
+        "the first hop is only reachable through the chain, and the second hop is only "
+        "reachable through the first"
+    )
+    assert by_depth[1].via_successor == f"{old}#7"
+    assert str(by_depth[1].edge.dst) == f"{old}#7", "the written reference is untouched"
+    assert by_depth[2].via_successor is None, (
+        "the second hop was NOT reached through a successor -- `via_successor` is a fact "
+        "about how each edge was found, not a flag on the whole report"
+    )
+    assert InstanceRef(old, "7") not in report.nodes, (
+        "the origin under its former name is the origin, at any depth"
+    )
+
+    # And from the other end of the graph, the merged node is still the far endpoint of
+    # a second-hop edge -- the case no depth-1 test can produce.
+    from_task = registry.neighbors(
+        InstanceRef(task_ref, "1"), ["blocks", "stakeholder"], 2, namespace="default"
+    )
+    assert from_task.known == 2 and from_task.complete is True
+    assert {str(node) for node in from_task.nodes} == {
+        f"{task_ref}#2",
+        f"{old}#7",
+    }, "the node reached is the one the edge names, which is what was written"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "indexes_membership")
+def test_c17_45_a_broken_or_looping_chain_stops_at_depth_and_says_so(
+    adapter, make_registry
+):
+    """**`C0-10`'s question, asked of chain-following: can a BROKEN backend make this
+    loop?** Ruling R38's honesty half, and the answer must not be *"it hangs"*.
+
+    Three ways a successor chain can fail to terminate, and all three are reachable
+    rather than hypothetical:
+
+    1. **A cycle.** `retire(a, successor=b)` then `retire(b, successor=a)` -- nothing in
+       `INTERFACE.md` §5.9 forbids constructing one, and `C9-18`'s identity guards are
+       about `kind` and predicate extents, not about the shape of the graph. The visited
+       set breaks it and the walk still returns the edges it found.
+    2. **A chain longer than the cap.** The walk stops, `complete=False`, and the `why`
+       names the cap -- **never a silently shallower answer** (`EDGES.md` §4.3 rule 7).
+    3. **A backend that cannot page its retired rows.** Rule U on the look itself: it has
+       not told us there is no merge, only that it could not say. The report says the
+       identity was not resolved and does **not** claim to have followed it.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "task")
+    seed(registry, "alpha", definition="a word")
+    seed(registry, "beta", definition="a word")
+    blocks(registry)
+    alpha = TypeRef("default", "entity", "alpha")
+    beta = TypeRef("default", "entity", "beta")
+    task_ref = TypeRef("default", "entity", "task")
+    registry.add_edge(
+        "blocks", InstanceRef(alpha, "1"), InstanceRef(task_ref, "9"), "user:sd"
+    )
+    assert not isinstance(
+        registry.retire("alpha", "folded", retired_by="user:sd", successor="beta"), Refusal
+    )
+    assert not isinstance(
+        registry.retire("beta", "folded back", retired_by="user:sd", successor="alpha"),
+        Refusal,
+    )
+    cyclic = registry.neighbors(
+        InstanceRef(beta, "1"), ["blocks"], 1, namespace="default"
+    )
+    assert cyclic.known == 1, "a cycle is walked once, not forever"
+    assert cyclic.edges[0].via_successor == f"{alpha}#1"
+
+    # 2 -- a chain longer than the cap.
+    long_registry = make_registry(adapter)
+    seed(long_registry, "task")
+    blocks(long_registry)
+    names = [f"n{i:02d}" for i in range(_CHAIN_BEYOND_CAP)]
+    for name in names:
+        seed(long_registry, name, definition="a word in a long chain")
+    long_registry.add_edge(
+        "blocks",
+        InstanceRef(TypeRef("default", "entity", names[0]), "1"),
+        InstanceRef(task_ref, "9"),
+        "user:sd",
+    )
+    for here, nxt in zip(names, names[1:]):
+        assert not isinstance(
+            long_registry.retire(here, "chain", retired_by="user:sd", successor=nxt),
+            Refusal,
+        )
+    capped = long_registry.neighbors(
+        InstanceRef(TypeRef("default", "entity", names[-1]), "1"),
+        ["blocks"],
+        1,
+        namespace="default",
+    )
+    assert capped.complete is False, (
+        "EDGES.md 4.3 rule 7 -- cut short is complete=False with a why, never a silently "
+        "shallower answer"
+    )
+    assert "successor chain" in capped.why_incomplete
+
+    # 3 -- a backend that cannot page its retired rows.
+    blind = make_registry(DegradedAdapter(adapter, page_cap=0))
+    partial = blind.neighbors(
+        InstanceRef(beta, "1"), ["blocks"], 1, namespace="default"
+    )
+    assert partial.complete is False
+    assert "could not be determined" in partial.why_incomplete, (
+        "Rule U -- it has not told us there is no merge, only that it could not say"
+    )
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "indexes_membership")
+def test_c17_46_retire_with_a_successor_is_followed_exactly_as_a_merge_is(registry):
+    """Ruling **R38**, and the reason it cannot be keyed on `merge_types` alone.
+
+    `INTERFACE.md` §5.3 makes the confidence-1.0 redirect from a retired name to its
+    successor a **registry guarantee**, and `EDGES.md` §4.3's own rule `4.3-14` already
+    named the two acts in one breath: *"the origin's type is joined to another by a
+    merge, **or by a retirement with a `successor`**"*. `C9-18` closed the other half of
+    that equivalence from the guard side -- `retire(successor=)` now carries §5.10's
+    identity guards, because it **is** the collapse `merge_types` refuses.
+
+    So a rule that followed a merge and not a retirement-with-successor would be the
+    kill row's third trip in mirror image: one act, two behaviours, and the cheaper door
+    unguarded. This asserts the two are one on the READ side too.
+    """
+    seed(registry, "task")
+    seed(registry, "agency_old", definition="a city agency")
+    seed(registry, "agency_new", definition="a city agency")
+    blocks(registry)
+    old = TypeRef("default", "entity", "agency_old")
+    new = TypeRef("default", "entity", "agency_new")
+    task_ref = TypeRef("default", "entity", "task")
+    registry.add_edge(
+        "blocks", InstanceRef(old, "1"), InstanceRef(task_ref, "9"), "user:sd"
+    )
+    assert not isinstance(
+        registry.retire(
+            "agency_old", "folded into agency_new", retired_by="user:sd",
+            successor="agency_new",
+        ),
+        Refusal,
+    )
+
+    report = registry.neighbors(InstanceRef(new, "1"), ["blocks"], 1, namespace="default")
+    assert report.known == 1, (
+        "a retirement with a successor redirects resolve_type at confidence 1.0, so it "
+        "joins the two identities exactly as a merge does -- INTERFACE.md 5.3, C9-18"
+    )
+    assert report.complete is True
+    assert report.edges[0].via_successor == f"{old}#1"
+    assert f"endpoint_type_merged:{new}" in report.warnings
+
+    # A plain retirement -- no successor -- joins nothing, and must not be read as if it
+    # did. Rule U in the other direction: not everything retired is a merge.
+    seed(registry, "obsolete", definition="a word nobody replaced")
+    registry.add_edge(
+        "blocks",
+        InstanceRef(TypeRef("default", "entity", "obsolete"), "1"),
+        InstanceRef(task_ref, "8"),
+        "user:sd",
+    )
+    assert not isinstance(
+        registry.retire("obsolete", "nobody uses it", retired_by="user:sd"), Refusal
+    )
+    plain = registry.neighbors(
+        InstanceRef(TypeRef("default", "entity", "obsolete"), "1"),
+        ["blocks"],
+        1,
+        namespace="default",
+    )
+    assert plain.known == 1 and plain.complete is True
+    assert plain.edges[0].via_successor is None
+    assert not any(w.startswith("endpoint_type_merged") for w in plain.warnings)
