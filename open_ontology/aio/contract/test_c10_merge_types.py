@@ -234,3 +234,53 @@ async def test_c10_08_every_acknowledgement_is_recorded_or_the_merge_is_refused(
     )
     assert isinstance(refusal, Refusal)
     assert refusal.reason == "cannot_record_override"
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+async def test_c10_09_two_empty_extents_are_not_a_byte_identical_extent(registry):
+    """`ROADMAP.md`'s kill row, reached by the OTHER end of guard 2's expression.
+
+    `C10-02` pins the case where the two extents DIFFER. Row 3c closed the case
+    where they cannot be COMPUTED (`indexes_membership=False`). Nothing pinned the
+    case where they are both **empty** -- and `set() == set()`, so two predicates
+    that nothing satisfies compared byte-identical, guard 2 did not fire, and the
+    merge fell through to the *overridable* guards.
+
+    Reproduced end to end by row #6's second adversarial round against this
+    registry: two predicates proposed by an `ai:` actor at Haiku into an
+    auto-approving namespace, live, then merged under two acknowledgements. An
+    empty extent is *no evidence of membership*, not *evidence of identical
+    membership* -- and 5.10 says of the guard one row down that "merging two types
+    about which nothing is known is the single most destructive thing this
+    interface can do".
+    """
+    await seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
+    await seed(registry, "searchable", kind="predicate", definition="a code path will accept it")
+
+    refusal = await registry.merge_types(
+        "commentable", "searchable", "nothing carries either, so they must be the same",
+        merged_by="ai:ingest",
+    )
+    assert isinstance(refusal, Refusal)
+    assert refusal.reason == "predicate_merge"
+    assert refusal.detail["overridable"] is False
+    assert refusal.detail["extents_empty"] is True
+    assert refusal.detail["from_extent"] == [] and refusal.detail["into_extent"] == []
+    assert "no evidence of membership" in refusal.detail["why"]
+
+    # Non-overridable means non-overridable, including under the two
+    # acknowledgements the round-2 reviewer used to get through.
+    for ack in (["predicate_merge"], ["definitions_diverge", "no_consumer_evidence"]):
+        again = await registry.merge_types(
+            "commentable", "searchable", "I really mean it",
+            merged_by="ai:ingest", acknowledge=ack,
+        )
+        assert isinstance(again, Refusal) and again.reason == "predicate_merge"
+
+    # And a NON-empty identical extent still merges -- the rule narrows the guard,
+    # it does not ban predicate merges outright (5.10's "unless byte-identical").
+    await seed(registry, "task", predicates=["commentable", "searchable"])
+    merged = await registry.merge_types(
+        "commentable", "searchable", "identical, and demonstrably so",
+        merged_by="user:sd", acknowledge=["no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged

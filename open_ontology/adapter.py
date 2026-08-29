@@ -572,7 +572,15 @@ class StorageAdapter(Protocol):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
-        invocation_id: str | None = None,
+        # NOTE: there is deliberately NO `invocation_id` filter here yet.
+        # `ACTIONS.md` 9.1 specifies it and the BUILD row lands it, together with
+        # the six implementations and the `oo_event` column -- because row #6's
+        # first fix pass added it to this Protocol alone, `runtime_checkable`
+        # kept `isinstance` green, `check_spec_drift.py` compares the printed
+        # signature against this Protocol rather than the backends, and every
+        # shipped adapter raised `TypeError` on the keyword. That is deviation
+        # D-4b-2 (PACKAGE.md 3.4) reproduced inside the fix that quotes it, and
+        # row #6's second adversarial round found it.
     ) -> list[EventRecord]: ...
 
     # ------------------------------------------------------------------ 16 to 18

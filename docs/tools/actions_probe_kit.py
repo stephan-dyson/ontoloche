@@ -71,6 +71,12 @@ GOVERNANCE_CALLS = (
     "register_consumer",
 )
 PRECONDITION_KINDS = ("type_active", "predicate_holds", "edge_exists", "edge_absent")
+#: ACTIONS 2.5 -- the kinds a `propose_type` EFFECT may name. An ALLOWLIST, not
+#: a blocklist: round 2 reached the kill row by OMITTING `kind` from the effect,
+#: because the round-1 rule tested `kind == "predicate"` and `kind` is optional.
+#: `action` is excluded too -- 15.1 ranks a verb above a noun, and a live verb
+#: minted unattended is mechanism 1 arriving through the layer this document adds.
+PROPOSABLE_KINDS = ("entity", "edge", "value_set")
 REVERSIBILITY = ("reversible", "compensable", "irreversible")
 APPROVAL_MODES = ("auto", "review", "human")
 OUTCOMES = ("applied", "refused", "failed", "compensated")
@@ -98,6 +104,20 @@ def created_by_of(actor: str) -> str:
         # value: a deterministic rule with no human and no model in the loop.
         return "derived"
     return "user"
+
+
+def is_person(actor: str | None) -> bool:
+    """ACTIONS 5.2 -- a TRUE allowlist, and the distinction is the point.
+
+    `created_by_of` maps an UNRECOGNISED prefix to "user", which is INTERFACE 2.1's
+    own reading of an actor string and right for provenance. It is wrong for an
+    approval gate: round 2 walked `bot:reaper`, `svc:cleanup`, `AI:bot`, `agent:claude`
+    and `nobody` through a `created_by == "user"` test, because every one of them
+    falls through to "user". A human approver must be RECOGNISABLE as one -- the
+    `user:` prefix INTERFACE 2.4 spells out -- and everything the registry does not
+    recognise is refused. Rule U: unknown is not a person.
+    """
+    return bool(actor) and actor.startswith("user:") and len(actor) > len("user:")
 
 
 # --------------------------------------------------------------------------
@@ -202,6 +222,12 @@ class Effect:
         """
         if self.op == "host_state":
             return ("host_state", self.why)
+        if self.op in ("add_edge", "retract_edge") and self.namespace is None:
+            # ACTIONS 2.5 -- an INPUT-DETERMINED namespace, DECLARED rather than
+            # omitted. A multi-publisher ingest action writes into the namespace of
+            # the row it is ingesting; round 2 measured the alternative at 2,394 of
+            # 2,399 CORRECT invocations carrying `effect_undeclared`.
+            return (self.op, None, self.family, self.kind)
         return (self.op, self.namespace, self.family, self.kind)
 
     def __str__(self) -> str:
@@ -348,6 +374,11 @@ class Invocation:
     inputs: dict[str, InputRef]
     declared_effects: tuple[Effect, ...]
     observed_effects: tuple[Effect, ...]
+    #: ACTIONS 3.1 -- the POLICY the invocation was judged against, copied for the
+    #: same reason the effects are. Round 2: an auditor asking "was Haiku permitted
+    #: to run this unattended in March?" had no field to read, because the copy was
+    #: taken for one of the five things that decide a verdict.
+    declared_policy: dict
     outcome: str
     gate_verdict: str
     provenance: InvocationProvenance
@@ -460,9 +491,17 @@ class ActionRegistry:
         one enforcement point is a rule with one door left open"*. Round 1 found
         ``import_types`` unmentioned by the spec and unguarded here.
         """
-        if family.reversibility is None and family.approval_mode is None:
-            # 2.2-1: a MISSING declaration is not a breach; it is simply not yet
-            # usable as an action family, and `preflight` refuses on it.
+        declares_something = bool(
+            family.inputs or family.preconditions or family.effects
+            or family.reachability or family.min_auto_tier or family.payload_schema)
+        if (family.reversibility is None and family.approval_mode is None
+                and not declares_something):
+            # 2.2-1: a GENUINELY EMPTY declaration is not a breach; it is simply
+            # not yet usable as an action family, and `preflight` refuses on it.
+            # Round 2: the first version returned early on the two required keys
+            # alone, so an entry declaring `merge_types` as an effect and nothing
+            # else was WRITTEN at all three doors -- rule 2.5-5's "the exclusion
+            # binds at declaration" bypassed by declaring LESS.
             self.families[(family.namespace, family.name)] = family
             return family
         problem = self.declaration_problem(family)
@@ -479,25 +518,33 @@ class ActionRegistry:
 
     def declaration_problem(self, family: ActionFamily) -> tuple[str, dict] | None:
         """Every declaration-time rule, in one place, so all three doors share it."""
-        if family.reversibility not in REVERSIBILITY:
-            return ("attributes_schema_violation",
-                    {"field": "reversibility", "got": family.reversibility,
-                     "why": f"must be one of {REVERSIBILITY} -- ACTIONS 2.6"})
-        if family.approval_mode not in APPROVAL_MODES:
-            return ("attributes_schema_violation",
-                    {"field": "approval_mode", "got": family.approval_mode,
-                     "why": f"must be one of {APPROVAL_MODES} -- ACTIONS 5.2"})
-        # ACTIONS 2.2 -- the ONE cross-field rule, in R18's shape, returning R18's
-        # OWN refusal value: PACKAGE 5.6 records R18 as an exception list inside
-        # the attribute-schema mechanism, and the shipped
-        # `family_declaration_problem` returns `attributes_schema_violation` for
-        # exactly this shape. Round 1 found this kit minting a new value for it.
-        if family.reversibility == "irreversible" and family.approval_mode != "human":
-            return ("attributes_schema_violation",
-                    {"field": "approval_mode", "reversibility": "irreversible",
-                     "approval_mode": family.approval_mode,
-                     "why": "an irreversible family must declare approval_mode='human' "
-                            "-- ACTIONS 2.2, the one cross-field rule"})
+        for eff in family.effects:
+            if eff.op in GOVERNANCE_CALLS:
+                return ("effect_not_permitted",
+                        {"op": eff.op,
+                         "why": "the governance loop is not an effect -- ACTIONS 2.5"})
+            if eff.op not in EFFECT_OPS:
+                return ("effect_not_permitted",
+                        {"op": eff.op, "why": "not one of the four -- ACTIONS 2.5"})
+            if eff.op == "host_state" and not eff.why.strip():
+                return ("effect_not_permitted",
+                        {"op": eff.op, "why": "host_state needs a why -- ACTIONS 2.5"})
+            if eff.op == "propose_type" and eff.kind not in PROPOSABLE_KINDS:
+                # Round 1's THIRD predicate door: an action that may propose a
+                # predicate, on a namespace whose policy auto-approves, mints a
+                # live capability set unattended. UC1's deployment IS that policy.
+                return ("effect_not_permitted",
+                        {"op": eff.op, "kind": eff.kind,
+                         "allowed": list(PROPOSABLE_KINDS),
+                         "why": "a `propose_type` effect must NAME a kind, and only "
+                                "entity/edge/value_set may be proposed by an action. A "
+                                "predicate's extent is a set of TYPES, and a freshly "
+                                "minted one is EMPTY -- so it is byte-identical to any "
+                                "other empty extent and INTERFACE 5.10 refusal #2 does "
+                                "NOT fire on it. `action` is excluded because 15.1 ranks "
+                                "a verb above a noun -- ACTIONS 2.5, the kill row"})
+            if eff.op in ("add_edge", "retract_edge") and eff.family not in self.edge_families:
+                return ("edge_family_unknown", {"family": eff.family})
         names = {i.name for i in family.inputs}
 
         def resolvable(token: str | None) -> bool:
@@ -529,6 +576,25 @@ class ActionRegistry:
                 return ("attributes_schema_violation",
                         {"field": "preconditions",
                          "why": "predicate_holds needs a predicate -- ACTIONS 2.4"})
+        if family.reversibility not in REVERSIBILITY:
+            return ("attributes_schema_violation",
+                    {"field": "reversibility", "got": family.reversibility,
+                     "why": f"must be one of {REVERSIBILITY} -- ACTIONS 2.6"})
+        if family.approval_mode not in APPROVAL_MODES:
+            return ("attributes_schema_violation",
+                    {"field": "approval_mode", "got": family.approval_mode,
+                     "why": f"must be one of {APPROVAL_MODES} -- ACTIONS 5.2"})
+        # ACTIONS 2.2 -- the ONE cross-field rule, in R18's shape, returning R18's
+        # OWN refusal value: PACKAGE 5.6 records R18 as an exception list inside
+        # the attribute-schema mechanism, and the shipped
+        # `family_declaration_problem` returns `attributes_schema_violation` for
+        # exactly this shape. Round 1 found this kit minting a new value for it.
+        if family.reversibility == "irreversible" and family.approval_mode != "human":
+            return ("attributes_schema_violation",
+                    {"field": "approval_mode", "reversibility": "irreversible",
+                     "approval_mode": family.approval_mode,
+                     "why": "an irreversible family must declare approval_mode='human' "
+                            "-- ACTIONS 2.2, the one cross-field rule"})
         for eff in family.effects:
             if eff.op in GOVERNANCE_CALLS:
                 return ("effect_not_permitted",
@@ -540,15 +606,20 @@ class ActionRegistry:
             if eff.op == "host_state" and not eff.why.strip():
                 return ("effect_not_permitted",
                         {"op": eff.op, "why": "host_state needs a why -- ACTIONS 2.5"})
-            if eff.op == "propose_type" and eff.kind == "predicate":
+            if eff.op == "propose_type" and eff.kind not in PROPOSABLE_KINDS:
                 # Round 1's THIRD predicate door: an action that may propose a
                 # predicate, on a namespace whose policy auto-approves, mints a
                 # live capability set unattended. UC1's deployment IS that policy.
                 return ("effect_not_permitted",
-                        {"op": eff.op, "kind": "predicate",
-                         "why": "an action may not propose a `predicate`: its extent is "
-                                "a set of TYPES and INTERFACE 5.10 refusal #2 is "
-                                "non-overridable -- ACTIONS 2.5, the kill row"})
+                        {"op": eff.op, "kind": eff.kind,
+                         "allowed": list(PROPOSABLE_KINDS),
+                         "why": "a `propose_type` effect must NAME a kind, and only "
+                                "entity/edge/value_set may be proposed by an action. A "
+                                "predicate's extent is a set of TYPES, and a freshly "
+                                "minted one is EMPTY -- so it is byte-identical to any "
+                                "other empty extent and INTERFACE 5.10 refusal #2 does "
+                                "NOT fire on it. `action` is excluded because 15.1 ranks "
+                                "a verb above a noun -- ACTIONS 2.5, the kill row"})
             if eff.op in ("add_edge", "retract_edge") and eff.family not in self.edge_families:
                 return ("edge_family_unknown", {"family": eff.family})
         return None
@@ -681,7 +752,7 @@ class ActionRegistry:
             # got `bot:reaper`, `svc:cleanup`, `AI:bot` and `nobody` past the
             # blocklist. INTERFACE 2.1 already derives `created_by` from the actor
             # and the record already carries it.
-            if not approved_by or created_by_of(approved_by) != "user":
+            if not is_person(approved_by):
                 return Preflight(
                     verdict="refused",
                     refusal=Refusal("human_approval_required",
@@ -821,6 +892,13 @@ class ActionRegistry:
             raise ValueError("outcome='refused' requires a refusal (ACTIONS 3.4)")
 
         warnings: list[str] = []
+        # ACTIONS 5.2 at the SECOND layer. Round 2: `preflight` refused
+        # `approved_by="ai:reaper"` on a human-mode family and `record_invocation`
+        # then wrote it with no warning at all -- the one-layer defect 2.3 is
+        # named for, inside the fix that closed 2.3's own version of it.
+        if fam.approval_mode == "human" and outcome == "applied" and not is_person(approved_by):
+            approved_by = None
+            warnings.append("approval_unrecorded")
         # ACTIONS 3.2 -- NEVER FABRICATED. The never-null rule binds where the
         # gate decided; everywhere else a null plus this warning is the honest
         # form. Round 1 found `auto:<policy>` being written for an
@@ -828,9 +906,22 @@ class ActionRegistry:
         if outcome == "applied" and not approved_by:
             warnings.append("approval_unrecorded")
         declared = {e.identity() for e in fam.effects}
+        # An input-determined declaration is satisfied only by an observed effect
+        # whose namespace is one the invocation's OWN INPUTS carry -- so an action
+        # invoked for the wrong publisher still warns, which is the whole point.
+        open_ns = {e.identity() for e in fam.effects
+                   if e.op in ("add_edge", "retract_edge") and e.namespace is None}
+        input_ns = {getattr(r, "namespace", None) for r in inputs.values()}
+        input_ns |= {getattr(getattr(r, "type", None), "namespace", None)
+                     for r in inputs.values()}
         for eff in observed_effects:
-            if eff.identity() not in declared:
-                warnings.append(f"effect_undeclared:{eff}")
+            if eff.identity() in declared:
+                continue
+            if (eff.op in ("add_edge", "retract_edge")
+                    and (eff.op, None, eff.family, eff.kind) in open_ns
+                    and eff.namespace in input_ns):
+                continue
+            warnings.append(f"effect_undeclared:{eff}")
         if self.caps.action_transaction_scope == "savepoint":
             warnings.append(
                 "not_durable_until_host_commits:"
@@ -846,6 +937,13 @@ class ActionRegistry:
             namespace=namespace,
             inputs=dict(inputs),
             declared_effects=tuple(fam.effects),      # ACTIONS 3.1 -- COPIED
+            declared_policy={
+                "approval_mode": fam.approval_mode,
+                "min_auto_tier": fam.min_auto_tier,
+                "reversibility": fam.reversibility,
+                "preconditions": tuple(c.kind for c in fam.preconditions),
+                "tier_order": self.tier_order,
+            },
             observed_effects=tuple(observed_effects),
             outcome=outcome,
             gate_verdict=gate_verdict,
@@ -1002,10 +1100,13 @@ class ActionRegistry:
                     grouped[group].append(f)
                     selected += 1
                     break
-        if not any(g in f.reachability
-                   for f in self.families.values()
-                   if f.reversibility is not None
-                   for g in order):
+        declares_any_surface = any(
+            f.reachability for f in self.families.values() if f.reversibility is not None)
+        if declares_any_surface and not any(
+                g in f.reachability
+                for f in self.families.values()
+                if f.reversibility is not None
+                for g in order):
             # A typo, judged against EVERY registered family rather than against
             # the namespace-filtered pool: an empty NAMESPACE is a legitimate
             # scope, not a misspelling. Round 1 found the filtered version
