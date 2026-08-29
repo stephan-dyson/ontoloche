@@ -260,6 +260,18 @@ class NeighborEdge:
     #: ``B->C`` edge is ``at_depth=2`` although both of its endpoints were reached at
     #: depth 1.
     at_depth: int
+    #: The node this edge newly reached, or ``None`` when it reached nobody new -- a
+    #: self-loop, or a triangle's closing edge whose two ends were both already there.
+    #:
+    #: **Filled by the walk, because a consumer cannot compute it from the report**, and
+    #: row 4b's third adversarial round proved that by implementing EDGES.md 9.3's own
+    #: worked example -- the grounding bundle's ``relations`` slot, which is the reason
+    #: this row exists -- the obvious way: comparing each edge's endpoints against the
+    #: ORIGIN. At depth 2 that is silently wrong, because the far end of a second-hop
+    #: edge was never incident on the origin: the node actually reached never appears
+    #: and the intermediate one appears twice, with no error and no ``complete=False``.
+    #: **Mechanism C, inside the example written to show a consumer how to avoid it.**
+    reached: NodeRef | None = None
 
 
 @dataclass(frozen=True)

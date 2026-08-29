@@ -11,17 +11,17 @@
 | | before (row 3e) | after |
 |---|---|---|
 | adapter primitives ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §3.4) | 15 | **18** |
-| contract ids (§6.2) | 150 | **191** |
-| sync suite, one run | `388 passed, 80 skipped` | **`474 passed, 117 skipped`** |
-| async suite, one run | `421 passed, 80 skipped` | **`510 passed, 117 skipped`** |
+| contract ids (§6.2) | 150 | **194** |
+| sync suite, one run | `388 passed, 80 skipped` | **`480 passed, 120 skipped`** |
+| async suite, one run | `421 passed, 80 skipped` | **`516 passed, 120 skipped`** |
 | `Capabilities` flags | 10 + 2 declarations | **14 + 5 declarations** |
 | store schema version | 3 | **4** |
-| `warnings` values (`INTERFACE.md` §5.4) | 20 | **21** |
+| `warnings` values (`INTERFACE.md` §5.4) | 20 | **22** |
 | `Refusal.reason` values (§5.12) | 21 | **21** — row #4 had already added all four |
-| `check_spec_drift.py` | 15 shapes, 14 calls, 2 vocabularies | **+3 PACKAGE shapes, +6 EDGES shapes, +1 rule-coverage gate (R31)** |
+| `check_spec_drift.py` | 15 shapes, 14 calls, 2 vocabularies | **+3 PACKAGE shapes, +6 EDGES shapes, +18 primitive signatures, +1 rule-coverage gate (R31)** |
 | registry facade calls | 14 + 3 package-local | **14 + 3 package-local, and 3 edge calls** |
 
-**Forty-one new ids: thirty-one in `C17` and ten in `C18`.** Nothing here came from a ruling that had not already been made — the whole of row #4's design was ruled in `R17`–`R26` before the row started — so the ratio that matters is a different one: **ten of `C17`'s ids exist to hold a BLOCKING finding that row #4's own adversarial loop had already found and fixed *in a throwaway probe kit the package does not import*,** and **two more came from row 4b's own loop** (§6). §3 is about the first ten.
+**Forty-four new ids: thirty-four in `C17` and ten in `C18`.** Nothing here came from a ruling that had not already been made — the whole of row #4's design was ruled in `R17`–`R26` before the row started — so the ratio that matters is a different one: **ten of `C17`'s ids exist to hold a BLOCKING finding that row #4's own adversarial loop had already found and fixed *in a throwaway probe kit the package does not import*,** and **five more came from row 4b's own loop** (§6). §3 is about the first ten.
 
 > **These numbers were measured, and the first draft of this table did not measure two of them.** It wrote `476 / 512` by arithmetic — the previous run plus two new ids × two new tests — and the suites actually report `474 / 510`, because the new ids skip on `sqlite_minimal`. Nothing turned on the difference, which is exactly why it is worth recording: this repository has been bitten four times by a number in prose that nothing derives, and a *predicted* number is that same defect with better intentions. Caught by re-running rather than by re-reading.
 
@@ -37,16 +37,16 @@ CONFORMANCE (PACKAGE.md 6.1)
   resolver: the shipped DeterministicResolver (2.6's fixed point)
   nonbinding tests excluded from the verdict: none
   coverage, per leg (PACKAGE.md 6.4 / ruling R12):
-    sqlite          CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
+    sqlite          CONFORMANT: 191 ids exercised, 1 not exercisable on this backend (listed)
                       1: PACKAGE.md 5.7 -- this backend stores arbitrary attributes, so a census restricted to its
                         projections has no subject here. C15-02 is the full case.
                          C15-09
-    postgres        CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
+    postgres        CONFORMANT: 191 ids exercised, 1 not exercisable on this backend (listed)
                       1: PACKAGE.md 5.7 -- this backend stores arbitrary attributes, so a census restricted to its
                         projections has no subject here. C15-02 is the full case.
                          C15-09
-    sqlite_minimal  CONFORMANT: 74 ids exercised, 115 not exercisable on this backend (listed)
-                      34: PACKAGE.md 3.2 -- this backend declares stores_edges=False, which 3.2 says is conformant.
+    sqlite_minimal  CONFORMANT: 74 ids exercised, 118 not exercisable on this backend (listed)
+                      37: PACKAGE.md 3.2 -- this backend declares stores_edges=False, which 3.2 says is conformant.
                         This test needs it as scaffolding, not as its subject: this store is a type registry only: no
                         table holds relationships, so there is nothing to write an edge to and nothing for a neighbour
                         walk to read
@@ -73,12 +73,12 @@ CONFORMANCE (PACKAGE.md 6.1)
                       1: PACKAGE.md 9.3 -- [...] C0-05
     (+2 backend-independent, run once: C0-04, C14-07)
   A conformance claim without its coverage line is not a claim (ruling R12).
-474 passed, 117 skipped in 150.34s (0:02:30)
+480 passed, 120 skipped in 237.77s (0:03:57)
 ```
 
 *(Reasons unchanged from [`3E-RUN.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/runs/3E-RUN.md) §2.1 are elided with `[...]`; the new ones and every id list are printed in full. The run itself prints all of them.)*
 
-**`sqlite_minimal` goes 70 → 74 ids exercised and 78 → 115 not exercisable, and both halves are the point.** It declares `stores_edges=False` **natively** — `oo_edge` is absent from its SQL, not hidden behind a Python `if` — so 34 `C17`/`C18` ids skip there with the backend's own sentence, one more skips for a reason specific to the declaration check, and `C17-28` skips on `indexes_membership` and `C17-10` on `stores_proposals`. The four it *gains* are the ones whose subject IS a declined capability: `C17-01` (every edge call refuses rather than returning an empty report), `C17-25`, `C17-27` and `C17-29`.
+**`sqlite_minimal` goes 70 → 74 ids exercised and 78 → 118 not exercisable, and both halves are the point.** It declares `stores_edges=False` **natively** — `oo_edge` is absent from its SQL, not hidden behind a Python `if` — so 37 `C17`/`C18` ids skip there with the backend's own sentence, one more skips for a reason specific to the declaration check, and `C17-28` skips on `indexes_membership` and `C17-10` on `stores_proposals`. The four it *gains* are the ones whose subject IS a declined capability: `C17-01` (every edge call refuses rather than returning an empty report), `C17-25`, `C17-27` and `C17-29`.
 
 ### 2.2 Async — `pytest --pyargs open_ontology.aio.contract -q`
 
@@ -90,12 +90,12 @@ CONFORMANCE (PACKAGE.md 6.1)
   resolver: the shipped DeterministicResolver (2.6's fixed point)
   nonbinding tests excluded from the verdict: none
   coverage, per leg (PACKAGE.md 6.4 / ruling R12):
-    sqlite          CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
-    postgres        CONFORMANT: 188 ids exercised, 1 not exercisable on this backend (listed)
-    sqlite_minimal  CONFORMANT: 74 ids exercised, 115 not exercisable on this backend (listed)
+    sqlite          CONFORMANT: 191 ids exercised, 1 not exercisable on this backend (listed)
+    postgres        CONFORMANT: 191 ids exercised, 1 not exercisable on this backend (listed)
+    sqlite_minimal  CONFORMANT: 74 ids exercised, 118 not exercisable on this backend (listed)
     (+2 backend-independent, run once: C0-04, C14-07)
   A conformance claim without its coverage line is not a claim (ruling R12).
-510 passed, 117 skipped in 138.78s (0:02:18)
+516 passed, 120 skipped in 171.71s (0:02:51)
 ```
 
 The async tree is generated by [`tools/unasync.py`](https://github.com/stephan-dyson/open-ontology/blob/main/tools/unasync.py) and `test_generated_matches_source.py` fails if it has drifted. It refused to emit twice during this row and was right both times — see §5, D-4b-7.
@@ -107,21 +107,21 @@ PACKAGE.md 3.2 -- every OPTIONAL capability, declined one at a time.
 required and never declinable: enforces_unique_name, transactional
 
   configuration                  verdict   passed  skipped  failed
-  stores_proposals=False         conformant    170       28       0
-  stores_events=False            conformant    166       32       0
-  stores_attributes=False        conformant    146       52       0
-  stores_aliases=False           conformant    188       10       0
-  indexes_membership=False       conformant    152       46       0
-  counts_usage=False             conformant    184       14       0
-  timestamps_usage=False         conformant    189        9       0
-  owns_schema=False              conformant    192        6       0
-  stores_edges=False             conformant    157       41       0
-  stores_edge_events=False       conformant    191        7       0
-  indexes_edges_by_family=False  conformant    191        7       0
-  stores_edge_attributes=False   conformant    191        7       0
-  no AttributeStore              conformant    185       13       0
-  stores_attributes=False +proj  conformant    146       52       0
-  stores_edge_attributes=F +proj conformant    191        7       0
+  stores_proposals=False         conformant    173       28       0
+  stores_events=False            conformant    168       33       0
+  stores_attributes=False        conformant    146       55       0
+  stores_aliases=False           conformant    191       10       0
+  indexes_membership=False       conformant    154       47       0
+  counts_usage=False             conformant    187       14       0
+  timestamps_usage=False         conformant    192        9       0
+  owns_schema=False              conformant    195        6       0
+  stores_edges=False             conformant    157       44       0
+  stores_edge_events=False       conformant    194        7       0
+  indexes_edges_by_family=False  conformant    194        7       0
+  stores_edge_attributes=False   conformant    194        7       0
+  no AttributeStore              conformant    188       13       0
+  stores_attributes=False +proj  conformant    146       55       0
+  stores_edge_attributes=F +proj conformant    194        7       0
 ```
 
 **Twelve configurations became fifteen**, and the four edge flags are ordinary members of `CAPABILITY_FLAGS` rather than a separate tuple precisely so this script reaches them without being told about them. The fifteenth is beacon finding **U3**'s shape one row down: a host-owned edge table with `description` and `confidence` as real typed columns and no JSON blob.
@@ -190,6 +190,7 @@ Thirteen rows, twelve from the specification and one added by implementing it.
 | **4.3-11** a READ over a savepoint scope adds nothing | `C17-21` |
 | **4.3-12** no `UnknownNode` exception | `C17-11` |
 | **4.3-13** *(new)* an edge whose family is registered nowhere is RETURNED, warned | `C17-13` |
+| **4.3-14** *(new)* the origin's type is joined to another by a merge, so the walk is `complete=False` and says which other name holds edges it did not search | `C17-33` |
 
 ### 4.3 `EDGES.md` §4.4 — completeness and entailment
 
@@ -240,6 +241,8 @@ A checker nobody has watched fail is a checker nobody knows works — row 3e pro
 | **D-4b-9** | **`edge_family_unregistered:<namespace>:<name>` is a warning value the specification did not have.** §4.3 had no row for an edge whose family is registered nowhere, and §2.7 plus §7.2 make that reachable on purpose | Minted and added to `INTERFACE.md` §5.4 **in the same change**, per ruling R3, and added to §4.3 as rule `4.3-13`. The edge is returned, never dropped — dropping it is the silent per-consumer drop §12 names as this document's dominant mechanism, in its only read call, on exactly the host §7.2 maps |
 | **D-4b-10** | **Adding primitives 16–18 to `StorageAdapter` breaks `isinstance` for every adapter written against the fifteen.** `StorageAdapter` is `runtime_checkable`, and ruling R30 records the same hazard for `AttributeStore` | Taken deliberately, because `EDGES.md` §6 puts the four flags on `Capabilities` and §7.1 gives the primitives the `stores_proposals=False` treatment — methods that exist and raise. **Nothing in this package calls `isinstance(x, StorageAdapter)`**, so the breakage is nominal; it is recorded because a third-party author who does call it will see it. `stores_edges` defaults to `False` so a pre-4b adapter's edge calls refuse honestly rather than crashing |
 | **D-4b-11** | **The `edge_family_retired` warning fires only for a family the caller NAMED**, not for a retired family reached through `edge_families=None` | `EDGES.md` §2.8's carrier table says *"a named family is retired"*, and this follows it literally rather than widening a closed vocabulary's meaning by implementation. **Q30** asks whether a `None` walk should warn per retired family it consulted, or whether that is noise at scale |
+| **D-4b-15** | **A merge splits an edge endpoint's identity, and `neighbors` does not follow it.** `merge_types` retires one word with the other as its `successor` and **rewrites no edge** — an edge's endpoints are references by identity triple (§2.1) and nothing in this package edits a stored reference. So edges written before a merge keep naming the absorbed word | **The report is made honest; the walk is not made clever.** It carries `endpoint_type_merged:<ref>`, `complete=False`, and a `why` naming the other name (rule `4.3-14`, `C17-33`). It does **not** follow the chain and return those edges: whether an edge written under a merged word is an edge of its survivor is a decision above this row, and making it silently would change what `neighbors` means. **Q33.** *(Before this the walk from the canonical type — the CORRECT thing to do after a merge — returned `known=0`, `complete=True` and an empty `warnings`, which contradicts §4.4's own argument for why `complete` may ever be `True`.)* |
+| **D-4b-16** | **Retracting an already-retracted edge overwrites the first retraction's reason, actor and timestamp on the row**, and on `stores_edge_events=False` the first retraction is then gone entirely | **Recorded, not changed at the cap.** §2.6's argument for not refusing an unrecordable retraction is *the record is the row* — and that argument silently assumes retraction happens once. A second retraction is neither refused nor idempotent. Narrow (it needs a declined event store **and** a caller error) but the justification stops holding the moment it happens, so it is on this list rather than in a reviewer's notes. **Q34** |
 | **D-4b-13** | **`edge_amended` is a vocabulary value nothing writes.** `EDGES.md` §5.2 adds three `event` values and narrates the third with a worked example — *"changing an edge's `confidence` after a re-classification is a new `edge_amended` event carrying the old and new values"* — and **v0 has no amend call for an edge at all.** Only `edge_added` and `edge_retracted` are ever appended | **Recorded, not removed.** The value is in `adapter.py`'s comment and in both migrations because the vocabulary is stored, never judged (§3.1), and a host that amends its own edge rows may write it. But §5.2 narrates it as landed behaviour with an example, and it is not. **Q32** asks whether 4c gives edges an amend path (which is where `payload_schema` and Q29 also point) or whether the example goes. Found by row 4b's second adversarial round |
 | **D-4b-14** | **`Capabilities.scope_conflict()` is exercised by `C17-25` and not folded into `C0-01`'s universal declaration gate**, so a third-party backend gets `missing_why()` checked for free and this checked only if `C17-25` runs against it | Left as it is for v0 and recorded. `C17-25` does run against the real parametrised `adapter` fixture on all three legs for the no-conflict case, and uses a synthetic `Capabilities` for the conflict case because a **conformant** backend cannot produce one to check. Folding it into `C0-01` would put an edge-specific rule in the group that predates edges; the honest place is where it is |
 | **D-4b-12** | **`find_edges` counts suppressed retracted edges with an extra query per page.** §4.3 rule 8 requires `complete=False` when a retracted edge was hidden, and only the adapter can know | Counted over the whole matching set rather than the page, because a caller told `complete=True` on page one and `complete=False` on page three has been told two different things about one query. The cost is one indexed count per `find_edges` call with `include_retracted=False`, and it is stated rather than discovered |
@@ -258,6 +261,7 @@ A checker nobody has watched fail is a checker nobody knows works — row 3e pro
 |---|---|---|---|---|---|
 | **1** | real-data lens · coherence lens | SHIP IT · NOT YET | **2** | **1** + 2 MINOR | Both blockers were in the DOCUMENTS, not the code — and one of them is row #4's own round-2 finding recurring inside the commit that added the gate meant to catch it. §6.2 |
 | **2** | real-data lens · coherence lens | NOT YET · NOT YET | **4** | **3** + 5 MINOR | The first defect in the shipped CODE: the assembly bound fired on an exact match with nothing truncated. And three more mappings and shapes claimed and not exercised. §6.3 |
+| **3** | real-data lens · **consumer lens** | NOT YET · NOT YET | **2** | **4** + 2 MINOR | A new lens, and it earned its place: five of the six came from *being the engineer who integrates next week* rather than from auditing. §6.4 |
 
 ### 6.2 Round 1 — what it found
 
@@ -321,6 +325,61 @@ The reviewer who *read* returned **NOT YET** with two BLOCKING, and both are the
 
 **What round 2 says about round 1.** Round 1 found two blockers in the documents and its real-data reviewer found none in the code. Round 2's real-data reviewer, told explicitly *not* to repeat round 1's seven lying adapters and to walk the parameter space instead, found the bound defect in an afternoon. **The instruction that produced the finding was "go somewhere else"** — which is §17.6's lesson operationalised, and the strongest argument in this row for briefing each round away from the last one's ground rather than at it.
 
+### 6.4 Round 3 — what it found, and the lens that found most of it
+
+**Round 3 changed one reviewer's lens rather than only their briefing.** Rounds 1 and 2 ran a real-data lens beside a coherence lens; round 3 kept the first and replaced the second with a **consumer lens** — *you are the engineer who has to build against this next week, and you have never seen it before*, told to write an adapter from the documents alone and a scheduled job from the API alone. **Five of the six findings came from that reviewer**, and none of them is a thing an auditor would have looked for.
+
+**B7 — a merge silently orphans every instance-level edge, and the walk reports `complete=True` about it.** `merge_types` is the registry's sanctioned answer to mechanism **4**, which §12 calls **co-dominant** for this row. It retires one word with the other as its `successor` and **rewrites no edge**. So a caller who does the *correct* thing afterwards — resolve to the canonical type, exactly as `resolve_type` teaches — got `known=0`, **`complete=True`**, and an empty `warnings` about edges sitting in the store under the absorbed name. **[Reproduced]** on every backend, because it lives entirely in the registry's node matching.
+
+> This contradicts §4.4's own argument for why `complete` may ever be `True`: *"there is no edge that exists in the store and is invisible to a query over it."* **Across a merge there is.** And it is the shape §2.2's `direction` finding calls unacceptable — a confident, complete, false negative — reached this time not by an odd parameter but by ordinary housekeeping.
+
+*Resolved by making the report honest and not by making the walk clever.* The origin's merge relations are read (its `successor`, the retired rows whose successor is it, its aliases) and the report carries `endpoint_type_merged:<ref>`, `complete=False`, and a `why` naming the other name. **It does not follow the chain**: whether an edge written under a merged word is an edge of its survivor is a decision above this row, and making it silently would change what `neighbors` means. Rule `4.3-14`, `C17-33`, deviation **D-4b-15**, **Q33**.
+
+*And the fix's own first version was wrong within the hour, caught by the capability matrix rather than by a reviewer:* it read a `why` off `stores_aliases=False`, which made **every** walk on such a backend `complete=False` — a signal that never turns off, which is row 3d's own recorded failure for the durability warning, reproduced by the fix for a false `complete=True`. Aliases are a second reading of a fact the successor scan already reads, so their absence subtracts nothing.
+
+**B8 — a caller's mistake did not arrive as the documented error.** §4.2 promises a `ValueError` for a caller's mistake, *"a caller error like §5.4's empty definition"*. The consumer reviewer passed `depth=1.5` — not exotic; `n / 1` is a float in Python and JSON round-trips ints as floats — and got a raw `TypeError` from three frames down, inside `range()`. A `node` that was a plain string died on `.namespace` deep in the walk. **And `edge_families="blocks"` was read one character at a time**, because a bare `str` satisfies `Sequence[str]`, and refused with `detail={"families": ["b","l","o","c","k","s"]}` — which does not merely fail, it *misleads a caller debugging why family `b` is unknown*.
+
+> **The call this document is built around had no input validation at all.** Three of the first four things a new integrator tried went through it.
+
+*Resolved:* the shape checks run first and name the parameter and the rule. `C17-32`.
+
+**The four MAJOR.**
+
+| # | Finding | Resolution |
+|---|---|---|
+| M5 | **§9.3's worked example — the grounding bundle's `relations` slot, the reason this row exists — is silently wrong past hop 1 when implemented the obvious way.** The reviewer compared each edge's endpoints against the ORIGIN; at depth 2 the far end of a second-hop edge was never incident on the origin, so `person#7` never appeared, `task#77` appeared twice, and there was **no error, no warning and no `complete=False`**. *Mechanism C, inside the example written to show a consumer how to avoid it* | `NeighborEdge.reached` names the node each edge newly reached (`None` for a self-loop and for a triangle's closing edge, which reaches nobody new). Filled by the walk, because the walk is the only thing that knows; and `edges`' `(at_depth, edge_id)` order is now a **guarantee** rather than an accident, because the consumer has to walk it in discovery order for `reached` to mean anything. §1's *"a set, not a ranked list"* is about relevance and stands. §9.3's example is rewritten and `C17-34` binds it |
+| M6 | **`PACKAGE.md` §3.4 primitive 15's printed signature was stale, and deviation D-4b-2 said it had been amended.** A third-party author implementing `read_events` literally from the document — which §3.1 calls the whole point — got a `TypeError` on the first `edge_provenance` call. **Two adversarial rounds read past it**, because this project's drift checker diffed façade signatures and printed dataclasses and never the eighteen primitive blocks | The signature is amended, and **the gate now covers all eighteen printed primitive signatures against the Protocol** — watched failing before it was trusted. A deviation claiming an amendment nobody made is `EDGES.md` §17.4's M10 exactly, one row later, in this document's own list |
+| M7 | `node` of the wrong type raised `AttributeError` from inside the walk | Folded into `C17-32` |
+| M8 | `edge_families` as a bare `str` iterated character by character | Folded into `C17-32` |
+
+**The two MINOR:** `NodeRef` — the type in `neighbors`' own signature — was not exported from `open_ontology` (added); and **retracting an already-retracted edge overwrites the first retraction's reason, actor and timestamp**, which on `stores_edge_events=False` erases it entirely (recorded as **D-4b-16** and **Q34** rather than changed at the cap: §2.6's *"the record is the row"* argument silently assumes retraction happens once).
+
+**One thing the round investigated and cleared**, recorded so it is not re-walked: `add_edge` does not bump `usage()`, so an edge family looks orphaned however many edges are written under it. That is `record_use`'s established, opt-in, pre-existing mechanism for *all* type usage in this registry — not something `add_edge` was ever meant to drive — and not a row-4b regression.
+
+---
+
+### 6.5 Convergence — honestly, and the loop did **not** converge
+
+**Three rounds, six fresh reviewers, five NOT YET and one SHIP IT.** The brief's stop rule was *two consecutive clean rounds, or three rounds plus an honest convergence note*. **The second branch applies**, which is the same close rows 3c, 3d, 3e and #4 took, and it should be read the same way: as a fact about the process, not a formality.
+
+**What the defect class did across the three rounds** — the only real evidence of convergence, and the shape here is different from row #4's:
+
+| Round | The defects were… |
+|---|---|
+| 1 | **In the documents' self-reports.** Two BLOCKING, both about what a document said about itself; the reviewer who ran the code found nothing, having built seven lying adapters that were all caught |
+| 2 | **In the claims about what was tested, and one boundary nobody had run.** Three mappings and shapes claimed and not exercised — plus the first defect in the shipped code, on the exact axis the previous row's retro had already named |
+| 3 | **In what a NEWCOMER hits, which nobody had been asked to be.** Five of six from the consumer lens: no input validation on the central call, a stale primitive signature a builder would build from, and the document's own worked example silently wrong |
+
+**That is not narrowing, and saying otherwise would be the kind of claim this row spent three rounds catching.** Rounds 1 and 2 found defects in the *evidence*; round 3 found defects in the *product*, and found more of them. What changed between rounds was not the artifact's quality but **where the reviewers were pointed** — and each time they were pointed somewhere new, they came back with something real.
+
+> **The honest reading: the ceiling here is the lens, not the artifact.** Row #4's §17.5 concluded that *"prose-plus-probe review has a floor, and this document has reached it"*, and named the next signal with real information as **a real consumer over a real store**. Round 3 was the closest available approximation of that — a reviewer told to *be* the consumer — and it produced the largest and most product-relevant haul of the three. **[Inferred]** a fourth round with a seventh lens would find a fourth class rather than none. That is an argument for shipping this to its actual consumer and routing what they find back, not for a fourth synthetic round.
+
+**Three things this loop did that are worth keeping.**
+
+1. **Every BLOCKING finding was reproduced by running code before it was believed**, including the two that were about documents rather than code — those were reproduced by reading both sides and quoting them.
+2. **Two of the three rounds found a defect inside the mechanism built to prevent that very defect**: round 1 found a rule mapped to ids that did not exercise it *inside the row that built ruling R31's gate*, and round 3 found a stale primitive signature *invisible to the drift checker this project built for exactly that*. Both closed the class rather than the instance — the gate now reads what the ids assert only insofar as a human can, and it now reads all eighteen primitive signatures.
+3. **Changing the LENS produced more than changing the briefing.** Round 2's real-data reviewer was told *"do not repeat round 1's seven lying adapters, go somewhere else"* and found one BLOCKING. Round 3's consumer lens was told *"be the engineer who integrates next week"* and found five findings nobody had been positioned to see. Rows 3c through #4 all ran two lenses; **this is the first round in this repository where a third lens was tried, and it was the productive one.**
+
 ---
 
 ## 7. Questions for the supervisor — **Q27 onward**
@@ -333,6 +392,8 @@ Numbering continues from Q26 (ruled as R31). None is taken on this row's authori
 | **Q28** | **`endpoint_kinds` cannot express the constraint §2.4 uses to motivate it** (D-4b-3): a citation and a facility are both `entity`, so *"a citation edge must not accept a facility at the tag end"* is unexpressible. CMS carries the fact in unvalidated `from`/`to` | **Narrow the sentence, do not widen the mechanism.** An endpoint *type* constraint is a second identity triple per end and a second thing to keep in step with the endpoints; the honest v0 move is for §2.4 to say what `endpoint_kinds` does. Phase 3's ingestion loop is the consumer that would force more | No |
 | **Q29** | **`payload_schema` is inert and its blocker has gone** (D-4b-6): §2.5 declares it inert until **R10**, and R10 landed in row 3e. §13's own rule says an unlandable `payload_schema` should be *removed* rather than left as a `None` that never becomes anything — which now reads the other way round | **Take it in 4c**, with edge payload validation as its own row: modes, versions, `attr_schema_version` on the edge, and `C15`'s shape transposed. It is the one part of the edge model with a declared field and no mechanism, and E10 is the cost UC1 is already paying | No |
 | **Q30** | **A retired family reached through `edge_families=None` is searched and NOT warned about** (D-4b-11), because §2.8's carrier table says *"a named family"*. At scale a `None` walk over a store with fifty retired families would emit fifty warnings | **Keep the literal reading for v0 and revisit with Phase 3's ingestion loop**, which is the first caller that will use `None` at scale. The alternative — a count rather than a list — is a new warning shape, and the vocabulary is closed | No |
+| **Q33** | **Should `neighbors` FOLLOW a merged type's successor chain** (D-4b-15), rather than only reporting that it did not? `resolve_type` already follows it (`C3-11`), so a caller is taught one identity model by one call and given another by the next | **Yes, and it is 4c's to take**, with the shape `resolve_type` already uses. It is not this row's to take silently: following the chain changes what an edge's endpoint MEANS — from *the reference that was written* to *the identity that reference now belongs to* — and that is an `INTERFACE.md` §2.1 question, not an `EDGES.md` one. The honest v0 answer is the one shipped: say what was not searched, and stop claiming completeness | **Yes** — it decides whether a merge is safe to run on a store with edges in it |
+| **Q34** | **A second retraction overwrites the first's reason, actor and timestamp** (D-4b-16), and §2.6's *the record is the row* argument assumes retraction happens once | **Refuse the second one** in 4c (`already_decided`'s shape, which §5.5 already has a value for), or make it idempotent. Not taken at this row's cap because either is a behaviour change and neither is forced by a use case | No |
 | **Q32** | **`edge_amended` is a vocabulary value nothing writes** (D-4b-13). `EDGES.md` §5.2 narrates it with a worked example — re-classifying an edge's `confidence` — and v0 has no amend call for an edge at all | **4c decides, with `payload_schema` (Q29)**, because they point at the same missing surface: an edge whose payload is validated is an edge somebody will want to correct. Until then the example should not read as landed behaviour | No |
 | **Q31** | **`neighbors` is bounded by `max_edges` at the REGISTRY, so two registries over one store can disagree about what `complete` means.** The bound is a deployment parameter (`Registry(max_edges=…)`), which is what makes it a circuit breaker rather than something a caller can raise per call | **Accept for v0 and record.** It is the same shape as `NamespacePolicy`, which is already per-registry, and R25 has routed the real question (façade paging) to Phase 3 with R13 | No |
 

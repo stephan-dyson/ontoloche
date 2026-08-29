@@ -2692,6 +2692,87 @@ class AsyncRegistry:
             seen_cursors.add(cursor)
         return families, complete, why
 
+    async def _merged_with(self, ref: TypeRef) -> tuple[tuple[str, ...], str | None]:
+        """Type names this one is joined to by a MERGE or a retirement with a successor.
+
+        ``(names, why the look was partial)`` -- and the names are what `neighbors`
+        cannot see, not what it searched.
+
+        **The gap this closes was a BLOCKING finding** (row 4b, adversarial round 3).
+        `merge_types` is the registry's sanctioned, routine answer to mechanism 4, which
+        `EDGES.md` 12 calls co-dominant for this row. It retires one word with the other
+        as its `successor` and adds the retired name to the survivor's aliases. **Edges
+        already written under the retired name keep naming it** -- `src`/`dst` are
+        references by identity triple (2.1) and nothing rewrites them -- so a caller who
+        does the CORRECT thing after a merge, resolving to the canonical type and then
+        walking, got `known=0`, **`complete=True`** and an empty `warnings`.
+
+        That is the confident, complete, false negative this document treats as
+        unacceptable everywhere else (2.2's `direction` finding), and it contradicts
+        4.4's own argument for why `complete` may be `True` at all: *"there is no edge
+        that exists in the store and is invisible to a query over it."* Across a merge
+        there is.
+
+        **What this does and does not do.** It makes the report HONEST -- the walk says
+        which other name holds edges it did not search, and `complete` becomes `False`.
+        It does **not** follow the chain and return those edges: doing that silently
+        would change what `neighbors` means, and whether an edge written under a merged
+        word is an edge of its survivor is a decision above this row. Recorded as
+        deviation **D-4b-15** and **Q33**.
+        """
+        seen: list[str] = []
+        why: str | None = None
+
+        rec = await self.adapter.get_type(ref.namespace, ref.name, kind=ref.kind)
+        if rec is not None and rec.status == "retired" and rec.successor:
+            seen.append(rec.successor)
+
+        # The other direction: a RETIRED word whose successor is this one. There is no
+        # `successor` filter on `TypeQuery` -- it would be registry policy inside the
+        # backend (3.3's rule) -- so the retired rows are read and filtered above,
+        # scoped to this namespace and paged to exhaustion, exactly as the collision
+        # scan does. Retired rows are the small half of a vocabulary.
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = await self.adapter.find_types(
+                TypeQuery(
+                    namespace=ref.namespace,
+                    status="retired",
+                    include_retired=True,
+                    after=after,
+                )
+            )
+            for other in page.records:
+                if other.successor == ref.name and other.name not in seen:
+                    seen.append(other.name)
+            if not page.complete and page.next_after is None:
+                why = page.why_incomplete or "the backend could not page the retired types"
+                break
+            after = page.next_after
+            if after is None or after in cursors:
+                break
+            cursors.add(after)
+
+        # And the aliases `merge_types` writes onto the survivor, which name the words it
+        # absorbed. **`stores_aliases=False` does NOT make this a partial look**, and the
+        # first version of this said it did: it set a `why` off that flag, which made
+        # EVERY walk on such a backend `complete=False` -- a signal that never turns off,
+        # which is the exact failure row 3d recorded for the durability warning, produced
+        # here by the fix for a false `complete=True`. Caught by the capability matrix
+        # within the hour.
+        #
+        # The reason it is not a partial look: `merge_types` writes BOTH a successor and
+        # an alias for the same absorption, and the retired-row scan above reads the
+        # successor. Aliases are a second reading of a fact already read, so their
+        # absence subtracts nothing from the merge question. They are still consulted,
+        # because a hand-written alias is one this scan would otherwise miss.
+        if rec is not None and rec.status == "active":
+            for alias in rec.aliases:
+                if alias not in seen and alias != ref.name:
+                    seen.append(alias)
+        return tuple(seen), why
+
     async def add_edge(
         self,
         family: str,
@@ -3038,8 +3119,38 @@ class AsyncRegistry:
         non-transitive, so a depth-2 result is not a depth-1 claim, and ``at_depth`` on
         every edge is what gives a consumer the means not to make that inference.
         """
+        # **The shape checks come first, and their absence was a BLOCKING finding**
+        # (row 4b, adversarial round 3). This is the one call the whole document is
+        # built around, and it had no input validation at all: `depth=1.5` sailed past
+        # the range guard below and blew up three frames later inside `range()`, a
+        # `node` that was a plain string died on `.namespace` deep in the walk, and
+        # `edge_families="blocks"` -- a bare `str` satisfies `Sequence[str]`, which is
+        # the most natural mistake in Python -- was iterated CHARACTER BY CHARACTER and
+        # refused with `detail={"families": ["b","l","o","c","k","s"]}`, actively
+        # misleading the caller about what they had got wrong.
+        #
+        # 4.2 promises a `ValueError` for a caller's mistake, and a raw `TypeError` from
+        # three frames down is not that promise kept.
+        if not isinstance(node, (TypeRef, InstanceRef)):
+            raise TypeError(
+                f"node must be a TypeRef or an InstanceRef (EDGES.md 2.1); got "
+                f"{type(node).__name__}"
+            )
+        if isinstance(edge_families, str):
+            raise TypeError(
+                "edge_families is a sequence of family names, not one name: a bare str "
+                "satisfies Sequence[str] and would be read one character at a time. "
+                f"Pass [{edge_families!r}]"
+            )
         if direction not in DIRECTIONS:
             raise ValueError(f"direction must be one of {DIRECTIONS}; got {direction!r}")
+        # `bool` is an `int` in Python, and `neighbors(node, families, True)` is a typo
+        # that would otherwise read as depth 1.
+        if not isinstance(depth, int) or isinstance(depth, bool):
+            raise ValueError(
+                f"depth is an int, 1 or {DEPTH_CAP} (EDGES.md 4.2); got "
+                f"{type(depth).__name__} {depth!r}"
+            )
         if depth < 1 or depth > DEPTH_CAP:
             # EDGES.md 4.2. `ValueError`, not a `Refusal`: a caller error like
             # INTERFACE.md 5.4's empty definition, and R3's closed vocabulary should not
@@ -3105,6 +3216,29 @@ class AsyncRegistry:
                     warnings.append(f"edge_family_retired:{fam.name}")
 
         origin_type = type_of(node)
+        # EDGES.md 4.3, rule 4.3-14. Cheap: one paged read of this namespace's retired
+        # rows, and only for the origin -- a frontier node reached at depth 2 was
+        # reached BY a stored edge, so its name is the name the store holds.
+        merged, merged_why = await self._merged_with(origin_type)
+        if merged:
+            warnings.append(f"endpoint_type_merged:{origin_type}")
+            complete = False
+            why = why or (
+                f"{origin_type} is joined by a merge or a retirement-with-successor to "
+                + ", ".join(sorted(merged))
+                + ", and edges written under those names are NOT searched: an edge's "
+                "endpoints are references by identity triple (EDGES.md 2.1) and a merge "
+                "rewrites none of them. Walk the other name too (EDGES.md 4.3, Q33)"
+            )
+        elif merged_why:
+            # Rule U on the look itself: a backend that could not page its retired rows
+            # has not told us there is no merge, only that it could not say.
+            complete = False
+            why = why or (
+                "whether this origin's type is joined to another by a merge could not "
+                "be determined: " + merged_why
+            )
+
         if await self.adapter.get_type(
             origin_type.namespace, origin_type.name, kind=origin_type.kind
         ) is None:
@@ -3247,16 +3381,41 @@ class AsyncRegistry:
         # common case in real data and it is not an incomplete answer: the walk saw
         # everything there was. Truncation is the other row of EDGES.md 4.3's table.
 
+        # **Ordered by `(at_depth, edge_id)`, and that is a GUARANTEE rather than an
+        # accident** (EDGES.md 4.1, row 4b adversarial round 3). It is a deterministic
+        # traversal order and not a ranking -- 1's *"a set, not a ranked list"* is about
+        # relevance and stands -- but a consumer projecting this report into a flat list
+        # has to walk it in discovery order for `reached` below to mean anything, and an
+        # order nobody promised is an order that can change under them.
         edges = tuple(
             sorted(seen.values(), key=lambda ne: (ne.at_depth, ne.edge.edge_id))
         )
+        # `reached` is filled here, in the one place that knows: the walk. **A consumer
+        # cannot compute it from the report**, and round 3 proved that by implementing
+        # this document's own worked example (9.3, the grounding bundle's `relations`
+        # slot -- the reason this row exists) the obvious way, comparing each edge's
+        # endpoints against the ORIGIN. At depth 2 that returns the wrong answer
+        # silently: the far end of a second-hop edge is compared against an origin it
+        # was never incident on, so the node actually reached never appears and the
+        # intermediate one appears twice. **Mechanism C, inside the example meant to
+        # show a consumer how to avoid it.**
+        #
+        # `None` for a self-loop and for an edge whose two endpoints were both already
+        # reached -- a triangle's closing edge reaches nobody new, and saying so is Rule
+        # U rather than picking one of its ends.
         nodes: list[NodeRef] = []
         seen_nodes: set[str] = {str(node)}
+        resolved: list[NeighborEdge] = []
         for ne in edges:
+            reached: NodeRef | None = None
             for far in (ne.edge.src, ne.edge.dst):
                 if str(far) not in seen_nodes:
                     seen_nodes.add(str(far))
                     nodes.append(far)
+                    if reached is None:
+                        reached = far
+            resolved.append(replace(ne, reached=reached))
+        edges = tuple(resolved)
         return NeighborReport(
             origin=node,
             depth_requested=depth,
