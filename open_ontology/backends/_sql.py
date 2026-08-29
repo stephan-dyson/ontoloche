@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from uuid import uuid4
 from typing import Any, Iterable
 
 from ..adapter import (
@@ -438,7 +439,13 @@ from ..adapter import (
     TypePage,
     TypeQuery,
 )
-from ..errors import AlreadyExists, AmbiguousKind, SchemaMismatch, StoreVersionUnknown
+from ..errors import (
+    AlreadyExists,
+    AmbiguousKind,
+    HostTransactionRequired,
+    SchemaMismatch,
+    StoreVersionUnknown,
+)
 
 MIGRATIONS_ROOT = Path(__file__).resolve().parent / "migrations"
 
@@ -510,6 +517,13 @@ class BaseSqlAdapter:
         self._failed = False
         self._savepoint_n = 0
         self._savepoint: str | None = None
+        # Savepoint names are namespaced PER ADAPTER, not per connection. Two adapter
+        # instances over one borrowed connection both used to start at `oo_1`, and
+        # nothing in this file reasoned about the engine's savepoint-name stack -- the
+        # nested case happened to work because both engines treat same-named savepoints
+        # as LIFO, which is a property this code was relying on without knowing it. Row
+        # 3d, second adversarial round: a collision is now impossible by construction.
+        self._savepoint_token = uuid4().hex[:8]
 
     # ------------------------------------------------------------------ subclass API
     def _execute(self, sql: str, params: tuple | list = ()) -> Any:
@@ -596,6 +610,7 @@ class BaseSqlAdapter:
         # first call a borrowed adapter makes is this probe, and on a fresh store it
         # fails by design.
         if self._borrowed:
+            self._require_host_transaction()
             probe = self._next_savepoint("oo_probe")
             self._execute(f"SAVEPOINT {probe}")
             try:
@@ -672,11 +687,34 @@ class BaseSqlAdapter:
     # ---------------------------------------------------------------- 3 transaction
     def _next_savepoint(self, prefix: str = "oo") -> str:
         self._savepoint_n += 1
-        return f"{prefix}_{self._savepoint_n}"
+        return f"{prefix}_{self._savepoint_token}_{self._savepoint_n}"
+
+    def _host_transaction_open(self) -> bool | None:
+        """Is the BORROWED connection currently inside the host's transaction?
+
+        ``None`` means this driver cannot tell, and the check is then skipped rather
+        than guessed -- Rule U applies to the adapter's own preconditions too.
+        """
+        return None
+
+    def _require_host_transaction(self) -> None:
+        if not self._borrowed:
+            return
+        if self._host_transaction_open() is False:
+            raise HostTransactionRequired(
+                "this adapter was opened over a connection it does not own, and that "
+                "connection has no transaction on it. transaction() is a SAVEPOINT and "
+                "a savepoint needs a transaction to sit inside: on Postgres it is an "
+                "error, and on SQLite the outermost SAVEPOINT would START a transaction "
+                "whose RELEASE COMMITS it -- granting a durability the host never asked "
+                "for. Begin your transaction before lending the connection "
+                "(PACKAGE.md 3 item 3, consequence 1)."
+            )
 
     def _open_scope(self) -> None:
         """Depth 0 entry. Owned: BEGIN. Borrowed: SAVEPOINT -- ruling R5."""
         if self._borrowed:
+            self._require_host_transaction()
             self._savepoint = self._next_savepoint()
             self._execute(f"SAVEPOINT {self._savepoint}")
         else:

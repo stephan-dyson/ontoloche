@@ -115,6 +115,20 @@ class AsyncRegistry:
         self._default_policy = policy or NamespacePolicy()
         self._policies = dict(policies or {})
         self.caps: Capabilities = await adapter.capabilities()
+        # Ruling R5 point 2: over a borrowed connection a clean return is atomic and
+        # NOT YET DURABLE, and "a why-style sentence surfaces in any result that would
+        # otherwise imply durability". PACKAGE.md 3 item 3 says the same. [Observed,
+        # row 3d second adversarial round] neither was implemented: `transaction_scope`
+        # appeared nowhere in this file, so `approve()` over a host-owned session
+        # returned TypeEntry(status="active") with nothing on it saying the host had
+        # not committed -- the sentence existed only in a separate capabilities() call
+        # the caller had to know to make. That is the failure Rule U is named after,
+        # in the one seam beacon builds against.
+        self._durability_warning: str | None = (
+            f"not_durable_until_host_commits:{self.caps.reason('transaction_scope')}"
+            if self.caps.transaction_scope == "savepoint"
+            else None
+        )
         if migrate:
             # PACKAGE.md 9.2 -- a store from the future raises rather than being read
             # under old assumptions. The failure mode is a loud refusal at startup.
@@ -352,6 +366,8 @@ class AsyncRegistry:
         for w in extra_warnings:
             if w not in warnings:
                 warnings.append(w)
+        if self._durability_warning and self._durability_warning not in warnings:
+            warnings.append(self._durability_warning)
         return TypeEntry(
             name=rec.name,
             kind=rec.kind,
@@ -370,6 +386,9 @@ class AsyncRegistry:
         )
 
     def _proposal(self, rec: ProposalRecord) -> Proposal:
+        warnings = list(rec.warnings)
+        if self._durability_warning and self._durability_warning not in warnings:
+            warnings.append(self._durability_warning)
         return Proposal(
             id=rec.proposal_id,
             name=rec.name,
@@ -383,7 +402,7 @@ class AsyncRegistry:
             proposed_at=rec.proposed_at,
             tier=rec.tier,
             status=rec.status,
-            warnings=tuple(rec.warnings),
+            warnings=tuple(warnings),
             near_matches=tuple((n[0], n[1]) for n in (rec.near_matches or [])),
         )
 

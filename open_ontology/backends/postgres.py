@@ -90,6 +90,13 @@ class PostgresAdapter(BaseSqlAdapter):
             cur.execute(sql, tuple(params) or None)
             return cur.fetchone()
 
+    def _host_transaction_open(self) -> bool | None:
+        status = self.conn.info.transaction_status
+        return status in (
+            self._psycopg.pq.TransactionStatus.INTRANS,
+            self._psycopg.pq.TransactionStatus.INERROR,
+        )
+
     def _begin(self) -> None:
         self._execute("BEGIN")
 

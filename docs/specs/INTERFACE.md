@@ -412,7 +412,7 @@ Proposal:
 
 > **Added by row 3c, 2026-08-28, after a third adversarial review round — this was a hole in §13's own exit criterion.** Two sentences in this document were false for exactly this case: the paragraph below says a `TypeEntry` comes back *"only when the namespace policy is `approval_policy=\"auto\"`"*, and §2.7 point 3 says the tier gate shows up as `Refusal(reason="tier_below_auto_approve_policy")` — which is true of `approve()` and **not** of `propose_type`'s internal auto-approval attempt. `2A-RUN.md` §4 deviation **D-11** recorded the gap in the words *"Neither document says what happens when the auto path meets the tier gate"*, and §11's list of deviations touching this document then failed to carry it forward. **It is UC1's own scenario:** Tenshen auto-approves and its classifier's tier is named as Haiku (§9, contortion 4), so this is the first thing a beacon migration hits.
 
-**`warnings` vocabulary, complete — seven values across two carriers:**
+**`warnings` vocabulary, complete — eight values across two carriers:**
 
 | value | lands on | from |
 |---|---|---|
@@ -423,6 +423,7 @@ Proposal:
 | `attributes_invalid:<field>:<why>` | `Proposal` | `PACKAGE.md` §5.3, `warn` mode |
 | `name_previously_retired` | **`TypeEntry` only** — the retired entry `propose_type` hands back; no proposal is created (§5.9) | §5.4 |
 | `retired_without_usage_evidence` | **`TypeEntry` only** — the retired entry `retire` returns | §5.9 |
+| `not_durable_until_host_commits:<why>` | **every `TypeEntry` and every `Proposal`** the registry returns, when the adapter declares `transaction_scope="savepoint"` | `PACKAGE.md` §3 item 3, ruling R5. *(Row 3d. The adapter is running inside a transaction **the host owns**: the write is atomic and becomes durable only when the host commits. `status="active"` with nothing else on the object is a durable-sounding answer to a question whose answer is not yet durable, which is the failure Rule U is named after. The `<why>` is the backend's own sentence, verbatim. Added after an adversarial reviewer found the document promising this and the code not doing it — `transaction_scope` appeared nowhere in `registry.py`.)* |
 
 *(Enumerated by row 3c; §5.4 previously listed three inline and the rest arrived scattered across the document. The carrier column was added after a fourth review round pointed out that one flat list invites reading all of them as `Proposal.warnings`.)*
 

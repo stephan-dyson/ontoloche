@@ -7,6 +7,7 @@ so everything here is built out of the public protocol and the public shapes.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
 from ..adapter import ProposalQuery, TypeQuery
@@ -24,6 +25,52 @@ EXTERNAL_FACTORY: Callable[[], Any] | None = None
 #: deterministic one produces. Added by row 3c: ruling R8's skip originally keyed on
 #: whether the *adapter* was foreign, which is the wrong axis for a resolver question.
 EXTERNAL_RESOLVER: Callable[[], Any] | None = None
+
+@dataclass(frozen=True)
+class BorrowedHarness:
+    """What ``C0-12`` needs in order to verify a ``transaction_scope="savepoint"`` claim.
+
+    **Why this exists, and it is a finding rather than a feature** *(row 3d, second
+    adversarial round)*. ``transaction_scope`` was a **self-reported claim that nothing
+    could check** for any adapter but the two shipped drivers: ``C0-12`` hard-coded
+    ``if backend == "sqlite" / elif "postgres" / else: skip``, so an adapter declaring
+    ``"savepoint"`` while committing at depth 0 -- **the literal U1 regression this row
+    exists to fix** -- ran the whole suite to a clean CONFORMANT. Reproduced before it
+    was believed.
+
+    An adapter over a borrowed connection cannot be built by the plain
+    ``adapter_factory``, because the *host* connection is the thing under test and the
+    suite does not have one. So the author supplies this:
+
+        run_contract_suite(factory, borrowed_factory=make_harness)
+        python -m open_ontology.contract --adapter pkg:Adapter --borrowed pkg:make_harness
+
+    ``host_begin`` puts the host's own transaction on the connection (or asserts one is
+    already there); ``host_open`` reports whether it is still open; ``host_commit``
+    commits it; ``outsider(name)`` counts rows for ``name`` in the type store **from an
+    independent connection**, which is how "not durable yet" is observed rather than
+    asserted; ``teardown`` disposes of everything the factory made.
+
+    In the async suite every callable is a coroutine function. The shape is otherwise
+    identical, which is why it lives here and is generated rather than written twice.
+
+    **Not supplying one is allowed and is not silent.** The run then reports the
+    declaration as NOT VERIFIED in its coverage block (PACKAGE.md 6.4), and a reader
+    can see exactly which claim was taken on trust.
+    """
+
+    adapter: Any
+    outsider: Callable[[str], Any]
+    host_begin: Callable[[], Any]
+    host_open: Callable[[], Any]
+    host_commit: Callable[[], Any]
+    teardown: Callable[[], Any]
+
+
+#: Set by ``run_contract_suite(borrowed_factory=...)`` / ``--borrowed``. A zero-argument
+#: callable returning a :class:`BorrowedHarness`. ``None`` means the suite cannot verify
+#: a ``transaction_scope="savepoint"`` declaration for this adapter, and says so.
+EXTERNAL_BORROWED: Callable[[], Any] | None = None
 
 #: The 400-row public CMS sample. Present or the C13 group skips (PACKAGE.md 8.4).
 FIXTURE_NAME = "cms_sample_400.csv"

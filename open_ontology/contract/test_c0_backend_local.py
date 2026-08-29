@@ -21,6 +21,7 @@ Both claim the same contract ids and both are binding.
 from __future__ import annotations
 
 import os
+import sqlite3
 import threading
 import uuid
 from datetime import UTC, datetime
@@ -30,6 +31,7 @@ import pytest
 from .._clock import FixedClock
 from ..adapter import TypeQuery, TypeRecord
 from ..errors import AlreadyExists, SchemaMismatch
+from ..policy import NamespacePolicy
 from ..registry import Registry
 from ..types import Refusal, TypeEntry
 from . import _support
@@ -309,16 +311,20 @@ class _Boom(RuntimeError):
     """The host's work must survive this; the adapter's must not."""
 
 
-def _borrowed_pair(backend, tmp_path):
+def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
     """A connection the HOST owns, and an adapter opened over it.
 
-    Returns ``(guest, outsider, host_begin, host_open, host_commit, teardown)``.
-    ``outsider(name)`` counts rows from an INDEPENDENT connection, which is how "the
-    host has not committed yet" is observed from outside rather than asserted.
+    ``harness.outsider(name)`` counts rows from an INDEPENDENT connection, which is how
+    "the host has not committed yet" is observed from outside rather than asserted.
+
+    **A foreign adapter supplies its own** via ``run_contract_suite(borrowed_factory=)``
+    or ``--borrowed``. Row 3d, second adversarial round: this function used to hard-code
+    ``sqlite``/``postgres`` and skip everything else, so a third-party adapter declaring
+    ``transaction_scope="savepoint"`` and committing anyway -- the U1 regression itself --
+    passed the whole suite. It also skipped ``sqlite_minimal``, one of the three legs
+    6.1 makes mandatory, whose adapter accepts a borrowed connection perfectly well.
     """
     if backend == "sqlite":
-        import sqlite3
-
         from ..backends.sqlite import SQLiteAdapter
 
         path = str(tmp_path / "borrowed.sqlite")
@@ -352,7 +358,40 @@ def _borrowed_pair(backend, tmp_path):
         def teardown():
             host.close()
 
-        return guest, outsider, host_begin, host_open, host_commit, teardown
+        return _support.BorrowedHarness(
+            guest, outsider, host_begin, host_open, host_commit, teardown
+        )
+
+    if backend == "sqlite_minimal":
+        # The natively-degraded leg is the beacon shape exactly: the host owns the
+        # schema AND the connection. Skipping it here was the least defensible of
+        # the three skips this function used to make.
+        from ..backends.sqlite_minimal import MinimalSQLiteAdapter
+
+        path = str(tmp_path / "borrowed_minimal.sqlite")
+        MinimalSQLiteAdapter.create_host_schema(path)
+        host = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+        host.execute("PRAGMA foreign_keys = ON")
+        host.execute("PRAGMA busy_timeout = 5000")
+        guest = MinimalSQLiteAdapter(path, connection=host)
+
+        def outsider(name):
+            other = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+            other.execute("PRAGMA busy_timeout = 2000")
+            try:
+                sql = "SELECT count(*) FROM oo_type WHERE name = ?"
+                return other.execute(sql, (name,)).fetchone()[0]
+            finally:
+                other.close()
+
+        return _support.BorrowedHarness(
+            guest,
+            outsider,
+            lambda: host.execute("BEGIN IMMEDIATE"),
+            lambda: bool(host.in_transaction),
+            lambda: host.execute("COMMIT"),
+            host.close,
+        )
 
     if backend == "postgres":
         dsn = os.environ.get("OO_POSTGRES_DSN")
@@ -399,11 +438,18 @@ def _borrowed_pair(backend, tmp_path):
             owner._execute('DROP SCHEMA IF EXISTS "' + schema + '" CASCADE')
             owner.close()
 
-        return guest, outsider, host_begin, host_open, host_commit, teardown
+        return _support.BorrowedHarness(
+            guest, outsider, host_begin, host_open, host_commit, teardown
+        )
+
+    if _support.EXTERNAL_BORROWED is not None:
+        return _support.EXTERNAL_BORROWED()
 
     pytest.skip(
-        "PENDING -- a borrowed connection is a property of the reference backends' "
-        "drivers; a foreign adapter declares its own transaction_scope."
+        "PENDING -- this adapter supplied no BorrowedHarness, so its "
+        "transaction_scope declaration cannot be verified here. Pass "
+        "run_contract_suite(borrowed_factory=...) or --borrowed to verify it; "
+        "until then the run reports the declaration as NOT VERIFIED (PACKAGE.md 6.4)."
     )
 
 
@@ -433,9 +479,10 @@ def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(backend, 
     SQLite is here for the same reason Postgres is: 2B's harness must not be
     Postgres-only, and SQLite has SAVEPOINT.
     """
-    guest, outsider, host_begin, host_open, host_commit, teardown = _borrowed_pair(
-        backend, tmp_path
-    )
+    harness = _borrowed_pair(backend, tmp_path)
+    guest = harness.adapter
+    outsider, host_begin = harness.outsider, harness.host_begin
+    host_open, host_commit, teardown = harness.host_open, harness.host_commit, harness.teardown
     try:
         caps = guest.capabilities()
         assert caps.transaction_scope == "savepoint", "borrowed DECLARES; it is not silent"
@@ -479,6 +526,29 @@ def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(backend, 
         assert guest.get_type("default", "outer", kind="entity") is None
         assert guest.get_type("default", "inner", kind="entity") is None
         assert host_open()
+
+        # ...and the REGISTRY says so on the result, not only in capabilities().
+        # Ruling R5 point 2 and PACKAGE.md 3 item 3 both promise a why-style sentence
+        # "in any result that would otherwise imply durability". [Observed, row 3d
+        # second adversarial round] nothing implemented it: approve() over a host-owned
+        # session returned TypeEntry(status="active") with no trace of the fact that the
+        # host had not committed, and the sentence lived only in a separate call the
+        # caller had to know to make. That is the failure Rule U is named after.
+        registry = Registry(
+            guest, clock=FixedClock(), policy=NamespacePolicy(approval_policy="auto")
+        )
+        surfaced = registry.propose_type(
+            "durability_probe", "a word whose durability belongs to the host", [], "user:sd"
+        )
+        assert surfaced.status == "active", "the auto path completed -- atomically"
+        assert any(w.startswith("not_durable_until_host_commits") for w in surfaced.warnings), (
+            "and the result says the host has not committed yet. A caller reading "
+            "status='active' with nothing else on the object has been told a durable "
+            "fact about a write that is not durable"
+        )
+        assert guest.capabilities().why["transaction_scope"] in " ".join(surfaced.warnings), (
+            "and the sentence is the backend's own, verbatim -- not one the registry made up"
+        )
 
         # 3. A clean exit RELEASEs -- and is NOT durable until the host commits.
         with guest.transaction():

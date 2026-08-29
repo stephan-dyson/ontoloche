@@ -29,6 +29,7 @@ def run_contract_suite(
     adapter_factory: Callable[[], Any],
     *,
     resolver_factory: Callable[[], Any] | None = None,
+    borrowed_factory: Callable[[], Any] | None = None,
     args: Sequence[str] = (),
     include_nonbinding: bool = False,
 ) -> int:
@@ -44,6 +45,14 @@ def run_contract_suite(
     because they assert outcomes only the shipped ``DeterministicResolver`` produces.
     Leave it ``None`` and they are binding, whichever adapter you brought.
 
+    ``borrowed_factory`` supplies a :class:`~open_ontology.contract._support.
+    BorrowedHarness` -- an adapter of yours opened over a connection **you** own, plus
+    the handles ``C0-12`` needs to watch your host transaction. Supply it if your adapter
+    declares ``transaction_scope="savepoint"``; without it that declaration is taken on
+    trust and the run says so in its coverage block (PACKAGE.md 6.4). Row 3d added this
+    after an adversarial reviewer got a deliberately-lying savepoint adapter to a clean
+    CONFORMANT verdict.
+
     ``include_nonbinding=False`` (the default) deselects tests marked ``nonbinding``,
     which are the ones PACKAGE.md declares outside the conformance definition. Pass
     ``True`` to run them anyway -- useful when you want the whole picture, never when
@@ -56,10 +65,13 @@ def run_contract_suite(
     marker = () if include_nonbinding else ("-m", "not nonbinding")
     previous = _support.EXTERNAL_FACTORY
     previous_resolver = _support.EXTERNAL_RESOLVER
+    previous_borrowed = _support.EXTERNAL_BORROWED
     _support.EXTERNAL_FACTORY = adapter_factory
     _support.EXTERNAL_RESOLVER = resolver_factory
+    _support.EXTERNAL_BORROWED = borrowed_factory
     try:
         return int(pytest.main(["--pyargs", "open_ontology.contract", *marker, *args]))
     finally:
         _support.EXTERNAL_FACTORY = previous
         _support.EXTERNAL_RESOLVER = previous_resolver
+        _support.EXTERNAL_BORROWED = previous_borrowed

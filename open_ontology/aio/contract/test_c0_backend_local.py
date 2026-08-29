@@ -33,9 +33,12 @@ import pytest
 
 from open_ontology._clock import FixedClock
 from open_ontology.aio.registry import AsyncRegistry
+from open_ontology.policy import NamespacePolicy
 from open_ontology.adapter import TypeQuery, TypeRecord
 from open_ontology.errors import AlreadyExists, SchemaMismatch
 from open_ontology.types import Refusal, TypeEntry
+
+from . import _support
 
 POSTGRES_DSN = os.environ.get("OO_POSTGRES_DSN")
 
@@ -264,6 +267,51 @@ class _Boom(RuntimeError):
     """The host's work must survive this; the adapter's must not."""
 
 
+async def _borrowed_minimal(tmp_path):
+    """The natively-degraded leg over a borrowed connection -- the beacon shape exactly:
+    the host owns the schema AND the connection. Skipping it was the least defensible of
+    the three skips ``_borrowed_pair`` used to make (row 3d, second adversarial round)."""
+    import aiosqlite
+
+    from open_ontology.aio.backends.sqlite_minimal import AsyncMinimalSQLiteAdapter
+
+    path = str(tmp_path / "borrowed_minimal.sqlite")
+    AsyncMinimalSQLiteAdapter.create_host_schema(path)
+    host = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
+    async with host.execute("PRAGMA foreign_keys = ON"):
+        pass
+    async with host.execute("PRAGMA busy_timeout = 5000"):
+        pass
+    guest = await AsyncMinimalSQLiteAdapter.open(path, connection=host)
+
+    async def outsider(name):
+        other = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
+        try:
+            sql = "SELECT count(*) FROM oo_type WHERE name = ?"
+            async with other.execute(sql, (name,)) as cur:
+                return (await cur.fetchone())[0]
+        finally:
+            await other.close()
+
+    async def host_begin():
+        async with host.execute("BEGIN IMMEDIATE"):
+            pass
+
+    async def host_open():
+        return bool(host.in_transaction)
+
+    async def host_commit():
+        async with host.execute("COMMIT"):
+            pass
+
+    async def teardown():
+        await host.close()
+
+    return _support.BorrowedHarness(
+        guest, outsider, host_begin, host_open, host_commit, teardown
+    )
+
+
 async def _borrowed_sqlite(tmp_path):
     import aiosqlite
 
@@ -304,7 +352,9 @@ async def _borrowed_sqlite(tmp_path):
     async def teardown():
         await host.close()
 
-    return guest, outsider, host_begin, host_open, host_commit, teardown
+    return _support.BorrowedHarness(
+        guest, outsider, host_begin, host_open, host_commit, teardown
+    )
 
 
 async def _borrowed_postgres():
@@ -351,7 +401,9 @@ async def _borrowed_postgres():
         await owner._execute('DROP SCHEMA IF EXISTS "' + schema + '" CASCADE')
         await owner.close()
 
-    return guest, outsider, host_begin, host_open, host_commit, teardown
+    return _support.BorrowedHarness(
+        guest, outsider, host_begin, host_open, host_commit, teardown
+    )
 
 
 async def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(
@@ -371,18 +423,26 @@ async def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(
     host commits; (3) re-entrant calls join the outermost savepoint (R5 point 3).
     """
     if backend == "sqlite":
-        parts = await _borrowed_sqlite(tmp_path)
+        harness = await _borrowed_sqlite(tmp_path)
+    elif backend == "sqlite_minimal":
+        harness = await _borrowed_minimal(tmp_path)
     elif backend == "postgres":
         if not POSTGRES_DSN:
             pytest.skip("PENDING -- no local Postgres; set OO_POSTGRES_DSN")
         pytest.importorskip("psycopg", reason="PENDING -- psycopg is not installed")
-        parts = await _borrowed_postgres()
+        harness = await _borrowed_postgres()
+    elif _support.EXTERNAL_BORROWED is not None:
+        harness = await _support.EXTERNAL_BORROWED()
     else:
         pytest.skip(
-            "PENDING -- a borrowed connection is a property of the reference backends' "
-            "drivers; a foreign adapter declares its own transaction_scope."
+            "PENDING -- this adapter supplied no BorrowedHarness, so its "
+            "transaction_scope declaration cannot be verified here. Pass "
+            "run_async_contract_suite(borrowed_factory=...) to verify it; until then "
+            "the run reports the declaration as NOT VERIFIED (PACKAGE.md 6.4)."
         )
-    guest, outsider, host_begin, host_open, host_commit, teardown = parts
+    guest = harness.adapter
+    outsider, host_begin = harness.outsider, harness.host_begin
+    host_open, host_commit, teardown = harness.host_open, harness.host_commit, harness.teardown
 
     try:
         caps = await guest.capabilities()
@@ -422,6 +482,24 @@ async def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(
         assert await guest.get_type("default", "outer", kind="entity") is None
         assert await guest.get_type("default", "inner", kind="entity") is None
         assert await host_open()
+
+        # ...and the REGISTRY says so on the result, not only in capabilities().
+        # Ruling R5 point 2 and PACKAGE.md 3 item 3 both promise a why-style sentence
+        # in any result that would otherwise imply durability; nothing implemented it
+        # until row 3d's second adversarial round.
+        registry = await AsyncRegistry.open(
+            guest, clock=FixedClock(), policy=NamespacePolicy(approval_policy="auto")
+        )
+        surfaced = await registry.propose_type(
+            "durability_probe", "a word whose durability belongs to the host", [], "user:sd"
+        )
+        assert surfaced.status == "active", "the auto path completed -- atomically"
+        assert any(w.startswith("not_durable_until_host_commits") for w in surfaced.warnings), (
+            "and the result says the host has not committed yet"
+        )
+        assert (await guest.capabilities()).why["transaction_scope"] in " ".join(
+            surfaced.warnings
+        ), "and the sentence is the backend's own, verbatim"
 
         # 3. A clean exit RELEASEs -- and is NOT durable until the host commits.
         async with guest.transaction():

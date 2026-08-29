@@ -47,6 +47,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--borrowed",
+        help=(
+            "pkg.mod:Name -- a zero-argument callable returning a BorrowedHarness: your "
+            "adapter over a connection YOU own, plus the handles C0-12 needs to watch "
+            "your host transaction. Required to VERIFY a transaction_scope='savepoint' "
+            "declaration; without it the run reports that declaration as not verified"
+        ),
+    )
+    parser.add_argument(
         "--include-nonbinding",
         action="store_true",
         help=(
@@ -62,10 +71,12 @@ def main(argv: list[str] | None = None) -> int:
         return target(*known.arg)
 
     resolver_factory = _load(known.resolver) if known.resolver else None
+    borrowed_factory = _load(known.borrowed) if known.borrowed else None
 
     return run_contract_suite(
         factory,
         resolver_factory=resolver_factory,
+        borrowed_factory=borrowed_factory,
         args=passthrough,
         include_nonbinding=known.include_nonbinding,
     )
