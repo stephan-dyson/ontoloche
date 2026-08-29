@@ -610,10 +610,26 @@ def test_c15_12_an_override_may_not_weaken_the_kind_and_the_census_says_so(regis
     )
 
     census = {e.key: e for e in registry.attribute_census().entries}
-    assert census["ordered"].declared is True, "the per-kind schema declares it for all"
-    assert census["ordering"].declared is True
+    assert census["ordered"].declared is True, (
+        "both schemas declare it, so it is declared for every name of this kind"
+    )
     assert census["values"].declared is None, (
         "Rule U: declared for one name of this kind and for no other, so the answer "
         "depends on which type -- neither True nor False is honest"
     )
     assert "deficiency_corrected_status" in (census["values"].declared_why or "")
+
+    # **And the same in the other direction**, which the first cut got wrong: the
+    # per-kind schema declares `ordering` and the override REMOVES it (shadowing is
+    # replacement, §5.2b rule 1). A flat `True` there is the same confident positive
+    # the tri-state exists to prevent -- and [Observed, row 3e second adversarial
+    # round] the registry refused a write of `ordering` on the overridden name with
+    # "not declared in the schema" while the census said it was declared for all.
+    assert census["ordering"].declared is None
+    assert "deficiency_corrected_status" in (census["ordering"].declared_why or "")
+
+    # §5.2b's sentinel guard, which had no test: the empty string is the STORE's way of
+    # saying "per-kind", so a caller passing it would silently replace the schema for
+    # the whole kind.
+    with pytest.raises(ValueError):
+        AttributeSchema(namespace="default", kind="value_set", version=1, fields={}, name="")
