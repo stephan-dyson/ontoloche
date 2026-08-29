@@ -236,8 +236,15 @@ class _DegradedWithAttributes(_DegradedBase):
     def put_attr_schema(self, rec):
         return self.inner.put_attr_schema(rec)
 
-    def get_attr_schema(self, namespace: str, kind: str, *, version: int | None = None):
-        return self.inner.get_attr_schema(namespace, kind, version=version)
+    def get_attr_schema(
+        self,
+        namespace: str,
+        kind: str,
+        *,
+        name: str | None = None,
+        version: int | None = None,
+    ):
+        return self.inner.get_attr_schema(namespace, kind, name=name, version=version)
 
     def observe_attributes(
         self, namespace: str, kind: str, attributes: dict, *, at: datetime, schema_version

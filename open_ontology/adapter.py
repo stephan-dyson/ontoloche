@@ -381,6 +381,11 @@ class AttrSchemaRecord:
     mode: str
     registered_at: datetime
     registered_by: str
+    #: Ruling R10, row 3e -- ``None`` is the per-kind schema, a string is a schema for
+    #: that one type which shadows it. Stored as the empty string, which no type name
+    #: can be (INTERFACE.md 2.1's ``^[a-z][a-z0-9_]{0,63}$``), so the store needs no
+    #: nullable primary-key column and the two cases stay distinguishable.
+    name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -410,7 +415,12 @@ class AttributeStore(Protocol):
     def put_attr_schema(self, rec: AttrSchemaRecord) -> AttrSchemaRecord: ...
 
     def get_attr_schema(
-        self, namespace: str, kind: str, *, version: int | None = None
+        self,
+        namespace: str,
+        kind: str,
+        *,
+        name: str | None = None,
+        version: int | None = None,
     ) -> AttrSchemaRecord | None: ...
 
     def observe_attributes(

@@ -238,8 +238,15 @@ class _DegradedWithAttributes(_DegradedBase):
     async def put_attr_schema(self, rec):
         return await self.inner.put_attr_schema(rec)
 
-    async def get_attr_schema(self, namespace: str, kind: str, *, version: int | None = None):
-        return await self.inner.get_attr_schema(namespace, kind, version=version)
+    async def get_attr_schema(
+        self,
+        namespace: str,
+        kind: str,
+        *,
+        name: str | None = None,
+        version: int | None = None,
+    ):
+        return await self.inner.get_attr_schema(namespace, kind, name=name, version=version)
 
     async def observe_attributes(
         self, namespace: str, kind: str, attributes: dict, *, at: datetime, schema_version
