@@ -97,7 +97,7 @@ The brief asks whether `edge_family` is a new `kind` value or a predicate. **Nei
 | **`consumers` / `predicates`** | **the code paths that traverse this family, and the ones that would silently drop a new one — mechanism C, and §8 is the argument** |
 | `Provenance`, `Evidence`, `model_tier` | *which model proposed this label, on what evidence, and did a human approve it* |
 
-**No new call in `INTERFACE.md` §5 is required to manage families.** That is the test of whether this decision is right, and it passes: the thirteen calls stay thirteen.
+**No new call in `INTERFACE.md` §5 is required to manage families.** That is the test of whether this decision is right, and it passes: this document adds none. *(The surface went 13 → 14 in row 3e, and not because of this document: ruling **R11** added `reinstate`, which by ruling **R19** covers edge **families** — they are `TypeEntry`s — and never edge **instances**, for which a retraction is no claim (§3.2) and a re-assertion is a new edge.)*
 
 **What would change this.** If a family ever needs a field that cannot honestly live in `attributes` *and* cannot be validated by `PACKAGE.md` §5 — i.e. a field the registry itself must read — then `kind="edge"` has stopped being a type and wants its own table, and this section is wrong. §2.5 is where that pressure would show up first.
 

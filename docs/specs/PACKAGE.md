@@ -76,7 +76,7 @@ from open_ontology import Registry
 
 `Registry` is **one façade object** carrying the `INTERFACE.md` §5 calls as methods, with signatures identical to §5 minus the implicit `self`.
 
-**Counting note — raised here, resolved in #1 by row 3c.** `INTERFACE.md` used to say "twelve calls". Enumerating §5.1–§5.11 yields **thirteen** functions: `consumers`, `predicates`, `resolve_type`, `propose_type`, `approve`, `reject`, `list_types`, `usage`, `provenance`, `retire`, `merge_types`, `register_consumer`, `record_use`. §5.5 defines two and §5.11 defines two. The façade exposes thirteen methods. `INTERFACE.md` §5.10, §12 and §13 now all say thirteen. *(Raised by this document at #2, corrected in #1 during row 3c after a fifth adversarial round — a two-line fix that had been carried as a known-wrong number through four deliverables.)*
+**Counting note — raised here, resolved in #1 by row 3c.** `INTERFACE.md` used to say "twelve calls". Enumerating §5.1–§5.11 yields **thirteen** functions: `consumers`, `predicates`, `resolve_type`, `propose_type`, `approve`, `reject`, `list_types`, `usage`, `provenance`, `retire`, `merge_types`, `register_consumer`, `record_use`. §5.5 defines two and §5.11 defines two. The façade exposes thirteen methods. `INTERFACE.md` §5.10, §12 and §13 now all say thirteen. **Fourteen since row 3e**, which added `reinstate` (`INTERFACE.md` §5.9b, ruling **R11**) — the first call added to that surface since v0, and the count is now checked mechanically by [`check_spec_drift.py`](../tools/check_spec_drift.py)'s `CALLS` tuple rather than restated in prose. *(Raised by this document at #2, corrected in #1 during row 3c after a fifth adversarial round — a two-line fix that had been carried as a known-wrong number through four deliverables.)*
 
 Public, in the sense of *"you may build against it, knowing v0 will break it"*:
 
@@ -465,7 +465,9 @@ Named here so it is a decision rather than an omission. `usage` is advisory; a l
 
 > **A destructive override that cannot be recorded is refused.**
 
-`retire(force=True)` "records the override in `history`" (§5.9); `merge_types(acknowledge=[…])` records the acknowledgement (§5.10). On a backend with `stores_events=False` the record cannot be written. The options are to do the destructive thing unrecorded, or to refuse. **Refuse.** An unrecorded override is exactly the class of silent, unattributable change this registry exists to prevent, and a backend that cannot keep an audit trail has not earned the right to be overridden. A backend with `stores_events=False` is still conformant — the suite tests the *refusal*, not the capability (`C9-02`, `C10-08`).
+`retire(force=True)` "records the override in `history`" (§5.9); `merge_types(acknowledge=[…])` records the acknowledgement (§5.10); and since row 3e `reinstate` (§5.9b, ruling **R11**) **clears** four retirement fields off the live row, which makes its event the only record that the retirement ever happened. On a backend with `stores_events=False` the record cannot be written. The options are to do the destructive thing unrecorded, or to refuse. **Refuse.** An unrecorded override is exactly the class of silent, unattributable change this registry exists to prevent, and a backend that cannot keep an audit trail has not earned the right to be overridden. A backend with `stores_events=False` is still conformant — the suite tests the *refusal*, not the capability (`C9-02`, `C10-08`, `C9-11`).
+
+> **`reinstate` is the third caller, and the one where "destructive" needs saying out loud** *(row 3e)*. Every other call in `INTERFACE.md` §5 only ever **appends**: `retire` adds a tombstone, `merge_types` adds an alias and a tombstone, and nothing is deleted anywhere. `reinstate` removes `retire_reason`, `retired_by`, `retired_at` and `successor` from the live row — because a retirement that is no longer in force must not read as current (§5.8's append-only rule puts it in the history instead). **The stated cost:** a `stores_events=False` store cannot un-burn a name. That is the world exactly as it was before R11, and it is consistent rather than an exception, because such a store already cannot record a forced retirement either.
 
 ---
 
@@ -815,7 +817,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**132 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Three** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**135 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (14).** No interface call; this is the protocol itself.
 
@@ -942,7 +944,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C8-04 | an imported row carries `unknown:imported`, never null |
 | C8-05 | `model_tier` is never overwritten by a later approval or amendment |
 
-**C9 — `retire` (8).** Mechanism **3**.
+**C9 — `retire` and `reinstate` (11).** Mechanism **3**.
 
 | id | asserts |
 |---|---|
@@ -954,6 +956,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C9-06 | `successor` is recorded and surfaces in `provenance` |
 | C9-07 | **an unknowable consumer set blocks the retirement:** on `indexes_membership=False` every extent is empty, so an empty `gates_on` means *we could not look* — `Refusal("no_consumer_evidence")`, overridable by `force=True`. *(Row 3c. `retire` read an empty `gates_on` as "nothing gates on this" and **silently retired a type with a live registered consumer** — mechanism C committed by the call built to catch it)* |
 | C9-08 | **`force=True` is refused when it cannot be recorded, whichever guard it overrides** — `indexes_membership=False` **and** `stores_events=False` together, which is `work_link_types`' own declared shape (B3 + B6). *(Row 3c. The recordability check lived inside the `live_consumers` branch, and with no extent to compute `gates_on` is always empty, so the branch never ran: a type with a live registered gate retired with no refusal, no warning and no history — while §7.3 B6 says in terms that this case returns `cannot_record_override`. `merge_types` had the unconditional form since v0)* |
+| C9-09 | **the round trip, and the classifier shape**: propose → approve → retire → `reinstate`, and `resolve_type` on the name is back to `existing` at confidence `1.0`. The retirement is **cleared from the live row and kept in the history** — the `reinstated` event carries `retire_reason`, `retired_by`, `retired_at` and `successor`. *(Row 3e, `INTERFACE.md` §5.9b, ruling **R11**. Row 3c's round 8 found `resolve_type` answering *"nothing in the vocabulary fits"* about a word it had just read the tombstone of; a name that still read as burned after being brought back is the same wrong answer pointing the other way.)* |
+| C9-10 | **`successor_active`, the twentieth `Refusal.reason`**: reinstating a word whose retirement named a successor that is **itself active** is refused, non-overridably, with the path back named in `detail`; retiring the successor first then lets the reinstatement through. *(Row 3e. Two live words on one meaning is mechanism **4** arriving through the lifecycle.)* |
+| C9-11 | **`reinstate` is refused where it cannot be recorded, and never no-ops silently**: on `stores_events=False` it returns `Refusal("cannot_record_override")` with the fields it would have cleared in `detail`, and nothing is written; on a type that is **not** retired it returns the entry carrying `reinstate_no_op:not_retired`. *(Row 3e. This is the only call in §5 that REMOVES a lifecycle fact from the live row, so §3.6's rule applies to it — and the second half is ruling R4's rule that a call which quietly did nothing is mechanism C committed by the registry. Needs `indexes_membership` as scaffolding: on a store that cannot compute an extent there is no way to reach a retired row at all, `C9-07` + `C9-08`.)* |
 
 **C10 — `merge_types` (8).** Mechanism **4**.
 
@@ -1060,6 +1065,10 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 | `live_consumers` | C9-01 |
 | `no_consumer_evidence` (retire) | **C9-07** |
 | `cannot_record_override` (retire, compound) | **C9-08** |
+| `cannot_record_override` (reinstate) | **C9-11** |
+| **`successor_active`** (reinstate, non-overridable) | **C9-10** |
+| `reinstate_no_op:not_retired` | **C9-11** |
+| a reinstated name resolves again | **C9-09** |
 | `retired_without_usage_evidence` | C9-03 |
 | retired name not reusable | C9-04, C16-02 |
 | `different_consumer_sets` (non-overridable) | C10-01 |
@@ -1541,7 +1550,7 @@ The first store-schema revision this package has shipped, and it is the case §9
 
 ### 11.2 Recorded for #1's next revision, no ruling needed
 
-- ~~**The call count.**~~ **Corrected by row 3c**: `INTERFACE.md` §5.10, §12 and §13 now say **thirteen**, which is what enumerating §5.1–§5.11 gives (§2.2).
+- ~~**The call count.**~~ **Corrected by row 3c**: `INTERFACE.md` §5.10, §12 and §13 said **thirteen**, which is what enumerating §5.1–§5.11 gave (§2.2). **Fourteen since row 3e** (`reinstate`, §5.9b, ruling R11).
 - **`INTERFACE.md` §2.1 says the registry never reads `attributes`.** §5 of this document makes reading them possible but off by default, so an untouched deployment matches §2.1 exactly. If #1 adopts the mechanism, that sentence needs a clause.
 - **`INTERFACE.md` §9 does not name the `kind` of a `work_link_types` row.** This document determines `kind="edge"` (§7.1) from §2.2's definition.
 
