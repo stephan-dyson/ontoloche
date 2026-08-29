@@ -352,12 +352,22 @@ class Resolution:
     """INTERFACE.md 5.3.
 
     ``alternatives`` is a list result, so Rule K (5.3 / 3) binds it: it carries
-    ``known`` and ``complete``. **``complete`` is always False in v0**, for the same
-    reason ``ConsumerReport.complete`` is (5.1): the near misses are scored inside one
-    namespace, and nothing searched the others. An empty ``alternatives`` therefore
-    never stands in for "there is nothing like this anywhere" -- it means "nothing like
-    this in the namespace you asked in, and we did not look outside it", which is
+    ``known`` and ``complete``.
+
+    **``complete`` was unconditionally False until ruling R6 (row 3e).** The reason it
+    was is still the reason it usually is: the near misses are scored inside one
+    namespace and nothing searched the others, so an empty ``alternatives`` never
+    stands in for "there is nothing like this anywhere" -- it means "nothing like this
+    in the namespace you asked in, and we did not look outside it", which is
     INTERFACE.md 10b.1, contortion 8, reported instead of implied.
+
+    R6 adds ``resolve_type(search_namespaces=...)``, and with it the one condition under
+    which the claim can honestly be True: **the caller named every namespace that
+    exists and every one of them was searched.** ``searched_namespaces`` is a required
+    companion of that claim rather than an echo of the argument, for the reason
+    EDGES.md gives about ``families_searched`` and ruling R12 gives about a coverage
+    line -- *a completeness claim without its scope line is not a claim*. Constructing a
+    ``complete=True`` resolution without one raises.
     """
 
     outcome: str
@@ -371,15 +381,25 @@ class Resolution:
     known: int = 0
     complete: bool = False
     why_incomplete: str = ""
+    #: Every namespace whose active types were actually scored, ``scoped_to`` included.
+    #: Empty means the default v0 behaviour -- one namespace, and it is ``scoped_to``.
+    #: Ruling R6, row 3e.
+    searched_namespaces: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.complete is not False:
-            raise ValueError(
-                "Resolution.complete is always False in v0 (INTERFACE.md 5.3): "
-                "alternatives are scored within one namespace and the others are "
-                "not searched"
-            )
         object.__setattr__(self, "known", len(self.alternatives))
+        object.__setattr__(self, "searched_namespaces", tuple(self.searched_namespaces))
+        if self.complete:
+            if not self.searched_namespaces:
+                raise ValueError(
+                    "Resolution.complete=True requires searched_namespaces "
+                    "(INTERFACE.md 5.3, ruling R6): a completeness claim without the "
+                    "list of what was searched is not a claim"
+                )
+            object.__setattr__(self, "why_incomplete", "")
+            return
+        if self.why_incomplete:
+            return
         object.__setattr__(
             self,
             "why_incomplete",

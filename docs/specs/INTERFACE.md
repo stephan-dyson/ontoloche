@@ -314,6 +314,7 @@ def resolve_type(
     namespace: str = "default",
     tier: str,                       # §2.7 — REQUIRED, not defaulted
     min_confidence: float = 0.0,
+    search_namespaces: Sequence[str] | None = None,   # ruling R6, row 3e. None = v0
 ) -> Resolution: ...
 ```
 
@@ -333,13 +334,33 @@ Resolution:
     reason:      str
     alternatives: list[tuple[str, float]]   # near misses, so a human can overrule
     tier:        str                  # echoed back; goes into provenance
-    scoped_to:     str                # the namespace the near misses were scored in
+    scoped_to:     str                # the namespace the OUTCOME was decided in
     known:         int                # len(alternatives). Rule K
-    complete:      bool               # ALWAYS False in v0. Rule K
-    why_incomplete: str               # names the namespace that was searched
+    complete:      bool               # Rule K. False unless every namespace that
+                                      #   exists was named — see R6 below
+    why_incomplete: str               # names what was not searched. "" when complete
+    searched_namespaces: tuple[str, ...]   # every namespace actually scored, scoped_to
+                                      #   included. Empty = the v0 default, one namespace
 ```
 
-**`complete` is always `false`, for the same reason §5.1's is** *(added by row 3c, 2026-08-28)*. The near misses are scored inside one namespace and nothing searched the others (§10b.1). So an empty `alternatives` **never** means *"there is nothing like this anywhere"* — it means *"nothing like this in the namespace you asked in, and we did not look outside it"*, and the caller can read that off the result instead of having to know it.
+**`complete` was always `false`, for the same reason §5.1's is** *(added by row 3c, 2026-08-28)*. The near misses are scored inside one namespace and nothing searched the others (§10b.1). So an empty `alternatives` **never** means *"there is nothing like this anywhere"* — it means *"nothing like this in the namespace you asked in, and we did not look outside it"*, and the caller can read that off the result instead of having to know it.
+
+### 5.3.1 `search_namespaces` — the cross-namespace lookup *(ruling **R6**, row 3e, 2026-08-29)*
+
+**The finding this closes** is §10b.1, contortion 8, and it is the sharpest result the UC3 pass produced: [`3C-VALIDATION.md`](../findings/3C-VALIDATION.md) W1.3. The Department of Parks registers `status`; the 311 team asks for `status` in its own namespace and is told *"nothing in the vocabulary fits `status`"* with an empty `alternatives`, while the **same context** asked in `dpr` returns `existing` at confidence `1.0`. **The answer was decided by which namespace the caller picked before asking.** §2.6 makes `namespace` the answer to **mechanism 4**; scoping without a cross-namespace *lookup* makes every publisher re-propose every word and leaves the registry unable to say so, which is **mechanism 2 reintroduced by the answer to mechanism 4**, in the call §5.3 says is designed against mechanism 2.
+
+**The rules, in full:**
+
+1. **`None` is the v0 behaviour, exactly.** No namespace is enumerated, nothing extra is read, `searched_namespaces` is empty and `complete` is `false` with the sentence above. **No v0 caller changes**, and no v0 caller pays for R6.
+2. **`namespace` is always searched**, whether or not the caller lists it, and it is first in `searched_namespaces`. The caller is standing in it.
+3. **Hits from another namespace land in `alternatives` as `("<namespace>:<name>", score)`.** Hits from the caller's own namespace keep their bare `name`, unchanged.
+4. **The outcome is still decided inside `namespace` alone.** A hit elsewhere **never** makes the outcome `existing`. Resolving across namespaces would be §2.6's answer to mechanism 4 deleting itself — two agencies meaning different things by one word is what scoping exists to *preserve*. What the hit does is put the fact in `reason` and in `alternatives`, which is what the second publisher was never told.
+5. **An exact name match in another namespace is guaranteed by the registry, not by the resolver.** If the name exists there it is listed, with the resolver's score when the resolver produced one and `None` when it did not — `None`, never `0.0`, because nothing scored it (Rule U). This is the same move §5.3 already makes for a live successor and for a retired name, and it is here for the same reason: [Observed, row 3c] a promise kept only because the shipped scorer happens to rate an exact name `1.0` is a promise a deployment supplying its own resolver (`PACKAGE.md` §2.6's **production path**) does not get.
+6. **`complete` is `true` only when the caller named every namespace that has a type in it** — retired types included, because a namespace whose every word is retired is still a namespace somebody published into. Otherwise `why_incomplete` **names the ones left out**, by name. *"We searched four of the six"* without saying which two is the confident partial answer Rule U forbids, which is what the empty `alternatives` of contortion 8 already was.
+7. **`complete=true` requires `searched_namespaces`**, and constructing a resolution that claims one without the other raises. Same rule as ruling **R12**'s coverage line and [`EDGES.md`](EDGES.md)'s `families_searched`: *a completeness claim without its scope line is not a claim.*
+8. **If the backend cannot enumerate the namespaces that exist**, `complete` is `false` and `why_incomplete` says so, distinctly from the omission case in rule 6. The two are different facts and are reported as two.
+
+**What R6 does not do.** It does not merge, alias, or relate the two entries — *"the same thing, kept apart"* is `equivalent_to`, ruled **R7** and specified in [`EDGES.md`](EDGES.md). It does not make `Resolution.complete` a statement about anything but the namespaces named: the near misses inside each namespace are still the resolver's, and `ConsumerReport.complete` is untouched and still always `false`. `C3-12`.
 
 **Designed against: mechanism 2** (nobody could find the existing types), and **mechanism 1** as the gate in front of `propose_type`.
 
@@ -947,7 +968,9 @@ resolve_type("borough", ctx_dot, namespace="dot", tier="opus")
 
 The one alternative offered is a same-namespace word at a 0.15 score — noise — while two exact matches sit one namespace away, unmentioned.
 
-**This is mechanism 2 (nobody could find the existing types), reintroduced by the answer to mechanism 4.** §2.6 says the answer to collision is scoping. Scoping without a cross-namespace *lookup* means every publisher re-proposes every word, and the registry cannot say so. **Not fixed in v0**, because the fix is a signature change to §5.3 — the smallest honest form is a `search_namespaces: Sequence[str] | None` argument whose results land in `alternatives` as `("<namespace>:<name>", score)` — and v0 is not amended on a design test's say-so. **Recorded as the first thing INTERFACE v1 must answer.**
+**This is mechanism 2 (nobody could find the existing types), reintroduced by the answer to mechanism 4.** §2.6 says the answer to collision is scoping. Scoping without a cross-namespace *lookup* means every publisher re-proposes every word, and the registry cannot say so.
+
+> **FIXED by ruling R6, row 3e, 2026-08-29 — §5.3.1.** This paragraph used to end *"not fixed in v0, because the fix is a signature change to §5.3 … and v0 is not amended on a design test's say-so. Recorded as the first thing INTERFACE v1 must answer."* The ruling reversed the deferral rather than the reasoning: the fix is exactly the `search_namespaces: Sequence[str] | None` argument the deferral names, it is **additive and default-off**, and `v0` is labelled unstable so that additive amendments are cheap — waiting for v1 would have left the venture's kill-criterion fixture with its central finding open for a signature change nobody has to take. What did not change: the outcome is still decided inside one namespace, because resolving *across* them would be §2.6's answer to mechanism 4 deleting itself. `C3-12` drives this exact `status` case in both suites.
 
 ### 10b.2 CONTORTION 9 — nothing can say *these two mean the same thing, kept apart*
 
