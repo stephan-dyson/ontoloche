@@ -16,7 +16,8 @@ What it implements, and nothing more:
 * EDGES 2.4.1 the endpoint rule, enforced at family-DECLARATION time:
   instance-level declares only ``entity``; no family at either level may
   declare ``predicate``
-* EDGES 4 ``neighbors`` with the depth cap, Rule K/U fields and ``at_depth``
+* EDGES 4 ``neighbors`` with the depth cap, Rule K/U fields, ``at_depth``,
+  per-level page exhaustion and the assembly bound
 * EDGES 6 the four capability flags and two declarations, enough of them to
   make the refusals real (driven by ``edges_capability_probe.py``)
 
@@ -239,37 +240,63 @@ class EdgeStore:
         *,
         incident_to: Sequence[NodeRef] | None = None,
         families: Sequence[str] | None = None,
+        symmetric_families: frozenset[str] = frozenset(),
         direction: str = "both",
         include_retracted: bool = False,
-    ) -> tuple[tuple[Edge, ...], bool, str | None]:
-        """Returns (records, complete, why_incomplete)."""
+        limit: int | None = None,
+        after: int | None = None,
+    ) -> tuple[tuple[Edge, ...], bool, str | None, int | None]:
+        """Primitive 18. Returns (records, complete, why_incomplete, next_after).
+
+        `after` is an opaque cursor -- an index into the store's stable order,
+        which is all a probe needs. EDGES 7.1 keyset-pages on
+        (created_at, edge_id); the registry's obligation is the same either way:
+        exhaust the pages for a level, or say the level is incomplete.
+        """
         keys = {str(n) for n in incident_to} if incident_to is not None else None
-        out: list[Edge] = []
+        matched: list[Edge] = []
         suppressed = 0
+        # EDGES 6: indexes_edges_by_family=False means the store CANNOT apply the
+        # family filter. It returns the node's edges unfiltered and complete for
+        # what it was asked; the registry narrows above. This is the deliberate
+        # deviation from find_types' rule -- see EDGES 7.1.
+        apply_family_filter = families is not None and self.caps.indexes_edges_by_family
         for e in self._edges.values():
             if e.status == "retracted" and not include_retracted:
                 if keys is None or str(e.src) in keys or str(e.dst) in keys:
                     suppressed += 1
                 continue
-            if families is not None and e.family not in families:
+            if apply_family_filter and e.family not in families:
                 continue
             if keys is not None:
                 out_hit = str(e.src) in keys
                 in_hit = str(e.dst) in keys
-                if direction == "out" and not out_hit:
+                # EDGES 2.2/4.1: a SYMMETRIC family has no direction. `A eq B`
+                # IS `B eq A`, so filtering on stored src/dst would make the
+                # answer depend on which publisher happened to write it first --
+                # a confident, complete, FALSE negative. Round 2's BLOCKING.
+                if e.family in symmetric_families:
+                    if not (out_hit or in_hit):
+                        continue
+                elif direction == "out" and not out_hit:
                     continue
-                if direction == "in" and not in_hit:
+                elif direction == "in" and not in_hit:
                     continue
-                if direction == "both" and not (out_hit or in_hit):
+                elif direction == "both" and not (out_hit or in_hit):
                     continue
-            out.append(e)
+            matched.append(e)
         why = None
         if suppressed:
             why = (
                 f"{suppressed} retracted edge(s) suppressed by include_retracted=False; "
                 "a default that hides things sets complete=False (INTERFACE 5.6)"
             )
-        return tuple(out), suppressed == 0, why
+        start = after or 0
+        page = matched[start:] if limit is None else matched[start:start + limit]
+        nxt = None
+        if limit is not None and start + limit < len(matched):
+            nxt = start + limit
+        return tuple(page), suppressed == 0, why, nxt
 
 
 class EdgeRegistry:
@@ -280,7 +307,14 @@ class EdgeRegistry:
         families: Iterable[Family] = (),
         store: EdgeStore | None = None,
         registered_types: Iterable[TypeRef] = (),
+        max_edges: int | None = None,
+        page_size: int | None = None,
     ) -> None:
+        # EDGES 4.2: the depth cap bounds HOPS, not degree. `max_edges` is the
+        # deployment's assembly bound; hitting it is an incomplete report with a
+        # why, never a silently truncated one.
+        self.max_edges = max_edges
+        self.page_size = page_size
         self.families = {f.name: f for f in families}
         self.store = store
         # EDGES 2.7: endpoint_kind_mismatch fires only when the endpoint's type
@@ -444,37 +478,79 @@ class EdgeRegistry:
         if str(_type_of(node)) not in self.registered_types:
             warnings.append(f"origin_type_unregistered:{_type_of(node)}")
 
+        symmetric = frozenset(
+            name for name in searched if self.families[name].symmetric
+        )
         seen_edges: dict[str, NeighborEdge] = {}
         frontier: list[NodeRef] = [node]
         visited = {str(node)}
         complete = True
         why: str | None = None
         depth_reached = 0
+        bound_hit = False
 
         for d in range(1, depth + 1):
-            if not frontier:
+            if not frontier or bound_hit:
                 break
-            recs, page_complete, page_why = self.store.find_edges(
-                incident_to=frontier,
-                families=searched,
-                direction=direction,
-                include_retracted=include_retracted,
-            )
-            if not page_complete:
-                complete = False
-                why = why or page_why
+            # EDGES 4.2/7.1: the registry EXHAUSTS the adapter's pages for a
+            # level. A level assembled from one page of many would be silently
+            # partial, which is the failure Rule K exists for.
+            recs: list[Edge] = []
+            cursor: int | None = None
+            while True:
+                page, page_complete, page_why, cursor = self.store.find_edges(
+                    incident_to=frontier,
+                    families=searched,
+                    symmetric_families=symmetric,
+                    direction=direction,
+                    include_retracted=include_retracted,
+                    limit=self.page_size,
+                    after=cursor,
+                )
+                if not page_complete:
+                    complete = False
+                    why = why or page_why
+                recs.extend(page)
+                if self.max_edges is not None and len(seen_edges) + len(recs) >= self.max_edges:
+                    bound_hit = True
+                    break
+                if cursor is None:
+                    break
+            # EDGES 7.1: when the store could not apply the family filter
+            # (indexes_edges_by_family=False) the REGISTRY narrows above it.
+            # The first version of this only implemented the store half, and the
+            # test written for it found the registry half missing.
+            if not self.store.caps.indexes_edges_by_family:
+                recs = [e for e in recs if e.family in searched]
             next_frontier: list[NodeRef] = []
+            new_at_this_depth = 0
             for e in recs:
                 if e.edge_id in seen_edges:
                     continue
+                if self.max_edges is not None and len(seen_edges) >= self.max_edges:
+                    bound_hit = True
+                    break
                 seen_edges[e.edge_id] = NeighborEdge(edge=e, at_depth=d)
+                new_at_this_depth += 1
                 for far in (e.src, e.dst):
                     if str(far) not in visited:
                         visited.add(str(far))
                         next_frontier.append(far)
-            if recs:
+            # EDGES 4.3: depth_reached counts levels that found something NEW.
+            # Counting "the scan returned records" instead made a genuine dead
+            # end report depth_reached == depth_requested under the DEFAULT
+            # direction="both", because the frontier re-finds the edge it
+            # arrived on. Round 2's second BLOCKING.
+            if new_at_this_depth:
                 depth_reached = d
             frontier = next_frontier
+
+        if bound_hit:
+            complete = False
+            why = why or (
+                f"assembly bound of {self.max_edges} edges reached; the depth cap "
+                "bounds hops, not node degree (EDGES 4.2)"
+            )
         # EDGES 4.3: a dead end is depth_reached < depth_requested with
         # complete=True. Truncation is a SEPARATE signal (complete=False plus a
         # why). Conflating them would make complete=False the common case.

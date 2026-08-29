@@ -268,6 +268,115 @@ def main() -> int:  # noqa: C901
         ok &= check("...on the KIND, which is the reification ban",
                     out9.detail["problem"], "kind")
 
+    # ---- round 2: direction on a SYMMETRIC family ------------------------
+    print("\nEDGES 2.2/4.1 -- `direction` does not filter a SYMMETRIC family")
+    eq = Family(name="equivalent_to", level="type", namespace="default",
+                definition="the two types denote the same thing", symmetric=True,
+                endpoint_kinds={"src": ("value_set",), "dst": ("value_set",)})
+    BA = TypeRef("dpr", "value_set", "borough")
+    BB = TypeRef("dot", "value_set", "borough")
+    reg_s = EdgeRegistry(families=[eq], store=EdgeStore(), registered_types=[BA, BB])
+    reg_s.add_edge("equivalent_to", BA, BB, prov("user:dpr_steward", "user"))
+    seen = {}
+    for node, d in ((BA, "out"), (BB, "out"), (BA, "in"), (BB, "in"),
+                    (BA, "both"), (BB, "both")):
+        rep = reg_s.neighbors(node, ["equivalent_to"], 1, namespace="default",
+                              direction=d)
+        seen[(str(node), d)] = rep.known
+    print(f"    known by (origin, direction): { {k: v for k, v in seen.items()} }")
+    ok &= check("every origin/direction combination finds the one edge",
+                sorted(set(seen.values())), [1],
+                "-- `A eq B` IS `B eq A`; filtering on stored src/dst gave a "
+                "confident complete=True FALSE NEGATIVE from one end")
+
+    print("\nEDGES 4.1 -- a DIRECTED family still filters")
+    blocks = Family(name="blocks", level="instance", namespace="default",
+                    definition="src blocks dst", inverse_label="blocked_by",
+                    endpoint_kinds={"src": ("entity",), "dst": ("entity",)})
+    TK = TypeRef("t", "entity", "task")
+    reg_d = EdgeRegistry(families=[blocks], store=EdgeStore(), registered_types=[TK])
+    reg_d.add_edge("blocks", InstanceRef(TK, "41"), InstanceRef(TK, "77"),
+                   prov("ai:classifier", "ai", confidence=0.8))
+    outs = reg_d.neighbors(InstanceRef(TK, "41"), ["blocks"], 1,
+                           namespace="default", direction="out").known
+    ins = reg_d.neighbors(InstanceRef(TK, "41"), ["blocks"], 1,
+                          namespace="default", direction="in").known
+    ok &= check("out finds it, in does not", (outs, ins), (1, 0))
+
+    # ---- round 2: the dead end under the DEFAULT direction ---------------
+    print("\nEDGES 4.3 -- the dead end holds under the DEFAULT direction='both'")
+    reg_de = EdgeRegistry(families=[CITES], store=EdgeStore(),
+                          registered_types=[CITATION, TAG])
+    reg_de.add_edge("cites", InstanceRef(CITATION, "1"), InstanceRef(TAG, "F684"),
+                    prov("import:cms", "user"), namespace=NS)
+    for d in ("both", "out"):
+        rep = reg_de.neighbors(InstanceRef(CITATION, "1"), ["cites"], 2,
+                               namespace=NS, direction=d)
+        print(f"    direction={d:4s} depth_reached={rep.depth_reached}/"
+              f"{rep.depth_requested} complete={rep.complete}")
+        ok &= check(f"depth_reached is 1, not 2, with direction={d}",
+                    rep.depth_reached, 1,
+                    "-- counting 'the scan returned records' made the frontier "
+                    "re-find its arriving edge and call that progress")
+        ok &= check(f"and complete stays True with direction={d}", rep.complete, True)
+
+    # ---- round 2: indexes_edges_by_family=False, actually implemented ----
+    print("\nEDGES 6/7.1 -- indexes_edges_by_family=False: the store cannot filter")
+    caps_noidx = EdgeCapabilities(
+        indexes_edges_by_family=False,
+        why={"indexes_edges_by_family":
+             "work_links.relationship is free text with no index"},
+    )
+    store_ni = EdgeStore(caps_noidx)
+    reg_ni = EdgeRegistry(families=[CITES, blocks], store=store_ni,
+                          registered_types=[CITATION, TAG, TK])
+    reg_ni.add_edge("cites", InstanceRef(CITATION, "9"), InstanceRef(TAG, "F684"),
+                    prov("import:cms", "user"), namespace=NS)
+    reg_ni.add_edge("blocks", InstanceRef(CITATION, "9"), InstanceRef(CITATION, "10"),
+                    prov("user:x", "user"), namespace="default")
+    raw, raw_complete, _, _ = store_ni.find_edges(
+        incident_to=[InstanceRef(CITATION, "9")], families=["cites"])
+    ok &= check("the STORE ignores the family filter and returns both",
+                len(raw), 2)
+    ok &= check("...and says its page IS complete for what it was asked",
+                raw_complete, True,
+                "-- the deliberate deviation from find_types' rule, EDGES 7.1")
+    rep_ni = reg_ni.neighbors(InstanceRef(CITATION, "9"), ["cites"], 1, namespace=NS)
+    ok &= check("the REGISTRY narrows above the store", rep_ni.known, 1)
+    ok &= check("families_searched is the caller's, not the store's",
+                rep_ni.families_searched, ("cites",))
+    ok &= check("and the answer is still complete", rep_ni.complete, True)
+
+    # ---- round 2: degree, not depth, is the unbounded axis ---------------
+    print("\nEDGES 4.2 -- the cap bounds HOPS, not degree: a hub at depth 1")
+    hub = InstanceRef(TypeRef("oti_311", "entity", "agency"), "NYPD")
+    reg_hub = EdgeRegistry(families=[CITES], store=EdgeStore(),
+                           registered_types=[CITATION, TAG, hub.type],
+                           max_edges=500, page_size=64)
+    for i in range(2000):
+        reg_hub.add_edge("cites", InstanceRef(CITATION, f"r{i}"), hub,
+                         prov("import:socrata", "user"), namespace=NS)
+    rep_hub = reg_hub.neighbors(hub, ["cites"], 1, namespace=NS)
+    print(f"    2000 edges on one node, max_edges=500, page_size=64 -> "
+          f"known={rep_hub.known} complete={rep_hub.complete}")
+    print(f"    why_incomplete: {rep_hub.why_incomplete}")
+    ok &= check("the report is bounded", rep_hub.known <= 500, True)
+    ok &= check("and says so rather than truncating silently", rep_hub.complete, False)
+    ok &= check("with a why naming the bound", "assembly bound" in
+                (rep_hub.why_incomplete or ""), True)
+
+    print("\nEDGES 7.1 -- with NO bound, the registry exhausts the pages per level")
+    reg_pg = EdgeRegistry(families=[CITES], store=EdgeStore(),
+                          registered_types=[CITATION, TAG, hub.type],
+                          page_size=64)
+    for i in range(300):
+        reg_pg.add_edge("cites", InstanceRef(CITATION, f"p{i}"), hub,
+                        prov("import:socrata", "user"), namespace=NS)
+    rep_pg = reg_pg.neighbors(hub, ["cites"], 1, namespace=NS)
+    ok &= check("all 300 assembled from 64-row pages", rep_pg.known, 300,
+                "-- a level built from one page of five would be silently partial")
+    ok &= check("and complete", rep_pg.complete, True)
+
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
     return 0 if ok else 1
 
