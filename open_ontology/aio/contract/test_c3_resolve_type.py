@@ -133,3 +133,37 @@ async def test_c3_09_cms_processing_date_is_an_export_artefact(registry):
     )
     assert resolution.outcome == "not_a_type"
     assert resolution.reason == "export_artefact"
+
+async def test_c3_10_a_retired_name_is_named_in_the_resolution_not_silently_omitted(registry):
+    """**Rule U, third instance.** `resolve_type` is the call INTERFACE.md 5.3 says is
+    *"designed against mechanism 2 -- nobody could find the existing types"*, and it
+    could not find a retired one.
+
+    A retired exact match is correctly not an `existing` outcome -- 5.9 makes the name
+    permanently unusable. But the registry had just read the tombstone and threw it
+    away, and then answered *"nothing in the vocabulary fits 'watch'"*: a confident
+    negative about a word it knew was burned. A classifier that trusts it calls
+    `propose_type` and gets the old retired `TypeEntry` back, distinguishable from a
+    fresh success only by inspecting `.status`.
+
+    The fix needs no new field: it is surfaced the way 5.5 already surfaces a prior
+    rejection -- named in `reason`, listed in `alternatives` with a `None` score,
+    because nothing scored it. Added by row 3c after an adversarial review round
+    reproduced it live.
+    """
+    await seed(registry, "watch", definition="a thing a user watches")
+    await registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")
+
+    resolution = await registry.resolve_type(
+        "watch", ResolveContext(definition_hint="something else entirely"), tier="opus"
+    )
+    assert resolution.outcome != "existing", "a retired name is not usable (5.9)"
+    assert "retired" in resolution.reason, "the tombstone must be named, not discarded"
+    assert "superseded by `capture`" in resolution.reason, "with the reason it was retired"
+    assert "capture" in resolution.reason, "and the successor, so the caller has somewhere to go"
+    assert ("watch", None) in resolution.alternatives, (
+        "listed like a prior rejection, scored None because nothing scored it"
+    )
+    assert "nothing in the vocabulary fits" not in resolution.reason, (
+        "the confident negative this test exists to remove"
+    )

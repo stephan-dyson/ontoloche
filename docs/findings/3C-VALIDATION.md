@@ -350,6 +350,14 @@ Every round below returned **NOT YET**. Not one finding was dismissed; each was 
 | 7 | INTERFACE | 1 BLOCKING, 1 MAJOR | The reviewer brief was re-aimed at design rather than drift, and it worked: **the `definitions_diverge` guard was anti-correlated with its own purpose.** §7.2. |
 | 4 | PACKAGE | 1 BLOCKING, 2 MAJOR, 2 MINOR | **`retire()`'s live-consumer guard was silently defeated by one declined capability.** §7.3. Also: a backend declining the optional `AttributeStore` crashed five C15 tests despite §5.5 calling it conformant — and `DegradedAdapter` could not construct one, because it re-declared the four extension methods unconditionally. `C15-08` added. |
 
+### 7.1b Round 8, and the third instance of the same error
+
+| # | Spec | Findings | What it caught |
+|---|---|---|---|
+| 8 | INTERFACE | 1 MAJOR | **`resolve_type` was blind to retired names.** [Observed]: propose → approve → retire `watch`, then `resolve_type("watch", …)` returns `outcome="proposal"`, `reason="nothing in the vocabulary fits 'watch'"`, empty `alternatives` — a clean green light for a word the registry had just read the tombstone of and discarded. A classifier that trusts it calls `propose_type` and gets the **old retired entry** back, distinguishable from a fresh success only by inspecting `.status`. That is **UC1's own shape** — an auto-approving classifier, one step earlier in the pipeline than R10 addresses — in the call §5.3 says is *designed against mechanism 2*. Fixed with no new field: the retirement is named in `reason` with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score, exactly as §5.5 already does for a prior rejection. `C3-10`. |
+
+**Three findings, one error.** Round 1's empty `alternatives` for a cross-namespace word, §7.3's `retire` reading an unknowable `gates_on` as *"nothing gates on this"*, and round 8's silent tombstone are the same mistake three times: **a confident answer standing in for a fact the system either had in hand or could not have.** Rule U is the rule this project states most loudly and breaks most often in its own implementation. Neither a reviewer's eye nor a contract test caught the family — each instance was found only when someone drove the real registry through a real scenario, which is the practice worth carrying forward.
+
 ### 7.2 The finding that changed the design: `definitions_diverge` was backwards
 
 `merge_types` refusal #6 asks whether two definitions are near-synonymous before letting a merge proceed. v0 answered it with `difflib.SequenceMatcher` character similarity against a fixed 0.55 threshold. Round 7 measured what that actually buys. **[Observed], on the reference implementation:**

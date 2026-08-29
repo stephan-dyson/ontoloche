@@ -699,7 +699,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**117 tests in seventeen groups.** *(109 at #3; eight added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C5-12`, `C6-07`, `C9-07`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**118 tests in seventeen groups.** *(109 at #3; nine added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C3-10`, `C5-12`, `C6-07`, `C9-07`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (9).** No interface call; this is the protocol itself.
 
@@ -738,7 +738,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C2-04 | `include_retired` |
 | C2-05 | a predicate is not a supertype: membership of `commentable` implies nothing about `searchable` |
 
-**C3 — `resolve_type` (9).** Mechanisms **2**, and **1** as the gate.
+**C3 — `resolve_type` (10).** Mechanisms **2**, and **1** as the gate.
 
 | id | asserts | note |
 |---|---|---|
@@ -751,6 +751,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C3-07 | a prior rejection for the candidate surfaces in `alternatives` | §5.5 |
 | C3-08 | **[CMS]** `resolve_type("location", context(sibling_columns=["Provider Address","City/Town","State","ZIP Code"]))` ⇒ `not_a_type` / `redundant_projection`. **`resolver_dependent`** — binding for the reference backends, skipped for a foreign adapter (§2.6, R8) | §10.2 |
 | C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact`. **`resolver_dependent`** (§2.6, R8) | §10.2, T7 |
+| C3-10 | **a retired name is named in the resolution**, with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score — never a bare *"nothing fits"*. *(Row 3c: `resolve_type` read the tombstone and discarded it, answering with a confident negative about a word it knew was burned — Rule U, in the call designed against mechanism 2)* |
 
 **C4 — `propose_type` (9).** Mechanism **1**.
 
@@ -947,7 +948,7 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 > *Corrected by row 3c after an adversarial review round.* This line read *"the three refusals this document adds are tested at C9-02, C10-08, C15-04"* — which names three ids covering **two** of the reasons, and left **`proposals_not_stored` with no test anywhere in either suite**. That is UC1's own path (§7.3 B4: a backend with no proposal table is conformant and `approve`/`reject` must refuse), so the capability the Tenshen design test most depends on was the one the suite never checked. `C5-12` closes it.
 
-**[Inferred]** the built suite will be larger than 117 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+**[Inferred]** the built suite will be larger than 118 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1283,7 +1284,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (117 tests, seventeen groups — 109 at #3, eight added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (118 tests, seventeen groups — 109 at #3, nine added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |

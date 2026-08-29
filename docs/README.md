@@ -17,7 +17,7 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 | Doc | Status | What it is |
 |---|---|---|
 | [INTERFACE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) | v0, unstable | The type-registry contract: thirteen calls around a proposal→approval loop; `consumers`, `predicates`, lifecycle; the closed fifteen-value `Refusal.reason` vocabulary (§5.12); Tenshen and CMS design tests. |
-| [PACKAGE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) | v0, unstable | The `open_ontology` package: a fifteen-primitive storage-adapter protocol, SQLite + Postgres backends, `attributes` schema-per-kind, and the **117-test contract suite that defines conformance** (the Phase 2B gate; 109 at #3, eight added by row 3c). |
+| [PACKAGE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) | v0, unstable | The `open_ontology` package: a fifteen-primitive storage-adapter protocol, SQLite + Postgres backends, `attributes` schema-per-kind, and the **118-test contract suite that defines conformance** (the Phase 2B gate; 109 at #3, nine added by row 3c). |
 
 ## Findings — evidence, in the order it was produced
 
