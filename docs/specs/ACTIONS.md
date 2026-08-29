@@ -100,6 +100,8 @@ Two candidate second rules were considered and **not** taken, because two is whe
 - *`effects == []` ⇒ `reversibility` must be `reversible`.* Tempting and wrong: an action with no declared **protocol** effects may still change host state (§2.5's `host_state`), so the antecedent does not imply the consequent. The real check is at record time and it is `effect_undeclared` (§7).
 - *`approval_mode="auto"` ⇒ `min_auto_tier is not None`.* Almost right, and left out deliberately: a deployment running a single model tier has nothing to compare against, and forcing it to invent a tier string is how `model_tier`'s opaque-string posture (`INTERFACE.md` §2.7) gets quietly turned into a required ordering nobody defined. It is a **warning**, not a rule — §5.2.
 
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
 | # | rule | exercised by |
 |---|---|---|
 | 2.2-1 | **A `kind="action"` entry that declares none of the eight keys is a legal `TypeEntry` and is NOT refused.** It is simply not yet usable as an action family, and `preflight` / `record_invocation` refuse on it with `attributes_schema_violation`. Refusing the *registration* would reject entries `INTERFACE.md` §2.1 says are legal — `edges.family_declaration_problem`'s own recorded decision for the identical case one kind along | `C19-26` |
@@ -193,6 +195,8 @@ Three unrelated surfaces reaching for one missing mechanism is the shape that ea
 
 > **The modelling escape hatch is closed too, and it is closed by a rule CMS itself motivated.** The obvious way to make severity checkable is to make it an edge — `citation:42 --has_severity--> value_set:scope_severity_code` — and `EDGES.md` §2.4.1 **refuses that at two layers**, at declaration and at write, because an instance-level family takes only `entity` endpoints. So the value test has no edge to stand on either, and §12 shows the refusal firing on the fixture that motivated the rule. **This document did not have to invent a boundary; it inherited one and found that it holds.**
 
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
 | # | rule | exercised by |
 |---|---|---|
 | 2.4-1 | The precondition vocabulary is closed at four kinds; a family declaring a fifth is refused at declaration | `C19-01` |
@@ -247,6 +251,8 @@ If `record_invocation` **refused** a report because the host observed an effect 
 
 **That is a deliberate departure from the brief's candidate list, recorded rather than quietly taken.** The brief's own instruction is *"add only what a design test forces"*; the design test forced the value into a different vocabulary, not out of existence. §7 carries both halves, and `INTERFACE.md` §5.4 gains the warning in this change per **R3**'s rule as `EDGES.md` §2.8 extended it to warnings.
 
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
 | # | rule | exercised by |
 |---|---|---|
 | 2.5-1 | The effect vocabulary is closed at four operations; a fifth is refused at declaration with `effect_not_permitted` | `C19-06` |
@@ -287,6 +293,17 @@ If `record_invocation` **refused** a report because the host observed an effect 
 ---
 
 ## 3. Invocations
+
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
+| # | rule | exercised by |
+|---|---|---|
+| 3-1 | `declared_effects` is **copied** from the family at invocation time, so amending the family does not re-describe an existing invocation's blast radius | `C19-29` |
+| 3-2 | `gate_verdict` has three values and `not_asked` is one of them; `False` would assert a refusal that never happened | `C19-30` |
+| 3-3 | `approved_by` is **never null** on an `applied` invocation; `"auto:<policy>"` when no human approved — `INTERFACE.md` §2.4's rule, inherited verbatim | `C19-31` |
+| 3-4 | `outcome="refused"` REQUIRES a `refusal`, whose `reason` is `INTERFACE.md` §5.12's closed vocabulary | `C19-32` |
+| 3-5 | An observed effect outside the declared set warns and the record is kept; an observed effect that is a **subset** of the declared set warns nothing | `C19-33` |
+| 3-6 | There is no `pending` outcome | `prose-only:` a value that does not exist cannot be asserted present; what a test could check is that the vocabulary has exactly four members, which is the closed-vocabulary assertion in rule 3-4 doing the same work under another name |
 
 ### 3.1 `Invocation` — one use of one verb
 
@@ -391,14 +408,6 @@ with three new `event` values — `invocation_recorded`, `invocation_reviewed`, 
 
 **[Observed]** beacon already has the second shape and not the first: `add_task_stakeholder` returns `undo={"kind": "add_task_stakeholder", …}` which `/api/messages/{id}/undo` replays through the same dispatch path — a compensating call, recorded nowhere as a governed event.
 
-| # | rule | exercised by |
-|---|---|---|
-| 3-1 | `declared_effects` is **copied** from the family at invocation time, so amending the family does not re-describe an existing invocation's blast radius | `C19-29` |
-| 3-2 | `gate_verdict` has three values and `not_asked` is one of them; `False` would assert a refusal that never happened | `C19-30` |
-| 3-3 | `approved_by` is **never null** on an `applied` invocation; `"auto:<policy>"` when no human approved — `INTERFACE.md` §2.4's rule, inherited verbatim | `C19-31` |
-| 3-4 | `outcome="refused"` REQUIRES a `refusal`, whose `reason` is `INTERFACE.md` §5.12's closed vocabulary | `C19-32` |
-| 3-5 | An observed effect outside the declared set warns and the record is kept; an observed effect that is a **subset** of the declared set warns nothing | `C19-33` |
-| 3-6 | There is no `pending` outcome | `prose-only:` a value that does not exist cannot be asserted present; what a test could check is that the vocabulary has exactly four members, which is the closed-vocabulary assertion in rule 3-4 doing the same work under another name |
 
 
 ---
@@ -452,6 +461,18 @@ A new action family is proposed, resolved against existing ones, approved or rej
 
 **All three refuse, and none of them says `false`.** The shipped comment on `TierOrder.below` gives the reason for the second: returning `False` would *"auto-approve an unknown model on the strength of not recognising its name"*. Round 1 found the first draft returning a confident below-the-floor refusal for a tier nobody supplied, and **raising an uncaught `ValueError`** for a tier outside the order — in the one place §5.2 flags mixed vendors as **[Assumed]** and possibly wrong.
 
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
+| # | rule | exercised by |
+|---|---|---|
+| 5.2-1 | `approval_mode` is closed at three values; a family declaring a fourth is refused at declaration | `C19-13` |
+| 5.2-2 | `approval_mode="human"` refuses a `preflight` whose `approved_by` is absent or whose **derived `created_by` is not `"user"`** — an allowlist, not a prefix blocklist | `C19-14` |
+| 5.2-3 | An actor tier below `min_auto_tier` returns `tier_below_action_policy` with `detail["state"] == "false"`, the family's floor and the actor's tier | `C19-15` |
+| 5.2-4 | `min_auto_tier=None` under `approval_mode="auto"` is a legal configuration reported as `tier_floor=None` plus a `why`, never a warning and never a refusal | `C19-16` |
+| 5.2-5 | The comparison is `bool \| None`, and **all three** unknown causes — no order, no tier, a tier outside the order — refuse with `detail["state"] == "unknown"` and a `why` naming which. None of them raises, and none says `false` | `C19-17` |
+| 5.2-6 | `model_tier` on `InvocationProvenance` is the tier of the **invoking** actor, distinct from the family's own `provenance.model_tier` | `C19-18` |
+| 5.2-7 | `approval_mode="review"` records `approved_by="auto:<policy>"` and the invocation is enumerable by `invocations(unreviewed=True)` until an `invocation_reviewed` event sets `reviewed_at` | `C19-50` |
+
 ### 5.3 What `min_auto_tier` does NOT decide — ruling R20, restated because it is easy to over-read
 
 **R20 ruled: `model_tier` on provenance — YES. A tier gate on AI-written edges — NO in v0**, because *"gating a weekly batch job is a product decision about beacon's behaviour, not a storage shape"*, relayed to the beacon program as an observation rather than a requirement.
@@ -465,19 +486,23 @@ So, concretely, for the one host that exists:
 
 **The 0.5 finding is what makes the parameter a product parameter rather than a knob.** **[Observed]** four agents, four tiers, one CMS slice: the cheapest tier **inverted the scope-and-severity scale** — reported that higher letters are less serious when J/K/L are Immediate Jeopardy — while every number it produced stayed correct and nothing errored. An action whose precondition depends on that scale, invoked by that tier, unattended, is that failure with a write attached. §12 is that scenario, end to end.
 
-| # | rule | exercised by |
-|---|---|---|
-| 5.2-1 | `approval_mode` is closed at three values; a family declaring a fourth is refused at declaration | `C19-13` |
-| 5.2-2 | `approval_mode="human"` refuses a `preflight` whose `approved_by` is absent or whose **derived `created_by` is not `"user"`** — an allowlist, not a prefix blocklist | `C19-14` |
-| 5.2-3 | An actor tier below `min_auto_tier` returns `tier_below_action_policy` with `detail["state"] == "false"`, the family's floor and the actor's tier | `C19-15` |
-| 5.2-4 | `min_auto_tier=None` under `approval_mode="auto"` is a legal configuration reported as `tier_floor=None` plus a `why`, never a warning and never a refusal | `C19-16` |
-| 5.2-5 | The comparison is `bool \| None`, and **all three** unknown causes — no order, no tier, a tier outside the order — refuse with `detail["state"] == "unknown"` and a `why` naming which. None of them raises, and none says `false` | `C19-17` |
-| 5.2-6 | `model_tier` on `InvocationProvenance` is the tier of the **invoking** actor, distinct from the family's own `provenance.model_tier` | `C19-18` |
-| 5.2-7 | `approval_mode="review"` records `approved_by="auto:<policy>"` and the invocation is enumerable by `invocations(unreviewed=True)` until an `invocation_reviewed` event sets `reviewed_at` | `C19-50` |
 
 ---
 
 ## 6. The calls — four, and none of them in `INTERFACE.md` §5
+
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
+| # | rule | exercised by |
+|---|---|---|
+| 6-1 | `preflight` **records nothing** and is idempotent: calling it N times leaves the invocation store unchanged | `C19-34` |
+| 6-2 | Every `PreconditionResult` carries `evaluated_by` naming the existing call that answered it, from the closed set `list_types` / `predicates` / `neighbors` — §2.4's no-query-language claim, made mechanical | `C19-35` |
+| 6-3 | `holds=None` is refused, and the refusal's `detail` says **unknown** rather than **false**; unknown is never treated as satisfied | `C19-36` |
+| 6-4 | `record_invocation` does **not** re-evaluate preconditions, and an invocation whose gate refused is recorded rather than discarded | `C19-37` |
+| 6-5 | `InvocationReport.known` is `int | None` and `complete` is `False` whenever a filter suppressed rows or `limit` truncated the answer | `C19-38` |
+| 6-6 | `preflight` and `record_invocation` validate every supplied input against its `InputSpec`, and refuse a `kind="predicate"` ref whatever the family declared | `C19-51` |
+| 6-7 | A shipped call that **raises** for an unregistered subject (`predicates`, `consumers`) is caught and becomes `holds=None` plus a `why`; nothing escapes the return type | `C19-52` |
+| 6-8 | `invocations` does not page | `prose-only:` ruling **R25** routed paging for every listing to Phase 3 *together*; a test asserting the absence of a cursor would pin a decision this document is explicitly not making |
 
 Signatures are Python-shaped because deliverable #2 is a Python package. They are **not** a module layout.
 
@@ -603,23 +628,13 @@ def projection(
 
 Shape and rules in §10, because the argument for it is the tool-slot ceiling and not the call list.
 
-| # | rule | exercised by |
-|---|---|---|
-| 6-1 | `preflight` **records nothing** and is idempotent: calling it N times leaves the invocation store unchanged | `C19-34` |
-| 6-2 | Every `PreconditionResult` carries `evaluated_by` naming the existing call that answered it, from the closed set `list_types` / `predicates` / `neighbors` — §2.4's no-query-language claim, made mechanical | `C19-35` |
-| 6-3 | `holds=None` is refused, and the refusal's `detail` says **unknown** rather than **false**; unknown is never treated as satisfied | `C19-36` |
-| 6-4 | `record_invocation` does **not** re-evaluate preconditions, and an invocation whose gate refused is recorded rather than discarded | `C19-37` |
-| 6-5 | `InvocationReport.known` is `int | None` and `complete` is `False` whenever a filter suppressed rows or `limit` truncated the answer | `C19-38` |
-| 6-6 | `preflight` and `record_invocation` validate every supplied input against its `InputSpec`, and refuse a `kind="predicate"` ref whatever the family declared | `C19-51` |
-| 6-7 | A shipped call that **raises** for an unregistered subject (`predicates`, `consumers`) is caught and becomes `holds=None` plus a `why`; nothing escapes the return type | `C19-52` |
-| 6-8 | `invocations` does not page | `prose-only:` ruling **R25** routed paging for every listing to Phase 3 *together*; a test asserting the absence of a cursor would pin a decision this document is explicitly not making |
 
 
 ---
 
 ## 7. Refusals — through `INTERFACE.md` §5.12, amended in this change
 
-**Ruling R3's rule:** a value is added by amending §5.12 **in the change that introduces it**. This document adds **six**, taking the closed vocabulary from twenty-one to **twenty-seven**. As with `EDGES.md` v0's four, **no v0 code path returns any of them** — row #6 is a spec and ships no action store — and they are enumerated in `INTERFACE.md` §5.12 and in `types.REFUSAL_REASONS` anyway, because a reason specified in a spec and absent from the tuple is the same drift the checker exists to catch, pointing the other way.
+**Ruling R3's rule:** a value is added by amending §5.12 **in the change that introduces it**. This document adds **seven** — six in the first draft and a seventh from its first adversarial round — taking the closed vocabulary from twenty-one to **twenty-eight**. As with `EDGES.md` v0's four, **no v0 code path returns any of them** — row #6 is a spec and ships no action store — and they are enumerated in `INTERFACE.md` §5.12 and in `types.REFUSAL_REASONS` anyway, because a reason specified in a spec and absent from the tuple is the same drift the checker exists to catch, pointing the other way.
 
 | value | returned by | why none of the twenty-one said it |
 |---|---|---|
@@ -628,21 +643,33 @@ Shape and rules in §10, because the argument for it is the tool-slot ceiling an
 | **`human_approval_required`** | **declaration**: an `irreversible` family declaring `approval_mode != "human"`. **`preflight`**: a `human`-mode family invoked with no human approver | The brief for this row named it `irreversible_requires_human`. **It is widened deliberately.** The declaration case and the invocation case are the same failure — *this needs a person and does not have one* — and `EDGES.md` §5.12 records the economy explicitly: *"a closed vocabulary that grows a value per variant of one failure is not closed for long."* `detail` names which door. Not `tier_below_auto_approve_policy`: that is about a *type proposal*'s tier, not about an invocation's approver |
 | **`tier_below_action_policy`** | `preflight` when the actor's tier is below the family's `min_auto_tier` | **`tier_below_auto_approve_policy` is NOT reused**, and the temptation to reuse it is exactly `INTERFACE.md` §2.3's Cause B. That value is about **approving a proposed type**; this one is about **invoking an approved action**. Two policies, two objects, two lifecycles: a deployment may auto-approve Haiku's *proposals* and refuse Haiku's *invocations*, and one word could not express that |
 | **`effect_not_permitted`** | **declaration** of a family whose `effects` name an operation outside §2.5's four, or one of the six governance calls | The brief named `effect_undeclared` as a refusal; the design tests moved it to a **warning** at record time (§2.5) and left this door with no value at all. Nothing said *"you may not declare that"* — `attributes_schema_violation` is about a schema's field types, and this is a rule about the vocabulary of one field's values |
+| **`input_kind_mismatch`** | `preflight` and `record_invocation`, when a supplied `InputRef` is not what the `InputSpec` declared — wrong ref shape, wrong kind, wrong family, or missing — **and whenever any input is a `kind="predicate"`, whatever the family declared** | **Added by round 1, and it closes the kill row.** `InputSpec.kinds` bound at declaration and at nothing else, so a family declared with `kinds=None` accepted two predicates and the gate said `allowed`: `merge_capabilities(commentable, searchable)`, end to end. **`endpoint_kind_mismatch` is not reused** — that value is about an *edge's* endpoint, and one word for two objects is `INTERFACE.md` §2.3's Cause B, the same argument that keeps `unknown_edge` separate from `edge_family_unknown` |
 | **`action_store_absent`** | any invocation call against an adapter declaring `stores_invocations=False` | A capability refusal, the **fifth** of that shape after `proposals_not_stored`, `cannot_record_override`, `consumer_source_read_only` and `edge_store_absent` — and it exists for the reason the first of those does: an empty `InvocationReport` would read as *"nothing has ever run"*, which is Rule U's forbidden empty in the one call a caller would believe |
 
 **A seventh was considered and NOT taken: `unknown_invocation`.** `EDGES.md` needed `unknown_edge` because `retract_edge` names an existing edge by id. **No call in this document names an existing invocation by id** — `compensates` names one, and a `compensates` pointing at nothing is recorded with a warning rather than refused, because refusing would discard the compensation record itself (§2.5's argument again) — and `invocations(...)` is a *filter*, where an empty result is the honest answer rather than a silent drop. **Stated so that the absence is a decision rather than an oversight.**
 
-**One warning value, added to `INTERFACE.md` §5.4 in this change** — the same rule, extended to warnings by `EDGES.md` §2.8:
+**Two warning values, added to `INTERFACE.md` §5.4 in this change** — the same rule, extended to warnings by `EDGES.md` §2.8:
 
 | value | carrier | from |
 |---|---|---|
-| `effect_undeclared:<op>:<target>` | **`Invocation`** | §2.5 — the host reported an effect the family did not declare. One per surplus effect. The record is **kept**; refusing it would destroy the only evidence the undeclared effect happened |
+| `effect_undeclared:<op>:<target>` | **`Invocation`** | §2.5 — the host reported an effect the family did not declare. One per surplus effect. The record is **kept**; refusing it would destroy the only evidence the undeclared effect happened. `<target>` is the effect's identity (§2.5); for `host_state`, which has no target, it is the `why` |
+| `approval_unrecorded` | **`Invocation`** | §3.2 — `outcome="applied"` and the gate was not asked, or was asked and refused, so there is no approval to record. **Added by round 1**, which found the first draft fabricating `approved_by="auto:<policy>"` in exactly that case, on an `irreversible`/`human` family invoked by `ai:reaper` |
 
-§5.4 goes to **twenty-three** values across five carriers.
+§5.4 goes to **twenty-four** values across nine carriers. *(This sentence said *"twenty-three… across **five** carriers"* until round 1 — the count of carriers contradicting `INTERFACE.md` §5.4's own header and this document's own §18, two screens apart. `check_spec_drift.py` holds the value list and the count word and has never held the carrier count; §14 records that the printed shapes here are held by nothing at all.)*
 
 ---
 
 ## 8. Capability flags for an action store
+
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
+| # | rule | exercised by |
+|---|---|---|
+| 8-1 | `stores_invocations=False` makes every call that **reads or writes the invocation store** — `record_invocation` and `invocations` — return `Refusal(reason="action_store_absent")`, never an empty report. `preflight` and `projection` touch no invocation and are unaffected; *"every invocation call"* was undefined until round 1 asked which four | `C19-39` |
+| 8-2 | Every `False` action flag carries a non-empty `Capabilities.why`, and when `stores_invocations` is `False` the other two are **vacuous rather than declined** — `C0-01`'s carve-out shape | `C19-40` |
+| 8-3 | With `action_store_shares_connection=True`, `action_transaction_scope` MUST equal `transaction_scope`; declaring two scopes on one connection is non-conformant | `C19-41` |
+| 8-4 | Under `action_transaction_scope="savepoint"`, `record_invocation` stamps `not_durable_until_host_commits` **itself**, and `invocations` does not | `C19-42` |
+| 8-5 | The action flags default `False`, so an adapter written against the eighteen-primitive protocol claims no invocation store | `C19-43` |
 
 In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabilities.why`, surfaced verbatim wherever a result would otherwise imply a fact. **Three flags and two declarations**, added to the existing `Capabilities` — the same split `EDGES.md` §6 draws, for the same reason: a flag is something a backend *declines*; a declaration says *how* it does something it can do.
 
@@ -686,13 +713,6 @@ Ruling **R5** gives `transaction_scope: "owned" | "savepoint"`. The invocation s
 
 Under `"savepoint"`, a `record_invocation` result carries `not_durable_until_host_commits:<why>` — `INTERFACE.md` §5.4's existing value, unchanged, on one more carrier. **No new warning value**, and the row-3d lesson applies verbatim: it is stamped at the **write** call site and **not** on `invocations`, because a signal that never turns off is noise. And it is stamped by `record_invocation` **itself**, not carried forward from anywhere — `EDGES.md` §6.2 records `retract_edge` getting exactly that wrong, and it is the second time this repo has seen the bug.
 
-| # | rule | exercised by |
-|---|---|---|
-| 8-1 | `stores_invocations=False` makes every call that **reads or writes the invocation store** — `record_invocation` and `invocations` — return `Refusal(reason="action_store_absent")`, never an empty report. `preflight` and `projection` touch no invocation and are unaffected; *"every invocation call"* was undefined until round 1 asked which four | `C19-39` |
-| 8-2 | Every `False` action flag carries a non-empty `Capabilities.why`, and when `stores_invocations` is `False` the other two are **vacuous rather than declined** — `C0-01`'s carve-out shape | `C19-40` |
-| 8-3 | With `action_store_shares_connection=True`, `action_transaction_scope` MUST equal `transaction_scope`; declaring two scopes on one connection is non-conformant | `C19-41` |
-| 8-4 | Under `action_transaction_scope="savepoint"`, `record_invocation` stamps `not_durable_until_host_commits` **itself**, and `invocations` does not | `C19-42` |
-| 8-5 | The action flags default `False`, so an adapter written against the eighteen-primitive protocol claims no invocation store | `C19-43` |
 
 
 ---
@@ -793,6 +813,20 @@ def read_events(
 
 ## 10. The tool-slot ceiling is a first-class design input
 
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
+
+| # | rule | exercised by |
+|---|---|---|
+| 10-1 | `reachability` values are opaque strings in the host's vocabulary; the registry never interprets one | `C19-19` |
+| 10-2 | The registry never chooses which families reach a surface — with `order=None` the report carries `counts` only, and **`order_source is None` is the marker**, not `complete`, which is `False` on every projection for the independent reason in rule 10-5 | `C19-20` |
+| 10-3 | `counts` is rule-independent — a family declaring two ordered groups is counted in **both** and charged to **one** (`admitted`), and `counts` is identical under every permutation of `order` | `C19-21` |
+| 10-4 | `rule="greedy_whole_group"` admits groups whole, in the caller's order, until `budget − reserved` is exhausted | `C19-22` |
+| 10-5 | `consumers_at_risk` inherits `ConsumerReport.complete == False` and can never be a complete casualty list | `C19-23` |
+| 10-6 | A projection whose `order` names only groups no family carries is refused with `action_family_unknown`, not answered with an empty report | `C19-24` |
+| 10-7 | The 128 ceiling is a provider's and the registry neither enforces nor assumes it — `budget` is a caller's argument with no default | `C19-25` |
+| 10-8 | `known` is the number of families this report **selected**, not the size of the registry | `C19-53` |
+| 10-9 | An `order` naming groups no registered family carries anywhere is a typo and refuses; a `namespace` that happens to hold no such family is a legitimate scope and answers with zeroes | `C19-54` |
+
 ### 10.1 The measurement, re-derived rather than cited
 
 **[Observed 2026-08-29**, re-measured from `C:\Users\steph\projects\beacon` at this row's start; method published so a reader can re-run it.**]**
@@ -880,17 +914,6 @@ For every family in `would_evict`, the registry reads the family's `TypeEntry.pr
 - **It does not subsume tools.** **[Observed]** 27 of 222 actions are `reads_only=True`, and beacon's §5.6 reads that as *"a typed traversal tool is the one kind of new tool that could subsume several narrow reads"*. That is a beacon product decision, it is Q3 in beacon's own §7, and nothing here takes it.
 - **It does not rank.** No `priority`, no usage-weighted ordering, no *"drop the least-used"*. `usage()` exists and a host may order by it; the registry supplying an order would be deciding which 128.
 
-| # | rule | exercised by |
-|---|---|---|
-| 10-1 | `reachability` values are opaque strings in the host's vocabulary; the registry never interprets one | `C19-19` |
-| 10-2 | The registry never chooses which families reach a surface — with `order=None` the report carries `counts` only, and **`order_source is None` is the marker**, not `complete`, which is `False` on every projection for the independent reason in rule 10-5 | `C19-20` |
-| 10-3 | `counts` is rule-independent — a family declaring two ordered groups is counted in **both** and charged to **one** (`admitted`), and `counts` is identical under every permutation of `order` | `C19-21` |
-| 10-4 | `rule="greedy_whole_group"` admits groups whole, in the caller's order, until `budget − reserved` is exhausted | `C19-22` |
-| 10-5 | `consumers_at_risk` inherits `ConsumerReport.complete == False` and can never be a complete casualty list | `C19-23` |
-| 10-6 | A projection whose `order` names only groups no family carries is refused with `action_family_unknown`, not answered with an empty report | `C19-24` |
-| 10-7 | The 128 ceiling is a provider's and the registry neither enforces nor assumes it — `budget` is a caller's argument with no default | `C19-25` |
-| 10-8 | `known` is the number of families this report **selected**, not the size of the registry | `C19-53` |
-| 10-9 | An `order` naming groups no registered family carries anywhere is a typo and refuses; a `namespace` that happens to hold no such family is a legitimate scope and answers with zeroes | `C19-54` |
 
 ---
 
@@ -936,11 +959,11 @@ For every family in `would_evict`, the registry reads the family's `TypeEntry.pr
 |---|---|---|---|
 | T1.1 | all three express | three `ActionFamily` rows, eight keys each, no key missing and none added | **PASS** |
 | T1.2 | one of two causes typed | `edge_absent(task, person, family="task_stakeholders")` carries the *"already linked"* half; the *"not yours"* half has **no** precondition kind and stays in the action | **PASS — partial, as pre-registered.** See contortion **ACT3** |
-| T1.3 | refused at declaration | `Refusal(reason="human_approval_required", detail={"door": "declaration", "reversibility": "irreversible", "approval_mode": "auto"})` | **PASS** |
+| T1.3 | refused at declaration | `Refusal(reason="attributes_schema_violation", detail={"door": "propose_type", "reversibility": "irreversible", "approval_mode": "auto"})` — **the value changed in round 1**, to R18's own (§2.2) | **PASS** |
 | T1.4 | 3 declarable, the rest admitted | 15 FKs on `people.id` — **7 CASCADE / 6 SET NULL / 2 unspecified**, reproduced by the probe. **3 `retract_edge`** effects (`person_links`, `task_stakeholders`, `project_stakeholders`) + **2 `host_state`**, both carrying a `why` | **PASS — every number as pre-registered** |
 | T1.5 | a second, unguessable effect | `person_service.delete_person` calls `connection_service.unlink`, and **that call commits** before the delete. Declared as the second `host_state` | **PASS — and it is the finding of this fixture** |
 | T1.6 | `effects: ()` honestly | `search_tasks`: `reads_only=True`, `covers_routes=[]`, `effects=()`, `reversibility="reversible"`, `tier_floor=None` with a `why` | **PASS** |
-| T1.7 | the arithmetic reproduces | cap **128**; `budget = MAX_TOOLS_PER_REQUEST - 1` appears **twice** in the source; **222** modules; **27** `reads_only`; **19** categories, all used, summing to 222; `counts` = common **45**, task **48**, project **21**, person **13** = **127**, `fits` all four, `over_by=0`. Then a 49th `task` family → `would_evict=("person",)`, `over_by=1` | **PASS — beacon's own comment, reproduced arithmetically** |
+| T1.7 | the arithmetic reproduces | cap **128**; `budget = MAX_TOOLS_PER_REQUEST - 1` appears **twice** in the source; **222** modules; **27** `reads_only`; **19** categories, all used, summing to 222 *(re-measured at 15:45 the same day: **223** and **20** — see §11.6)*; `counts` = common **45**, task **48**, project **21**, person **13** = **127**, `fits` all four, `over_by=0`. Then a 49th `task` family → `would_evict=("person",)`, `over_by=1` | **PASS — beacon's own comment, reproduced arithmetically** |
 | T1.8 | counts only | `order_source=None`, `fits=()`, `would_evict=()`, `complete=False`, `why_incomplete="no order supplied; the registry does not choose which families reach a surface"` | **PASS** |
 | T1.9 | empty, and the empty is the point | `consumers_at_risk=()` **and** `complete=False` with `why_incomplete` naming `ConsumerReport.complete == False` | **PASS** |
 | T1.10 | out of scope by R24 | see below — **no fix claimed** | **PASS** |
@@ -981,7 +1004,22 @@ await session.commit()
 >
 > **What UC1 contributed that no other fixture could:** the mid-action commit (**ACT5**), the two-causes-one-code failure path (**ACT3**), and the largest real blast radius in the corpus — **15 foreign keys, of which this document can declare 4 and must admit 11.** *From nothing declared to three families declared plus a stated unknown* is the entire value proposition of `effects`, measured on the only host that exists.
 >
-> **What it did not exercise:** a `review`-mode family (beacon has no such state) and `compensated` as an outcome — beacon's undo path exists but nothing records the compensation as an invocation, so the outcome is *specified here and shown by UC3*.
+> **What it did not exercise:** a `review`-mode family — beacon has no such state. `compensated` as an outcome is not exercised here either, and **it is exercised by UC3's probe as of round 1**. *(This sentence said it was "shown by UC3" while UC3's probe contained no compensation at all — a false claim in a walk-through, which `USE-CASES.md` calls a silent accommodation rather than a pass. Found by round 1's real-data lens; the probe now runs it, and the sentence names the round in which it became true.)*
+
+### 11.6 The fixture moved under the design test, and that is a finding rather than an accident
+
+**[Observed 2026-08-29]** the measurement in §10.1 was taken at **13:05** and re-taken at **15:45** on the same day. Between them beacon gained `src/beacon/assistant/actions/manage_life_event.py`:
+
+| | pinned 13:05 | observed 15:45 |
+|---|---|---|
+| action modules | 222 | **223** |
+| categories | 19 | **20** — a new `life_event` |
+| `reads_only` | 27 | 27 |
+| **`task_detail`'s sum** | **127** | **127** |
+
+**The load-bearing number did not move, and the reason is the mechanism §10 describes.** The new action did not go into `task`, `common`, `project` or `person`; it went into a **new keyword-gated category**, which is exactly what `snooze`, `shape`, `pin` and `connect_suggestion` are — **[Observed]** each of them split out of a full category with a comment naming the cap (*"shipping it in `task` took task 48→49 and tipped common+task+project+person to 128"*). So the pressure §10 measures was live during this row and beacon's own release valve was used, without anybody involved knowing that a specification was being written about it.
+
+**What the probe does about it.** `actions_beacon_probe.py` now carries the 13:05 measurement as a **pinned, dated observation** and prints a `FIXTURE DRIFT` line when it moves, while **asserting** the two things that are invariants rather than observations: *the categories sum to the module count*, and *`task_detail` still sums to the budget*. Row #4's rule — *a design test whose numbers move between runs is not a design test* — was written about a query that could be pinned with an `order` clause. **This fixture is somebody else's live codebase and cannot be pinned**, so the honest form is to date the observation, assert the invariant, and name the movement. Recorded as contortion **ACT7**.
 
 ---
 
@@ -1022,9 +1060,9 @@ await session.commit()
 | T2.2 | **NOT expressible** | `Precondition(kind="value_in_set", …)` raises *"is not one of ('type_active', 'predicate_holds', 'edge_exists', 'edge_absent') — the vocabulary is closed at four"* | **PASS — the pre-registered failure, and the central finding** |
 | T2.3 | refused at two layers | the permissive family `has_severity` with `dst=("entity","value_set")` **raises at declaration**; the correctly declared family refuses the write with `Refusal(reason="endpoint_kind_mismatch", detail={... "problem": "level" ...})` | **PASS — both layers, on the fixture that motivated the rule** |
 | T2.4 | vocabulary, not data | the one expressible precondition is `type_active("cms:value_set:scope_severity_code")` — *is the scale still in the vocabulary*, not *what does this facility score* | **PASS, and it is a weak substitute, which is the point** |
-| T2.5 | refused | `Refusal(reason="tier_below_action_policy", detail={"tier": "haiku", "min_auto_tier": "sonnet"})` | **PASS** |
+| T2.5 | refused | `Refusal(reason="tier_below_action_policy", detail={"state": "false", "tier": "haiku", "min_auto_tier": "sonnet"})` — `state` added in round 1, so a real below-the-floor refusal is distinguishable from the three unknown ones (§5.2) | **PASS** |
 | T2.6 | allowed | `verdict="allowed"`, `approved_by="auto:action_policy"` | **PASS** |
-| T2.7 | refused as **unknown** | `Refusal(reason="tier_below_action_policy", detail={"state": "unknown", "why": "no deployment tier order supplied; the registry does not order tiers (INTERFACE 2.7)"})` | **PASS — the pre-registered choice, and `state` distinguishes it from a false** |
+| T2.7 | refused as **unknown** | `Refusal(reason="tier_below_action_policy", detail={"state": "unknown", "why": "no deployment tier order supplied; the registry does not order tiers (INTERFACE 2.7)"})` — **and round 1 added the other two unknowns**: no tier supplied, and a tier outside the order, which had been returning a confident refusal and an uncaught `ValueError` respectively | **PASS — the pre-registered choice, and `state` distinguishes it from a false** |
 | T2.8 | the numbers | 400 citations · 10 facilities · **B 2 · C 5 · D 235 · E 82 · F 41 · G 31 · J 4** · Immediate Jeopardy at CCNs **275020, 275025, 275029** (3 of 10) · actual harm at **8** of 10 | **PASS — every pre-registered number** |
 | T2.9 | refused at declaration | `Refusal(reason="edge_family_unknown", detail={"door": "declaration", "family": "not_registered"})` — `EDGES.md`'s value, no new one | **PASS** |
 | T2.10 | two gates, two values | the invocation gate returns `tier_below_action_policy`; `INTERFACE.md` §2.7's proposal gate returns `tier_below_auto_approve_policy`. Different objects, different lifecycles, different values | **PASS — §7's argument for a separate value holds** |
@@ -1083,7 +1121,7 @@ await session.commit()
 | T3.1 | two `value_set` `TypeRef` inputs are legal | both declare; `InputSpec(kinds=("predicate",))` raises *"`predicate` may not be an input kind — EDGES 2.4.1's rule inherited"* | **PASS, both halves** |
 | T3.2 | `neighbors` and nothing else | `PreconditionResult.evaluated_by == "neighbors"`; the adjacent pair is `allowed` | **PASS — §2.4's no-query-language claim, mechanical** |
 | T3.3 | **refused for the two-hop pair** | `Refusal(reason="precondition_unmet", detail={"state": "false", "kind": "edge_exists", "subject": "a"})` for `dpr ↔ dot` — **while `neighbors(dpr, ["equivalent_to"], depth=2)` reaches `dot:value_set:borough` perfectly well** | **PASS — the sharpest result in the document** |
-| T3.4 | refused at declaration | `Refusal(reason="effect_not_permitted", detail={"door": "declaration", "op": "merge_types", "why": "the governance loop is not an effect"})` | **PASS** |
+| T3.4 | refused at declaration | `Refusal(reason="effect_not_permitted", …)` at **each of the three shipped doors** — `propose_type`, `approve`, and `import_types`, which cannot refuse and so returns `import_refused:effect_not_permitted` with nothing written. *(The first draft checked one door and §17 audited three; round 1 imported an **active** family declaring `merge_types` through the shipped registry with no warning at all.)* | **PASS** |
 | T3.5 | the **shipped** `merge_types` still refuses | `Refusal(reason="cross_namespace_merge")` with the `equivalent_to` **and** the `reconciled_with` edge present — **and again** under `acknowledge=["cross_namespace_merge","definitions_diverge"]` | **PASS — the load-bearing check, against `open_ontology.Registry`** |
 | T3.6 | `derived`, no contortion | `InvocationProvenance.created_by == "derived"`, actor `derived:catalogue_rule` | **PASS — R17 paying off two rows later** |
 | T3.7 | both versions | `source_version == "uvpi-gqnh@2017-10-04 / erm2-nwe9@2026-08-28"` | **PASS** |
@@ -1107,7 +1145,7 @@ await session.commit()
 
 ---
 
-### 13.5 The five contortions, recorded and **not** designed away
+### 13.5 The seven contortions, recorded and **not** designed away
 
 | # | Contortion | Where | Why it was not designed away |
 |---|---|---|---|
@@ -1115,6 +1153,8 @@ await session.commit()
 | **ACT2** | **`ResolveContext` is column-shaped, so resolving a verb runs on less signal than the mechanism was built for.** `sample_values` has no filler for an action, and `sibling_columns` — *"carries most of the signal"* — is empty | §5.1 | An action-shaped `ResolveContext` would be a second context object for one call. Recorded so that a weaker `resolve_type` on `kind="action"` is a known limit rather than a surprise |
 | **ACT3** | **`add_task_stakeholder`'s two causes split unevenly**: *"already linked"* becomes a typed `edge_absent`; *"task not yours"* has no precondition kind and stays inside the action | §11.3 T1.2 | Authorization is §1's non-goal and **R24**'s ruling. Making it a precondition would put a permissions model in the registry through the side door |
 | **ACT4** | **A value-level precondition is not expressible**, and this is the **third** surface to reach for the same missing mechanism | §2.4, §12.3 T2.2 | Ruling **R22** routed it to Phase 3 with contortion 11. Taking it here would be a query language arriving in a design test. **Q35** carries it with the count |
+| **ACT6** | **`type_active` cannot use `resolve_type`, and its negative answer is unknowable at reasonable cost.** `resolve_type` needs a tier and a column-shaped context `preflight` does not have (**ACT2**); `list_types` has no `name` filter and a filtered listing is incomplete, so a **miss** is `None` plus a `why` rather than `False` | §2.4, §6.1 | A `name` filter on `list_types` is a change to `INTERFACE.md` §5.6 for one caller, and the mechanism that would make the negative cheap is the same one Phase 3's paging decision touches. **Q41**. Found by round 1's integrator lens asking which planned ids it could actually write |
+| **ACT7** | **The UC1 fixture is a live codebase and moved during the row.** beacon gained an action between the 13:05 measurement and the 15:45 re-run: 222 → 223 modules, 19 → 20 categories | §11.6 | It cannot be pinned — it is somebody else's repository. The observation is dated, the invariant is asserted, and the movement is printed. **And `task_detail` still summed to 127**, because the new action went into a new keyword-gated category, which is the mechanism §10 exists to describe |
 | **ACT5** | **A mid-action commit is invisible to `reversibility`.** `delete_person` commits an `unlink` before its own delete; one `not_durable_until_host_commits` warning would be false for the first half and true for the second | §11.3 T1.5 | Per-effect durability is a field on `Effect` and a mechanism with one fixture behind it. **[Observed]** once, in one host; one observation is not a design input |
 
 ---
@@ -1123,23 +1163,27 @@ await session.commit()
 
 **Ruling R31** (standing constraint 8): *every numbered rule in a spec section ships with either (a) a contract id that exercises it, or (b) an explicit `prose-only` tag with the reason — and `check_spec_drift.py` fails on a rule with neither.* The ruling names this row by name: *"and to #6 (actions spec) as it is written."*
 
-**Every numbered rule in this document carries one or the other, from the first draft rather than retrofitted.** Eight sections, **47** numbered rules: **43** name a planned contract id, **4** carry a `prose-only:` tag with a reason.
+**Every numbered rule in this document carries one or the other, from the first draft rather than retrofitted.** Eight sections, **58** numbered rules: **54** name a planned contract id, **4** carry a `prose-only:` tag with a reason. *(47 / 43 / 4 in the first draft; round 1 added eleven rules, every one of them a defect it found.)*
 
 | section | rules | ids | prose-only |
 |---|---|---|---|
-| §2.2 the declared shape | 4 | `C19-26` … `C19-28` | 1 — an absence has no test that knows what to look for |
-| §2.4 preconditions | 6 | `C19-01` … `C19-05` | 1 — **ACT4**, routed to Phase 3 by **R22** |
-| §2.5 effects | 7 | `C19-06` … `C19-12` | 0 |
+| §2.2 the declared shape | 5 | `C19-26` … `C19-28`, `C19-44` | 1 — an absence has no test that knows what to look for |
+| §2.4 preconditions | 9 | `C19-01` … `C19-05`, `C19-45` … `C19-47` | 1 — **ACT4**, routed to Phase 3 by **R22** |
+| §2.5 effects | 9 | `C19-06` … `C19-12`, `C19-48`, `C19-49` | 0 |
 | §3 invocations | 6 | `C19-29` … `C19-33` | 1 — a value that does not exist |
-| §5.2 the gate | 6 | `C19-13` … `C19-18` | 0 |
-| §6 the calls | 6 | `C19-34` … `C19-38` | 1 — **R25** routed paging |
+| §5.2 the gate | 7 | `C19-13` … `C19-18`, `C19-50` | 0 |
+| §6 the calls | 8 | `C19-34` … `C19-38`, `C19-51`, `C19-52` | 1 — **R25** routed paging |
 | §8 capability flags | 5 | `C19-39` … `C19-43` | 0 |
-| §10 the ceiling | 7 | `C19-19` … `C19-25` | 0 |
-| **total** | **47** | **43** | **4** |
+| §10 the ceiling | 9 | `C19-19` … `C19-25`, `C19-53`, `C19-54` | 0 |
+| **total** | **58** | **54** | **4** |
 
-> **These ids are PLANNED and nothing claims them yet, and that has an operational consequence the build row must not trip over.** `check_spec_drift.py`'s `R31_SECTIONS` currently lists three `EDGES.md` sections, and its `_check_rule_coverage` fails a rule whose named id *"no test in the suite claims"*. **Pointing it at this document today would fail forty-three times.** So `ACTIONS.md` is **deliberately not added to `R31_SECTIONS` in this change** — the extension lands in the build row, in the same change that lands the tests, which is the only order in which the gate is ever telling the truth. **Stated because the alternative failure is worse than the obvious one**: a checker wired up early gets silenced, and a silenced checker is how `gate_unregistered` went eighteen-said-nineteen-meant for a row (`INTERFACE.md` §5.4).
+> **The tables moved in round 1, because five of the eight were unreachable from the section they belong to.** `check_spec_drift.py`'s `_section` reads from a heading to the **next heading of any level**, so a table sitting at the end of §3.5 is invisible to a checker asked about §3. **Thirty of the forty-seven rules were unreachable** and the mapping §14 promised could not have been wired to the checker it names. The five tables now sit directly under their own top-level heading, which is where `_section` can see them; the arrangement is verified by running that function's own code against this document.
 
-**What the build row inherits, precisely:** a `C19` group of **43** ids, section-mapped above and row-mapped in the eight tables; **4** `prose-only` tags whose reasons are the argument, not a shrug; and the four probes in [`docs/tools/`](../tools/), whose 54 checks are the executable form of most of the 43 and should be **transposed into the suite rather than re-derived** — that is row 4b's own recorded lesson, where ten BLOCKING findings had been fixed *only* in a throwaway probe kit the package does not import.
+> **These ids are PLANNED and nothing claims them yet, and that has an operational consequence the build row must not trip over.** `check_spec_drift.py`'s `R31_SECTIONS` currently lists three `EDGES.md` sections, and its `_check_rule_coverage` fails a rule whose named id *"no test in the suite claims"*. **Pointing it at this document today would fail fifty-four times.** So `ACTIONS.md` is **deliberately not added to `R31_SECTIONS` in this change** — the extension lands in the build row, in the same change that lands the tests, which is the only order in which the gate is ever telling the truth. **Stated because the alternative failure is worse than the obvious one**: a checker wired up early gets silenced, and a silenced checker is how `gate_unregistered` went eighteen-said-nineteen-meant for a row (`INTERFACE.md` §5.4).
+>
+> **And nothing holds this document's ELEVEN printed shapes, which is a different gap in the same place.** `check_spec_drift.py` compares `INTERFACE.md`'s, `PACKAGE.md`'s and `EDGES.md`'s printed shapes against the code; it does not read this file at all, and there is no code to hold it against until the build row. **Round 1 found five drifts between this document and its own probe kit** — `Precondition.namespace`, `Invocation.compensates`, `InvocationProvenance.evidence`, and two call signatures — inside the section that argues field names were kept ugly *because* that is the drift the checker was written to catch. All five are fixed; the gap stays until the build row, and it is named here rather than discovered there.
+
+**What the build row inherits, precisely:** a `C19` group of **54** ids, section-mapped above and row-mapped in the eight tables; **4** `prose-only` tags whose reasons are the argument, not a shrug; and the four probes in [`docs/tools/`](../tools/), whose **62** checks are the executable form of most of the 54 and should be **transposed into the suite rather than re-derived** — that is row 4b's own recorded lesson, where ten BLOCKING findings had been fixed *only* in a throwaway probe kit the package does not import.
 
 ---
 
@@ -1204,11 +1248,23 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 
 **Neither is tripped, and here is the mechanical form of both.**
 
-**1. Can an action merge anything?** **No, and it is refused at the declaration door rather than at the write.** `merge_types` is one of the six governance calls §2.5 excludes from the effect vocabulary as a **general rule**, not a family's opt-in. §13 T3.4 declares a family with `Effect(op="merge_types", …)` and gets `Refusal(reason="effect_not_permitted", detail={"door": "declaration"})`. **This is a door no previous row had** — a verb is a governed, approved, tool-shaped wrapper, and a merge inside one would be the kill row with a permission slip.
+**1. Can an action merge anything?** **No, and it is refused at all three declaration doors rather than at the write.** `merge_types` is one of the six governance calls §2.5 excludes from the effect vocabulary as a **general rule**, not a family's opt-in. §13 T3.4 declares a family with `Effect(op="merge_types", …)` at **`propose_type`, `approve` and `import_types`** and is refused at each — the third returning `import_refused:effect_not_permitted` with nothing written, because `import_types` returns entries and cannot return a `Refusal`. **This is a door no previous row had** — a verb is a governed, approved, tool-shaped wrapper, and a merge inside one would be the kill row with a permission slip.
+
+> **This paragraph counted THREE doors and named none of them, and round 1 walked through the one it had not thought of.** A reviewer used the shipped `Registry.import_types` to land an **active** `kind="action"` family declaring `merge_types` as an effect *and* breaching §2.2's cross-field rule, with **no warning at all** — while the same call refused a breaching *edge* family correctly, because `registry.py` guards that path and says why in its own docstring: *"a rule with one enforcement point is a rule with one door left open — and the thing on the other side of this one is the `ROADMAP.md` kill row."* The audit below was true of the specification's intent and false of the code, which is the worst place for an audit to be right.
 
 **2. Does the shipped `merge_types` still refuse with an action layer on top?** **Yes, checked against `open_ontology.Registry` rather than against the probe's model.** §13 T3.5: with the `equivalent_to` edge written, a `reconcile_borough` family declared and approved, and its `reconciled_with` edge written, `merge_types("borough", "borough", namespace="dpr", into_namespace="oti_311")` returns `Refusal(reason="cross_namespace_merge")` — **and again** under `acknowledge=["cross_namespace_merge","definitions_diverge"]`. `EDGES.md` T3.12, re-run one layer up.
 
-**3. Can a predicate be reached through an action?** **No, and the rule is general at both doors this document has.** An `InputSpec` may not name `predicate` in `kinds` (§2.3, checked in §13 T3.1b), and §2.4's `predicate_holds` asks about **one** type's membership rather than comparing two extents. **`merge_capabilities(commentable, searchable)` is the kill row spelled as a tool call**, and the input rule is what makes it unconstructible. `EDGES.md` §2.4.1 had to learn this the hard way — its first draft left the exclusion inside one family's declaration, and a round-1 reviewer walked straight through it — so the rule here is general from the first draft **because that round was already paid for**.
+**3. Can a predicate be reached through an action?** **No — at three doors, and this document had one of the three when it first claimed to have them all.**
+
+| door | what stops it | checked by |
+|---|---|---|
+| **declaration** | an `InputSpec` may not name `predicate` in `kinds` | §13 T3.1b |
+| **invocation** | `preflight` and `record_invocation` refuse **any** `kind="predicate"` ref, whatever the family declared — `input_kind_mismatch` | §13 **R1-B1**, **R1-B1b** |
+| **effect** | `propose_type` may not name `kind="predicate"`, so an auto-approving namespace cannot mint a live capability set unattended | §2.5 rule 2.5-8 |
+
+> **The first draft had the first door only, and this section audited all three as shut.** **[Observed, round 1]** a reviewer declared a family with `kinds=None`, handed `preflight` two `kind="predicate"` refs, got `verdict="allowed"`, and recorded it `applied`: **`merge_capabilities(commentable, searchable)`, constructed end to end.** A second reviewer reached the same row a different way — `Effect(op="propose_type", kind="predicate")` against the **shipped** `Registry` on a namespace whose policy auto-approves, which is **[Observed]** UC1's own configuration, minting a live `commentable` predicate at Haiku with no warning.
+>
+> **`EDGES.md` §2.4.1 had to learn the two-layer lesson the hard way and this document said it had inherited the lesson unchanged.** It had inherited half. That is worse than not having inherited it, because the audit was written as though the round had been paid for — and §17 is the section whose whole job is to be believed. The rule is general at all three doors now, and each is exercised rather than asserted.
 
 **4. Did anything take its shape from Tenshen?** The eight keys, one at a time:
 
@@ -1238,13 +1294,63 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 | **No executor and no scheduler** | §1's first two non-goals, and §4 states the consequence rather than hiding it: the gate is advisory by construction |
 | Invocations with append-only provenance | §3. `Invocation`, `InvocationProvenance` narrowing `Provenance` the *other* way from `EdgeProvenance`, `EventRecord.invocation_id`, three event values, and a correction that is a new event while a compensation is a new invocation |
 | Gating — families through the proposal loop, invocations through `approval_mode` / `min_auto_tier` | §5. And §5.3 states what `min_auto_tier` does **not** decide, per **R20** |
-| New `Refusal.reason` values through `INTERFACE.md` §5.12 in the same change (**R3**) | **Six** added: `action_family_unknown`, `precondition_unmet`, `human_approval_required`, `tier_below_action_policy`, `effect_not_permitted`, `action_store_absent`. §5.12 enumerates **twenty-seven**; `types.REFUSAL_REASONS` carries them in the same commit. A seventh (`unknown_invocation`) is argued and **not** taken |
-| New `warnings` values through `INTERFACE.md` §5.4 in the same change | **One**: `effect_undeclared:<op>:<target>`, §5.4 now **twenty-three** across nine carriers. The brief offered it as a *refusal*; the UC1 design test moved it |
-| Capability flags in `PACKAGE.md`'s style, with `why`; adapter primitives ≤ 4 | §8 (three flags, two declarations, three more argued **not** taken) and §9 (**three** primitives, 19–21) |
+| New `Refusal.reason` values through `INTERFACE.md` §5.12 in the same change (**R3**) | **Seven** added: `action_family_unknown`, `precondition_unmet`, `human_approval_required`, `tier_below_action_policy`, `effect_not_permitted`, `action_store_absent` — and `input_kind_mismatch`, which round 1 added in the change that closed the kill row. §5.12 enumerates **twenty-eight**; `types.REFUSAL_REASONS` carries them in the same commit. A seventh (`unknown_invocation`) is argued and **not** taken |
+| New `warnings` values through `INTERFACE.md` §5.4 in the same change | **Two**: `effect_undeclared:<op>:<target>` (the brief offered it as a *refusal*; the UC1 design test moved it) and `approval_unrecorded` (round 1). §5.4 now **twenty-four** across nine carriers |
+| Capability flags in `PACKAGE.md`'s style, with `why`; adapter primitives ≤ 4 | §8 (three flags, two declarations, three more argued **not** taken) and §9 (**three** primitives, 19–21, **plus one amendment to primitive 15** — `read_events(invocation_id=)`, which §9.1 states with what **R30** says it costs) |
 | Tenancy: none in the protocol (**R24**) | §8, and §11.4 names the consequence for beacon's enterprise blocker instead of claiming a fix |
 | The tool-slot ceiling as a first-class design input | §10. Re-measured, not cited: 128 / 127 / 222 / 19 / 27, and `common 45 + task 48 + project 21 + person 13 = 127` reproduced arithmetically through `projection` |
-| A design-test section per use case, expected outcomes stated first | §11, §12, §13. **Thirty-two predictions, committed in a separate commit ahead of the results; five contortions recorded, none designed away**; **54 probe checks** across four probes, all passing |
-| Standing constraint 8 from the start | §14. **47** numbered rules across eight sections: **43** planned `C19` ids, **4** `prose-only` tags with reasons. `check_spec_drift.py`'s extension is the build row's, and §14 says why wiring it early would be worse than not wiring it |
+| A design-test section per use case, expected outcomes stated first | §11, §12, §13. **Thirty-two predictions, committed in a separate commit ahead of the results; seven contortions recorded, none designed away**; **62 probe checks** across four probes, all passing — 54 in the first draft plus **8 regression checks, one per round-1 finding of substance** |
+| Standing constraint 8 from the start | §14. **58** numbered rules across eight sections: **54** planned `C19` ids, **4** `prose-only` tags with reasons, and the tables **relocated in round 1** so the checker can actually reach all eight. `check_spec_drift.py`'s extension is the build row's, and §14 says why wiring it early would be worse than not wiring it |
 | Which mechanism it is designed against, and what would change it | §15 |
-| Kill-criterion check | §17. Not tripped, at **three** doors — the effect vocabulary, the input vocabulary, and the shipped `merge_types` — and the Tenshen-shape question answered honestly rather than favourably |
+| Kill-criterion check | §17. **Tripped in round 1, twice, and closed** — the input vocabulary bound at declaration only, and `propose_type` could name a predicate. Now checked at **five** doors: three declaration call sites, the invocation-time input check, and the shipped `merge_types`. The Tenshen-shape question is answered honestly rather than favourably |
 | An adversarial review loop | §19 |
+
+---
+
+## 19. The adversarial review loop
+
+**Protocol** (`USE-CASES.md`, standing constraint 7; the brief's stop rule): fresh reviewers each round, briefed with the three fixtures and told to **drive the design through each fixture's real data rather than read it** — 3c's lesson being that *"every finding of substance came from driving the real registry through a real scenario, none from reading."* Two reviewers per round, distinct lenses. **Stop: two consecutive clean rounds, or three rounds plus an honest convergence note.**
+
+**The lenses were chosen from what worked.** Row 4b's most productive round swapped in a **consumer lens** and got five of its six findings from it, so round 1 here paired the standing **real-data lens** with an **"engineer who has to build this next week"** lens — the same idea, pointed at the implementer rather than at the reader.
+
+### 19.1 Round log
+
+| Round | Reviewers | Verdicts | BLOCKING | MAJOR | Outcome |
+|---|---|---|---|---|---|
+| **1** | real-data lens · build-it-next-week lens | NOT YET · NOT YET | **7** | **21** + 14 MINOR | **The kill row was constructible, twice, through two different doors.** Every finding reproduced by running code. Eleven new numbered rules, two new vocabulary values, one code change in the package, eight regression checks. §19.2 |
+
+### 19.2 Round 1 — what it found
+
+**Seven BLOCKING, and the two that matter most are the same failure from two directions: a rule this document said it had inherited *unchanged* was inherited by half.**
+
+**B1 — the kill row, constructed end to end.** `InputSpec.kinds` bound at declaration and at nothing else. A reviewer declared a family with `kinds=None`, handed `preflight` two `kind="predicate"` refs, got `verdict="allowed"`, and recorded it `applied`: **`merge_capabilities(commentable, searchable)`**. `EDGES.md` §2.4.1 binds at **both** layers and spent its own round 1 learning why; §2.3 claimed to inherit that rule *unchanged* and §17 audited it as shut. **Fixed** by validating every supplied input at both calls, with `input_kind_mismatch` as the twenty-eighth `Refusal.reason` (§7), and a general `predicate` exclusion that no family declaration can opt out of. `R1-B1` / `R1-B1b`.
+
+**B6 — the same row through a third door.** `Effect(op="propose_type", kind="predicate")` was unconstrained, and a reviewer minted a **live** `commentable` predicate against the **shipped** `Registry` on a namespace whose policy auto-approves — **[Observed]** UC1's own configuration — at Haiku, with no warning. **Fixed:** rule 2.5-8.
+
+**B3 — a fourth declaration door nobody had counted.** §17 audited *"three doors"* and named no call site. The shipped `_edge_family_refusal` is called from `propose_type`, `approve` **and `import_types`**, and says why in its own docstring; this document mentioned `import_types` nowhere. A reviewer imported an **active** action family declaring `merge_types` and breaching §2.2's cross-field rule, with no warning at all. **Fixed:** rule 2.2-4, and `import_refused:<reason>` on the path that cannot return a `Refusal`. `R1-B3`.
+
+**B2 — the ledger fabricated an approval.** `record_invocation` filled `approved_by="auto:<policy>"` on every `applied` invocation, so an `irreversible`/`human` family recorded an `applied` invocation by `ai:reaper` with a policy approval nobody performed — the field `EDGES.md` §5.1 dropped from `EdgeProvenance` because *"a field whose only honest value is a lie should not be on the shape."* **Fixed:** `None` plus `approval_unrecorded`, the twenty-fourth warning value; §2.4's never-null rule binds only where the gate decided. `R1-B2`.
+
+**B-code — `EventRecord` had no `invocation_id` and `read_events` no filter for one.** This document specified the field, a `read_events` filter for it and a `review` mode that reads it, in a change that **never touched `adapter.py`** — one row after `EDGES.md` set the precedent in that file's own comment. `InvocationProvenance.history` and the whole of `review` mode were unreachable. **Fixed** in the package, with `PACKAGE.md` §3.3/§3.4 amended in the same change and the async mirror regenerated.
+
+**B-shape — `find_invocations` returned a 2-tuple**, so a backend had nowhere to say `known=None`, which §6.3 spends a paragraph requiring. Every other paging primitive already returns a `Page`. **Fixed:** `InvocationPage`.
+
+**B-declaration — rule 2.2-1 contradicted the shipped decision for the identical case one kind along.** `edges.family_declaration_problem` records that a **missing** declaration is not a breach, because refusing the registration *"would make this row reject types `INTERFACE.md` says are legal, on data the one real host already has"*. This document refused it, and never said it was taking the opposite position. **Fixed** by adopting the shipped one, with the hole closed at the other end. `R1-B4`.
+
+**Twenty-one MAJOR, of which four changed a mechanism rather than a sentence:**
+
+- **`counts` was order-dependent** (§10.3). A family in two reachability groups made *"the useful half of this call is the counting"* rest on a guarantee that did not hold. No design test found it because **[Observed]** beacon's `category` is a single string. **Fixed:** `counts` (declared) and `admitted` (charged) are two fields. `R1-A3`.
+- **`invocations(...).complete` was `True` on a filtered answer**, through a dead sub-expression `(not filtered or True)` — in the one query §4 asks an operator to act on. **Fixed:** every filtered answer is a floor. `R1-A4`.
+- **`approval_mode="human"` was a three-prefix blocklist** and `bot:reaper`, `svc:cleanup`, `AI:bot` and `nobody` all walked through it. **Fixed:** an allowlist off the derived `created_by`. 
+- **`review` mode and `compensated` were specified and executed by nothing**, and §11.5 claimed UC3 showed the second while UC3's probe contained no compensation at all — *a false claim in a walk-through*, which `USE-CASES.md` calls a silent accommodation rather than a pass. **Fixed** and both now run. `R1-A8a` / `R1-A8b`.
+
+**And two findings about the audit rather than the design**, which are the ones worth keeping:
+
+- **Thirty of the forty-seven numbered rules were unreachable by the checker §14 names.** `_section` reads to the next heading of any level, and five tables sat under a leaf subsection. §14 promised a mapping that could not have been wired.
+- **§7 said §5.4 goes to "twenty-three values across five carriers"** while `INTERFACE.md` §5.4's own header and this document's §18 both said **nine** — a self-accounting error two screens apart, which is the failure mode `EDGES.md` §16 records three times in its own summary table. `check_spec_drift.py` holds the value list and the count word and has never held the carrier count.
+
+### 19.3 What round 1 says about the process
+
+**Both lenses found the kill row, by different routes, and neither found it by reading.** The real-data lens constructed `merge_capabilities` and ran it; the build-it lens went through the 43 planned ids asking which it could turn into an assertion and found eleven it could not, which is a *different* kind of question and produced a different half of the list. **[Inferred]** that the second lens is the one to keep for a spec row: a specification's defects are mostly the questions it does not answer, and the only reliable way to find an unanswered question is to try to answer it.
+
+**The single most uncomfortable finding is not a defect, it is a pattern.** §17's kill-criterion audit was **wrong**, in the section whose entire job is to be believed, and it was wrong in the specific way of claiming an inherited rule it had inherited half of. `EDGES.md` §15 records the identical failure one row earlier — *"in the first draft it was NOT structurally blocked, and this section said it was"* — and this document quoted that sentence while repeating the mistake. **A self-audit written by the author of the thing audited is worth what an adversary makes it worth**, and that is the third row in a row where the kill-criterion section is where the loop earns its keep.
