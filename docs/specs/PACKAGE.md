@@ -148,7 +148,7 @@ v0 ships `_resolve.DeterministicResolver`: `difflib.SequenceMatcher` over `name`
 
 **The consequence, stated plainly:** the deterministic resolver is not good enough for production and is not meant to be. It exists so the suite has a fixed point. `Registry(adapter, resolver=MyModelResolver())` is the production path, and **no contract test may pass or fail because of resolver quality** — the suite asserts *outcomes and shapes* (`confidence is None`, `outcome == "none"`, `alternatives` populated), never scores.
 
-> **Three tests broke that rule, and row 3c enforces it rather than restating it.** `C3-08`/`C3-09` assert a `not_a_type` **outcome** that only the shipped `DeterministicResolver`'s lookup table produces, and `C4-06`'s keyword rule is not behind this seam at all (§8b.3, B8). They now carry a `resolver_dependent` marker: **binding for the two reference backends**, where they pin real behaviour of the resolver this package ships, and **skipped, with a reason naming this section, for a foreign adapter**, where they assert nothing about the backend under test. Ruling **R8**'s recommendation, applied — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, which the supervisor may reverse.
+> **Three tests broke that rule, and row 3c enforces it rather than restating it.** `C3-08`/`C3-09` assert a `not_a_type` **outcome** that only the shipped `DeterministicResolver`'s lookup table produces, and `C4-06`'s keyword rule is not behind this seam at all (§8b.3, B8). They now carry a `resolver_dependent` marker: **binding for the two reference backends**, where they pin real behaviour of the resolver this package ships, and **skipped, with a reason naming this section, for a foreign adapter**, where they assert nothing about the backend under test. Ruling **Q4**'s recommendation, applied — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, which the supervisor may reverse.
 
 ---
 
@@ -685,7 +685,7 @@ Two rules that keep the definition honest:
 
 **`nonbinding` now exempts, where before it only annotated.** §5.5 says a backend *"may not be failed for"* `C15-02`. Registering `@pytest.mark.nonbinding` never made that true: the runner passed every test, so a backend that honestly declines the optional `AttributeStore` protocol — behaviour §5.5 explicitly permits — got `complete=False`, failed `C15-02`'s assertion, and was reported as failing the suite. **Verified before it was fixed:** a wrapper that omits `AttributeStore` returns `AttributeCensus(entries=(), known=None, complete=False, why="this backend has no attribute census storage")` and fails that test. `run_contract_suite` and `python -m open_ontology.contract` now pass `-m "not nonbinding"` by default, with `--include-nonbinding` to run them anyway. **A conformance verdict is the default run; the flag is for curiosity.**
 
-**Resolver-dependent tests are binding here and not there.** `C3-08`, `C3-09` and `C4-06` carry a `resolver_dependent` marker. Against the two reference backends they run and must pass — they pin real behaviour of the resolver this package ships. Against a foreign adapter (`--adapter`, or `run_contract_suite`) they are **skipped with a reason naming §2.6 and ruling R8**, because a third-party backend paired with its own resolver — §2.6's own production path — was otherwise failing mandatory conformance tests for a reason that is neither its storage nor its choice. Skipped, never silent: `-rs` prints exactly what was not run and why.
+**Resolver-dependent tests are binding here and not there.** `C3-08`, `C3-09` and `C4-06` carry a `resolver_dependent` marker. Against the two reference backends they run and must pass — they pin real behaviour of the resolver this package ships. Against a foreign adapter (`--adapter`, or `run_contract_suite`) they are **skipped with a reason naming §2.6 and question **Q4****, because a third-party backend paired with its own resolver — §2.6's own production path — was otherwise failing mandatory conformance tests for a reason that is neither its storage nor its choice. Skipped, never silent: `-rs` prints exactly what was not run and why.
 
 **Every run states what it covered.** §6.1 requires *both* reference backends *in one run*, and a bare `pytest --pyargs open_ontology.contract` with no `OO_POSTGRES_DSN` exits `0` having exercised SQLite alone — a skip is easy to miss beside a wall of passes. The suite now prints, at the end of every run:
 
@@ -699,7 +699,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**118 tests in seventeen groups.** *(109 at #3; nine added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C3-10`, `C5-12`, `C6-07`, `C9-07`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**119 tests in seventeen groups.** *(109 at #3; **ten** added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C3-10`, `C5-12`, `C6-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (9).** No interface call; this is the protocol itself.
 
@@ -749,8 +749,8 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C3-05 | `tier` is required — omitting it is a `TypeError`, not a default | §2.7 |
 | C3-06 | `tier` is echoed on the `Resolution` and lands in provenance unchanged | |
 | C3-07 | a prior rejection for the candidate surfaces in `alternatives` | §5.5 |
-| C3-08 | **[CMS]** `resolve_type("location", context(sibling_columns=["Provider Address","City/Town","State","ZIP Code"]))` ⇒ `not_a_type` / `redundant_projection`. **`resolver_dependent`** — binding for the reference backends, skipped for a foreign adapter (§2.6, R8) | §10.2 |
-| C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact`. **`resolver_dependent`** (§2.6, R8) | §10.2, T7 |
+| C3-08 | **[CMS]** `resolve_type("location", context(sibling_columns=["Provider Address","City/Town","State","ZIP Code"]))` ⇒ `not_a_type` / `redundant_projection`. **`resolver_dependent`** — binding for the reference backends, skipped for a foreign adapter (§2.6, Q4) | §10.2 |
+| C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact`. **`resolver_dependent`** (§2.6, Q4) | §10.2, T7 |
 | C3-10 | **a retired name is named in the resolution**, with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score — never a bare *"nothing fits"*. *(Row 3c: `resolve_type` read the tombstone and discarded it, answering with a confident negative about a word it knew was burned — Rule U, in the call designed against mechanism 2)* |
 
 **C4 — `propose_type` (9).** Mechanism **1**.
@@ -762,7 +762,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C4-03 | a name already taken in `(namespace, kind)` returns the **existing `TypeEntry`** — not an error |
 | C4-04 | a near-duplicate returns a `Proposal` with `warnings=["near_duplicate:<name>"]` and **does not refuse** — the kill-row protection |
 | C4-05 | `evidence=[]` ⇒ `warnings` contains `no_evidence`; the proposal is still created |
-| C4-06 | a definition asserting a domain semantic with no `external_doc` evidence ⇒ `unverified_semantics`. **`resolver_dependent`** — the keyword rule behind it is not even behind the `Resolver` seam (§2.6, §8b.3 B8, R8) |
+| C4-06 | a definition asserting a domain semantic with no `external_doc` evidence ⇒ `unverified_semantics`. **`resolver_dependent`** — the keyword rule behind it is not even behind the `Resolver` seam (§2.6, §8b.3 B8, Q4) |
 | C4-07 | under `approval_policy="auto"` the return is a `TypeEntry` with `provenance.approved_by == "auto:<policy>"` — **never blank** |
 | C4-08 | a retired name ⇒ the retired entry plus `warnings=["name_previously_retired"]`, and no new entry |
 | C4-09 | `^[a-z][a-z0-9_]{0,63}$` enforced identically on both backends |
@@ -817,7 +817,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C8-04 | an imported row carries `unknown:imported`, never null |
 | C8-05 | `model_tier` is never overwritten by a later approval or amendment |
 
-**C9 — `retire` (7).** Mechanism **3**.
+**C9 — `retire` (8).** Mechanism **3**.
 
 | id | asserts |
 |---|---|
@@ -827,6 +827,8 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C9-04 | the retired name is not reusable (pairs with C4-08) |
 | C9-05 | an empty `reason` raises |
 | C9-06 | `successor` is recorded and surfaces in `provenance` |
+| C9-07 | **an unknowable consumer set blocks the retirement:** on `indexes_membership=False` every extent is empty, so an empty `gates_on` means *we could not look* — `Refusal("no_consumer_evidence")`, overridable by `force=True`. *(Row 3c. `retire` read an empty `gates_on` as "nothing gates on this" and **silently retired a type with a live registered consumer** — mechanism C committed by the call built to catch it)* |
+| C9-08 | **`force=True` is refused when it cannot be recorded, whichever guard it overrides** — `indexes_membership=False` **and** `stores_events=False` together, which is `work_link_types`' own declared shape (B3 + B6). *(Row 3c. The recordability check lived inside the `live_consumers` branch, and with no extent to compute `gates_on` is always empty, so the branch never ran: a type with a live registered gate retired with no refusal, no warning and no history — while §7.3 B6 says in terms that this case returns `cannot_record_override`. `merge_types` had the unconditional form since v0)* |
 
 **C10 — `merge_types` (8).** Mechanism **4**.
 
@@ -926,6 +928,8 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 | `unknown_proposal` | C5-05 |
 | `reject` requires a reason | C5-08 |
 | `live_consumers` | C9-01 |
+| `no_consumer_evidence` (retire) | **C9-07** |
+| `cannot_record_override` (retire, compound) | **C9-08** |
 | `retired_without_usage_evidence` | C9-03 |
 | retired name not reusable | C9-04, C16-02 |
 | `different_consumer_sets` (non-overridable) | C10-01 |
@@ -948,7 +952,7 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 > *Corrected by row 3c after an adversarial review round.* This line read *"the three refusals this document adds are tested at C9-02, C10-08, C15-04"* — which names three ids covering **two** of the reasons, and left **`proposals_not_stored` with no test anywhere in either suite**. That is UC1's own path (§7.3 B4: a backend with no proposal table is conformant and `approve`/`reject` must refuse), so the capability the Tenshen design test most depends on was the one the suite never checked. `C5-12` closes it.
 
-**[Inferred]** the built suite will be larger than 118 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+**[Inferred]** the built suite will be larger than 119 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1199,7 +1203,7 @@ resolve_type("location", ctx(sibling_columns=("latitude","longitude")))
 
 > **`C4-06`'s share of this fix is cosmetic, and saying so is the honest part** *(recorded row 3c, after a fourth review round on this document)*. The `resolver_dependent` marker skips a test when the caller supplies their own `Resolver`. For `C3-08`/`C3-09` that is a real remedy: the outcome comes from `self.resolver.classify()`, so a deployment's resolver genuinely determines it. **`C4-06`'s does not touch the resolver at all** — `_asserts_domain_semantic` is a module function `propose_type` calls directly — so supplying a resolver changes nothing about whether it would pass, and the defect B8 names for it is *relabelled, not addressed*. The exemption is still right (a third-party backend should not fail a test it cannot influence), but **the only real fix is moving the domain-semantic judgement behind the `Resolver` seam**, which is the v1 item below. Recorded here rather than bundled silently with the other two.
 
-**Recommendation, and it was applied** *(row 3c, after the finding recurred in two consecutive review rounds — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, ruling R8, which the supervisor may reverse)*. The three carry a `resolver_dependent` marker: **binding for the two reference backends, skipped with a reason for a foreign adapter** (§2.6, §6.1). That is the narrower of the two options, and it was chosen because it changes nothing about this repository's own gate — §6.1 already requires both reference backends — while removing a promise the suite could not keep to anyone else.
+**Recommendation, and it was applied** *(row 3c, after the finding recurred in two consecutive review rounds — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, question **Q4**, whose recommendation was applied and which the supervisor may reverse)*. The three carry a `resolver_dependent` marker: **binding for the two reference backends, skipped with a reason for a foreign adapter** (§2.6, §6.1). That is the narrower of the two options, and it was chosen because it changes nothing about this repository's own gate — §6.1 already requires both reference backends — while removing a promise the suite could not keep to anyone else.
 
 **What was deliberately NOT done:** widening `_PROJECTION_FAMILIES` to include `latitude`/`longitude`. That fits the table to the second dataset the way it was already fitted to the first, and it would make the *next* use case's version of this finding harder to see rather than easier. Moving the domain-semantic judgement behind `Resolver` is the tidier long-run answer and stays a v1 item.
 
@@ -1234,7 +1238,7 @@ The review loop that follows a design test (standing constraint 7) found two mor
 
 **[Observed] result:** a `stores_proposals=False` backend now runs the suite to **`96 passed, 25 skipped, 1 deselected`, exit 0**, and the two reference backends still execute all 115 with nothing skipped. §3.2's sentence and §7.4's verdict are true for the first time.
 
-> **What this did NOT close, recorded rather than half-fixed.** A backend declining **several** optional capabilities at once still fails, and the residue is real: with `stores_events=False` an acknowledged merge is correctly refused (`cannot_record_override`, §3.6) so `C16`'s fixture cannot build the store it inspects, and with `indexes_membership=False` the `C10` group's consumer-set guards all degrade to `no_consumer_evidence` rather than the specific refusals they assert. **[Observed]**, on a double declining all seven optional flags. Closing it may require deciding what conformance *means* for a backend that can never merge and can never index — which is a ruling, not a test fix. **R11** in [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
+> **What this did NOT close, recorded rather than half-fixed.** A backend declining **several** optional capabilities at once still fails, and the residue is real: with `stores_events=False` an acknowledged merge is correctly refused (`cannot_record_override`, §3.6) so `C16`'s fixture cannot build the store it inspects, and with `indexes_membership=False` the `C10` group's consumer-set guards all degrade to `no_consumer_evidence` rather than the specific refusals they assert. **[Observed]**, on a double declining all seven optional flags. Closing it may require deciding what conformance *means* for a backend that can never merge and can never index — which is a ruling, not a test fix. **Q7** in [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 
 ---
 
@@ -1284,7 +1288,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (118 tests, seventeen groups — 109 at #3, nine added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (119 tests, seventeen groups — 109 at #3, ten added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |
@@ -1306,7 +1310,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 3. **Three new `Refusal.reason` values** are introduced here — `proposals_not_stored`, `cannot_record_override`, `attributes_schema_violation` (§3.6). *Asked: amend #1's list, or state that `reason` is an open vocabulary?*
    → **Ruled R3: amend #1. `Refusal.reason` is a CLOSED vocabulary**, enumerated in `INTERFACE.md` §5.12, and adding a value requires amending that section in the same change. **Ruling R4** later added a fifteenth, `consumer_source_read_only`, by exactly that route.
 
-**Open items that remain open are not here.** They are the six in [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6 (R5–R10), of which two are this document's: per-kind attribute schemas (**R9**, open) and `C3-08`/`C3-09`/`C4-06` versus §2.6 (**R8** — whose recommendation was *applied* by row 3c after recurring in two consecutive review rounds, so the ruling wanted there is confirm-or-revert rather than decide).
+**Open items that remain open are not here.** They are the six in [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6 (Q1–Q6), of which two are this document's: per-kind attribute schemas (**Q5**, open) and `C3-08`/`C3-09`/`C4-06` versus §2.6 (**Q4** — whose recommendation was *applied* by row 3c after recurring in two consecutive review rounds, so the ruling wanted there is confirm-or-revert rather than decide).
 
 ### 11.2 Recorded for #1's next revision, no ruling needed
 

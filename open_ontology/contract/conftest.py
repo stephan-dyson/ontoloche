@@ -56,7 +56,7 @@ def pytest_collection_modifyitems(config, items):
     with its own resolver, which 2.6 calls *the production path*, failed mandatory
     conformance tests for a reason that is neither storage nor its own choice.
 
-    Ruling **R8**, applied by row 3c: they are **binding whenever the suite runs on
+    Ruling **Q4**, applied by row 3c: they are **binding whenever the suite runs on
     the shipped ``DeterministicResolver``** -- which is every reference-backend run and
     every third-party run that does not replace it -- and are **skipped when a caller
     supplies their own resolver** via ``run_contract_suite(resolver_factory=...)`` or
@@ -73,7 +73,7 @@ def pytest_collection_modifyitems(config, items):
         return
     skip = pytest.mark.skip(
         reason=(
-            "PACKAGE.md 2.6 / ruling R8 -- this test asserts an outcome only the "
+            "PACKAGE.md 2.6 / ruling Q4 -- this test asserts an outcome only the "
             "shipped DeterministicResolver produces, and this run supplied its own "
             "resolver. No contract test may pass or fail on resolver quality."
         )
@@ -268,7 +268,7 @@ def pytest_terminal_summary(terminalreporter):
     if _support.EXTERNAL_RESOLVER is not None:
         write(
             "  resolver: SUPPLIED BY THE CALLER -- PACKAGE.md 2.6's production path; "
-            "the resolver_dependent tests were skipped (ruling R8)"
+            "the resolver_dependent tests were skipped (ruling Q4)"
         )
     else:
         write("  resolver: the shipped DeterministicResolver (2.6's fixed point)")
