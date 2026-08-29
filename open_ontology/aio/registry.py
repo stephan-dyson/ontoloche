@@ -2835,6 +2835,14 @@ class AsyncRegistry:
             if await self.adapter.get_type(t.namespace, t.name, kind=t.kind) is None:
                 warnings.append(f"endpoint_type_unregistered:{t}")
         if fam.status == "retired":
+            # EDGES.md 2.8, second carrier. Writing an edge onto a RETIRED family is
+            # not refused -- retirement is a statement about the vocabulary and the
+            # edge is a fact about two things -- but a caller who has just written
+            # under a word somebody withdrew is entitled to know. 2.8's table listed
+            # only `NeighborReport` for this value until row 4b's second adversarial
+            # round found the code emitting it here as well: a carrier minted by
+            # implementation, which is the closed vocabulary opening by code rather
+            # than by prose. Added to 2.8 in the same change, per ruling R3.
             warnings.append(f"edge_family_retired:{family}")
         warnings.extend(self._edge_write_warnings())
 
@@ -2977,12 +2985,24 @@ class AsyncRegistry:
         if rec is None:
             return Refusal("unknown_edge", {"edge_id": edge_id})
         edge = _edge_from_record(rec)
-        if not self.caps.stores_edge_events:
-            return replace(
-                edge.provenance,
-                history=(),
-                history_why=self.caps.reason("stores_edge_events"),
-            )
+        # **Both flags, and checking only one of them raised** (row 4b, adversarial
+        # round 2). `read_events` is the SAME primitive `stores_events` gates, and
+        # nothing in EDGES.md 6 or PACKAGE.md 3.2 ties the two declarations together
+        # -- so a conformant third-party adapter may declare `stores_edges=True`,
+        # `stores_edge_events=True` and `stores_events=False`, and this call went
+        # straight into an uncaught `NotSupported`. Neither reference backend can
+        # produce that combination, which is exactly why nothing caught it.
+        #
+        # A declined capability degrades to an honest empty plus a `why`; it never
+        # raises. `_events()` -- the type-side twin -- has always checked
+        # `stores_events` first, and this now does the same.
+        for flag in ("stores_edge_events", "stores_events"):
+            if not getattr(self.caps, flag):
+                return replace(
+                    edge.provenance,
+                    history=(),
+                    history_why=self.caps.reason(flag),
+                )
         rows = await self.adapter.read_events(rec.namespace, edge_id=edge_id)
         return replace(
             edge.provenance,
@@ -3156,7 +3176,22 @@ class AsyncRegistry:
                     if not keep:
                         continue
                     fresh[rec.edge_id] = _edge_from_record(rec)
-                if self.max_edges is not None and len(seen) + len(fresh) >= self.max_edges:
+                if self.max_edges is not None and len(seen) + len(fresh) > self.max_edges:
+                    # **Strictly greater, and the `=` in `>=` was a BLOCKING finding**
+                    # (row 4b, adversarial round 2). A walk of exactly `max_edges`
+                    # distinct edges has had NOTHING truncated -- every edge that
+                    # exists was returned and the adapter's own last page came back
+                    # with `next_after=None` -- and it reported `complete=False` with
+                    # a `why` naming a bound nothing had crossed. That is round 3's
+                    # B7 exactly, on the one axis its fix never tried: the previous
+                    # test exercised 19-under-20 and 19-under-5 and never `==`.
+                    #
+                    # **A false claim in the field 4.2 promises will tell the truth is
+                    # worse than no bound**, because the deployment reading it
+                    # concludes the bound is too tight when the store had the whole
+                    # answer. The per-edge guard below is still `>=` and still caps
+                    # `known` at exactly `max_edges`; the two cannot disagree, because
+                    # reaching the guard requires this line to have fired first.
                     bound_hit = True
                     break
                 cursor = page.next_after

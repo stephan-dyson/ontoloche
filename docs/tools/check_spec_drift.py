@@ -54,6 +54,7 @@ EDGES = ROOT / "docs" / "specs" / "EDGES.md"
 sys.path.insert(0, str(ROOT))
 
 from open_ontology import adapter as adapter_module  # noqa: E402
+from open_ontology import edges as edges_module  # noqa: E402
 from open_ontology import attributes as attributes_module  # noqa: E402
 from open_ontology.contract import harness as harness_module  # noqa: E402
 from open_ontology import registry as registry_module  # noqa: E402
@@ -131,6 +132,32 @@ PACKAGE_SHAPES = {
 
 #: Same rule as SPEC_OMITS, for PACKAGE.md. An entry is a decision on the record.
 PACKAGE_OMITS: dict[str, set[str]] = {}
+
+#: EDGES.md prints its shapes as ``Name:`` sketches, exactly as INTERFACE.md does.
+#: **Added by row 4b's second adversarial round, and the reason is a defect it found.**
+#:
+#: EDGES.md 5.1 printed an ``EdgeProvenance`` with no ``model_tier`` and argued at
+#: length that the field was *"deliberately absent"* -- while ruling **R20** had granted
+#: it before that row started, the code carried it, `C17-02` round-tripped it, and the
+#: same document's 14 table printed *"model_tier: yes"* five hundred lines below. The
+#: document contradicted the code, the ruling, and itself, in three places at once.
+#:
+#: INTERFACE.md's printed shapes have been held against `types.py` since row 3c and
+#: PACKAGE.md's against `adapter.py` since row 3d, each after the same class of defect.
+#: **EDGES.md 5.1 was the last printed shape in this repository that nothing checked,
+#: and it is the one that drifted** -- which is the third time this project has watched
+#: drift migrate into whichever half is not gated. There is no fourth half.
+EDGES_SHAPES = {
+    "TypeRef": "TypeRef",
+    "InstanceRef": "InstanceRef",
+    "Edge": "Edge",
+    "EdgeProvenance": "EdgeProvenance",
+    "NeighborReport": "NeighborReport",
+    "NeighborEdge": "NeighborEdge",
+}
+
+#: Same rule as the other two omit maps. An entry is a decision on the record.
+EDGES_OMITS: dict[str, set[str]] = {}
 
 _FENCE = re.compile(r"```(?:python)?\n(.*?)```", re.S)
 _CLASS = re.compile(r"^class ([A-Z]\w*)[:(]", re.M)
@@ -489,6 +516,33 @@ def main() -> int:
                 f"PACKAGE {printed}.{name}: printed by PACKAGE.md, absent from the code"
             )
 
+    # --- EDGES.md's printed shapes, against open_ontology/edges.py. Row 4b, round 2.
+    if EDGES.exists():
+        edges_blocks = spec_blocks(EDGES.read_text(encoding="utf-8"))
+        for printed, attribute in EDGES_SHAPES.items():
+            cls = getattr(edges_module, attribute, None)
+            if cls is None or not hasattr(cls, "__dataclass_fields__"):
+                problems.append(f"EDGES {printed}: open_ontology.edges has no dataclass {attribute}")
+                continue
+            fields = shape_fields(edges_blocks, printed)
+            if fields is None:
+                problems.append(
+                    f"EDGES {printed}: listed as a printed shape and EDGES.md prints no "
+                    f"`{printed}:` block -- a reader has nothing to build from"
+                )
+                continue
+            actual = set(cls.__dataclass_fields__)
+            allowed = EDGES_OMITS.get(printed, set())
+            for name in sorted(actual - fields - allowed):
+                problems.append(
+                    f"EDGES {printed}.{name}: the code has it and EDGES.md's printed shape "
+                    f"does not -- which is exactly how `model_tier` went missing for a row"
+                )
+            for name in sorted(fields - actual):
+                problems.append(
+                    f"EDGES {printed}.{name}: printed by EDGES.md, absent from the code"
+                )
+
     problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
     problems.extend(_check_warning_vocabulary(SPEC.read_text(encoding="utf-8")))
 
@@ -520,6 +574,8 @@ def main() -> int:
         f"contents and count.\n"
         f"INTERFACE.md 5.4: the closed warnings vocabulary matches "
         f"types.WARNING_VALUES ({len(types_module.WARNING_VALUES)} values).\n"
+        f"docs/specs/EDGES.md: every printed shape matches open_ontology/edges.py "
+        f"({len(EDGES_SHAPES)} shapes).\n"
         f"EDGES.md: every numbered rule in "
         f"{', '.join(sorted(R31_SECTIONS))} carries a contract id or a tagged "
         f"reason (ruling R31, standing constraint 8)."
