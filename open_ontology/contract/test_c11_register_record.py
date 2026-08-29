@@ -1,4 +1,4 @@
-"""C11 -- ``register_consumer`` / ``record_use`` (4). Mechanism C.
+"""C11 -- ``register_consumer`` / ``record_use`` (5). Mechanism C.
 
 ``usage`` and ``consumers`` cannot answer anything unless something writes to them.
 """
@@ -90,3 +90,50 @@ def test_c11_04_a_read_only_consumer_source_fails_loudly_not_silently(
     assert refusal.detail["consumer_id"] == "comment_service.can_comment"
     assert refusal.detail["why"], "the adapter's own sentence, not an invented one"
     assert read_only.adapter.find_consumers("default") == [], "and nothing was written"
+
+
+def test_c11_05_an_unregistered_gate_is_warned_about_not_reported_as_a_live_gate(
+    registry,
+):
+    """**Ruling R8, row 3d.** `C11-02` establishes that a consumer may gate on a word
+    nobody registered and that the registration must not be refused -- that IS mechanism
+    C. This is the other half: the *report* must not then read as a fact about a live
+    gate.
+
+    `would_drop: [future_service.render]` invites exactly one reading -- *this consumer
+    gates on `not_yet_a_predicate`, and `capture` is not in its extent.* The truth is
+    weaker and worse: **there is no `not_yet_a_predicate`**, so the extent is not
+    "excludes `capture`", it is undefined, and every type in the namespace would drop.
+
+    So the report carries `gate_unregistered:<gate>`. Three things are asserted, and
+    the third is the one that keeps `C11-02` true:
+
+    1. the warning names the gate;
+    2. a gate that IS a registered predicate raises no warning -- including a **retired**
+       one, which is a registered entry with a tombstone (`C3-10`), not an absent word;
+    3. `would_drop` still lists the consumer. Dropping it would delete mechanism-C
+       visibility, which is ruling R8's rejected option 2.
+    """
+    registry.register_consumer(
+        Consumer(id="future_service.render", gate="not_yet_a_predicate", on_unknown="drop")
+    )
+    seed(registry, "capture", definition="a captured watch")
+
+    report = registry.consumers("capture")
+    assert "gate_unregistered:not_yet_a_predicate" in report.warnings, (
+        "the report must say the gate is a word nobody registered"
+    )
+    assert [c.id for c in report.would_drop] == ["future_service.render"], (
+        "and must still list the consumer -- C11-02's mechanism-C visibility is intact"
+    )
+
+    # A gate that IS registered raises nothing, and a RETIRED one is still registered.
+    seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
+    registry.register_consumer(
+        Consumer(id="aura_render.referent_link", gate="commentable", on_unknown="drop")
+    )
+    after = registry.consumers("capture")
+    assert "gate_unregistered:commentable" not in after.warnings
+    assert "gate_unregistered:not_yet_a_predicate" in after.warnings, (
+        "one registered gate does not clear the warning about the other"
+    )

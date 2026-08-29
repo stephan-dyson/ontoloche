@@ -235,6 +235,7 @@ ConsumerReport:
     known:       int                 # len(gates_on) + len(would_drop) + len(would_error)
     complete:    bool                # ALWAYS False in v0
     why_incomplete: str              # "consumers are registered, not discovered; unregistered code paths are invisible"
+    warnings:    list[str]           # "gate_unregistered:<gate>" — see below. Ruling R8
 ```
 
 **Designed against: mechanism C.** This is the call that would have prevented the only documented Tenshen incident — `capture` began being emitted, `aura_render` gated on a list that excluded it, `on_unknown` was effectively `drop`, and the feature was dead for exactly the watch kind that had just started working.
@@ -242,6 +243,19 @@ ConsumerReport:
 **Behaviour when uncertain.** `complete` is **always `false` in v0**, unconditionally, even when every consumer in a system is registered — because the registry cannot know that it is. A caller rendering `WALKTHROUGH.md` step 5 must therefore print *"3 known, there may be others"* and has no way to print *"3"*. **This is deliberate friction.** An impact list that misses a consumer is more dangerous than no list, because it promises safety it cannot deliver.
 
 **Two ways a consumer gates, and v0 computed one** *(corrected by row 3c, 2026-08-29, after an adversarial review round)*. For an `entity`, a consumer gates on it when the consumer's `gate` predicate **includes** it. **For a `kind="predicate"` entry, a consumer gates on it when the `gate` IS it** — and a predicate is essentially never a member of itself, so the membership test alone never matched. **[Observed]**, on a fully capable backend with nothing unknowable: `consumers("commentable")` returned `gates_on: []` and filed the consumer of `commentable` under **`would_drop`** — the exact opposite of the truth — and `retire("commentable")` then succeeded with no refusal. `predicates()` had the right query all along; this call did not, and §5.9 guards retirement with `consumers` and carves out no exception for predicates. That is mechanism **C** inside §2.3's *"single most load-bearing idea in this document"*. `C1-09`.
+
+**A gate nobody registered is warned about, not hidden and not refused** *(ruling **R8**, row 3d — routed here from the UC3 walk-through)*. A consumer's `gate` **may** name a predicate that does not exist; `register_consumer` accepts it deliberately, because a consumer gating on a word nobody registered **is** mechanism **C**, and refusing the registration would hide the very thing this call exists to surface (`C11-02`).
+
+But the report then says `would_drop: [aura_render.referent_link]` about that consumer, and a reader takes that as a fact about a live gate: *this consumer gates on `commentable`, and this type is not in `commentable`'s extent.* The truth is weaker and worse. **There is no `commentable`.** The extent is not "excludes this type" — it is undefined, and *every* type in the namespace would drop, not just this one. One line of the report, two very different situations.
+
+So the report carries `warnings: ["gate_unregistered:commentable"]` — the same `<name>:<subject>` shape as `attributes_invalid:<field>`. `would_drop` still lists the consumer, unchanged: dropping it would delete mechanism-C visibility, which is `C11-02`'s subject.
+
+Two things this deliberately is **not**:
+
+- it is **not** `gate_values` (ruling R8's option 1, deferred to Phase 3): letting a gate name a *value* would make the registry know what a value is, which §2.1 refuses on purpose. That refusal is a product boundary and it moves by decision, not by drift.
+- it is **not** a refusal, and it is not a rule about *retired* predicates. A retired predicate is a **registered** entry — the tombstone is there and `resolve_type` reads it (`C3-10`) — so it raises no warning. Only a gate with no entry at all does.
+
+**Rule U applies to the warning too.** "This gate is unregistered" is a positive claim about an absence, and the registry only makes it when the lookup came back `complete`. On a backend whose page is incomplete, no warning is emitted — the report does not guess in either direction. `C11-05`.
 
 **Unknown type:** raises `UnknownType`, never returns an empty report — an empty report reads as *"nothing gates on this"*, which is the exact false reassurance this call exists to prevent.
 
