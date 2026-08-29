@@ -59,6 +59,7 @@ from open_ontology.edges import (
     DEPTH_CAP,
     DIRECTIONS,
     EDGE_LEVELS,
+    EDGE_PAYLOAD_KIND,
     EQUIVALENT_TO,
     EQUIVALENT_TO_ATTRIBUTES,
     EQUIVALENT_TO_DEFINITION,
@@ -2723,6 +2724,65 @@ class AsyncRegistry:
             rec.name, rec.namespace, dict(rec.attributes or {}), rec.status
         )
 
+    async def _edge_payload_schema(
+        self, namespace: str, fam: EdgeFamily, attributes: dict
+    ) -> tuple[AttributeSchema | None, list[str], bool]:
+        """The schema governing one edge PAYLOAD -- ruling **R34**, EDGES.md 2.5.
+
+        ``(schema, violations, the named schema is not in force)``.
+
+        PACKAGE.md 5's mechanism verbatim, one kind along: a per-namespace
+        ``(namespace, "edge_payload")`` schema governs every edge payload written in
+        that namespace, a family's declared ``payload_schema`` name shadows it for that
+        family, and R10's **enforcement floor** applies -- an override replaces the
+        FIELDS and may never weaken the STRICTNESS. ``_check_attributes`` already
+        implements all three, so this call is a lookup and not a second mechanism, which
+        is the whole point of transposing rather than inventing.
+
+        **The kind is ``"edge_payload"`` and not ``"edge"``, and the reason is measured
+        rather than argued** -- see ``edges.EDGE_PAYLOAD_KIND``. Under 2.5's literal key
+        the schema that governs a family's payload is the same schema that governs the
+        family's own five declaration keys, and registering one makes the family
+        unregisterable. Deviation **D-4c-1**.
+
+        **The third element is Rule U.** A family that names a schema nobody registered
+        has not been validated, and neither refusing the write nor validating against
+        the per-namespace fallback in silence is honest about that. It is warned.
+        """
+        schema, violations = await self._check_attributes(
+            namespace, EDGE_PAYLOAD_KIND, fam.payload_schema, attributes
+        )
+        named_missing = fam.payload_schema is not None and (
+            schema is None or schema.name != fam.payload_schema
+        )
+        return schema, violations, named_missing
+
+    async def _observe_edge_payload(
+        self, namespace: str, payload: dict, schema_version: int | None
+    ) -> None:
+        """PACKAGE.md 5.5's floor, applied to edges -- every key ever written, recorded.
+
+        5.5 calls the census *"the floor that applies even in ``off`` mode"* and argues
+        it on `attributes` accumulating unwatched. `Edge.attributes` is the same escape
+        hatch on the surface that has millions of rows rather than hundreds, so it gets
+        the same floor: `attribute_census(kind="edge_payload")` enumerates what edge
+        payloads actually carry, in every mode, on every backend that can store them.
+
+        The projection rule (5.7) applies unchanged: only the keys that SURVIVED the
+        write are counted, because the census is a report about what got written.
+        """
+        store = self._attribute_store()
+        observed = self.caps.surviving_edge_attributes(payload)
+        if store is None or not observed:
+            return
+        await store.observe_attributes(
+            namespace,
+            EDGE_PAYLOAD_KIND,
+            observed,
+            at=self._now(),
+            schema_version=schema_version,
+        )
+
     async def _all_edge_families(self) -> tuple[list[EdgeFamily], bool, str | None]:
         """Every registered ``kind="edge"`` entry, in EVERY namespace. EDGES.md 4.1.
 
@@ -2982,7 +3042,62 @@ class AsyncRegistry:
                 },
             )
 
+        # ---- EDGES.md 2.5, ruling **R34**: the payload is VALIDATED, and this is the
+        # one declared field of the edge model that had a name and no mechanism.
+        #
+        # PACKAGE.md 5's three modes, unchanged and not re-argued: `off` checks nothing
+        # (the default, so an untouched deployment behaves exactly as row 4b shipped),
+        # `warn` writes the edge and enumerates the violations, `enforce` refuses.
+        # `attributes_schema_version` on the Edge records the version in force at the
+        # write, so 5.4's promise -- entries written under an older schema are never
+        # rewritten and never retroactively invalidated; they are OLDER ROWS -- holds
+        # for edges too.
+        #
+        # **Validated against what the CALLER wrote, not against what survives storage**,
+        # which is the type side's order (`_write_approved` checks `rec.attributes`) and
+        # is the honest one: a `required` field the backend cannot store is the
+        # backend's declared loss (EDGES.md 6, `stores_edge_attributes`), not the
+        # caller's schema violation, and reporting it as the latter would blame a
+        # writer for a column somebody else's schema does not have.
+        payload_in = dict(attributes or {})
+        payload_schema, violations, schema_unregistered = await self._edge_payload_schema(
+            namespace, fam, payload_in
+        )
+        if violations and payload_schema is not None and payload_schema.mode == "enforce":
+            # INTERFACE.md 5.12's existing value -- no new refusal is minted, because
+            # this IS `attributes_schema_violation`: the same mechanism, one kind along.
+            # `detail` names which schema refused, per PACKAGE.md 5.2b rule 4, with the
+            # family added because two families in one namespace may be judged by two
+            # different schemas.
+            return Refusal(
+                "attributes_schema_violation",
+                {
+                    "kind": EDGE_PAYLOAD_KIND,
+                    "family": family,
+                    "namespace": namespace,
+                    "violations": violations,
+                    "schema_version": payload_schema.version,
+                    "schema_name": payload_schema.name,
+                    "why": (
+                        f"the payload of an edge on {namespace}:{family} is governed by "
+                        f"the attribute schema {payload_schema.name or '(per-namespace)'} "
+                        f"v{payload_schema.version} in enforce mode (EDGES.md 2.5, R34)"
+                    ),
+                },
+            )
+
         warnings: list[str] = []
+        if schema_unregistered:
+            # Rule U. The family declares a payload schema and no schema of that name is
+            # in force, so this edge was NOT validated against the thing its family
+            # names -- and a declared field pointing at nothing, unreported, is the
+            # inert `payload_schema` this ruling exists to end.
+            warnings.append(f"payload_schema_unregistered:{fam.payload_schema}")
+        if violations and payload_schema is not None and payload_schema.mode == "warn":
+            # PACKAGE.md 5.3's `warn` row, on one more carrier: the write succeeds and
+            # the entry is thereafter enumerable. Same value as the type side, because
+            # it is the same fact.
+            warnings.extend(f"attributes_invalid:{v}" for v in violations)
         for node in (src, dst):
             # EDGES.md 2.7. `endpoint_kind_mismatch` can only fire when the endpoint's
             # type IS registered; on an unregistered one the registry cannot know the
@@ -3015,7 +3130,7 @@ class AsyncRegistry:
             model_tier=model_tier,
             history_why=_EDGE_HISTORY_WHY,
         )
-        payload = self.caps.surviving_edge_attributes(dict(attributes or {}))
+        payload = self.caps.surviving_edge_attributes(payload_in)
         edge_id = _uuid()
         async with self.adapter.transaction():
             stored = await self.adapter.put_edge(
@@ -3029,9 +3144,15 @@ class AsyncRegistry:
                         provenance=provenance,
                         attributes=payload,
                         warnings=tuple(warnings),
+                        attr_schema_version=(
+                            payload_schema.version if payload_schema else None
+                        ),
                     )
                 ),
                 expect_absent=True,
+            )
+            await self._observe_edge_payload(
+                namespace, payload_in, payload_schema.version if payload_schema else None
             )
             await self._append_event(
                 namespace, "edge_added", created_by_actor, edge_id=edge_id,
@@ -3875,6 +3996,29 @@ class AsyncRegistry:
         store = self._attribute_store()
         if store is None:
             return [], None
+        # **`edge_payload` is discovered through the FAMILIES, not through the types of
+        # that kind, and it has to be** (ruling R34, row 4c). Every other kind's
+        # name-level schemas are keyed by a type NAME, so enumerating the types of the
+        # kind finds them. An edge payload schema is keyed by the name a family
+        # DECLARES in `payload_schema`, and there is no `kind="edge_payload"` type for
+        # the loop below to find -- so without this branch the census would answer
+        # `declared=False` for a key a payload schema declares `required`, which is the
+        # exact confident negative ruling R10's own census fix was made to stop, one
+        # kind along and in the row that introduced the kind.
+        if kind == EDGE_PAYLOAD_KIND:
+            families, _, why = await self._all_edge_families()
+            out: list[AttributeSchema] = []
+            for declared in dict.fromkeys(
+                f.payload_schema
+                for f in families
+                if f.namespace == namespace and f.payload_schema
+            ):
+                found = await store.get_attr_schema(namespace, kind, name=declared)
+                if found is not None:
+                    schema = self._schema_from_record(found)
+                    if schema is not None:
+                        out.append(schema)
+            return out, why
         # Paged to exhaustion, like `_active_page` and for the same reason: an override
         # sitting past the first page turned the tri-state `declared` back into a
         # confident `True` that the write path contradicts, under `complete=True`. Row

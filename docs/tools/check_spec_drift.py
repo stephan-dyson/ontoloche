@@ -361,6 +361,9 @@ def _check_warning_vocabulary(spec_text: str) -> list[str]:
 #: each. Adding a section here is how a later row brings its own rules under the gate.
 R31_SECTIONS = {
     "2.4.1": "#### 2.4.1",
+    # Row 4c, ruling R34: `payload_schema` stopped being inert, so its rules come under
+    # the gate in the change that gave them behaviour rather than a row later.
+    "2.5": "### 2.5",
     "4.3": "### 4.3",
     "4.4": "### 4.4",
 }

@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C15 -- the ``attributes`` mechanism (6). PACKAGE.md 5.
+"""C15 -- the ``attributes`` mechanism (13). PACKAGE.md 5.
 
 The default is ``off`` so that an untouched deployment behaves exactly as
 INTERFACE.md 2.1 describes. What happens unconditionally is the census, and ruling R2
@@ -629,3 +629,46 @@ async def test_c15_12_an_override_may_not_weaken_the_kind_and_the_census_says_so
     # the whole kind.
     with pytest.raises(ValueError):
         AttributeSchema(namespace="default", kind="value_set", version=1, fields={}, name="")
+
+@pytest.mark.nonbinding
+@pytest.mark.requires_capability("stores_attributes")
+@pytest.mark.requires_attribute_store
+async def test_c15_13_a_plain_string_attribute_survives_the_census_on_every_leg(registry):
+    """The most ordinary attribute value there is, through the audit call. Row 4c.
+
+    **[Observed, on `main` before row 4c]** one type written with
+    ``attributes={"note": "a plain string"}`` made ``attribute_census()`` raise
+    ``json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)`` on the
+    **Postgres leg and only there** -- the reference *deployment* backend. Every
+    ``*_json`` column in that schema is ``jsonb``, so psycopg decodes it before the
+    dialect sees it, and the dialect re-parsed anything arriving as a ``str``: which is
+    exactly a jsonb column holding a JSON string.
+
+    Nothing caught it for three rows. No test wrote a string-valued attribute and then
+    censused it; the census is nonbinding under ruling **R2**, so it is outside the
+    conformance verdict and had no cross-leg assertion of its own; and the sqlite legs
+    store text and parse it correctly, so the two-leg agreement everything else relies
+    on had one leg that never disagreed. It was found by wiring ruling R34's
+    edge-payload census onto the same call.
+
+    This is the assertion that would have caught it: a string, an int, a list and a
+    dict, written as attributes and read back through the census, on every leg.
+    """
+    await seed(
+        registry,
+        "thing",
+        attributes={
+            "note": "a plain string",
+            "count": 3,
+            "tags": ["a", "b"],
+            "nested": {"k": "v"},
+        },
+    )
+    census = await registry.attribute_census()
+    examples = {entry.key: entry.example for entry in census.entries}
+    assert examples["note"] == "a plain string", (
+        "a jsonb column holding a JSON string is a string, not a document to re-parse"
+    )
+    assert examples["count"] == 3
+    assert examples["tags"] == ["a", "b"]
+    assert examples["nested"] == {"k": "v"}

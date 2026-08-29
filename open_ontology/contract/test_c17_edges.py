@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (34). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (40). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -1606,3 +1606,340 @@ def test_c17_34_the_report_says_which_node_each_edge_reached(registry):
         "than naming one of its two already-reached ends"
     )
     assert {str(ne.reached) for ne in triangle.edges if ne.reached} == {str(b), str(c)}
+
+
+# ------------------------------------------------- 4c: the payload schema, ruling R34
+#
+# `payload_schema` was the one field of `EDGES.md` §2.4 with a name and no mechanism.
+# §2.5 declared it inert "until R10 lands"; **R10 landed in row 3e**, and row 4b
+# recorded the field still doing nothing as deviation D-4b-6 and asked Q29. Ruling
+# **R34** takes it here: `PACKAGE.md` §5's modes, versions and enforcement floor,
+# transposed to `add_edge` rather than reinvented for it.
+
+
+def _payload_family(registry, *, schema_name="blocks_payload", namespace="default"):
+    seed(registry, "task", namespace=namespace)
+    return edge_family(
+        registry,
+        "blocks",
+        inverse_label="blocked_by",
+        payload_schema=schema_name,
+        namespace=namespace,
+    )
+
+
+def _payload_task(i=1, namespace="default"):
+    """A registered endpoint, so a payload assertion is never read through an
+    `endpoint_type_unregistered` warning the test did not mean to produce."""
+    return InstanceRef(TypeRef(namespace, "entity", "task"), str(i))
+
+
+def _schema(name, *, mode, additional="forbid", version=1, namespace="default", **fields):
+    from ..attributes import AttributeSchema, FieldSpec
+
+    return AttributeSchema(
+        namespace=namespace,
+        kind="edge_payload",
+        name=name,
+        version=version,
+        fields=fields
+        or {
+            "role": FieldSpec(
+                type="str",
+                description="the role the src end plays in this relationship",
+                required=True,
+                enum=("owner", "reviewer"),
+            )
+        },
+        additional=additional,
+        mode=mode,
+    )
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
+@pytest.mark.requires_attribute_store
+def test_c17_35_an_enforced_payload_schema_refuses_the_edge_and_names_which_schema(
+    registry,
+):
+    """EDGES.md 2.5 / ruling **R34**. `enforce` mode, on the edge payload.
+
+    **No new `Refusal.reason` is minted and that is the point.** This is
+    `attributes_schema_violation` -- PACKAGE.md 5.3's `enforce` row -- reached one kind
+    along, because R34's instruction is to transpose the mechanism rather than to invent
+    a second one for edges. `detail` names *which* schema refused (5.2b rule 4), plus the
+    family, because two families in one namespace may be judged by two different schemas
+    and *"which one refused me"* has to be answerable.
+    """
+    _payload_family(registry)
+    registry.register_attribute_schema(_schema("blocks_payload", mode="enforce"))
+
+    refusal = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd", attributes={"role": "nobody"}
+    )
+    assert isinstance(refusal, Refusal), refusal
+    assert refusal.reason == "attributes_schema_violation"
+    assert refusal.detail["kind"] == "edge_payload"
+    assert refusal.detail["family"] == "blocks"
+    assert refusal.detail["schema_name"] == "blocks_payload"
+    assert refusal.detail["schema_version"] == 1
+    assert refusal.detail["violations"] == [
+        "role:'nobody' is not one of ['owner', 'reviewer']"
+    ]
+
+    missing = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(3), "user:sd", attributes={}
+    )
+    assert isinstance(missing, Refusal)
+    assert missing.detail["violations"] == ["role:required field missing"], (
+        "a required payload field is required for an edge exactly as it is for a type"
+    )
+
+    ok = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(4), "user:sd", attributes={"role": "owner"}
+    )
+    assert not isinstance(ok, Refusal), ok
+    assert ok.attributes == {"role": "owner"}
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
+@pytest.mark.requires_attribute_store
+def test_c17_36_warn_mode_writes_and_the_version_in_force_is_recorded_on_the_edge(
+    registry,
+):
+    """EDGES.md 2.5. `warn` writes and enumerates; the VERSION is on the edge.
+
+    PACKAGE.md 5.4's promise is the one being transposed here and it is the half that is
+    easy to skip: *entries written under an older schema are never rewritten and never
+    retroactively invalidated -- **it makes them v1 rows***. An edge carries
+    `attr_schema_version` for the same reason a `TypeEntry` does, so a reader can tell
+    which generation of a payload they are looking at without the registry pretending to
+    interpret it. Registering v2 does not touch the v1 edge.
+    """
+    _payload_family(registry)
+    registry.register_attribute_schema(_schema("blocks_payload", mode="enforce"))
+    first = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd", attributes={"role": "owner"}
+    )
+    assert first.attr_schema_version == 1
+
+    from ..attributes import FieldSpec
+
+    registry.register_attribute_schema(
+        _schema(
+            "blocks_payload",
+            mode="warn",
+            additional="warn",
+            version=2,
+            role=FieldSpec(
+                type="str",
+                description="the role the src end plays in this relationship",
+                enum=("owner", "reviewer"),
+            ),
+        )
+    )
+    second = registry.add_edge(
+        "blocks",
+        _payload_task(),
+        _payload_task(3),
+        "user:sd",
+        attributes={"role": "nobody", "surplus": "x"},
+    )
+    assert not isinstance(second, Refusal), second
+    assert second.attr_schema_version == 2
+    assert "attributes_invalid:role:'nobody' is not one of ['owner', 'reviewer']" in (
+        second.warnings
+    )
+    assert "attributes_invalid:surplus:not declared in the schema" in second.warnings
+
+    stored = registry.neighbors(
+        _payload_task(), ["blocks"], namespace="default", direction="out"
+    )
+    by_id = {ne.edge.edge_id: ne.edge for ne in stored.edges}
+    assert by_id[first.edge_id].attr_schema_version == 1, (
+        "PACKAGE.md 5.4 -- a v1 edge is not re-validated by a v2 schema; it is a v1 row"
+    )
+    assert by_id[first.edge_id].warnings == (), "and it did not grow the v2 warnings"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
+def test_c17_37_a_payload_schema_nobody_registered_writes_the_edge_and_says_so(registry):
+    """EDGES.md 2.5, Rule U. The twenty-sixth `warnings` value.
+
+    A family that declares `payload_schema="blocks_payload"` when no schema of that name
+    is in force has **not** been validated against the thing it names. Refusing the write
+    would put the ordering of two deployment acts -- register the family, register the
+    schema -- inside a data path, and would make a family declared first permanently
+    unusable. Writing it silently is the inert `payload_schema` R34 exists to end, since
+    the caller cannot tell a validated payload from an unvalidated one.
+
+    So: the edge is written, `attr_schema_version` is `None` (which already means
+    *"written with validation off"*), and the warning names the schema nobody registered.
+    """
+    _payload_family(registry)
+    edge = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd", attributes={"role": "anything"}
+    )
+    assert not isinstance(edge, Refusal), edge
+    assert "payload_schema_unregistered:blocks_payload" in edge.warnings
+    assert edge.attr_schema_version is None
+    assert edge.attributes == {"role": "anything"}, "written, never dropped"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
+@pytest.mark.requires_attribute_store
+def test_c17_38_a_payload_schema_does_not_make_its_own_family_unregisterable(registry):
+    """Deviation **D-4c-1**, pinned. EDGES.md 2.5's key was `(namespace, "edge", <family>)`.
+
+    That is the identical key ruling **R10** gives the name-level schema governing the
+    family's OWN `TypeEntry.attributes` -- its `level`, `symmetric`, `inverse_label`,
+    `endpoint_kinds` and `payload_schema`. One key, two dicts, which is INTERFACE.md
+    2.3's Cause B.
+
+    **[Observed, row 4c, before the fix]** a payload schema `{"role": str}` with
+    `additional="forbid"` registered under `(default, "edge", "blocks")` made
+    `propose_type(kind="edge", name="blocks", ...)` refuse `attributes_schema_violation`
+    with all five declaration keys reported *"not declared in the schema"*: **governing
+    a family's payload made the family unregisterable.** The kind is `edge_payload`, and
+    this asserts the two spaces cannot collide -- including the case that produced the
+    finding, where the payload schema's name is the family's own name.
+    """
+    seed(registry, "task")
+    registry.register_attribute_schema(
+        _schema("blocks", mode="enforce", additional="forbid")
+    )
+    family = edge_family(
+        registry, "blocks", inverse_label="blocked_by", payload_schema="blocks"
+    )
+    assert isinstance(family, TypeEntry), family
+    assert family.attributes["level"] == "instance", (
+        "the family's five declaration keys are untouched by its payload schema"
+    )
+    assert family.attributes["payload_schema"] == "blocks"
+
+    refused = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd", attributes={"level": "instance"}
+    )
+    assert isinstance(refused, Refusal), (
+        "and the payload schema still governs the PAYLOAD -- the declaration keys are "
+        "not a legal payload just because they are legal on the family"
+    )
+    assert refused.detail["kind"] == "edge_payload"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
+@pytest.mark.requires_attribute_store
+def test_c17_39_the_enforcement_floor_and_the_per_namespace_schema_both_apply(registry):
+    """PACKAGE.md 5.2b rules 2 and 3, transposed. **An override is a schema, not an
+    exemption.**
+
+    Two halves, and both are R10's rules rather than new ones:
+
+    * a `(namespace, "edge_payload")` schema with **no name** governs every edge payload
+      written in that namespace, so a family that declares no `payload_schema` is not
+      thereby ungoverned;
+    * a family's named schema replaces the FIELDS and may not weaken the STRICTNESS. A
+      `mode="off"` override under an `enforce` namespace schema still refuses, because
+      the floor is applied **when a write is validated** -- checking it at registration
+      is bypassed by registering the weak override first.
+    """
+    from ..attributes import AttributeSchema, FieldSpec
+
+    seed(registry, "task")
+    registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default",
+            kind="edge_payload",
+            version=1,
+            fields={
+                "basis": FieldSpec(
+                    type="str", description="why this edge was asserted", required=True
+                )
+            },
+            additional="forbid",
+            mode="enforce",
+        )
+    )
+    edge_family(registry, "relates_to")
+    refusal = registry.add_edge(
+        "relates_to", _payload_task(), _payload_task(2), "user:sd", attributes={}
+    )
+    assert isinstance(refusal, Refusal), (
+        "a family that declares no payload schema is judged by the per-namespace one, "
+        "exactly as a type with no name-level schema is judged by the per-kind one"
+    )
+    assert refusal.detail["schema_name"] is None
+    assert refusal.detail["violations"] == ["basis:required field missing"]
+
+    edge_family(registry, "blocks", inverse_label="blocked_by", payload_schema="soft")
+    registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default",
+            kind="edge_payload",
+            name="soft",
+            version=1,
+            fields={"role": FieldSpec(type="str", description="the src end's role")},
+            additional="allow",
+            mode="off",
+        )
+    )
+    still_refused = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(3), "user:sd", attributes={"surplus": 1}
+    )
+    assert isinstance(still_refused, Refusal), (
+        "PACKAGE.md 5.2b rule 3 -- a mode='off' override under an enforce namespace "
+        "schema is a one-line unreviewed opt-out, and the strictness is a floor"
+    )
+    assert still_refused.detail["schema_name"] == "soft"
+    assert still_refused.detail["violations"] == ["surplus:not declared in the schema"], (
+        "the FIELDS are replaced (no `basis` demanded) and only the strictness is raised"
+    )
+
+
+@pytest.mark.nonbinding
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
+@pytest.mark.requires_attribute_store
+def test_c17_40_the_census_enumerates_edge_payload_keys_and_stays_tri_state(registry):
+    """PACKAGE.md 5.5's floor, on the edge payload. **Nonbinding** -- ruling R2 keeps
+    `attribute_census` package-local and outside the conformance definition, as `C15-02`
+    is.
+
+    5.5 argues the census on `attributes` accumulating unwatched with nobody able to
+    enumerate it. `Edge.attributes` is the same escape hatch on the surface that has
+    millions of rows rather than hundreds, so it gets the same floor: **every key ever
+    written is recorded, in every mode.**
+
+    The tri-state `declared` is the half that had to be built rather than inherited.
+    Every other kind's name-level schemas are keyed by a TYPE name, so the census
+    discovers them by enumerating the types of that kind -- and there is no
+    `kind="edge_payload"` type to enumerate. Without discovery through the FAMILIES, the
+    census would answer a confident `declared=False` about a key a payload schema
+    declares `required`, which is the exact wrong answer ruling R10's own census fix was
+    made to stop, one kind along.
+    """
+    _payload_family(registry)
+    registry.register_attribute_schema(
+        _schema("blocks_payload", mode="warn", additional="warn")
+    )
+    written = registry.add_edge(
+        "blocks",
+        _payload_task(),
+        _payload_task(2),
+        "user:sd",
+        attributes={"role": "owner", "undeclared_note": "x"},
+    )
+    assert not isinstance(written, Refusal), written
+
+    census = registry.attribute_census(kind="edge_payload")
+    rows = {entry.key: entry for entry in census.entries}
+    assert set(rows) == {"role", "undeclared_note"}, (
+        "every key ever written is recorded, declared or not -- 5.5's whole argument"
+    )
+    assert rows["undeclared_note"].declared is False
+    assert rows["role"].declared is None, (
+        "no per-namespace schema declares `role` and the family's does, so whether it "
+        "is declared depends on which family -- Rule U, not a flat True or False"
+    )
+    assert "blocks_payload" in (rows["role"].declared_why or ""), (
+        "and `declared_why` names the schema the answer depends on"
+    )
+    assert rows["role"].schema_versions == (1,)

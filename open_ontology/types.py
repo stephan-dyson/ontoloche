@@ -231,6 +231,15 @@ WARNING_VALUES = (
     # and an undeclared `retract_edge` was laundered into the ledger with no warning.
     # The fix is to record what the gate judged; this says when the two differ.
     "declaration_amended",
+    # EDGES.md 2.5, ruling **R34**, row 4c -- the twenty-sixth. `Edge`, when the family
+    # declares a `payload_schema` and no schema of that name is in force in the
+    # family's namespace. The edge is WRITTEN, because refusing would make a family
+    # declared before its schema was registered unusable and would put the ordering of
+    # two deployment acts inside a data path; and it is not silent, because a declared
+    # field pointing at nothing is exactly the inert `payload_schema` R34 exists to
+    # end. Rule U in one value: **the payload was not validated, and here is the name
+    # nobody registered.**
+    "payload_schema_unregistered",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
