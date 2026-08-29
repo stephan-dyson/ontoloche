@@ -29,6 +29,7 @@ def test_c4_01_an_empty_definition_is_refused(registry):
         registry.propose_type("facility", "   ", [DATA_EVIDENCE], "user:sd")
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c4_02_an_ai_proposer_without_a_tier_is_refused(registry):
     with pytest.raises(ValueError):
         registry.propose_type("facility", "a nursing home", [], "ai:proposer")
@@ -46,6 +47,7 @@ def test_c4_03_a_name_already_taken_returns_the_existing_entry(registry):
     assert answer.status == "active"
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c4_04_a_near_duplicate_warns_and_does_not_refuse(registry):
     """The kill-row protection: refusing here is how a locally-correct new predicate
     gets folded into an existing one instead of being created."""
@@ -63,6 +65,7 @@ def test_c4_04_a_near_duplicate_warns_and_does_not_refuse(registry):
     assert proposal.near_matches
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c4_05_no_evidence_warns_and_the_proposal_is_still_created(registry):
     proposal = registry.propose_type("facility", "a nursing home", [], "user:sd")
     assert isinstance(proposal, Proposal)

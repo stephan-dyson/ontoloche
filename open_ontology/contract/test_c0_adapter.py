@@ -164,6 +164,7 @@ def test_c0_05_migrate_is_idempotent_and_atomic(adapter):
         adapter._fetchone("SELECT count(*) FROM oo_half_applied")
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter):
     stored = adapter.put_type(_type(), expect_absent=True)
     assert stored.name == "facility"
@@ -273,7 +274,8 @@ def test_c0_07_g1s_key_is_scoped_so_one_word_in_two_namespaces_is_two_rows(adapt
         got = adapter.get_type(namespace, "status", kind="value_set")
         assert got is not None, f"{namespace}:status went missing"
         assert got.definition == rec.definition, "one namespace overwrote another"
-        assert got.attributes == rec.attributes
+        if adapter.capabilities().stores_attributes:
+            assert got.attributes == rec.attributes
 
     # And the collision is still refused *within* a namespace.
     with pytest.raises(AlreadyExists):

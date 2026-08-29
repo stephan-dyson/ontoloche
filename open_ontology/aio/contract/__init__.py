@@ -2,7 +2,7 @@
 
     An async backend is conformant iff the whole suite passes against it.
 
-The 109 contract ids of ``PACKAGE.md`` 6.2 are the same 109 ids here, with the same
+The 115 contract ids of ``PACKAGE.md`` 6.2 are the same 115 ids here, with the same
 test-function names, because every ``test_c*.py`` in this package is *generated from
 the sync one* by ``tools/unasync.py``. There is no second set of assertions to keep in
 step with the first; there is one set, compiled twice.

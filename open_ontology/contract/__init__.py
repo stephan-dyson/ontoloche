@@ -28,6 +28,7 @@ __all__ = ["run_contract_suite"]
 def run_contract_suite(
     adapter_factory: Callable[[], Any],
     *,
+    resolver_factory: Callable[[], Any] | None = None,
     args: Sequence[str] = (),
     include_nonbinding: bool = False,
 ) -> int:
@@ -36,6 +37,12 @@ def run_contract_suite(
     ``adapter_factory`` must return a **fresh, empty** store each time it is called --
     the suite calls it once per test and expects no state to survive between them.
     ``migrate()`` is called for you.
+
+    ``resolver_factory`` supplies a ``Resolver`` for the whole run -- PACKAGE.md 2.6's
+    **production path**, which the suite could not exercise at all until row 3c. Supply
+    it and the three ``resolver_dependent`` tests are skipped with a reason (ruling R8),
+    because they assert outcomes only the shipped ``DeterministicResolver`` produces.
+    Leave it ``None`` and they are binding, whichever adapter you brought.
 
     ``include_nonbinding=False`` (the default) deselects tests marked ``nonbinding``,
     which are the ones PACKAGE.md declares outside the conformance definition. Pass
@@ -48,8 +55,11 @@ def run_contract_suite(
 
     marker = () if include_nonbinding else ("-m", "not nonbinding")
     previous = _support.EXTERNAL_FACTORY
+    previous_resolver = _support.EXTERNAL_RESOLVER
     _support.EXTERNAL_FACTORY = adapter_factory
+    _support.EXTERNAL_RESOLVER = resolver_factory
     try:
         return int(pytest.main(["--pyargs", "open_ontology.contract", *marker, *args]))
     finally:
         _support.EXTERNAL_FACTORY = previous
+        _support.EXTERNAL_RESOLVER = previous_resolver

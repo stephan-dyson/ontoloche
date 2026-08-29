@@ -397,7 +397,7 @@ Named here so it is a decision rather than an omission. `usage` is advisory; a l
 
 **Three new refusal reasons this document introduces**, all of them consequences of a backend that cannot do something rather than of a policy — flagged in §11 for #1 to adopt or reject *(all three adopted by ruling R3; a fourth of the same shape followed under R4 — see below)*:
 
-- **`proposals_not_stored`** — `approve`/`reject` on a backend with `stores_proposals=False` (§7, B4). Reusing `unknown_proposal` here would be a confident wrong answer, which Rule U forbids.
+- **`proposals_not_stored`** — `approve`/`reject` on a backend with `stores_proposals=False` (§7, B4). Reusing `unknown_proposal` here would be a confident wrong answer, which Rule U forbids. **Tested by `C5-12`** *(added by row 3c; it had no test at all, and §6.3's coverage line said otherwise — see §8b.5)*.
 - **`cannot_record_override`** — see below.
 - **`attributes_schema_violation`** — §5, `enforce` mode only.
 
@@ -655,7 +655,7 @@ This is the same move as `ConsumerReport.complete = False`: it does not solve th
 
 > **Recorded by deliverable #3, 2026-08-28 — this section specifies two tables and a facade method but adds no primitive to carry them,** while §3.4 stays at fifteen and `C0-04` polices the boundary. Phase 2A reaches them through an **optional `AttributeStore` protocol, outside the fifteen and outside conformance**, which is consistent with ruling R2. A backend that does not implement it is still fully conformant, and `attribute_census` then reports `complete=False` with a `why` rather than an empty census. See [`2A-RUN.md`](../runs/2A-RUN.md) §4.4, deviation D-2.
 
-**Flagged: `attribute_census` is a method beyond the calls enumerated in `INTERFACE.md` §5.** It is the only one this document adds. §11 asks for a ruling: absorb it into #1, or keep it package-local and out of the conformance definition. Until ruled, the suite tests it (`C15-02`) but a backend may not be failed for it — the tests are marked `xfail_if_not_declared`.
+**Flagged: `attribute_census` is a method beyond the calls enumerated in `INTERFACE.md` §5.** It is the only one this document adds. §11 asks for a ruling: absorb it into #1, or keep it package-local and out of the conformance definition. **Ruled R2: package-local, outside the conformance definition.** The suite tests it (`C15-02`) and a backend may not be failed for it — the test is marked **`nonbinding`**, and since row 3c that marker actually deselects it from a conformance verdict rather than merely annotating it (§6.1). *(This sentence previously named a marker, `xfail_if_not_declared`, that exists nowhere in the codebase — corrected by row 3c after an adversarial review round.)*
 
 ### 5.6 What it does not fix
 
@@ -699,9 +699,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**113 tests in seventeen groups.** *(109 at #3; `C0-07`, `C6-07`, `C0-08` and `C15-07` added by row 3c — see §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**115 tests in seventeen groups.** *(109 at #3; six added by row 3c — `C0-07`, `C6-07`, `C0-08`, `C0-09`, `C5-12`, `C15-07`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
-**C0 — adapter conformance (8).** No interface call; this is the protocol itself.
+**C0 — adapter conformance (9).** No interface call; this is the protocol itself.
 
 | id | asserts | mech |
 |---|---|---|
@@ -711,6 +711,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C0-04 | **§3.1, by source inspection**: all **seven** of §3.1's identifiers — `Refusal`, `Rejection`, `Resolution`, `ConsumerReport`, `UsageReport`, `TypeEntry`, `Proposal` — appear nowhere in `adapter.py` or `backends/`. *(Row 3c: the test checked five of the seven; `ConsumerReport` and `UsageReport` were missing from it, though neither was ever present in the code)* | — |
 | C0-05 | `migrate()` is idempotent; the version row is written in the same transaction as the DDL | — |
 | C0-06 | every `*Record` round-trips; a field the backend cannot store comes back empty, not wrong | — |
+| C0-09 | **`owns_schema=False` makes `migrate()` verify-only** (§9.3): against a store the host application owns, `migrate()` raises `SchemaMismatch` naming what is missing, issues no DDL to fix it, and once the owner has created the schema returns the version and is usable. *(Row 3c. B1 is the first Tenshen contortion and the enterprise-DBA posture is the reference deployment — both reference backends implemented this and nothing asserted it.)* | — |
 | C0-08 | **G1 and G2, RACED:** two adapters on one store and two real concurrent writers — one absent name (exactly one insert wins, one `AlreadyExists`, one row in the store) and one proposal approved twice (exactly one `TypeEntry`, one `Refusal("already_decided")`). *(Row 3c, §8b.5. `C0-02`/`C0-07` call the primitives sequentially, which a read-then-write check passes as happily as a constraint does — §3.5 says a read-then-write check is **not** sufficient, and until this test nothing held it to that. A thread race has no mechanical async form, so the sync module is excluded from `tools/unasync.py` and the async counterpart is hand-written; both claim this id and both are binding.)* | — |
 | C0-07 | **G1's key is *scoped*:** one word under three namespaces is three rows, each `expect_absent=True`, each retrievable with its own definition and attributes; the collision is still raised *within* a namespace; `TypeQuery(namespace=None)` returns all three. *(Row 3c, §8b.2 — the half of G1 that `INTERFACE.md` §2.6's answer to mechanism 4 rests on, and that nothing asserted)* | **4** |
 
@@ -765,7 +766,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C4-08 | a retired name ⇒ the retired entry plus `warnings=["name_previously_retired"]`, and no new entry |
 | C4-09 | `^[a-z][a-z0-9_]{0,63}$` enforced identically on both backends |
 
-**C5 — `approve` / `reject` (11).** Mechanism **1**.
+**C5 — `approve` / `reject` (12).** Mechanism **1**.
 
 | id | asserts |
 |---|---|
@@ -780,6 +781,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C5-09 | a rejection is **retained** and findable — the record that stops re-proposal in six months |
 | C5-10 | `reject(superseded_by=…)` records the successor |
 | C5-11 | **atomicity**: an injected failure between the type write and the event write leaves no type and no decided proposal |
+| C5-12 | **`proposals_not_stored`**, on a backend with `stores_proposals=False`: `propose_type` **is** the decision and returns an auto-approved `TypeEntry` with a non-blank `approved_by`; `approve` and `reject` return `Refusal("proposals_not_stored")` — not `unknown_proposal`, which would be a confident wrong answer about a proposal that was never storable. *(Row 3c. §3.6 introduced this reason and §6.3 claimed it was covered; it had no test anywhere in either suite, and it is UC1's own path — §7.3 B4)* |
 
 **C6 — `list_types` (7).** Mechanism **2**.
 
@@ -934,9 +936,18 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 | `no_consumer_evidence` | C10-07 |
 | `record_use` may be a no-op | C7-06, C11-03 |
 
-**No §5 refusal is untested.** The three refusals this document adds (§3.6) are tested at C9-02, C10-08, C15-04.
+**No §5 refusal is untested, and since row 3c that is true rather than merely stated.** The four refusals this document adds (§3.6) are tested at:
 
-**[Inferred]** the built suite will be larger than 113 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+| refusal | test |
+|---|---|
+| `cannot_record_override` | `C9-02` (retire), `C10-08` (merge) |
+| `attributes_schema_violation` | `C15-04`, `C15-06`, `C15-07` |
+| `consumer_source_read_only` | `C11-04` (ruling R4) |
+| **`proposals_not_stored`** | **`C5-12`** |
+
+> *Corrected by row 3c after an adversarial review round.* This line read *"the three refusals this document adds are tested at C9-02, C10-08, C15-04"* — which names three ids covering **two** of the reasons, and left **`proposals_not_stored` with no test anywhere in either suite**. That is UC1's own path (§7.3 B4: a backend with no proposal table is conformant and `approve`/`reject` must refuse), so the capability the Tenshen design test most depends on was the one the suite never checked. `C5-12` closes it.
+
+**[Inferred]** the built suite will be larger than 115 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1193,11 +1204,11 @@ resolve_type("location", ctx(sibling_columns=("latitude","longitude")))
 
 > **The protocol carries three agencies with no change to the fifteen primitives, no change to the table shapes, and no change to `Capabilities`.** Scoping was already in the primary key; per-namespace attribute schemas already worked and are the mechanism UC3 most needs. **Two contortions (B7, B8), neither designed away.**
 >
-> **The suite gained two tests it should have had since #2** — `C0-07` and `C6-07`, 109 → 111 — because UC3 found that the coexistence half of G1 and the cross-namespace half of `list_types` were both unasserted. Per `ROADMAP.md`'s rule of the ordering, a use case that finds a missing test rather than a missing feature is the good outcome.
+> **The suite gained two tests it should have had since #2** — `C0-07` and `C6-07`, and four more from the review rounds, 109 → 115 — because UC3 found that the coexistence half of G1 and the cross-namespace half of `list_types` were both unasserted. Per `ROADMAP.md`'s rule of the ordering, a use case that finds a missing test rather than a missing feature is the good outcome.
 >
 > **Kill-criterion check (§7.5), re-run against a third fixture: still not tripped.** Nothing about NYC's shape is in the schema. The columns UC3 leans on hardest — `namespace` in the primary key, `attr_schema_version`, `oo_attr_schema` keyed on `(namespace, kind)` — were all put there by CMS and Tenshen, before this dataset existed.
 
-### 8b.5 What the adversarial review round added — two more tests, 111 → 113
+### 8b.5 What the adversarial review rounds added — six more tests, 109 → 115
 
 The review loop that follows a design test (standing constraint 7) found two more places where a test asserted less than the document claimed. Both are recorded here rather than in a run record, because both changed the conformance definition.
 
@@ -1208,6 +1219,19 @@ The review loop that follows a design test (standing constraint 7) found two mor
 > **One generation exception, and it is deliberate.** A thread race has no mechanical async form — the async equivalent of two threads is `asyncio.gather` over two coroutines, a *different mechanism* rather than a token substitution. `tools/unasync.py` therefore excludes `contract/test_c0_concurrency.py` by name (`HAND_WRITTEN_ASYNC`), and `aio/contract/test_concurrency.py` is maintained by hand, the way the driver-level `close()` methods are (`3B-ASYNC.md` D-A12). **It is the only contract module in the suite that is not generated**, and the exclusion is a named constant so it cannot grow quietly.
 
 **`C15-07` — one schema per kind cannot serve both CMS `value_set`s.** §5.6 now records the limitation; `C15-07` asserts both horns of it. It is not a bug report against a backend — every backend behaves this way, because the key is in the schema, not in the storage — and it is pinned so that a later ruling to key schemas per `(namespace, kind, name)` has a test that changes when the answer does.
+
+**`C0-09` — `owns_schema=False` is verify-only.** §9.3 says that when the schema belongs to the host application — beacon's Alembic, or an enterprise Postgres where the DBA owns DDL — `migrate()` checks the columns it needs, raises `SchemaMismatch` naming what is missing, and **never issues DDL against a schema it does not own**. Both reference backends implemented it; nothing asserted it. It is **B1, the first contortion of the Tenshen design test**, and §7.3 justifies it on the enterprise-DBA posture being the reference deployment — so the suite was silent about a path both of its own worked examples take.
+
+**`C5-12` — `proposals_not_stored`, and the claim that a proposal-less backend conforms.** This one started as a coverage gap and turned into the largest single finding of the loop.
+
+§3.2 says **"Every other flag may be `False` and the backend can still be conformant"**, and §7.4's verdict says a `stores_proposals=False` backend — Tenshen's — conforms *"as a third backend"*. **[Observed] both were false: 26 of the 113 tests failed against such a backend**, and four of them crashed outright with `AttributeError: 'TypeEntry' object has no attribute 'id'`. Two distinct causes, neither previously recorded:
+
+1. **The suite ran every backend under `approval_policy="review"`**, which §7.3 B4 says a proposal-less backend cannot serve — so `propose_type` returned a `Refusal` where the harness expected a `Proposal`. The suite now defaults such a backend to `approval_policy="auto"`, because B4 says the flag *forces* it.
+2. **Test harnesses assumed `propose_type` returns a `Proposal`.** Where the capability is the test's *subject*, the test asserts the honest answer (that is §6.1 rule 1, unchanged, and `C5-12` is now that test). Where it is only *scaffolding* — every test that must have a proposal before it can approve one — the test is skipped by a new `requires_capability` marker, with a reason naming the flag and quoting the backend's own `why`.
+
+**[Observed] result:** a `stores_proposals=False` backend now runs the suite to **`96 passed, 25 skipped, 1 deselected`, exit 0**, and the two reference backends still execute all 115 with nothing skipped. §3.2's sentence and §7.4's verdict are true for the first time.
+
+> **What this did NOT close, recorded rather than half-fixed.** A backend declining **several** optional capabilities at once still fails, and the residue is real: with `stores_events=False` an acknowledged merge is correctly refused (`cannot_record_override`, §3.6) so `C16`'s fixture cannot build the store it inspects, and with `indexes_membership=False` the `C10` group's consumer-set guards all degrade to `no_consumer_evidence` rather than the specific refusals they assert. **[Observed]**, on a double declining all seven optional flags. Closing it may require deciding what conformance *means* for a backend that can never merge and can never index — which is a ruling, not a test fix. **R11** in [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 
 ---
 
@@ -1257,7 +1281,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (113 tests, seventeen groups — 109 at #3, four added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (115 tests, seventeen groups — 109 at #3, six added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |

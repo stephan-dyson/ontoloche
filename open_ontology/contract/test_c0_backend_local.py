@@ -1,12 +1,21 @@
-"""C0-08 -- G1 and G2 raced by two real concurrent writers. PACKAGE.md 3.5.
+"""C0-08 and C0-09 -- the two contract tests that build backends directly.
 
-**Why this module is separate, and why the generator skips it.** A thread race has no
-mechanical async form: the async equivalent of two threads is ``asyncio.gather`` over
-two coroutines, which is a different mechanism, not a token substitution. So this file
-is excluded from ``tools/unasync.py``'s ``CONTRACT_TESTS`` and its async counterpart --
-``open_ontology/aio/contract/test_concurrency.py`` -- is **hand-written**, the way the
-driver-level ``close()`` methods are (3B-ASYNC.md D-A12). Both claim the same contract
-id and both are binding.
+Both construct adapter objects rather than taking the ``adapter`` fixture, so neither
+survives mechanical async translation: the async backends are built with
+``await AsyncSQLiteAdapter.open(path)`` (3B-ASYNC.md D-A1), not by calling the class.
+
+**C0-08 -- G1 and G2 raced by two real concurrent writers. PACKAGE.md 3.5.**
+
+A thread race has no mechanical async form either: the async equivalent of two threads
+is ``asyncio.gather`` over two coroutines, which is a different mechanism, not a token
+substitution.
+
+**C0-09 -- ``owns_schema=False`` makes ``migrate()`` verify-only. PACKAGE.md 9.3.**
+
+So this file is excluded from ``tools/unasync.py``'s ``CONTRACT_TESTS`` and its async
+counterpart -- ``open_ontology/aio/contract/test_c0_backend_local.py`` -- is
+**hand-written**, the way the driver-level ``close()`` methods are (3B-ASYNC.md D-A12).
+Both claim the same contract ids and both are binding.
 """
 
 from __future__ import annotations
@@ -20,7 +29,7 @@ import pytest
 
 from .._clock import FixedClock
 from ..adapter import TypeQuery, TypeRecord
-from ..errors import AlreadyExists
+from ..errors import AlreadyExists, SchemaMismatch
 from ..registry import Registry
 from ..types import Refusal, TypeEntry
 from . import _support
@@ -177,3 +186,63 @@ def test_c0_08_g1_and_g2_hold_against_two_real_concurrent_writers(backend, tmp_p
     )
     stored = first.get_type("raced", "survey", kind="entity")
     assert stored is not None and stored.status == "active"
+
+
+def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_path):
+    """**B1, tested.** PACKAGE.md 9.3: when the schema belongs to the host application
+    -- beacon's Alembic, or an enterprise Postgres where the DBA owns DDL and the
+    application role has no CREATE right -- ``migrate()`` is **verify-only**. It checks
+    the columns it needs and raises ``SchemaMismatch`` naming what is missing, and it
+    **never issues DDL against a schema it does not own.**
+
+    Both reference backends implement this and nothing asserted it. It is one of the
+    two capabilities PACKAGE.md 7 (the Tenshen design test) most depends on -- B1 is
+    the first contortion in that section -- so the suite was silent about exactly the
+    path its own flagship worked example takes. Added by row 3c after an adversarial
+    review round; see docs/findings/3C-VALIDATION.md.
+    """
+    if backend == "sqlite":
+        from ..backends.sqlite import SQLiteAdapter
+
+        path = str(tmp_path / "host_owned.sqlite")
+        guest = SQLiteAdapter(path, owns_schema=False)
+    elif backend == "postgres":
+        import os
+
+        dsn = os.environ.get("OO_POSTGRES_DSN")
+        if not dsn:
+            pytest.skip("PENDING -- no local Postgres; set OO_POSTGRES_DSN")
+        from ..backends.postgres import PostgresAdapter
+
+        schema = "oo_guest_" + uuid.uuid4().hex[:12]
+        owner = PostgresAdapter(dsn, schema=schema)
+        owner._execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+        guest = PostgresAdapter(dsn, schema=schema, owns_schema=False)
+    else:
+        pytest.skip("PENDING -- owns_schema is a property of the reference backends")
+
+    assert guest.capabilities().owns_schema is False
+    assert guest.capabilities().why.get("owns_schema") or True  # C0-01 covers the why
+
+    # 1. An empty store: verify-only must REFUSE, and must not fix it by issuing DDL.
+    with pytest.raises(SchemaMismatch) as raised:
+        guest.migrate()
+    assert "oo_type" in str(raised.value), "the refusal names what is missing"
+    with pytest.raises(SchemaMismatch):
+        guest.migrate()  # still missing -- nothing was created behind our back
+
+    # 2. Once the owner has created the schema, the guest verifies and returns.
+    if backend == "sqlite":
+        from ..backends.sqlite import SQLiteAdapter
+
+        SQLiteAdapter(path).migrate()
+    else:
+        owner.migrate()
+    version = guest.migrate()
+    assert isinstance(version, int) and version >= 1
+
+    # 3. And it is usable: verify-only is not read-only.
+    guest.put_type(_type(name="facility"), expect_absent=True)
+    assert guest.get_type("default", "facility", kind="entity") is not None
+    if backend == "postgres":
+        owner._execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')

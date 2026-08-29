@@ -152,10 +152,14 @@ def test_c13_05_value_set_is_accepted_and_survives_a_round_trip(registry, adapte
         kind="value_set",
         attributes={"ordered": True, "ordering": list(SEVERITY_ORDERING)},
     )
-    assert isinstance(proposal, Proposal)
-    assert proposal.kind == "value_set"
-
-    entry = registry.approve(proposal.id, "user:sd")
+    # A backend with stores_proposals=False auto-approves and hands back the entry
+    # directly (PACKAGE.md 7.3 B4). What C13-05 is about is that `value_set` survives
+    # a round trip, not which of the two shapes came back.
+    if isinstance(proposal, Proposal):
+        assert proposal.kind == "value_set"
+        entry = registry.approve(proposal.id, "user:sd")
+    else:
+        entry = proposal
     assert isinstance(entry, TypeEntry) and entry.kind == "value_set"
 
     stored = adapter.get_type("default", "scope_severity_code", kind="value_set")

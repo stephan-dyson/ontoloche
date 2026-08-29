@@ -16,6 +16,15 @@ from ..types import Evidence, TypeEntry
 #: backend. ``None`` means the two reference backends.
 EXTERNAL_FACTORY: Callable[[], Any] | None = None
 
+#: Set by ``run_contract_suite(resolver_factory=...)``. ``None`` means the suite runs
+#: on the shipped ``DeterministicResolver``, which is the fixed point PACKAGE.md 2.6
+#: says the suite needs. When it is set, the suite is running the **production path**
+#: 2.6 names -- a real resolver behind the same registry -- and the three
+#: ``resolver_dependent`` tests stop applying, because they assert outcomes only the
+#: deterministic one produces. Added by row 3c: ruling R8's skip originally keyed on
+#: whether the *adapter* was foreign, which is the wrong axis for a resolver question.
+EXTERNAL_RESOLVER: Callable[[], Any] | None = None
+
 #: The 400-row public CMS sample. Present or the C13 group skips (PACKAGE.md 8.4).
 FIXTURE_NAME = "cms_sample_400.csv"
 
@@ -344,7 +353,17 @@ def cms_vocabulary(facts: dict) -> list[dict]:
 
 
 def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
-    """Load the sample's vocabulary through the adapter and record its instance counts."""
+    """Load the sample's vocabulary through the adapter and record its instance counts.
+
+    ``propose_type`` returns a ``TypeEntry`` rather than a ``Proposal`` on a backend
+    with ``stores_proposals=False`` -- PACKAGE.md 7.3 B4, which is the Tenshen adapter
+    the document's own design test calls conformant. This harness assumed a ``Proposal``
+    and crashed with ``AttributeError: 'TypeEntry' object has no attribute 'id'``, so
+    **the mandatory C13 group failed a backend §7.4 says conforms** -- the exact
+    "legitimate backend fails for a non-storage reason" class §6.1 exists to prevent.
+    Corrected by row 3c after an adversarial review round; ``seed()`` above always had
+    it right.
+    """
     facts = sample_facts(path)
     entries = []
     for spec in cms_vocabulary(facts):
@@ -357,7 +376,12 @@ def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
             attributes=spec["attributes"],
             tier="opus",
         )
-        entry = registry.approve(proposal.id, "user:sd")
+        # B4: no proposal table means propose_type IS the decision.
+        entry = (
+            proposal
+            if isinstance(proposal, TypeEntry)
+            else registry.approve(proposal.id, "user:sd")
+        )
         for _ in range(spec["uses"]):
             registry.record_use(spec["name"], by="cms_sample_loader")
         entries.append(entry)

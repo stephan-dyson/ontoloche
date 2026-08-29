@@ -1,8 +1,8 @@
-"""Suite bookkeeping for the async mirror -- not one of the 109.
+"""Suite bookkeeping for the async mirror -- not one of the 115.
 
 Two things to prove, and the second is the point of the whole deliverable:
 
-1. every one of ``PACKAGE.md`` 6.2's 109 contract ids exists as a test function here,
+1. every one of ``PACKAGE.md`` 6.2's 115 contract ids exists as a test function here,
    exactly as it does in the sync suite; and
 2. the ids and the function names are **identical between the two suites** -- not
    equivalent, not corresponding, identical. If they were only corresponding, the

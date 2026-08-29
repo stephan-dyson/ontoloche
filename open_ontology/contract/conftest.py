@@ -32,6 +32,11 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "nonbinding: outside the conformance definition")
     config.addinivalue_line(
         "markers",
+        "requires_capability(*flags): needs a Capabilities flag the backend may decline; "
+        "skipped with a reason when it is False, per PACKAGE.md 3.2",
+    )
+    config.addinivalue_line(
+        "markers",
         "resolver_dependent: asserts an outcome only the shipped DeterministicResolver "
         "produces -- binding for the reference backends, skipped for a foreign adapter",
     )
@@ -46,19 +51,26 @@ def pytest_collection_modifyitems(config, items):
     with its own resolver, which 2.6 calls *the production path*, failed mandatory
     conformance tests for a reason that is neither storage nor its own choice.
 
-    Ruling **R8**, applied by row 3c: they stay **binding for the two reference
-    backends**, where they pin real behaviour of the resolver this package ships, and
-    are **skipped for a foreign adapter**, where they assert nothing about the backend
-    under test. Skipped with a reason, never silently -- and the reason names the
-    ruling, so a third-party author can see what was not run and why.
+    Ruling **R8**, applied by row 3c: they are **binding whenever the suite runs on
+    the shipped ``DeterministicResolver``** -- which is every reference-backend run and
+    every third-party run that does not replace it -- and are **skipped when a caller
+    supplies their own resolver** via ``run_contract_suite(resolver_factory=...)`` or
+    ``--resolver``, because then they assert nothing about the backend under test.
+
+    **The gate is the resolver, not the adapter.** A first attempt keyed the skip on
+    whether the *adapter* was foreign, which is the wrong axis for a resolver question:
+    it forgave a foreign backend that had kept the shipped resolver (where these tests
+    are perfectly valid) and still left PACKAGE.md 2.6's *production path* -- a
+    reference backend plus a real model resolver -- unrunnable. Corrected by row 3c
+    after a fourth adversarial round. Skipped with a reason, never silently.
     """
-    if _support.EXTERNAL_FACTORY is None:
+    if _support.EXTERNAL_RESOLVER is None:
         return
     skip = pytest.mark.skip(
         reason=(
             "PACKAGE.md 2.6 / ruling R8 -- this test asserts an outcome only the "
-            "shipped DeterministicResolver produces. It is binding for the reference "
-            "backends and says nothing about a foreign adapter's storage."
+            "shipped DeterministicResolver produces, and this run supplied its own "
+            "resolver. No contract test may pass or fail on resolver quality."
         )
     )
     for item in items:
@@ -134,8 +146,31 @@ def adapter_factory(backend):
 
 
 @pytest.fixture
-def adapter(adapter_factory):
-    return adapter_factory()
+def adapter(adapter_factory, request):
+    """PACKAGE.md 3.2: *"Every other flag may be `False` and the backend can still be
+    conformant"*, and 7.4 calls a ``stores_proposals=False`` backend conformant *"as a
+    third backend"*. The suite falsified both -- **26 tests failed against such a
+    backend**, because their harness assumes ``propose_type`` returns a ``Proposal``
+    when 7.3 B4 says it returns a ``TypeEntry``.
+
+    A test whose *subject* is a declined capability still asserts the honest unknown --
+    6.1 rule 1, unchanged. A test that merely *needs* the capability as scaffolding, like
+    every test that must have a proposal before it can approve one, is skipped here with
+    a reason naming the flag and quoting the backend's own ``why``. Added by row 3c after
+    an adversarial review round found the C13 instance; see 3C-VALIDATION.md.
+    """
+    made = adapter_factory()
+    marker = request.node.get_closest_marker("requires_capability")
+    if marker is not None:
+        caps = made.capabilities()
+        for flag in marker.args:
+            if not getattr(caps, flag):
+                pytest.skip(
+                    f"PACKAGE.md 3.2 -- this backend declares {flag}=False, which 3.2 "
+                    f"says is conformant. This test needs it as scaffolding, not as its "
+                    f"subject: {caps.why.get(flag, 'no reason given')}"
+                )
+    return made
 
 
 @pytest.fixture
@@ -149,9 +184,19 @@ def make_registry(clock):
 
     def build(adapter, **policy_kwargs):
         policies = policy_kwargs.pop("policies", None)
+        resolver = policy_kwargs.pop("resolver", None)
+        # PACKAGE.md 7.3 B4: no proposal table *forces* approval_policy="auto" -- there
+        # is nowhere to hold a pending proposal. The suite used to run every backend
+        # under the default "review", so a conformant proposal-less backend met a policy
+        # the document says it cannot serve and got a Refusal where a TypeEntry belongs.
+        if "approval_policy" not in policy_kwargs and not adapter.capabilities().stores_proposals:
+            policy_kwargs["approval_policy"] = "auto"
+        if resolver is None and _support.EXTERNAL_RESOLVER is not None:
+            resolver = _support.EXTERNAL_RESOLVER()
         return Registry(
             adapter,
             clock=clock,
+            resolver=resolver,
             policy=NamespacePolicy(**policy_kwargs),
             policies=policies,
         )
@@ -184,8 +229,11 @@ def pytest_runtest_logreport(report):
 
 
 def pytest_deselected(items):
+    # Only marker-driven exemptions. A `-k` filter deselects too, and counting those
+    # would make the summary say a normal filtered run had exempted half the suite.
     for item in items:
-        _EXEMPTED.add(item.nodeid.rsplit("::", 1)[-1])
+        if item.get_closest_marker("nonbinding"):
+            _EXEMPTED.add(item.nodeid.rsplit("::", 1)[-1])
 
 
 def pytest_terminal_summary(terminalreporter):
@@ -202,6 +250,13 @@ def pytest_terminal_summary(terminalreporter):
                 f"  NOT a conformance run -- {', '.join(missing)} did not execute. "
                 "6.1 requires both reference backends in one run; set OO_POSTGRES_DSN."
             )
+    if _support.EXTERNAL_RESOLVER is not None:
+        write(
+            "  resolver: SUPPLIED BY THE CALLER -- PACKAGE.md 2.6's production path; "
+            "the resolver_dependent tests were skipped (ruling R8)"
+        )
+    else:
+        write("  resolver: the shipped DeterministicResolver (2.6's fixed point)")
     if _EXEMPTED:
         write(
             f"  nonbinding tests excluded from the verdict: {len(_EXEMPTED)} "

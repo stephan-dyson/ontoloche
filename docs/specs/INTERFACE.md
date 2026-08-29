@@ -264,11 +264,14 @@ PredicateEntry:
     name:        str
     definition:  str
     extent:      list[str]       # type names satisfying it — DERIVED, never stored twice
-    extent_size: int
+    extent_size: int | None      # None = the extent could not be computed. NEVER 0
     consumers:   list[Consumer]  # consumers gating on this predicate
     status:      "proposed" | "active" | "retired"
     provenance:  Provenance
+    why_extent_incomplete: str | None    # the `why` the paragraph below requires
 ```
+
+*(`extent_size` and `why_extent_incomplete` corrected by row 3c, 2026-08-28, after a fourth adversarial review round. The table typed `extent_size: int` while the paragraph below it required `None`, and declared no home for the `why` — **Rule U's marquee example contradicting its own data shape**, three lines apart. An implementer coding from the table would have coerced the unknown to `0`, which is the exact "nothing is commentable" false reading the paragraph forbids. `types.py` and `PACKAGE.md` `C2-02` both had it right.)*
 
 **Designed against: mechanism 4, defensively — and the kill-criterion row.** Predicates are the structure that stops five locally-correct lists from being read as five duplicates.
 
@@ -378,7 +381,19 @@ Proposal:
 
 > **Added by row 3c, 2026-08-28, after a third adversarial review round — this was a hole in §13's own exit criterion.** Two sentences in this document were false for exactly this case: the paragraph below says a `TypeEntry` comes back *"only when the namespace policy is `approval_policy=\"auto\"`"*, and §2.7 point 3 says the tier gate shows up as `Refusal(reason="tier_below_auto_approve_policy")` — which is true of `approve()` and **not** of `propose_type`'s internal auto-approval attempt. `2A-RUN.md` §4 deviation **D-11** recorded the gap in the words *"Neither document says what happens when the auto path meets the tier gate"*, and §11's list of deviations touching this document then failed to carry it forward. **It is UC1's own scenario:** Tenshen auto-approves and its classifier's tier is named as Haiku (§9, contortion 4), so this is the first thing a beacon migration hits.
 
-**`warnings` vocabulary, complete:** `"unverified_semantics"` · `"no_evidence"` · `"near_duplicate:<name>"` · `"name_previously_retired"` · `"auto_approval_refused:tier_below_auto_approve_policy"` · `"attributes_invalid:<field>:<why>"` (the last from `PACKAGE.md` §5.3, `warn` mode). *(Enumerated by row 3c; §5.4 previously listed three of the six inline and the rest arrived scattered.)*
+**`warnings` vocabulary, complete — six values across two carriers:**
+
+| value | lands on | from |
+|---|---|---|
+| `unverified_semantics` | `Proposal`, and the `TypeEntry` keeps it after approval | §2.8 |
+| `no_evidence` | `Proposal` | §5.4 |
+| `near_duplicate:<name>` | `Proposal` | §5.4 |
+| `auto_approval_refused:tier_below_auto_approve_policy` | `Proposal` (still pending) | the bullet above |
+| `attributes_invalid:<field>:<why>` | `Proposal` | `PACKAGE.md` §5.3, `warn` mode |
+| `name_previously_retired` | **`TypeEntry` only** — the retired entry `propose_type` hands back; no proposal is created (§5.9) | §5.4 |
+| `retired_without_usage_evidence` | **`TypeEntry` only** — the retired entry `retire` returns | §5.9 |
+
+*(Enumerated by row 3c; §5.4 previously listed three inline and the rest arrived scattered across the document. The carrier column was added after a fourth review round pointed out that one flat list invites reading all of them as `Proposal.warnings`.)*
 
 ---
 
