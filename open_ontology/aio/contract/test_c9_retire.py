@@ -105,3 +105,41 @@ async def test_c9_06_the_successor_is_recorded_and_surfaces_in_provenance(regist
     retired_events = [e for e in (await registry.provenance("watch")).history if e.event == "retired"]
     assert retired_events[0].detail["successor"] == "capture"
     assert retired_events[0].detail["reason"] == "superseded by `capture`"
+
+async def test_c9_07_an_unknowable_consumer_set_blocks_the_retirement(adapter, make_registry):
+    """**Mechanism C, committed by the call built to catch it.** Row 3c, after an
+    adversarial review round reproduced this live.
+
+    `retire` is guarded by `consumers`, not by usage (INTERFACE.md 5.9), and it read an
+    empty `gates_on` as *"nothing gates on this"*. On a backend that cannot index
+    membership every extent is empty, so `gates_on` is empty for a reason that means
+    **we could not look** -- and a type with a real, registered, gating consumer retired
+    with no refusal and no warning. `merge_types` already took the honest line for the
+    identical uncertainty (5.10's `no_consumer_evidence`, *"the one place we do not know
+    blocks rather than warns"*); `retire` now takes it too, with `force=True` as the
+    override, recorded in history like any other.
+
+    Note what this is NOT: it is not a claim that the backend is non-conformant.
+    `indexes_membership=False` is a declared, conformant capability (PACKAGE.md 3.2).
+    The registry simply may not convert its own blindness into a confident answer.
+    """
+    blind = await make_registry(AsyncDegradedAdapter(adapter, indexes_membership=False))
+    await seed(blind, "commentable", kind="predicate", definition="a code path will accept it")
+    await seed(blind, "task", definition="a unit of work", predicates=["commentable"])
+    await blind.register_consumer(
+        Consumer(id="comment_service.can_comment", gate="commentable", on_unknown="drop")
+    )
+
+    report = await blind.consumers("task")
+    assert report.gates_on == (), "the extent is unknowable, so the report is empty..."
+    assert report.complete is False, "...and it already says it is incomplete"
+
+    refusal = await blind.retire("task", "no longer needed", retired_by="user:sd")
+    assert isinstance(refusal, Refusal), "an empty gates_on we could not verify must block"
+    assert refusal.reason == "no_consumer_evidence"
+    assert refusal.detail["overridable"] is True
+    assert "could not look" in refusal.detail["why"]
+    assert (await blind.list_types(namespace="default")).types, "and nothing was retired"
+
+    overridden = await blind.retire("task", "I accept the risk", retired_by="user:sd", force=True)
+    assert isinstance(overridden, TypeEntry) and overridden.status == "retired"

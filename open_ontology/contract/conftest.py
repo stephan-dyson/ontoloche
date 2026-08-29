@@ -37,6 +37,11 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers",
+        "requires_attribute_store: needs the optional AttributeStore extension, which "
+        "PACKAGE.md 5.5 and ruling R2 say a conformant backend may decline",
+    )
+    config.addinivalue_line(
+        "markers",
         "resolver_dependent: asserts an outcome only the shipped DeterministicResolver "
         "produces -- binding for the reference backends, skipped for a foreign adapter",
     )
@@ -160,6 +165,16 @@ def adapter(adapter_factory, request):
     an adversarial review round found the C13 instance; see 3C-VALIDATION.md.
     """
     made = adapter_factory()
+    if request.node.get_closest_marker("requires_attribute_store") is not None:
+        from ..adapter import AttributeStore
+
+        if not isinstance(made, AttributeStore):
+            pytest.skip(
+                "PACKAGE.md 5.5 / ruling R2 -- this backend declines the optional "
+                "AttributeStore extension, which 5.5 says leaves it fully conformant. "
+                "`attribute_census` reports complete=False with a why; this test needs "
+                "the extension itself."
+            )
     marker = request.node.get_closest_marker("requires_capability")
     if marker is not None:
         caps = made.capabilities()

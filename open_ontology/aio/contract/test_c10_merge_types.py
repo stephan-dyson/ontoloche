@@ -132,10 +132,16 @@ async def test_c10_05_a_retired_operand_refuses_but_can_be_acknowledged(registry
     assert refusal.detail["overridable"] is True
 
     merged = await registry.merge_types(
-        "todo", "task", "same thing", merged_by="user:sd", acknowledge=["retired_operand"]
+        "todo", "task", "same thing", merged_by="user:sd",
+        # `definitions_diverge` too: no resolver here certifies synonymy, and this
+        # test's subject is the retired operand, not the wording (row 3c).
+        acknowledge=["retired_operand", "definitions_diverge"],
     )
     assert isinstance(merged, MergeResult)
-    assert merged.acknowledged == ("retired_operand",)
+    assert merged.acknowledged == ("retired_operand", "definitions_diverge")
+    # Row 3c: the divergence acknowledgement is now required whenever the definitions
+    # differ and no resolver certifies synonymy, and the score is recorded either way.
+    assert any(w.startswith("definitions_similarity:") for w in merged.warnings)
 
 async def test_c10_06_diverging_definitions_refuse_but_can_be_acknowledged(registry):
     await _shared_consumer(registry)

@@ -39,7 +39,14 @@ __all__ = ["DegradedAdapter", "READ_ONLY_CONSUMERS"]
 READ_ONLY_CONSUMERS = "read_only_consumers"
 
 
-class DegradedAdapter:
+#: The optional ``AttributeStore`` extension (PACKAGE.md 5.5, ruling R2). Outside the
+#: fifteen primitives and outside conformance.
+_ATTRIBUTE_STORE_METHODS = frozenset(
+    {"put_attr_schema", "get_attr_schema", "observe_attributes", "read_attr_observed"}
+)
+
+
+class _DegradedBase:
     """Wraps a conformant adapter and takes capabilities away from it.
 
     ``pages_countable=False`` is not a capability flag; it is the ``TypePage.known is
@@ -202,7 +209,10 @@ class DegradedAdapter:
             raise NotSupported(self.capabilities().reason("stores_events"))
         return self.inner.read_events(namespace, kind=kind, name=name, proposal_id=proposal_id)
 
-    # --------------------------------------------- optional attribute extension
+
+class _DegradedWithAttributes(_DegradedBase):
+    """The same double, plus the optional ``AttributeStore`` extension."""
+
     def put_attr_schema(self, rec):
         return self.inner.put_attr_schema(rec)
 
@@ -218,3 +228,55 @@ class DegradedAdapter:
 
     def read_attr_observed(self, namespace: str, *, kind: str | None = None):
         return self.inner.read_attr_observed(namespace, kind=kind)
+
+
+def DegradedAdapter(inner, **kwargs):
+    """Wrap ``inner`` and take capabilities away from it.
+
+    A **factory**, not a class, and that is the point: the optional ``AttributeStore``
+    extension is a *protocol*, not a ``Capabilities`` flag, so a wrapper either has the
+    four methods or it does not -- it cannot declare them absent. Until row 3c this was
+    one class that always defined them, so **wrapping a backend that declined the
+    extension silently gave it back**, and the tool built to construct degraded backends
+    could not construct that one. The class is chosen from what ``inner`` actually is.
+    """
+    from ..adapter import AttributeStore
+
+    cls = _DegradedWithAttributes if isinstance(inner, AttributeStore) else _DegradedBase
+    return cls(inner, **kwargs)
+
+
+class WithoutAttributeStore:
+    """A conformant adapter that declines the optional ``AttributeStore`` extension.
+
+    PACKAGE.md 5.5 and ``2A-RUN.md`` deviation D-2 both say a backend that does not
+    implement `AttributeStore` *"is still fully conformant"* and that
+    ``attribute_census`` then reports ``complete=False`` with a `why`. **Until row 3c
+    that was untrue and untestable at once**: four C15 tests called
+    ``register_attribute_schema`` with no guard, which raises ``NotSupported`` on such a
+    backend -- and `DegradedAdapter` forwarded the four extension methods
+    unconditionally, so the tool built to construct "a backend declines an optional
+    capability" could not construct **the one optional capability that is a protocol
+    rather than a `Capabilities` flag**.
+
+    ``__getattr__`` rather than ``__getattribute__``: the four names are simply absent
+    from this class, so ``hasattr`` is False and the ``runtime_checkable`` Protocol's
+    ``isinstance`` check answers correctly.
+    """
+
+    def __init__(self, inner):
+        object.__setattr__(self, "inner", inner)
+
+    def __getattr__(self, name):
+        if name in _ATTRIBUTE_STORE_METHODS:
+            raise AttributeError(
+                f"{name} -- this backend declines the optional AttributeStore extension"
+            )
+        return getattr(self.inner, name)
+
+    def __setattr__(self, name, value):
+        # A write goes to the wrapped adapter, so this proxy behaves like the backend it
+        # stands in for -- `C0-05` monkeypatches `_migration_sql` on the adapter it is
+        # handed, and a proxy that kept the attribute for itself would silently make the
+        # test pass against the untouched inner migrations.
+        setattr(self.inner, name, value)

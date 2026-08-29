@@ -327,3 +327,71 @@ Both are the *specified* behaviour. The question is what conformance should mean
 Four items are recorded and need no ruling — they are collected in `INTERFACE.md` §11 for v1 and cost nothing to defer: `property_not_type` as a fifth `not_a_type` reason (contortion 10), `Provenance.source_version` (contortion 12), cross-namespace `find_consumers`/`attribute_census` (B7), and the catalogue-vs-API name divergence (§1.1), which no registry call can fix and which belongs to Phase 3's ingestion layer.
 
 ---
+
+## 7. The adversarial review loop
+
+**Protocol** (`USE-CASES.md`, ROADMAP standing constraint 7): a fresh, hostile reviewer each round, briefed with the three fixtures and asked to break the spec against each; loop until **two consecutive fresh reviewers return no BLOCKING or MAJOR findings**. Reviewers were run on Sonnet, the orchestration on Opus. No reviewer saw a previous round's verdict, and each was given the standing decisions and open rulings so it could not re-raise a settled question as new.
+
+Every round below returned **NOT YET**. Not one finding was dismissed; each was either fixed or recorded with a written reason.
+
+### 7.1 Round log
+
+| # | Spec | Findings | What it caught, and what changed |
+|---|---|---|---|
+| 1 | INTERFACE | 2 MAJOR | **Rule K was stated globally and applied selectively.** `Resolution.alternatives` and `predicates()` were bare lists, so the second publisher of a colliding word got `alternatives: []` — an empty list standing in for *"we did not look"*, the one thing Rule U forbids by name, with no field to ask whether the search had been scoped. Both now carry Rule K. Also: §2.8 cited `C4-06` for something it does not assert; one `[Observed]` was a judgement. |
+| 1 | PACKAGE | 1 BLOCKING, 2 MAJOR | **G1 and G2 were never raced.** §3.5 says G1 must come from a constraint and that a read-then-write check *"is not sufficient"* — every test called the primitives sequentially on one thread, which check-then-insert passes just as happily. `C0-08` added and **verified to bite**: a check-then-insert wrapper yields two winners and fails it. `C15-07` added for the per-kind schema limit. B8 recorded. |
+| 2 | INTERFACE | 3 MAJOR | **`reinstate` was a call the document invented in a subordinate clause** — one occurrence in the whole repository, no implementation, while §5.9 leaned on it to call retirement *"reversible-ish"*. Justification corrected, not deleted (see §6, R10). `register_consumer`'s signature still said `-> Consumer` in the one place it is declared. Rule K said `known: int`; two of its four shapes are `int \| None`. |
+| 2 | PACKAGE | 1 BLOCKING, 2 MAJOR | **The conformance gate was not the gate.** §5.5 says a backend *"may not be failed for"* `C15-02`; `@pytest.mark.nonbinding` only silenced a warning and the runner ran everything, so a backend that honestly declined the optional `AttributeStore` **was reported as failing the suite that ruling A5 makes the Phase 2B gate**. Both runners now default to `-m "not nonbinding"`, and every run prints what it covered. **R8 applied** after recurring in two rounds. §11.1's ruling ledger had drifted out of sync with its own rulings. |
+| 3 | INTERFACE | 1 BLOCKING, 1 MAJOR | `propose_type` under `approval_policy="auto"` meeting the tier gate returned a still-pending `Proposal` carrying a warning in no vocabulary — neither §5.4's `TypeEntry` nor §2.7's `Refusal`. Recorded in `2A-RUN.md` as D-11; §11 had failed to carry it forward, leaving §13's *"a stated behaviour when uncertain"* false for that call. **It is UC1's own scenario.** |
+| 3 | PACKAGE | 1 BLOCKING, 2 MAJOR | **The suite could not be passed by the backend the document calls conformant.** §3.2 says every optional flag may be `False`; §7.4 says a `stores_proposals=False` backend — Tenshen's — conforms *"as a third backend"*. **26 of 113 tests failed against one**, four crashing outright. Fixed (see §8b.5); now `96 passed, 25 skipped, exit 0`. `C0-09` and `C5-12` added; the multi-flag residue recorded as **R11**. |
+| 4 | INTERFACE | 2 MAJOR | `PredicateEntry.extent_size` was typed `int` in §5.2's table and required to be `None` three lines below — **Rule U's marquee example contradicting its own data shape.** R8's applied fix gated on a foreign *adapter*, the wrong axis for a resolver question, and nothing let a caller supply a `Resolver` at all, so §2.6's *production path* was unrunnable. `resolver_factory` and `--resolver` added; the gate re-keyed. |
+| 5 | INTERFACE | 1 BLOCKING, 2 MINOR | **`merge_types` was the one call in §5 with no printed data shape** — four rounds and the whole UC3 pass had walked past it. The shipped `MergeResult` carries nine fields, two of which (`entry`, `aliases_added`) hold the part of the design that matters: a merge *retires and aliases*, it does not delete. The call count, wrong since #1 and quoted onward into `README.md`, corrected from twelve to thirteen. |
+| 6 | INTERFACE | 1 BLOCKING, 1 MAJOR, 1 MINOR | §5.10's signature omitted `into_namespace`, so **`cross_namespace_merge` — the non-overridable refusal this whole row exists to exercise — was unreachable from the printed contract**, while §10b and this finding both call it. `TypeEntry.attr_schema_version` is returned on every entry and was in neither the field table nor the deviation ledger. **And the durable fix:** six rounds had each found one defect of this same family, so [`docs/tools/check_spec_drift.py`](../tools/check_spec_drift.py) now compares all fifteen printed shapes and thirteen signatures against the code — **it found two more the moment it was written**, and the contract suite runs it. |
+| 7 | INTERFACE | 1 BLOCKING, 1 MAJOR | The reviewer brief was re-aimed at design rather than drift, and it worked: **the `definitions_diverge` guard was anti-correlated with its own purpose.** §7.2. |
+| 4 | PACKAGE | 1 BLOCKING, 2 MAJOR, 2 MINOR | **`retire()`'s live-consumer guard was silently defeated by one declined capability.** §7.3. Also: a backend declining the optional `AttributeStore` crashed five C15 tests despite §5.5 calling it conformant — and `DegradedAdapter` could not construct one, because it re-declared the four extension methods unconditionally. `C15-08` added. |
+
+### 7.2 The finding that changed the design: `definitions_diverge` was backwards
+
+`merge_types` refusal #6 asks whether two definitions are near-synonymous before letting a merge proceed. v0 answered it with `difflib.SequenceMatcher` character similarity against a fixed 0.55 threshold. Round 7 measured what that actually buys. **[Observed], on the reference implementation:**
+
+| pair | similarity | old behaviour |
+|---|---|---|
+| UC1 — `blocks` vs `duplicates`, two Tenshen relationship types | **0.9275** | merge proceeds |
+| UC2 — the two CMS `value_set`s (`deficiency_corrected_status` vs `scope_severity_code`) | **0.8021** | merge proceeds |
+| UC3 — DOT meter vs DPR tree condition, templated | **0.7465** | merge proceeds |
+| **the genuinely synonymous pair** — "A Medicare-certified nursing home, identified by its CCN" vs "A nursing home certified by Medicare, identified by its CMS Certification Number" | **0.5507** | barely passes |
+| UC3 — DPR tree vs 311 request `status` | 0.4972 | refused, but for the wrong reason: different words, not different meaning |
+
+**The check was anti-correlated with its purpose.** It waved through unrelated types that shared boilerplate and came within 0.0007 of refusing a real synonym that used different words, because character similarity of prose measures **writing style, not meaning** — and an AI proposer writing to a template is the normal case, not the edge case. The consequence was a silent, permanent merge (there is no `reinstate` — R10) in which the losing name is burned and thereafter resolves to a `TypeEntry` for the wrong concept with the wrong value list.
+
+**Fixed, by applying Rule U to the registry's own judgement.** `NamespacePolicy.definitions_diverge_threshold` now defaults to **`None`**, meaning *"no resolver here can certify that two definitions are near-synonymous"* — so `merge_types` refuses until a human acknowledges, exactly as §5.10 already does for `no_consumer_evidence` (*"the one place we do not know blocks rather than warns"*). A deployment whose resolver **can** make that judgement sets a float and takes responsibility, the same pattern §2.7 uses for tier ordering. Two consequences:
+
+- **Identical definitions still certify without a resolver** — that is a fact, not a judgement, and it keeps the change from being noise.
+- **`MergeResult.warnings` stopped being permanently reserved.** Every merge now records `definitions_similarity:<score>` and either `definitions_threshold:<t>` or `definitions_uncertified`, so an auditor asking *"how close was this to the line?"* has an answer, and a merge that went through on an uncertified guard is visibly one nobody's resolver vouched for.
+
+**This is the second time the loop found the same shape of error** — a number standing in for a judgement the system cannot make. The first was `resolve_type`'s empty `alternatives` (round 1). Rule U is the rule this project keeps breaking in its own implementation, which is worth knowing.
+
+### 7.3 The finding that was a live safety bug: `retire()` read blindness as absence
+
+`retire` is guarded by `consumers`, not by usage (§5.9). It refused when `gates_on` was non-empty and proceeded when it was empty. **[Observed]:** with a real, registered, gating consumer in place, a fully capable backend refuses with `live_consumers` — and the identical registry on a backend declaring `indexes_membership=False` **retired the type, with no refusal and no warning.** Every extent is empty there, so `gates_on` is empty because nothing could be looked up.
+
+That is **mechanism C — the silent per-consumer drop — committed by the call built to prevent it**, and it is worse than round 7's merge finding because a wrong merge is at least recorded in history and a wrong retirement was not. `merge_types` had taken the honest line for the identical uncertainty since v0; `retire` had not. It now returns `Refusal("no_consumer_evidence")`, overridable by `force=True` and recorded like any other override. Pinned by `C9-07`.
+
+### 7.4 What the loop says about the process
+
+**Eleven rounds, eleven NOT YET verdicts, and the loop did not converge** — see §7.5. Four observations worth carrying to the next spec:
+
+1. **Six of the first eight findings were the same family** — a printed shape or signature drifted from the code. No reviewer caught them all, because each was checking by eye. A twelve-line script catches the family, found two more immediately, and now runs in the suite. **Write that check on the first spec, not the sixth round.**
+2. **The reviewer brief shapes the finding.** Rounds 1–6 produced mostly drift; round 7's brief said *"six rounds found almost nothing about whether the DESIGN survives the three fixtures — push there"*, and it returned the `definitions_diverge` result. A brief that does not say what has already been mined gets what has already been mined.
+3. **Two findings recurred across rounds** (R8, and the capability-honesty family). The loop's own rule — a finding that recurs is a decision to take, not to defer — was the right call both times.
+4. **The suite was wrong more often than the specs were.** Of the eight contract tests added by this row, six exist because the suite claimed coverage it did not have (`C0-07`, `C0-08`, `C5-12`, `C6-07`, `C9-07`, `C15-08`). A conformance suite that is *the definition of conformance* deserves the same adversarial pressure as the document it enforces.
+
+### 7.5 Convergence, honestly
+
+**The loop is being closed on the round cap, not on two clean passes.** The protocol asks for two consecutive fresh reviewers with no BLOCKING or MAJOR findings; **that did not happen.** Every round returned NOT YET, and the last round on each document still found real defects.
+
+**What that does and does not mean.** It does **not** mean the findings were being churned: no finding recurred unfixed, each round's defects were distinct, and the suite grew from 109 to 117 tests with every addition verified against a deliberately broken backend before being believed. It **does** mean the tail is not empty — a twelfth round would likely find something, most probably another cross-reference between two long documents.
+
+**Why stopping here is the honest call rather than the tired one:** the *family* that dominated rounds 1–6 is now machine-checked and cannot recur silently, the two design-level findings (§7.2, §7.3) are fixed with tests, and the remaining open items are the seven in §6 that need a ruling rather than a fix. **The next round of this loop should run after those rulings, not before them** — several of them (R5, R7, R9, R11) would change the surface a reviewer is reading.
+
+---
