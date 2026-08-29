@@ -3,13 +3,13 @@
 An open ontology and pipeline layer — typed entities, typed relationships, and
 governed actions that AI agents can safely call.
 
-**Status: Phase 2A shipped, plus its async mirror.** Phase 0 discovery is closed, Phase 1's interface contract is written, and the reference implementation exists: the `open_ontology` package, a fifteen-primitive storage adapter over SQLite and Postgres, and **109 contract tests that are the definition of conformance** — green on both backends, synchronously and asynchronously, in one run.
+**Status: Phase 2A shipped, plus its async mirror.** Phase 0 discovery is closed, Phase 1's interface contract is written, and the reference implementation exists: the `open_ontology` package, a fifteen-primitive storage adapter over SQLite and Postgres, and **145 contract tests that are the definition of conformance** — green on both backends, synchronously and asynchronously, in one run.
 
 ```bash
 pip install -e ".[contract]"
 pytest --pyargs open_ontology.contract          # the sync conformance suite
 pip install -e ".[contract-aio]"
-pytest --pyargs open_ontology.aio.contract      # the same 109 ids, awaited
+pytest --pyargs open_ontology.aio.contract      # the same 145 ids, awaited
 ```
 
 ## Start here
@@ -23,13 +23,13 @@ pytest --pyargs open_ontology.aio.contract      # the same 109 ids, awaited
   developer at any point. Read this to argue with the product; read the two above to argue
   with the strategy.
 - [`docs/specs/INTERFACE.md`](docs/specs/INTERFACE.md) — **the Phase 1 deliverable: the type-registry
-  contract, `v0` and unstable.** Twelve calls built around a proposal→approval loop, with
+  contract, `v0` and unstable.** Fourteen calls built around a proposal→approval loop, with
   `consumers(type)` — *"if I add this, what will silently ignore it?"* — first-class. Includes
   the Tenshen and CMS design tests, and the conflicts both produced.
 - [`docs/specs/PACKAGE.md`](docs/specs/PACKAGE.md) — **the Phase 2 deliverable: the package contract.** The
   fifteen-primitive storage-adapter protocol built on one rule — *the adapter stores records and
   does not know what a proposal, an approval or a refusal is* — the nine table shapes, and the
-  109 contract tests enumerated id by id.
+  145 contract tests enumerated id by id.
 - [`docs/runs/2A-RUN.md`](docs/runs/2A-RUN.md) and [`docs/runs/3B-ASYNC.md`](docs/runs/3B-ASYNC.md) — **the run
   records.** What was actually executed, with the verbatim pytest output and every deviation
   from the specs recorded rather than silently resolved. `3B-ASYNC.md` also carries the async

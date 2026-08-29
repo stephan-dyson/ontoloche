@@ -1,4 +1,4 @@
-"""C12 -- the Foundry import mapping (5). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping (7). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``Registry.import_types``, a method beyond the twelve, because no 5.x
@@ -130,3 +130,43 @@ def test_c12_05_an_import_does_not_un_retire_a_local_name(registry, adapter):
         "and the tombstone was not overwritten"
     )
     assert sorted(t.name for t in registry.list_types().types) == ["cycle_track"]
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c12_06_an_import_does_not_retire_a_type_something_still_gates_on(registry):
+    """**The mirror of `C12-05`, and it was open.** Row 3e, third adversarial round.
+
+    `retire()` refuses `live_consumers` when something still gates on the type
+    (`INTERFACE.md` §5.9). A Foundry `deprecated` row did the identical act with **no
+    refusal, no warning and no `retired` event** -- so `PACKAGE.md` §3.6's rule that a
+    destructive change nobody can audit is refused was bypassed on every backend, and
+    `consumers()` went on naming the retired type as gated.
+    """
+    from ..types import Consumer
+
+    seed(registry, "commentable", kind="predicate", definition="a code path accepts it")
+    seed(registry, "billable", predicates=["commentable"], definition="a billable unit")
+    registry.register_consumer(
+        Consumer(id="billing.charge", gate="commentable", on_unknown="drop")
+    )
+    assert registry.retire("billable", "no", retired_by="user:sd").reason == "live_consumers"
+
+    out = registry.import_types([{"name": "billable", "status": "deprecated"}])
+    assert out[0].status == "active", "the same act through an import is refused too"
+    assert "import_refused:live_consumers" in out[0].warnings
+
+
+def test_c12_07_source_version_survives_the_import(registry):
+    """R21 on the ingestion path, which is UC3's actual wedge (`INTERFACE.md` §2.4a).
+
+    A dump has a version, and §10b.5's whole finding is that it had nowhere to go.
+    Dropping it from `import_types`' `Provenance` ran the whole suite green until this
+    -- row 3e, third adversarial round.
+    """
+    out = registry.import_types(
+        [{"name": "tree_census_record", "status": "active",
+          "definition": "one row of the street tree census",
+          "source_version": "2017-10-04"}]
+    )
+    assert out[0].provenance.source_version == "2017-10-04"
+    assert registry.provenance("tree_census_record").source_version == "2017-10-04"

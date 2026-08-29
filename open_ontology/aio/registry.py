@@ -82,6 +82,7 @@ from open_ontology.registry import (
     CONSUMERS_WHY_INCOMPLETE,
     NAME_RE,
     _DefinitionProbe,
+    _NEAR_MISS_CAP,
     _asserts_domain_semantic,
     _created_by,
     _evidence_from_dict,
@@ -693,7 +694,24 @@ class AsyncRegistry:
         page = await self.adapter.find_types(TypeQuery(namespace=namespace, kind=kind, status="active"))
         known = page.records
         scored = self.resolver.score(candidate, context, known, tier=tier) if known else []
-        alternatives: list[Alternative] = [(n, s) for n, s in scored[:5]]
+        alternatives: list[Alternative] = [(n, s) for n, s in scored[:_NEAR_MISS_CAP]]
+        # **The cap is a fact about the list, so it gates the claim** (5.3.1 rule 8c).
+        # `alternatives` has carried at most five near misses since v0; that was
+        # invisible while `complete` was hard-wired False and became a silent
+        # truncation under a positive claim the moment ruling R6 made `complete`
+        # reachable. Row 3e, third adversarial round: ten types tied at one score, five
+        # dropped, `complete=True`, `why_incomplete=""`.
+        if len(scored) > _NEAR_MISS_CAP and search_namespaces is not None:
+            dropped = (
+                f"near misses beyond the first {_NEAR_MISS_CAP} were dropped in "
+                f"{namespace!r}"
+            )
+            cross_complete = False
+            cross_why = (
+                f"{cross_why}; {dropped}"
+                if cross_why
+                else "the search is incomplete (INTERFACE.md 5.3.1, ruling R6): " + dropped
+            )
         rejections, rejection_note = await self._prior_rejections(namespace, candidate)
         alternatives.extend(rejections)
         alternatives.extend(retired_alt)
@@ -846,7 +864,22 @@ class AsyncRegistry:
         # type is retired is still a namespace somebody published into, and calling the
         # search complete without it would be a claim about a place we did not look.
         census = await self.adapter.find_types(TypeQuery(namespace=None, include_retired=True))
-        existing = sorted({rec.namespace for rec in census.records})
+        # **One query for every rejection of this word, everywhere.** It replaces the
+        # per-namespace queries the first cut issued, and it closes rule 6's blind spot:
+        # a namespace whose only trace of this candidate is a REJECTED proposal holds no
+        # type, so the type census above cannot see it, and `list_types` cannot show it
+        # to the caller either -- yet it holds the cheapest possible record of *we
+        # already decided against this word*. Row 3e, third adversarial round.
+        #
+        # Scope, stated: "every namespace that could contribute an alternative for THIS
+        # candidate" -- a namespace holding only unrelated proposals contributes nothing
+        # to this list, so leaving it out shortens nothing.
+        rejections, rejections_complete, rejections_why = await self._rejections_everywhere(
+            candidate
+        )
+        existing = sorted(
+            {rec.namespace for rec in census.records} | set(rejections)
+        )
         omitted = [name for name in existing if name not in wanted]
 
         by_namespace: dict[str, list] = {}
@@ -872,12 +905,11 @@ class AsyncRegistry:
         exact_elsewhere: list[str] = []
         ambiguous_elsewhere: list[str] = []
         burned_elsewhere: list[tuple[str, Any]] = []
+        capped: list[str] = []
         # The home namespace's own rejections are added by `_prior_rejections` in
         # `resolve_type`; what is decided here is whether that list could be whole.
-        home_rejected, proposals_complete, home_why = await self._rejections_in(
-            namespace, candidate
-        )
-        proposal_whys: list[str] = [home_why] if home_why else []
+        proposals_complete = rejections_complete
+        proposal_whys: list[str] = [rejections_why] if rejections_why else []
         for other in wanted:
             if other == namespace:
                 continue
@@ -913,9 +945,11 @@ class AsyncRegistry:
             scored = (
                 self.resolver.score(candidate, context, pool, tier=tier) if pool else []
             )
+            if len(scored) > _NEAR_MISS_CAP:
+                capped.append(other)
             # Deduped by label: one name under two kinds in one namespace is one taken
             # word, and listing it twice double-counts Rule K's `known`.
-            for name, score in scored[:5]:
+            for name, score in scored[:_NEAR_MISS_CAP]:
                 label = f"{other}:{name}"
                 if label not in seen_labels:
                     seen_labels.add(label)
@@ -933,12 +967,7 @@ class AsyncRegistry:
             # proposed and rejected in another namespace is the cheapest possible record
             # of *we already decided against this*, which is the whole reason 5.5
             # surfaces it at home. Row 3e, second adversarial round.
-            rejected, rejected_complete, rejected_why = await self._rejections_in(other, candidate)
-            if not rejected_complete:
-                proposals_complete = False
-                if rejected_why and rejected_why not in proposal_whys:
-                    proposal_whys.append(rejected_why)
-            for name in rejected:
+            for name in rejections.get(other, ()):
                 label = f"{other}:{name}"
                 if label not in seen_labels:
                     seen_labels.add(label)
@@ -990,61 +1019,77 @@ class AsyncRegistry:
         # and UC1's declared shape -- one `Resolution` said `complete=True`,
         # `why_incomplete=""`, and in the adjacent `reason` field that prior rejections
         # had been omitted from the list it had just called whole.
-        complete = not omitted and census.complete and proposals_complete
-        why = ""
+        complete = not omitted and census.complete and proposals_complete and not capped
+        # **Every reason, not the first one.** Rule U wants the reasons a list is short,
+        # plural: an unnamed namespace, a truncated type page, a proposal store that
+        # could not answer and a near-miss cap can all bite on one call, and an `elif`
+        # chain hands the caller whichever happened to be checked first. Row 3e, third
+        # adversarial round found two of them masking each other.
+        reasons: list[str] = []
         if omitted:
-            why = (
-                "the search is incomplete: "
-                + ", ".join(repr(name) for name in omitted)
+            reasons.append(
+                ", ".join(repr(name) for name in omitted)
                 + " "
                 + ("has" if len(omitted) == 1 else "have")
-                + " types in the store and "
+                + " a type or a prior rejection of this word and "
                 + ("was" if len(omitted) == 1 else "were")
-                + " not named in search_namespaces (INTERFACE.md 5.3.1, ruling R6)"
+                + " not named in search_namespaces"
             )
-        elif not census.complete:
-            why = (
-                "every namespace the caller named was searched, and the backend could "
-                "not return the whole store in one page, so both which namespaces "
-                "exist and what is in them are partial: "
+        if not census.complete:
+            reasons.append(
+                "the backend could not return the whole type store in one page, so "
+                "both which namespaces exist and what is in them are partial: "
                 + (census.why_incomplete or "no reason given by the backend")
             )
-        elif not proposals_complete:
-            why = (
-                "every namespace the caller named was searched and the type store "
-                "answered in full, but prior REJECTIONS could not be searched, so "
-                "alternatives is short by however many there are: "
+        if not proposals_complete:
+            reasons.append(
+                "prior REJECTIONS could not be searched, so alternatives is short by "
+                "however many there are: "
                 + "; ".join(proposal_whys or ["no reason given by the backend"])
+            )
+        if capped:
+            reasons.append(
+                f"near misses beyond the first {_NEAR_MISS_CAP} were dropped in "
+                + ", ".join(repr(name) for name in sorted(set(capped)))
+            )
+        why = ""
+        if reasons:
+            why = (
+                "the search is incomplete (INTERFACE.md 5.3.1, ruling R6): "
+                + "; ".join(reasons)
             )
         return tuple(alternatives), tuple(wanted), complete, why, note
 
-    async def _rejections_in(
-        self, namespace: str, candidate: str
-    ) -> tuple[tuple[str, ...], bool, str | None]:
-        """``(rejected names, could we look, why not)`` for one namespace.
+    async def _rejections_everywhere(
+        self, candidate: str
+    ) -> tuple[dict[str, list[str]], bool, str | None]:
+        """``({namespace: rejected names}, could we look, why not)`` for one word.
 
-        The second store ``Resolution.alternatives`` is fed from (5.5). Split out of
-        ``_prior_rejections`` by row 3e's second adversarial round, which found that
-        ruling R6's completeness verdict was computed from the type store alone -- so a
-        backend with ``stores_proposals=False`` returned ``complete=True`` next to a
-        ``reason`` saying rejections had been omitted.
+        The second store ``Resolution.alternatives`` is fed from (5.5). Added by row
+        3e's second adversarial round, which found ruling R6's completeness verdict
+        computed from the type store alone -- so a backend with
+        ``stores_proposals=False`` returned ``complete=True`` next to a ``reason``
+        saying rejections had been omitted -- and widened by its third to one query over
+        every namespace at once, which is both cheaper than one per namespace and the
+        only way to see a namespace that holds a rejection and no type.
         """
         if not self.caps.stores_proposals:
-            return (), False, (
-                "prior rejections could not be searched in namespace "
-                f"{namespace!r}: " + (self.caps.reason("stores_proposals") or "")
+            return {}, False, (
+                "prior rejections could not be searched: "
+                + (self.caps.reason("stores_proposals") or "")
             )
         page = await self.adapter.find_proposals(
-            ProposalQuery(namespace=namespace, name=candidate, status="rejected")
+            ProposalQuery(name=candidate, status="rejected")
         )
+        found: dict[str, list[str]] = {}
+        for record in page.records:
+            found.setdefault(record.namespace, []).append(record.name)
         if not page.complete:
-            return (
-                tuple(r.name for r in page.records),
-                False,
-                f"the rejected-proposal page for namespace {namespace!r} was partial: "
-                + (page.why_incomplete or "no reason given by the backend"),
+            return found, False, (
+                "the rejected-proposal page was partial: "
+                + (page.why_incomplete or "no reason given by the backend")
             )
-        return tuple(r.name for r in page.records), True, None
+        return found, True, None
 
     async def _prior_rejections(
         self, namespace: str, candidate: str
@@ -1672,7 +1717,13 @@ class AsyncRegistry:
 
         successor = getattr(rec, "successor", None)
         if successor:
-            live = await self.adapter.get_type(namespace, successor)
+            # ``kind=`` narrows on purpose: uniqueness is per ``(namespace, kind)``
+            # (2.1), so a live entry of a DIFFERENT kind that happens to share the
+            # successor's word is a different type, not this word's replacement.
+            # Unnarrowed, this probe raised ``AmbiguousKind`` straight out of a call
+            # documented ``-> TypeEntry | Refusal`` the moment ruling R19's edge
+            # families shared a word with an entity -- row 3e, third adversarial round.
+            live = await self.adapter.get_type(namespace, successor, kind=rec.kind)
             if live is not None and live.status != "retired":
                 return Refusal(
                     "successor_active",
@@ -1692,7 +1743,9 @@ class AsyncRegistry:
                 )
 
         # **Two live words with one meaning between them is mechanism 4, and this call
-        # was the one door left open to it** *(row 3e, first adversarial round)*.
+        # was A door left open to it** *(row 3e, first adversarial round; "the one
+        # door" was withdrawn by the third, which found two more in `import_types`.
+        # `C16-06` asserts the whole-store invariant instead of guessing entrances)*.
         # `merge_types` refuses by default and `propose_type` on a name a live type
         # holds as an alias returns the tombstone -- but `merge A into B; retire B;
         # reinstate A; reinstate B` are four ordinary calls that end with A and B both
@@ -1883,7 +1936,7 @@ class AsyncRegistry:
         ``cannot_record_override`` on a store that cannot keep them.
         """
         records, why = await self._active_page(namespace)
-        active = {r.name for r in records}
+        active = {(r.name, r.kind) for r in records}
 
         mine = set(rec.aliases or ())
         for other in records:
@@ -1894,19 +1947,39 @@ class AsyncRegistry:
             if other.name in mine:
                 return other.name, "alias", why
 
-        # The succession graph, as RECORDED. One read; the walk is over a dict.
-        succeeds: dict[str, set[str]] = {}
-        preceded: dict[str, set[str]] = {}
+        # The succession graph, as RECORDED, keyed on ``(name, kind)``.
+        #
+        # **Keyed on the pair, because uniqueness is** (2.1). A bare-name graph made
+        # this guard confuse two different words: with `holder` live as a `kind="edge"`
+        # family and `owner` retired in favour of an entity called `holder`, it issued a
+        # false, non-overridable refusal telling an operator to retire an edge family
+        # nobody had merged. Ruling **R19** puts edge families in this call's path by
+        # design -- a family *is* a `TypeEntry` -- so this is not a hypothetical.
+        #
+        # **Both `retired` AND `merged` events.** A merge retires `from_` with `into` as
+        # its successor and writes the alias onto the survivor, and the first cut read
+        # only the survivor's `aliases` column for that -- so one ordinary
+        # ``import_types`` call, which rewrites a live row and wipes its aliases, erased
+        # the guard's only evidence and let the four-call walk through. Row 3e, third
+        # adversarial round, reproduced on 5.9b's own named fixture.
+        succeeds: dict[tuple[str, str], set[tuple[str, str]]] = {}
+        preceded: dict[tuple[str, str], set[tuple[str, str]]] = {}
         for event in await self.adapter.read_events(namespace):
-            if event.event != "retired":
+            detail = event.detail or {}
+            if event.event == "retired":
+                successor = detail.get("successor")
+            elif event.event == "merged":
+                successor = detail.get("into")
+            else:
                 continue
-            successor = (event.detail or {}).get("successor")
-            if not successor or not event.name:
+            if not successor or not event.name or not event.kind:
                 continue
-            succeeds.setdefault(event.name, set()).add(successor)
-            preceded.setdefault(successor, set()).add(event.name)
+            here = (event.name, event.kind)
+            there = (successor, event.kind)
+            succeeds.setdefault(here, set()).add(there)
+            preceded.setdefault(there, set()).add(here)
 
-        def _walk(start: str, graph: dict[str, set[str]]) -> str | None:
+        def _walk(start, graph):
             seen = {start}
             frontier = list(graph.get(start, ()))
             while frontier:
@@ -1915,14 +1988,15 @@ class AsyncRegistry:
                     continue
                 seen.add(node)
                 if node in active:
-                    return node
+                    return node[0]
                 frontier.extend(graph.get(node, ()))
             return None
 
-        forward = _walk(rec.name, succeeds)
+        me = (rec.name, rec.kind)
+        forward = _walk(me, succeeds)
         if forward is not None:
             return forward, "successor", why
-        backward = _walk(rec.name, preceded)
+        backward = _walk(me, preceded)
         if backward is not None:
             return backward, "predecessor", why
         return None, None, why
@@ -2286,6 +2360,37 @@ class AsyncRegistry:
                 )
                 continue
 
+            # **An import does not retire a type something still gates on, either.**
+            # Round 3e's second adversarial round closed the un-retire direction above
+            # and left its mirror open: a Foundry `deprecated` row retired a live,
+            # consumer-gated type with no refusal, no warning and no `retired` event,
+            # while `retire()` refuses the identical act with `live_consumers` (5.9).
+            # Row 3e, third adversarial round.
+            if standing is not None and status == "retired":
+                gated = (await self._consumer_report(standing)).gates_on
+                if gated:
+                    out.append(
+                        await self._entry(standing, extra_warnings=("import_refused:live_consumers",))
+                    )
+                    continue
+
+            # **And it does not create a second live word for one meaning.** An imported
+            # row carries its own `aliases`, and writing one that a live entry already
+            # answers to is the state `merge_types`, `propose_type` and `reinstate` all
+            # refuse -- reached here in ONE ordinary call, which is why 5.9b's claim
+            # that the surface could not otherwise produce it was wrong twice over.
+            # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
+            incoming = tuple(row.get("aliases") or ())
+            if incoming and status != "retired":
+                clash = await self._alias_clash(namespace, name, row.get("kind", kind), incoming)
+                if clash is not None:
+                    out.append(
+                        await self._entry(standing, extra_warnings=("import_refused:alias_collision",))
+                        if standing is not None
+                        else self._refused_import(namespace, name, clash)
+                    )
+                    continue
+
             imported_from = {"system": system}
             for key in ("apiName", "rid"):
                 if key in row:
@@ -2335,6 +2440,47 @@ class AsyncRegistry:
                 )
             out.append(self._written(await self._entry(stored)))
         return out
+
+    async def _alias_clash(
+        self, namespace: str, name: str, kind: str, aliases: Sequence[str]
+    ) -> str | None:
+        """An ACTIVE entry that already answers to one of these words, or to ``name``."""
+        records, _ = await self._active_page(namespace)
+        wanted = set(aliases) | {name}
+        for other in records:
+            if other.name == name and other.kind == kind:
+                continue
+            if other.name in wanted:
+                return other.name
+            if wanted & set(other.aliases or ()):
+                return other.name
+        return None
+
+    def _refused_import(self, namespace: str, name: str, clash: str) -> TypeEntry:
+        """A row an import declined to write, returned as a shape a caller can read.
+
+        There is no standing entry to hand back, so this is the imported row as it would
+        have looked, marked ``proposed`` -- nothing was written -- and carrying why.
+        """
+        now = self._now()
+        return TypeEntry(
+            name=name,
+            kind="entity",
+            namespace=namespace,
+            definition=f"not imported: {clash!r} already answers to this word",
+            created_by="seed",
+            provenance=Provenance(created_at=now, created_by_actor="import"),
+            status="proposed",
+            usage=UsageReport(
+                type=name, count=None, last_seen=None, first_seen=None, orphaned=None,
+                window=None, why="nothing was written", complete=False,
+            ),
+            consumers=ConsumerReport(
+                type=name, gates_on=(), would_drop=(), would_error=(), known=0,
+                complete=False, why_incomplete="nothing was written",
+            ),
+            warnings=("import_refused:alias_collision",),
+        )
 
     # ------------------------------------------------------------------ attributes
     async def register_attribute_schema(self, schema: AttributeSchema) -> AttributeSchema:
@@ -2397,10 +2543,14 @@ class AsyncRegistry:
         # ruling R6's own cost finding produced one round earlier.
         per_kind_cache: dict[str, AttributeSchema | None] = {}
         name_level_cache: dict[str, list[AttributeSchema]] = {}
+        partial_whys: list[str] = []
         for row in rows:
             if row.kind not in per_kind_cache:
                 per_kind_cache[row.kind] = await self._schema_for(namespace, row.kind)
-                name_level_cache[row.kind] = await self._name_level_schemas(namespace, row.kind)
+                found, partial = await self._name_level_schemas(namespace, row.kind)
+                name_level_cache[row.kind] = found
+                if partial and partial not in partial_whys:
+                    partial_whys.append(partial)
         entries = []
         for row in rows:
             # A census row is (kind, key) over EVERY type of that kind, and since
@@ -2465,6 +2615,24 @@ class AsyncRegistry:
                     + ", ".join(sorted(self.caps.attribute_projections))
                 ),
             )
+        if partial_whys:
+            # A census over types we could not finish reading cannot call itself whole,
+            # and the keys whose `declared` depended on those types are unknown rather
+            # than declared. Row 3e, third adversarial round.
+            entries = [
+                replace(entry, declared=None, declared_why=(
+                    "the type page for this kind was partial, so whether a name-level "
+                    "schema declares this key is unknown: " + "; ".join(partial_whys)
+                )) if entry.declared is True else entry
+                for entry in entries
+            ]
+            return AttributeCensus(
+                namespace=namespace,
+                entries=tuple(entries),
+                known=len(entries),
+                complete=False,
+                why_incomplete="; ".join(partial_whys),
+            )
         return AttributeCensus(
             namespace=namespace, entries=tuple(entries), known=len(entries), complete=True
         )
@@ -2496,7 +2664,9 @@ class AsyncRegistry:
             registered_by=rec.registered_by,
         )
 
-    async def _name_level_schemas(self, namespace: str, kind: str) -> list[AttributeSchema]:
+    async def _name_level_schemas(
+        self, namespace: str, kind: str
+    ) -> tuple[list[AttributeSchema], str | None]:
         """Every name-level schema of one kind -- ruling R10, for the census.
 
         Read through the type store rather than through a schema listing: the optional
@@ -2506,18 +2676,37 @@ class AsyncRegistry:
         """
         store = self._attribute_store()
         if store is None:
-            return []
-        page = await self.adapter.find_types(
-            TypeQuery(namespace=namespace, kind=kind, include_retired=True)
-        )
+            return [], None
+        # Paged to exhaustion, like `_active_page` and for the same reason: an override
+        # sitting past the first page turned the tri-state `declared` back into a
+        # confident `True` that the write path contradicts, under `complete=True`. Row
+        # 3e, third adversarial round.
+        records: list = []
+        after: str | None = None
+        why: str | None = None
+        seen: set[str] = set()
+        while True:
+            page = await self.adapter.find_types(
+                TypeQuery(namespace=namespace, kind=kind, include_retired=True, after=after)
+            )
+            records.extend(page.records)
+            if page.complete:
+                why = None
+                break
+            why = page.why_incomplete or "the backend could not answer this query in full"
+            cursor = page.next_after
+            if not cursor or cursor in seen:
+                break
+            seen.add(cursor)
+            after = cursor
         out: list[AttributeSchema] = []
-        for rec in page.records:
+        for rec in records:
             found = await store.get_attr_schema(namespace, kind, name=rec.name)
             if found is not None:
                 schema = self._schema_from_record(found)
                 if schema is not None:
                     out.append(schema)
-        return out
+        return out, why
 
     async def _schema_for(
         self, namespace: str, kind: str, name: str | None = None

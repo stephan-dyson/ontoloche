@@ -27,6 +27,7 @@ __all__ = [
     "PROPOSAL_STATUSES",
     "NOT_A_TYPE_REASONS",
     "REFUSAL_REASONS",
+    "WARNING_VALUES",
     "Citation",
     "Evidence",
     "ProvenanceEvent",
@@ -123,6 +124,39 @@ REFUSAL_REASONS = (
     # `reinstate` was the one door left open, in the registry whose thesis is detecting
     # exactly this.
     "alias_collision",
+)
+
+# INTERFACE.md 5.4 -- CLOSED, the same rule R3 gives for REFUSAL_REASONS and for the
+# same reason. A value carrying a `:<detail>` suffix is listed by its prefix.
+#
+# Enumerated here because it was NOT, and the document drifted: 5.4's table said
+# "eighteen values" while omitting `gate_unregistered`, which ruling R8 added in row 3d,
+# which v0 code emits on every ConsumerReport with an unregistered gate, and which
+# C11-05 tests -- an omission the table's own last row referred to by name. Found by a
+# reviewer reading two files side by side, which is exactly what check_spec_drift.py
+# exists to make unnecessary; it now holds 5.4 against this tuple the way it already
+# holds 5.12. Row 3e, third adversarial round.
+WARNING_VALUES = (
+    "unverified_semantics",
+    "no_evidence",
+    "near_duplicate",
+    "auto_approval_refused",
+    "attributes_invalid",
+    "name_previously_retired",
+    "retired_without_usage_evidence",
+    "reinstate_no_op",
+    "reinstate_alias_check_unavailable",
+    "import_refused",
+    "not_durable_until_host_commits",
+    "gate_unregistered",
+    "definitions_similarity",
+    "definitions_uncertified",
+    "definitions_threshold",
+    "endpoint_type_unregistered",
+    "retracted_without_event_trail",
+    "edge_family_retired",
+    "origin_type_unregistered",
+    "no_edge_gate_registered",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

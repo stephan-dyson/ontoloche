@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C16 -- whole-store invariants (5).
+"""C16 -- whole-store invariants (6).
 
 PACKAGE.md 6.2 describes these as running once at suite end over everything the suite
 wrote. The suite's adapters are function-scoped so that a failure in one test cannot
@@ -175,3 +175,27 @@ async def test_c16_05_every_created_by_is_in_the_closed_vocabulary(exercised, ad
             f"does not define"
         )
         assert rec.status in STATUSES, f"{rec.name} has status={rec.status!r}"
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+async def test_c16_06_no_two_active_entries_in_one_namespace_hold_one_word(exercised, adapter):
+    """**The mechanical form of the thing three separate calls each refuse.**
+
+    `merge_types`, `propose_type` and `reinstate` all refuse to leave two ACTIVE entries
+    with one word between them -- and row 3e's adversarial loop found three different
+    walks into that state anyway, each one closed by a guard added to whichever call the
+    reviewer happened to come in through. This is the whole-store invariant those guards
+    are approximating, asserted directly: it would have caught all three without anybody
+    walking four calls to find them. Mechanism **4**, checked rather than argued.
+    """
+    page = await adapter.find_types(TypeQuery(include_retired=True))
+    active = [r for r in page.records if r.status == "active"]
+    spoken_for: dict[tuple[str, str], str] = {}
+    for rec in active:
+        for word in (rec.name, *(rec.aliases or ())):
+            key = (rec.namespace, word)
+            owner = spoken_for.get(key)
+            assert owner is None or owner == rec.name, (
+                f"{rec.namespace}:{word!r} is answered by BOTH {owner!r} and "
+                f"{rec.name!r}, both active -- mechanism 4"
+            )
+            spoken_for[key] = rec.name

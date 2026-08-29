@@ -16,7 +16,7 @@ outcomes and shapes, never about a score's value.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import Resolution, ResolveContext
+from open_ontology.types import Resolution, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import seed, snapshot
 
 
@@ -323,6 +323,46 @@ async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_
         search_namespaces=["dpr", "default", "dob", "archive"],
     )
     assert named.complete is (await adapter.capabilities()).stores_proposals
+
+    # 6. **A word RETIRED in a searched namespace is LISTED, not merely counted.** The
+    # census reads retired rows to decide which namespaces exist; the first cut then
+    # threw the records away, so a burned word came back invisible under `complete`.
+    # [Observed, row 3e third adversarial round] deleting that branch ran the whole
+    # suite green -- the fix was made in round 2 and asserted by nothing.
+    seen_burned = await registry.resolve_type(
+        "old_word", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["archive"],
+    )
+    burned = await adapter.get_type("archive", "old_word", kind="entity")
+    if burned is not None and burned.status == "retired":
+        assert ("archive:old_word", None) in seen_burned.alternatives, (
+            "the tombstone is listed the same way both sides of the namespace boundary,"
+            " with a None score because nothing scored it"
+        )
+        assert "RETIRED" in seen_burned.reason
+    else:
+        # A backend that cannot compute an extent refuses the retirement itself
+        # (`C9-07`), so there is no tombstone here to list -- the word is simply active.
+        assert "archive:old_word" in [n for n, _ in seen_burned.alternatives]
+
+    # 7. **And a word REJECTED in a searched namespace.** §5.5 calls a retained
+    # rejection the cheapest record of *we already decided against this word*; it is
+    # exactly as useful one namespace along. Same story: fixed in round 2, asserted by
+    # nothing until a mutation deleted it and the suite stayed green.
+    if (await adapter.capabilities()).stores_proposals:
+        spurned = await registry.propose_type(
+            "footway", "a DOB footway, proposed and then declined", [], "user:dob",
+            namespace="dob",
+        )
+        if not isinstance(spurned, TypeEntry):
+            await registry.reject(spurned.id, "user:dob", "we do not publish this")
+            seen_rejected = await registry.resolve_type(
+                "footway", ResolveContext(), namespace="oti_311", tier="opus",
+                search_namespaces=["dob"],
+            )
+            assert "dob:footway" in [n for n, _ in seen_rejected.alternatives], (
+                "a rejection elsewhere is a decision the second publisher should see"
+            )
 
 async def test_c3_13_a_truncated_page_cannot_support_a_completeness_claim(adapter, make_registry):
     """**Rule U, in the one call that gained a `complete=True` to get wrong.**

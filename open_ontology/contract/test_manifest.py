@@ -1,11 +1,11 @@
-"""Suite bookkeeping -- not one of the 145.
+"""Suite bookkeeping -- not one of the 150.
 
-PACKAGE.md 6.2 enumerates 145 contract tests in seventeen groups and calls the
+PACKAGE.md 6.2 enumerates 150 contract tests in seventeen groups and calls the
 enumeration *the coverage floor, not a budget*. This checks the floor is actually on the
 floor: every enumerated id exists as a test function, and nothing has quietly gone
 missing while the suite was being written.
 
-The number of collected pytest items is larger than 145 -- both because the suite is
+The number of collected pytest items is larger than 150 -- both because the suite is
 parametrised over backends and because C4-09 is parametrised over malformed names.
 """
 
@@ -27,16 +27,16 @@ EXPECTED_PER_GROUP = {
     6: 7,
     7: 7,
     8: 6,
-    9: 15,
+    9: 17,
     10: 8,
     11: 5,
-    12: 5,
+    12: 7,
     13: 5,
     14: 7,
     15: 12,
-    16: 5,
+    16: 6,
 }
-TOTAL = 145
+TOTAL = 150
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 
@@ -129,3 +129,42 @@ def test_every_optional_capability_can_be_declined_alone():
         [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)
     )
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_the_document_and_this_module_agree_group_by_group():
+    """Not one of the 150 -- suite bookkeeping, like the id census above.
+
+    ``PACKAGE.md`` 6.2 states a count per group in each group's header and then
+    enumerates the ids in a table beneath it. Row 3e's third adversarial round found the
+    headers summing to **142** over tables enumerating **145**, with this module's
+    ``EXPECTED_PER_GROUP`` agreeing with the tables -- a number in prose that nothing
+    derives, which is the fourth time this repository has been bitten by exactly that.
+
+    So both halves of 6.2 are now held against this module: the header count, and the
+    number of enumerated rows. Skipped rather than failed outside a source checkout,
+    since an installed wheel ships no ``docs/``.
+    """
+    root = Path(__file__).resolve().parents[2]
+    spec = root / "docs" / "specs" / "PACKAGE.md"
+    if not spec.exists():  # pragma: no cover - an installed wheel has no docs/
+        pytest.skip("PENDING -- docs/specs/PACKAGE.md is not in this install")
+
+    text = spec.read_text(encoding="utf-8")
+    headers = {
+        int(group): int(count)
+        for group, count in re.findall(r"^\*\*C(\d+) [^(]*\((\d+)\)\.", text, re.M)
+    }
+    enumerated: dict[int, set[str]] = {}
+    for full, group in re.findall(r"^\| (C(\d+)-\d+) \|", text, re.M):
+        enumerated.setdefault(int(group), set()).add(full)
+    rows = {group: len(ids) for group, ids in enumerated.items()}
+
+    assert headers == EXPECTED_PER_GROUP, (
+        "PACKAGE.md 6.2's group HEADERS disagree with this module: "
+        f"{sorted(set(headers.items()) ^ set(EXPECTED_PER_GROUP.items()))}"
+    )
+    assert rows == EXPECTED_PER_GROUP, (
+        "PACKAGE.md 6.2's enumerated ROWS disagree with this module: "
+        f"{sorted(set(rows.items()) ^ set(EXPECTED_PER_GROUP.items()))}"
+    )
+    assert sum(rows.values()) == TOTAL
