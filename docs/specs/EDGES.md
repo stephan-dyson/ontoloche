@@ -590,6 +590,85 @@ Per `USE-CASES.md`'s protocol, and committed in its own commit ahead of the resu
 
 **What would count as a failure of this design test rather than of beacon:** any of T1.1, T1.6, T1.7 or T1.12 not holding. T1.2, T1.9 and T1.10 are predicted to fail *in beacon's data*, and a recorded contortion is a pass (`USE-CASES.md`).
 
+
+### 9.2 The walk-through — expected vs observed
+
+**Method.** Not prose. [`docs/tools/edges_beacon_probe.py`](../tools/edges_beacon_probe.py) parses beacon's model files **read-only** for their `mapped_column` declarations, maps every column onto an `EdgeRecord` field or onto *no home*, and walks the three shipped read seams over synthetic instances shaped like beacon's rows using [`edges_probe_kit.py`](../tools/edges_probe_kit.py) — a throwaway implementation of §2–§7 that lives in `docs/tools`, is not imported by the package, and imports `REFUSAL_REASONS` from `open_ontology.types` so it cannot quietly widen the closed vocabulary. **Nothing in beacon was edited, imported or executed.**
+
+| # | Expected | **Observed** | Verdict |
+|---|---|---|---|
+| T1.1 | PASS | Ten of eleven `work_links` columns map. `relationship_type` → `family` — **and the DB column is named `relationship`, not `relationship_type`**, a mapping a third-party adapter author would get wrong from the docs alone. `status`, `retract_reason`, `retracted_by`, `retracted_at` are all absent, confirming the four-column migration | **PASS** |
+| T1.2 | PREDICTED FAILURE | `relationship_type: Mapped[str \| None]` — **nullable**, confirmed by parse. No `person_link_types` model exists; the labels are a code comment | **FAILS as predicted → contortion E6** |
+| T1.3 | PREDICTED PARTIAL | Every `task_stakeholders` column maps. `role` and `source` land in `attributes`, **unvalidated** — `payload_schema` is inert until R10 | **PARTIAL as predicted → contortion E10** |
+| T1.4 | PASS | `source` mapped to `attributes`, not to `EdgeProvenance` | **PASS** |
+| T1.5 | PREDICTED CONTORTION | See T1.5b below — it is worse than predicted | **CONTORTION E8** |
+| T1.6 | PASS | `neighbors(task#41, ["blocks"], 1, direction="out")` → `["tenshen:entity:task#77"]` | **PASS** |
+| T1.7 | PASS | `neighbors(task#41, ["blocks","task_stakeholder"], 2)` → `["tenshen:entity:person#7", "tenshen:entity:task#77"]`, `at_depth ∈ {1,2}` | **PASS — the missing hop, answered** |
+| T1.8 | PASS on shape | `neighbors(organization#3, ["task_organization","blocks"], 2)` → both tasks. `role` rides in `attributes` | **PASS on shape, contortion E10 on payload** |
+| T1.9 | PREDICTED FAILURE | The mixin's far end is `(source_table, record_id)` and `source_table ∈ {task_notes, project_notes, meeting_notes, open_loops}` — **table names, not entity names** | **FAILS as predicted → contortion E7** |
+| T1.10 | PREDICTED NO | With **no** registered types, the `blocks` edge is **written**, not refused, carrying `warnings: ("endpoint_type_unregistered:tenshen:entity:task", ×2)` | **CONFIRMED, and it is the right behaviour** |
+| T1.11 | PREDICTED LOSSY | See §9.3 | **LOSSY as predicted → contortion E9** |
+| T1.12 | PASS | The four columns are absent from `work_links` today and nothing else is needed | **PASS** |
+
+**T1.5b — the `created_by` count, and it is the finding of this design test.** The probe enumerated **six** `created_by`-shaped vocabularies across the interface and beacon:
+
+| Site | Values |
+|---|---|
+| `INTERFACE.md` §2.1 `TypeEntry.created_by` | `seed` · `ai` · `user` |
+| `WorkLink.created_by` | `user` · `ai` · **`interview`** |
+| `PersonLink.created_by` | `user` · `ai` · **`interview`** |
+| `TaskStakeholder.source` | `user` · `auto_extract` · `intake_auto` · `legacy` |
+| `EntityMention.source` | `ai-inferred` · `user-linked` |
+| `EntityMention.match` | **`deterministic`** · `llm` · `manual` |
+
+**[Observed]** `EntityMention.match` carries the exact three-way distinction EDGES needs and does not have — *derived by a rule* / *inferred by a model* / *asserted by a person* — and its first value, **`deterministic`, is the same value UC3's BBL join wanted and could not name** (T3.8). **Two independent fixtures, on unrelated data, reach for one missing value.** That is `Q12`, and it is the strongest evidence in this document for amending a vocabulary rather than recording a contortion.
+
+This is also, precisely, finding 0.1's *"seven vocabularies in one codebase"* recurring on the provenance axis rather than the entity axis. The registry's answer to that is `namespace` and `predicate`; neither helps here, because these six are not competing definitions of one word — they are six locally-correct answers to *how did this row come to exist*, which is one question with one right answer.
+
+**T1.10, and why the observed behaviour is a pass rather than a shrug.** `endpoint_kind_mismatch` **cannot fire anywhere in beacon today**, because it fires only on a *registered* endpoint type and beacon has seven live, disagreeing entity-type vocabularies and no registered one. The probe shows the edge being written with two `endpoint_type_unregistered` warnings rather than refused — Rule U, a positive claim about a mismatch requires having looked. **This document reaches beacon's own §10.4 conclusion independently: *"Slice 0 (one entity-type vocabulary) is a hard prerequisite of this rule, not a nice-to-have."*** Recorded as corroboration, **not** as a design input — nothing here took a shape because beacon says so, and the agreement is what makes it worth reporting.
+
+### 9.3 The `relations` slot — filled, and what is lost filling it
+
+Beacon's `architecture/grounding-contract.md` specifies `"relations": list[Reference]` per entity and **`grep -rn '"relations"' src/beacon/ --include=*.py` returns zero hits** [Observed, beacon spec §2.4]. `Reference` is `{type, id, note}` [Observed, beacon spec §2.8].
+
+The probe fills it from the T1.7 report:
+
+```python
+{"type": "task",   "id": "77", "note": "blocks (hop 1, confidence 0.82)"}
+{"type": "person", "id": "7",  "note": "task_stakeholder (hop 2)"}
+```
+
+**It works, and the projection is lossy in a specific and reportable way.** Nine things a `NeighborReport` carries have no slot in a `Reference`: `family`, `at_depth`, `confidence`, `created_by`, `source_version`, `status`, `warnings`, and the report-level `complete` and `families_searched`.
+
+**Why that matters more than it looks.** Under `constrained-narrator.md` §no-free-form-recall a producer-composed artifact may only cite relationships present in the bundle. So everything above survives **only as prose in `note`** — which is the one field a constrained narrator must not parse, because parsing it would be free-form recall. Concretely: **`at_depth` and `complete` cannot reach the narrator as structure**, so the two safeguards §4.4 installed against reading reachability as entailment are exactly the two the bundle drops.
+
+**This is a finding for the beacon program, not a change to this document.** `Reference` would need three fields (`family`, `hop`, `confidence`) and the bundle a `relations_complete` flag; that is beacon's contract to amend, and slice 2 is where it would land. Recorded as contortion **E9** and relayed.
+
+### 9.4 The ten contortions, recorded and **not** designed away
+
+| # | Contortion | Where it bites |
+|---|---|---|
+| **E1** | `work_links` has no provenance beyond `created_by` / `created_at` / `confidence`. No actor, no evidence, no history, no `source_version` | `EdgeProvenance` returns them empty **with a `why`**; `stores_edge_events=False`. Honest, and half-blind — the same shape as `PACKAGE.md` §7.3's B5 |
+| **E2** | No lifecycle columns at all | Retraction costs four additive columns. One `ALTER TABLE`, one table, no rewrite (T1.12) |
+| **E3** | **Tenancy has no home, and this document refuses to invent one.** `work_links.user_id` is nullable with no FK; `work_links` has no `workspace` at all; the mention mixin has both, NOT NULL | Mapping `user_id`/`workspace` onto `Edge.namespace` is **refused**: namespace scopes a *vocabulary*, not a *tenant*, and mapping tenancy onto it would give every user a private `blocks` family — mechanism 4 manufactured by this spec on data with no collision in it. So an adapter filters outside the protocol or leaks across users. **Beacon's workspace rule to make. Q19** |
+| **E4** | Endpoint ids are `Integer` in beacon, `str` in `InstanceRef` | The adapter casts both ways. Cheap, and it means an edge id round-trips as text; recorded because a `str`/`int` cast is where a silent key mismatch lives |
+| **E5** | `purge_orphan_links` **DELETES** rows whose endpoint it does not recognise, and its `else` branch judges every non-`task` endpoint against the *project* id set — so live `report` edges are purged daily [Observed, beacon spec §10.4] | EDGES has no delete (§1) and retracts instead. The two policies contradict; the host's wins because the host owns the rows. **Relayed as a finding, already filed in beacon's own `TODO.md`** |
+| **E6** | `PersonLink.relationship_type` is **nullable**; `Edge.family` is required | Skipping null-family rows is a silent drop by the adapter — mechanism **C** committed at the seam. Inventing a family asserts a fact the data lacks. **Neither is taken. Q18** |
+| **E7** | Shape B's far end is `(source_table, record_id)` — a **row in a table**, not an entity instance | `endpoint_kinds` cannot be satisfied or checked. The three mention families are expressible only by declaring the four `source_table` values to be entity types, which they are not. **Q20** |
+| **E8** | Six `created_by`-shaped vocabularies; `deterministic` has no value in ours | Survives only in `created_by_actor`, which is a string, not a vocabulary. **Q12**, and UC3 hits the same wall (T3.8) |
+| **E9** | The grounding bundle's `Reference` drops nine fields, including `at_depth` and `complete` | The two safeguards §4.4 installs are the two the bundle cannot carry. Beacon's contract to amend |
+| **E10** | Edge payload is unvalidated until **R10** lands in row 3e | `role`, `source` and `description` round-trip through projections with no schema. `PACKAGE.md` §5.3's default is `off` anyway, so nothing regresses — but the *justification* for `payload_schema` is unavailable in the row that specifies it |
+
+### 9.5 UC1 verdict
+
+> **Expressible, with ten recorded contortions, none designed away.** All three of beacon's relationship shapes map: Shape A cleanly (one homeless column, `user_id`), Shape C cleanly (every column homed), Shape B **not** (its far end is a table row). The three shipped read seams walk, and the flagship two-hop query — the one `deadline_cluster_service` stops one hop short of — is answered at `depth=2`, which is the whole argument for the cap being 2 rather than 1.
+>
+> **The cost is one `ALTER TABLE` on one table** (four additive columns), plus the three-column additive migration `PACKAGE.md` §7.3 already priced for `work_link_types`. Not zero, and the same order of magnitude.
+>
+> **Two of the ten are the interface telling beacon something true about its own data** rather than complaining about a field: E6 (a relationship whose type is optional is not a typed relationship) and E5 (the sweeper deletes what it does not recognise). Per `ROADMAP.md`'s rule of the ordering, those are the good outcomes.
+
+---
+
 ---
 
 ## 10. Design test 2 — UC2 CMS: the implicit edges in a 400-row export
@@ -614,6 +693,39 @@ The ground truth fixes the node counts: **10** facilities (distinct CCN), **69**
 | **T2.10** | **T3 — `Location` is 99.988% redundant** | **PREDICTED: not an edge question at all.** `resolve_type` already answers it `not_a_type / redundant_projection` (`C3-08`). Expect EDGES to add nothing and to claim nothing |
 
 **The conflict rule is live in T2.5/T2.6.** UC1 would be *served* by letting payload ride on edges — beacon has fourteen payload-carrying families out of seventeen. UC2 says a property of a row is not a property of a relationship. **CMS wins**, and §2.4.1's rule is written CMS's way.
+
+### 10.2 The walk-through — expected vs observed
+
+**Method.** [`docs/tools/edges_cms_probe.py`](../tools/edges_cms_probe.py) reads the checked-in 400-row sample, builds the three families and every edge through `edges_probe_kit`, and compares every count against the **frozen** ground truth. `py docs/tools/edges_cms_probe.py` → `ALL CHECKS PASSED`.
+
+| # | Expected | **Observed** | Verdict |
+|---|---|---|---|
+| T2.1 | PASS | three `level="instance"` families, `endpoint_kinds` all `("entity",)`, none symmetric, each with an `inverse_label` | **PASS** |
+| T2.2 | 400 / 69 / 400, 92 distinct | nodes: facilities **10**, surveys **69**, citations **400**, tags **92**. Edges: `issued_during` **400**, `conducted_at` **69**, `cites` **400**, distinct `cites` destinations **92** | **PASS — every pre-registered number** |
+| T2.3 | sums to 69 and 400 | summed over all ten facilities: **69** surveys at depth 1, **400** citations added at depth 2. One report: `known=47 complete=True depth_reached=2 families_searched=('conducted_at','issued_during')`, `at_depth ∈ {1,2}` | **PASS** |
+| T2.4 | facility in two hops | `neighbors(citation#0, [...], 2, direction="out")` → `["cms:entity:survey#275012|2025-12-16|Health", "cms:entity:facility#275012"]` | **PASS** |
+| T2.5 | REFUSED | `Refusal(reason="endpoint_kind_mismatch", detail={"endpoint": "dst", "problem": **"level"**, "family_level": "instance", "node_level": "type", …})` | **PASS, and sharper than predicted** — see below |
+| T2.6 | fits, refuse anyway | **10 of 10** citation properties are single-valued per `cites` edge | **PASS — the prediction was exact** |
+| T2.7 | value sets absent | neither value set appears in the edge store | **PASS** |
+| T2.8 | not caught; sample does not exercise it | 10 distinct provider names over 10 CCNs; **0** names shared | **PASS — the fixture does not exercise T4** |
+| T2.9 | representable, not caught | **6 of 400** rows carry a correction date before the survey date, matching the pre-registered 1.5% | **PASS** |
+| T2.10 | nothing added | `resolve_type` answers it; EDGES adds nothing | **PASS** |
+
+**T2.5 was refused on `level`, not on `kind`, and that is worth noticing.** The probe deliberately declared `has_severity` with `endpoint_kinds={"dst": ("entity","value_set")}` — i.e. a family that *permits* a value set — to check whether the rule could be talked around by a permissive declaration. It cannot: the `level` check runs first and a `value_set` reached as `scope_severity_code` is a `TypeRef`, while a `level="instance"` family requires an `InstanceRef` on both ends. **`endpoint_kinds` alone would have been a rule a family author could opt out of; `level` is not.** That ordering is now explicit in §2.4.1 because the probe made it visible.
+
+**T2.6, and the mechanical test coming out exactly as pre-registered.** *Does every property of the citation row fit on the `cites` edge?* For each of `Deficiency Prefix`, `Deficiency Category`, `Scope Severity Code`, `Deficiency Corrected`, `Correction Date` and the five Y/N flags, the probe grouped values by `(citation, tag)` pair: **every one is single-valued.** All ten fit.
+
+> **Therefore the whole class is refused.** If `Scope Severity Code` may ride on the edge, so may the other nine, and `cites` becomes the citation row under another name — with the registry storing node properties it has said three times (§1, §2.4.1, `INTERFACE.md` §2.1) that it does not store. The test was pre-registered as a mechanical one so the answer could not be argued afterwards, and it came out as predicted.
+
+**The UC2-vs-UC1 conflict, resolved in CMS's favour.** UC1 would be *served* by payload on edges: **14 of beacon's 17 join families carry payload** [Observed, beacon spec §10.5]. UC2 says a property of a row is not a property of a relationship. **CMS wins**, per the rule of the ordering, and §2.4.1 is written CMS's way. The cost to UC1 is real and is recorded as contortion **E10**: beacon's `role` and `source` ride in `attributes`, unvalidated, and `payload_schema` is the thing that would validate them.
+
+### 10.3 UC2 verdict
+
+> **Expressible with no contortions, every pre-registered count reproduced, and one decision taken against UC1's interest.** The three-level CMS structure is three instance families; the deepest chain is two hops, which is the cap; the two `value_set` entries are excluded from the edge store by a rule the fixture itself motivated.
+>
+> **What UC2 contributed that no other fixture could:** the `endpoint_kinds`/`level` split (§2.4.1), and the mechanical test that stopped the edge model from absorbing a row. **What it did not exercise:** T4 (name collisions) — the ten-facility sample has none, so entity resolution's absence is *stated* here rather than *shown*, and a later fixture should show it.
+
+---
 
 ---
 
@@ -643,5 +755,161 @@ The ground truth fixes the node counts: **10** facilities (distinct CCN), **69**
 ### 11.2 What a failure would mean
 
 T3.12 failing would be the kill row (`ROADMAP.md`: *the answer to collision must be scoping, not merging*) reopened by this document. T3.4 failing — a report a reader cannot distinguish from an equivalence class — would mean `equivalent_to` is transitive in practice however it is documented, and the family should not ship.
+
+---
+### 11.3 The walk-through — expected vs observed
+
+**Method.** [`docs/tools/edges_nyc_probe.py`](../tools/edges_nyc_probe.py), live against the SODA API, using **two** engines on purpose: the **shipped** `open_ontology.Registry` on SQLite for everything about types (so T3.12's claim about `merge_types` is a claim about the real implementation), and `edges_probe_kit` for everything about edges. `py docs/tools/edges_nyc_probe.py` → `ALL CHECKS PASSED`.
+
+**The value sets, re-pulled live 2026-08-29** — W2's data, unchanged:
+
+| | field | values |
+|---|---|---|
+| **A** `uvpi-gqnh` | `boroname` | `Bronx` · `Brooklyn` · `Manhattan` · `Queens` · `Staten Island` |
+| **B** `erm2-nwe9` | `borough` | `BRONX` · `BROOKLYN` · `MANHATTAN` · `QUEENS` · `STATEN ISLAND` · **`Unspecified`** |
+| **C** `693u-uax6` | `borough` | `Bronx` · `Brooklyn` · `Manhattan` · `Queens` · `Staten Island` |
+
+Same five referents, three encodings, and B carries an extra spelling of *unknown*. **This is why `equivalent_to` is not a merge:** the types denote the same thing and their value sets are not interchangeable.
+
+| # | Expected | **Observed** | Verdict |
+|---|---|---|---|
+| T3.1 | PASS | three `TypeEntry` rows from the **shipped** registry, `dot:borough` / `dpr:borough` / `oti_311:borough`, coexisting | **PASS** |
+| T3.2 | chain | `A ≡ B` and `B ≡ C` written; `A ≡ C` not | **PASS** |
+| T3.3 | `{oti_311}`, `known=1`, complete | exactly that | **PASS** |
+| T3.4 | reaches `dot`, **not** asserted equivalent | `nodes = [dot:value_set:borough, oti_311:value_set:borough]`; `at_depth`: `dpr→oti_311` = **1**, `oti_311→dot` = **2**; **no edge in the report has `dpr:borough` and `dot:borough` as its two ends** | **PASS — reachability, not entailment** |
+| T3.5 | spans namespaces | the caller passed `namespace="default"` and the report's nodes are in `dot` and `oti_311` — **neither of them the namespace named** | **PASS** |
+| T3.6 | complete, with the caveat | `complete=True`, `families_searched=("equivalent_to",)` | **PASS, and see below** |
+| T3.7 | expressible | 25 complaints over **22** distinct BBLs; **54** census trees on those lots; **102** edges written; **18 of 25** complaints matched a tree; **max 16 trees on one lot** | **PASS, and it found something** |
+| T3.8 | CONTORTION | `created_by='user'`, `created_by_actor='import:socrata_bbl_join'` | **CONTORTION confirmed — Q12** |
+| T3.9 | REFUSED | `Refusal(reason="endpoint_kind_mismatch", detail={"problem": "level", …})` | **PASS** |
+| T3.10 | visible staleness | `source_version = "erm2-nwe9@2026-08-28 / uvpi-gqnh@2017-10-04"` on every edge | **PASS** |
+| T3.11 | inherited, not created | namespace assignment for B is made before any edge; EDGES adds no ambiguity | **PASS** |
+| T3.12 | **still refused** | `Refusal(reason="cross_namespace_merge")` with the edge present; **and again** with `acknowledge=["cross_namespace_merge","definitions_diverge"]` | **PASS — the load-bearing check** |
+
+Also observed, from the same run: `depth=3` raises `ValueError` (§4.2); a typo'd family (`equivalant_to`) returns `Refusal(reason="edge_family_unknown")` for the **whole call**; and a registry with no edge store returns `Refusal(reason="edge_store_absent")` rather than an empty report.
+
+**T3.7 found something the expectation did not anticipate, and it is the UC3 finding.** The BBL join is **many-to-many**: one tax lot carries up to **16** census trees, and **7 of 25** 311 tree complaints matched no census tree at all. So a deterministic key match — the most confident kind of join an ingestion layer can make — does **not** establish the relationship a reader wants. *"This complaint is about this tree"* is not entailed by *"this complaint and this tree share a tax lot"*.
+
+Two consequences taken in the walk-through rather than argued:
+
+1. **The family is named for what the key proves**, `same_tax_lot`, not for what a reader wants, `concerns`. A family name that overstates its evidence is mechanism 4 arriving through the vocabulary the edge store itself introduces.
+2. **`confidence` is `1/n`** where *n* is the number of trees on the lot — 1.0 for a single-tree lot, 0.0625 for the sixteen-tree one — and `Evidence` records the join basis verbatim. Both fields already existed for exactly this; the fixture is what shows they are load-bearing rather than ornamental.
+
+**A reproducibility gap, found and closed.** The first two runs of this probe printed different numbers (73 edges / max 29, then 62 / max 16) because the SODA query had `limit` and no `order`, so the API returned an arbitrary 25 rows. **A design test whose numbers move between runs is not a design test.** The query now pins `order=unique_key` and two consecutive runs agree exactly. Recorded because it is the same class of defect as `2A-RUN.md` §8.4's, and because it was found by running twice rather than by reading.
+
+**T3.6, said plainly.** `complete=True` here means *every `equivalent_to` edge in this store was returned*. It does **not** mean anything about the 2,399 datasets in the catalogue, of which three are present. That is why `families_searched` is a required field and not an echo: **a `complete=True` printed without it is the same category of claim as a conformance verdict printed without its coverage line** (ruling R12), and this document takes R12's rule rather than restating it.
+
+### 11.4 Contortion E11, and the thing UC3 did **not** break
+
+**E11 — `equivalent_to` at scale has no proposer.** The two edges in this walk-through were written by hand. Nothing in v0 *finds* the equivalence: `resolve_type` is scoped to one namespace (contortion 8), and **R6's `search_namespaces` — the call that would find it — lands in row 3e, after this one.** So the family exists and the mechanism that would populate it does not, and at 2,399 datasets a hand-written equivalence is not a mechanism. **This document closes contortion 9 and is dependent on 3e closing contortion 8 for the closure to be useful.** Stated so that *"EDGES fixed the borough problem"* is not read into §11.
+
+**What UC3 did not break, which is the more important half.** The kill row's mechanism — *scope, do not merge* — is **stronger** after this test, not weaker. Before EDGES, a steward who knew two scoped types denoted one thing had exactly one move available and it was the destructive one, refused. Now there is a non-destructive move that records the knowledge, **and the destructive one is still refused, twice, including under explicit acknowledgement.** T3.12 is the check that this document did not quietly become a merge licence, and it was run against the shipped registry rather than reasoned about.
+
+### 11.5 UC3 verdict
+
+> **Expressible. Contortion 9 (`INTERFACE.md` §10b.2 — *nothing can say "these two mean the same thing, kept apart"*) is closed by `equivalent_to`, and the closure was checked against the shipped `merge_types`: the `cross_namespace_merge` refusal holds, non-overridably, with the equivalence edge present.**
+>
+> **One new contortion (E11)** — the family has no proposer until R6 lands in 3e — **and one finding the expectations missed:** a deterministic key join is many-to-many, so the most confident join an ingestion layer can make still does not establish the relationship a reader wants. `confidence` and `Evidence` are what carry that, and the family is named for what the key proves.
+>
+> **UC3 conflicts with neither UC1 nor UC2.** Every finding here is an absence or a caution, none contradicts the other two fixtures, and per `USE-CASES.md`'s conflict rule there is nothing for the supervisor to arbitrate between fixtures. The four items wanting a ruling are Q-numbered in §14.
+
+---
+
+## 12. Which mechanism this is designed against
+
+**Primarily mechanism C — silent per-consumer drop — and that is a different answer from `INTERFACE.md`'s.** `INTERFACE.md` §6 is designed against **1 + 3** under assumption A1, with C *"present, unobserved"*. For edges the ranking inverts, and the evidence is in this repo rather than assumed:
+
+| Mechanism | Status for EDGES | What answers it |
+|---|---|---|
+| **C** silent drop | **Dominant, and [Observed] rather than assumed.** `deadline_cluster_service` hard-codes the family `blocks`; `work_link_types` is *extended at runtime by an AI classifier*; a new family is therefore invisible to the one shipped edge consumer, silently. That is 0.1's incident shape with a classifier as producer | §8 — `consumers` extends to families with **no new call**, because a family is a `TypeEntry`. Plus the `no_edge_gate_registered` warning |
+| **4** collision | **Co-dominant, and it is why this row exists at all.** R7 assigned `equivalent_to` here because `INTERFACE.md`'s answer to collision — scope, do not merge — left nothing that could say *equivalent, kept apart* | §3 — `equivalent_to`, symmetric, non-transitive, non-merging, and explicitly not a merge licence (T3.12) |
+| **3** never retired | Present | Families retire like any type; edges retract (§2.6). `usage`/`orphaned` on a family answers *"is anything still writing this?"* |
+| **1** no review | Present, **at the family level only** | The family goes through `propose_type` → `approve`; individual edges do not, and §2.6 argues why rather than assuming it |
+| **2** could not find | **Present and NOT answered here.** E11: nothing finds the equivalence to be recorded | R6's `search_namespaces`, row 3e. Stated as a dependency, not claimed |
+
+**No single call is the centre, and for edges that is easier to see than for types.** There is one read call and two writes. The centre is the *family*, which is not a call at all — it is the decision that a relationship label is a governed word.
+
+---
+
+## 13. What would change this
+
+Mirroring `INTERFACE.md` §11.
+
+| If… | Then | What changes here |
+|---|---|---|
+| **A family needs a field the registry must READ** — not validate, read | §2.3 is wrong | `kind="edge"` stops being a type and wants its own table and its own calls. §2.4's five keys are the pressure point; `level` is the one closest to needing it |
+| **A real consumer needs `depth=3`** | §4.2's cap is wrong | The cap moves *with that consumer's evidence*, and R13 must be revisited in the same change — the cap and the no-paging rule are one decision |
+| **R13 is revisited and the façade pages** | §4.2's justification evaporates | The depth cap becomes arbitrary and should be re-derived, or dropped in favour of a page bound |
+| **R10 does not land in 3e** | §2.5 is a dead field | `payload_schema` is removed rather than left as a `None` that never becomes anything, and edge payloads are declared permanently opaque |
+| **`equivalent_to` is used as a merge precondition anywhere** | §3.2 has failed in practice | The family should be withdrawn. An edge that becomes a licence is worse than no edge, because the refusal it erodes is the answer to the kill row |
+| **A consumer reads a depth-2 report as an equivalence class** | §4.4's `at_depth` is insufficient | Either `neighbors` refuses `depth=2` for non-transitive families, or the family declares `transitive: bool` and the report enforces it. Both are surface changes and neither is taken now |
+| **Beacon's Slice 0 does not land** | `endpoint_kinds` is unenforceable on the one host that exists | The declaration stays honest (warnings, not claims) and buys nothing operationally. It is not removed — CMS and NYC both register their types |
+| **The office says two teams meaning different things by one word IS the main complaint** (A1 wrong) | `INTERFACE.md` §11's first row fires | `equivalent_to` gets *more* load-bearing, not less, and its non-transitivity becomes the thing to defend hardest |
+| **`Reference` in beacon's grounding contract stays three fields** | §9.3's loss is permanent | Slice 2 delivers a `relations` slot that cannot carry `at_depth` or `complete`, so the narrator sees reachability with no way to tell it from entailment. **This is the most consequential open item for the Tenshen rebuild** |
+
+**Weaknesses named now so they are not discovered later:**
+
+- **The edge store's `complete=True` is the first true completeness claim this project makes**, and it is true only over `families_searched`. Every consumer that prints it without that list is making a claim this document did not authorise.
+- **Duplicate edges are permitted (§6.1)**, so `known` counts edges and not distinct neighbours. A consumer that counts `edges` to mean *"how many people are blocked"* is wrong, and nothing stops it.
+- **No edge is ever deleted**, so a store that ingests a daily feed accumulates retracted edges forever. Nothing here sizes that.
+- **`neighbors` is the only read.** There is no *"do these two nodes have an edge?"* call, which is a one-edge `find_edges` a caller must express as a depth-1 walk and filter.
+
+---
+
+## 14. Questions for the supervisor — **Q12 onward**
+
+Numbering continues from Q11 (ruled as R16). None of these is taken on this document's authority.
+
+| # | Question | Recommendation | Founder-visible? |
+|---|---|---|---|
+| **Q12** | **`created_by` has three values and the data needs four.** Six `created_by`-shaped vocabularies were counted (§9.2 T1.5b), and **two independent fixtures reach for the same missing one**: beacon's `EntityMention.match` has `deterministic`, and UC3's BBL join is a deterministic rule that must currently claim `user`. Add a fourth value — `derived` — to `INTERFACE.md` §2.1's `created_by`? | **Yes**, in row 3e, which is already amending that document. It is additive, it is the *only* one of these questions with evidence from two unrelated fixtures, and the alternative is a string convention in `created_by_actor` that nothing validates | **Yes** — it changes `TypeEntry` too, not only edges |
+| **Q13** | **`symmetric ⇒ inverse_label is None` is a cross-field rule, and `PACKAGE.md` §5.6 says `FieldSpec` does not do cross-field rules.** So `approve()` must know one rule about `kind="edge"` attributes. Is that acceptable, or does it breach §3.1's boundary? | **Accept it, narrowly**, and record it as the one attribute rule the registry knows. The alternative — a rule language in the schema mechanism — is much larger than v0 needs, and `INTERFACE.md` §9 contortion 1 has been open since #1 | No |
+| **Q14** | **Does R11's `reinstate` (row 3e) cover edges?** §2.6 declines to invent a second reinstatement one row ahead of the first | **3e decides**, with edges in scope. Two differently-shaped reinstatements would be Cause B | No |
+| **Q15** | **Should `EdgeProvenance` carry `model_tier`, and should AI-written edges have a tier gate?** Beacon's `infer_person_relationships` classifies with **Haiku** and auto-applies at ≥0.7 — 0.5's failure shape, one level down | **`model_tier`: yes** (cheap, additive, symmetric with `Provenance`). **A tier gate: no in v0** — gating a weekly batch job is a product decision about beacon's behaviour, not a storage shape | **Yes** — it is 0.5 consequence 2 reappearing |
+| **Q16** | **Should `Provenance` gain `source_version` too?** `EdgeProvenance` has it (§5.3); `INTERFACE.md` §10b.5 collected it for v1. Two shapes, one concept, one missing the field | **Yes**, row 3e. Additive, defaults `None`, and 3e already opens that shape. Beacon has independently built the same thing as `EntityMention.content_hash` | No |
+| **Q17** | **A consumer that gates on edges by ENDPOINT KIND has no representation** — *"I traverse any edge whose `dst` is a `person`"*. Same shape as contortion 11 (value-level gates), one level along | **Defer to Phase 3**, with contortion 11. Both would make `Consumer.gate` a query language | No |
+| **Q18** | **`Edge.family` is required; `PersonLink.relationship_type` is nullable.** Should there be a reserved `unclassified` family, or must an adapter refuse to map such rows? | **Neither in v0. Record it.** A reserved family is a vocabulary this document invents for a host's missing constraint; refusing to map is a silent drop. The honest third answer is that beacon should make the column NOT NULL, which is beacon's call | No |
+| **Q19** | **Tenancy has no home (E3).** `user_id` / `workspace` map to nothing, and `Edge.namespace` is refused as their home | **Do not solve it here** — the brief says so and the reason holds: namespace scopes a vocabulary, not a tenant. But the question *"does the edge protocol need a tenancy dimension at all, or is filtering the host's job?"* is Phase 2B's first real integration question and should be answered before beacon builds against this | **Yes** — it gates 2B |
+| **Q20** | **Shape B's far end is a table row, not an entity instance (E7).** Does `endpoint_kinds` need a third level, or is Slice 0 the answer? | **Slice 0 is the answer**, and this is evidence for it rather than a change here. A `record` level would let any table row be a node, which deletes the distinction §2.4.1 exists to hold | No |
+
+---
+
+## 15. Kill-criterion check — required, and not skipped
+
+**`ROADMAP.md`'s kill row:** *"A capability predicate gets merged as a duplicate → Stop."* And the rule of the ordering: *nothing in #1–#4 may take a shape because Tenshen has it.*
+
+**Neither is tripped, and here is the mechanical form of both.**
+
+**1. Is this document a merge licence?** No, and it was tested rather than asserted. T3.12 wrote the `equivalent_to` edge and then asked the **shipped** registry to merge the two types: refused `cross_namespace_merge`, and refused again under explicit `acknowledge`. §3.2 states the rule; the probe checked it against `open_ontology.Registry`, not against the probe's own model.
+
+**2. Can a predicate be an edge endpoint?** **No.** `equivalent_to`'s `endpoint_kinds` exclude `kind="predicate"` (§3.1), for the reason §5.10 refusal #2 is non-overridable: two predicates being "equivalent" is a claim about extents, and it must be made from byte-identical extents or not at all. **An `equivalent_to` edge between two predicates would be exactly the kill row, one indirection away**, and it is structurally blocked rather than discouraged.
+
+**3. Did anything take its shape from Tenshen?** The five family keys, checked one at a time:
+
+| key | Whose need |
+|---|---|
+| `symmetric`, `inverse_label` | **Tenshen has both as columns.** They are also `INTERFACE.md` §9 contortion 1, open since deliverable #1 and named there as the reason #4 must follow #1 closely. Taken because a contortion the interface recorded is a debt this document owes, not because beacon has the columns |
+| `level` | **UC3.** Beacon has *no* type-level edge at all; `equivalent_to` is unexpressible without `level`, and R7 assigned it |
+| `endpoint_kinds` | **UC2.** The `citation`/`survey`/`facility`/`deficiency_tag` chain needs each end constrained, and T2.5/T2.6 is where the rule was decided — against UC1's interest |
+| `payload_schema` | **UC2 again**, via `PACKAGE.md` §5.1's argument about the A–L severity ordering. UC1 is the fixture that *suffers* from it being inert (E10) |
+
+**Three of five come from CMS or NYC; two are a debt to #1. Zero are shaped by beacon.** And the direction of the one real conflict is the check that matters: §2.4.1 was written CMS's way **against** UC1's interest, on a fixture where 14 of 17 beacon families carry the payload the rule excludes.
+
+**4. Would deleting `equivalent_to` leave the rest coherent?** Yes — §2–§8 stand without §3, and UC1 and UC2 need no type-level edge at all. That is the operational test of whether a design is centred on one family, and it is not.
+
+---
+
+## 16. Exit criteria — `ROADMAP.md` row #4, checked
+
+| Criterion | Where |
+|---|---|
+| A typed relationship store, specified | §2, §5, §6, §7 |
+| `neighbors(node, edge_types, depth)` read seam | §4. Bounded at 2, Rule K/U throughout, no traversal language, no materialisation, no paging (R13) |
+| Provenance on edges | §5. `EdgeProvenance`, append-only history, `EventRecord.edge_id`, `source_version` |
+| Type-to-type edges (**R7**) | §3. `equivalent_to`, symmetric, non-transitive, non-merging — and the non-merging half checked against the shipped registry |
+| `v0` and "unstable" in the header | Header, line 3 |
+| A design-test section per use case, expected outcomes stated first | §9, §10, §11. **Thirty-four predictions, committed in a separate commit ahead of the results; eleven contortions recorded, none designed away** |
+| An adversarial review loop | §17 |
+| New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | Three added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent`. §5.12 now enumerates eighteen |
 
 ---
