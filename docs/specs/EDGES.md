@@ -6,7 +6,9 @@
 **Rulings this document carries:** **R7** (`equivalent_to` is an edge, and EDGES v0 must carry type-level edges) · **R13** (the façade does not page in v0) · **R5** (`transaction_scope`, inherited by the edge store) · **R3** (`Refusal.reason` is closed — three values added to [`INTERFACE.md`](INTERFACE.md) §5.12 by this change).
 **Claim tags:** **[Observed]** seen directly · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 
-**This row is a spec. No implementation lands with it.** The design tests in §9–§11 are walk-throughs driven through real data by throwaway probes ([`docs/tools/`](../tools/)), not by a shipped edge store. Where a probe stands in for a store, it says so.
+**This row was a spec. Row 4b is its implementation, and this document is now the specification of shipped code** — see [`docs/runs/4B-RUN.md`](../runs/4B-RUN.md). The design tests in §9–§11 were walk-throughs driven through real data by throwaway probes ([`docs/tools/`](../tools/)); §10 and §11 are now driven through the shipped store by the **`C18`** contract group as well, on all three reference legs, with the same pre-registered numbers. Where a probe still stands in for a store, it says so.
+
+**What 4b changed in this document, and it is deliberately little.** Three amendments and no reversals: §2.4.1, §4.3 and §4.4 gained rule tables mapping every numbered rule to the contract id that exercises it (ruling **R31**, standing constraint 8); §4.3 gained a thirteenth row for a case the specification did not cover — an edge whose family is registered nowhere; and §16 now reports what landed. Everything the three adversarial rounds of the spec row fixed is now an assertion in the suite rather than in a probe kit the package does not import. The places where the implementation could **not** follow the document as written are enumerated as deviations in [`4B-RUN.md`](../runs/4B-RUN.md) §5, never silently resolved.
 
 ---
 
@@ -134,6 +136,18 @@ The three clauses earn their keep on real fixtures, and the first two pull in op
 > **All three clauses bind at family-DECLARATION time, not only at write time, and that distinction is the one round 1 was spent on.** A rule checked only when an edge is written is a rule a family author can opt out of by declaring a permissive `endpoint_kinds` — and both halves of this section were exactly that in the first draft. A reviewer declared a family with `predicate` endpoints and wrote a predicate-to-predicate edge with no refusal (the kill row, §15); writing the test for that then exposed the same hole in the instance clause, where a family declaring `("entity", "edge")` at instance level would have reified an edge. **A family whose `endpoint_kinds` breach this section is refused when it is declared**, so the write-time check has nothing left to be talked around — and the write-time check still runs, because an endpoint of the wrong *level* is a caller's mistake rather than the family's. Both layers are exercised in [`edges_capability_probe.py`](../tools/edges_capability_probe.py); §17.
 
 **`equivalent_to` additionally requires `src.kind == dst.kind`** — a family-level constraint beyond `endpoint_kinds`, stated in §3.1 rather than here, because it is that family's semantics and not a general mechanism.
+
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. Held against the contract suite by [`check_spec_drift.py`](../tools/check_spec_drift.py).
+
+| # | rule | exercised by |
+|---|---|---|
+| 2.4.1-1 | A `level="instance"` family accepts only `kind="entity"` endpoints — only an entity has instances, and §1 rules out reification | `C17-09`, `C18-04` |
+| 2.4.1-2 | A `level="type"` family accepts any registered kind except `predicate`, `kind="edge"` included — that is a row of the vocabulary, not a reified instance | `C17-27`, `C18-05` |
+| 2.4.1-3 | `predicate` is excluded at **both** levels, as a general rule rather than a family's opt-in — the `ROADMAP.md` kill row is one indirection away | `C17-09` |
+| 2.4.1-4 | All three clauses bind at family-**DECLARATION** time, not only at write time; the write-time check still runs, because an endpoint of the wrong *level* is a caller's mistake rather than the family's | `C17-08`, `C17-09` |
+| 2.4.1-5 | A family whose declaration breaches this section is refused at every door a declaration can arrive through | `C17-09` |
+| 2.4.1-6 | `equivalent_to` additionally requires `src.kind == dst.kind` (§3.1's family-level constraint) | `C17-08` |
+| 2.4.1-7 | `endpoint_kinds` constrains the **kind** of an endpoint and not its **type**, so it cannot say *"src is a citation and dst is a survey"* — both are entities | `prose-only:` the mechanism has no slot for it, which is a limit of §2.4 rather than a rule to test. Recorded as deviation **D-4b-3** in [`4B-RUN.md`](../runs/4B-RUN.md); CMS carries the fact in unvalidated `from`/`to` attributes meanwhile |
 
 ### 2.5 `payload_schema`, and the dependency on R10 that this document cannot discharge
 
@@ -346,19 +360,23 @@ NeighborEdge:
 
 ### 4.3 Behaviour when uncertain
 
-| Situation | Result |
-|---|---|
-| The registry has no edge store | **`Refusal(reason="edge_store_absent")`**. Never an empty report — an empty `NeighborReport` reads as *"this node has no neighbours"*, which is Rule U's forbidden empty list in the one call that would be believed |
-| A named family in `edge_families` is not a registered `kind="edge"` entry | **`Refusal(reason="edge_family_unknown", detail={"families": [...]})`**. The whole call, not a partial answer: a caller that names a family and gets a report back is entitled to believe the family was searched, and a typo'd name returning a clean empty set is mechanism **C** committed by the read seam |
-| A named family exists but is **retired** | Not a refusal. It is searched (its edges were not deleted), and the report carries `warnings: ["edge_family_retired:<name>"]` |
-| `edge_families=None` | Every family the store can answer, **across every namespace** (§4.1). `families_searched` echoes exactly which, and `complete` is about *those* — §4.4 |
-| The **adapter** cannot count | `EdgePage.known=None`, never `0` — `PACKAGE.md` §3.4's uniform uncertainty rule. **`NeighborReport.known` is never `None`** (§4.1): the report materialises its edges, so its `known` is a length. *(This row said `known=None` about the report itself until round 3 — leftover prose from before §4.1's own correction, contradicting it two sections apart.)* |
-| **The walk ran out of graph** — a leaf, a sink, a node with no edges at all | `depth_reached < depth_requested` **with `complete=True`** and no `why_incomplete`. This is the *common* case in real data and it is **not** an incomplete answer: the walk saw everything there was |
-| **The walk was cut short** — a scan bound, a store that timed out, a page it could not exhaust | `depth_reached < depth_requested` **with `complete=False`**, and `why_incomplete` names the bound. **Never a silently shallower answer** |
-| `include_retracted=False` (the default) and a retracted edge was suppressed | `complete=False`, because a default that hides things is `list_types`' rule (`INTERFACE.md` §5.6) |
-| A named family in `edge_families` is registered in a **different** namespace from the one passed | `Refusal(reason="edge_family_unknown")`. Resolving names is `namespace`'s one job (§4.1) |
-| `node` is an `InstanceRef` whose type is not registered | Not an error (§2.7). The walk proceeds and the report carries `warnings: ["origin_type_unregistered:<ref>"]` |
-| The edge store is `transaction_scope="savepoint"` and this is a **read** | **Nothing is added.** `PACKAGE.md` §3.4 primitive 3, note 2: a read says nothing about durability in either direction, because the registry cannot know whether the host has committed |
+> **The rules of this section are numbered and each is exercised or tagged** — ruling **R31**, standing constraint 8, applied for the first time by row 4b. The `exercised by` column is held against the contract suite by [`check_spec_drift.py`](../tools/check_spec_drift.py): an id named here that no test claims is a failure, and a row with an empty cell is a failure. `prose-only:` is a legal answer with a reason attached, and there is one.
+
+| # | Situation | Result | exercised by |
+|---|---|---|---|
+| 4.3-1 | The registry has no edge store | **`Refusal(reason="edge_store_absent")`**. Never an empty report — an empty `NeighborReport` reads as *"this node has no neighbours"*, which is Rule U's forbidden empty list in the one call that would be believed | `C17-01` |
+| 4.3-2 | A named family in `edge_families` is not a registered `kind="edge"` entry | **`Refusal(reason="edge_family_unknown", detail={"families": [...]})`**. The whole call, not a partial answer: a caller that names a family and gets a report back is entitled to believe the family was searched, and a typo'd name returning a clean empty set is mechanism **C** committed by the read seam | `C17-14` |
+| 4.3-3 | A named family exists but is **retired** | Not a refusal. It is searched (its edges were not deleted), and the report carries `warnings: ["edge_family_retired:<name>"]` | `C17-15` |
+| 4.3-4 | `edge_families=None` | Every family the store can answer, **across every namespace** (§4.1). `families_searched` echoes exactly which, and `complete` is about *those* — §4.4 | `C17-13` |
+| 4.3-5 | The **adapter** cannot count | `EdgePage.known=None`, never `0` — `PACKAGE.md` §3.4's uniform uncertainty rule. **`NeighborReport.known` is never `None`** (§4.1): the report materialises its edges, so its `known` is a length. *(This row said `known=None` about the report itself until round 3 — leftover prose from before §4.1's own correction, contradicting it two sections apart.)* | `C17-19`, `C17-22` |
+| 4.3-6 | **The walk ran out of graph** — a leaf, a sink, a node with no edges at all | `depth_reached < depth_requested` **with `complete=True`** and no `why_incomplete`. This is the *common* case in real data and it is **not** an incomplete answer: the walk saw everything there was | `C17-17` |
+| 4.3-7 | **The walk was cut short** — a scan bound, a store that timed out, a page it could not exhaust | `depth_reached < depth_requested` **with `complete=False`**, and `why_incomplete` names the bound. **Never a silently shallower answer** | `C17-18`, `C17-19` |
+| 4.3-8 | `include_retracted=False` (the default) and a retracted edge was suppressed | `complete=False`, because a default that hides things is `list_types`' rule (`INTERFACE.md` §5.6) | `C17-20` |
+| 4.3-9 | A named family in `edge_families` is registered in a **different** namespace from the one passed | `Refusal(reason="edge_family_unknown")`. Resolving names is `namespace`'s one job (§4.1) | `C17-14` |
+| 4.3-10 | `node` is an `InstanceRef` whose type is not registered | Not an error (§2.7). The walk proceeds and the report carries `warnings: ["origin_type_unregistered:<ref>"]` | `C17-11` |
+| 4.3-11 | The edge store is `transaction_scope="savepoint"` and this is a **read** | **Nothing is added.** `PACKAGE.md` §3.4 primitive 3, note 2: a read says nothing about durability in either direction, because the registry cannot know whether the host has committed | `C17-21` |
+| 4.3-12 | **No `UnknownNode` exception**, and the paragraph below argues why `UnknownType`'s reasoning does not transpose | The honest form is a report with `edges: ()`, `known: 0` and a warning when the origin's type is unregistered | `C17-11` |
+| 4.3-13 | An edge whose family is registered **nowhere** is returned by an `edge_families=None` walk, with `edge_family_unregistered:<namespace>:<name>` | *Added by row 4b, which implemented this section. There is deliberately no foreign key from an edge to its family (§2.7's argument, and §7.2 observes beacon's `work_links` has none either), so the case is reachable — and the spec did not say what the READ does with it. Dropping it is mechanism **C** in the read seam* | `C17-13` |
 
 **No `UnknownNode` exception.** `INTERFACE.md` §5.1 raises `UnknownType` rather than returning an empty `ConsumerReport`, and the reasoning was that an empty report is false reassurance. It does not transpose: the registry **has no node store** (§1), so it cannot distinguish *a node with no edges* from *a node that does not exist*, and raising would require inventing a fact. The honest form is a report with `edges: ()`, `known: 0` and a `warnings` entry when the origin's type is unregistered. **This is a place where two rules of this project point opposite ways and the tie is broken by which one requires the registry to know something it does not.**
 
@@ -373,6 +391,15 @@ NeighborEdge:
 **`at_depth` is the second thing that keeps this honest, and it is `equivalent_to`'s problem specifically.** §3.1 makes `equivalent_to` symmetric and **not transitive**. A depth-2 walk from `dpr:borough` over `A≡B` and `B≡C` returns `dot:borough` — reachable, and **not asserted equivalent to the origin**. Without `at_depth` a caller renders three boroughs as one equivalence class, which is the transitive closure the family refused to license, manufactured by the read seam.
 
 > **`neighbors` returns reachability. It never returns entailment.** A consumer that treats a depth-2 result as a depth-1 claim has made the inference itself, and the report gives it every means not to.
+
+> **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. Held against the contract suite by [`check_spec_drift.py`](../tools/check_spec_drift.py).
+
+| # | rule | exercised by |
+|---|---|---|
+| 4.4-1 | `complete` **can** be `True`, unlike `ConsumerReport.complete` and `Resolution.complete`, because an edge is a stored row: there is no edge that exists in the store and is invisible to a query over it | `C17-22` |
+| 4.4-2 | `complete` is over `families_searched` and over the **edge store**, never over the host's relationships — so `families_searched` is a required field of the report and not an echo of the argument (ruling R12's rule, taken rather than restated) | `C17-22`, `C18-06` |
+| 4.4-3 | `at_depth` distinguishes reachability from entailment: a depth-2 walk over `A≡B` and `B≡C` returns `C`, **not asserted equivalent to `A`**, and without `at_depth` a caller renders three as one equivalence class | `C17-23`, `C18-05` |
+| 4.4-4 | The comparison that holds is with the two carriers that are **always** `False`; `TypeListing.complete` is already `True` for an unfiltered census, so *"the first Rule-K carrier that can be True"* was an overclaim | `prose-only:` a correction to this document's own prose about a claim `C6-04` already binds on the type side. Nothing new to exercise |
 
 ### 4.5 What `neighbors` does across namespaces — and why it does not inherit contortion 8
 
@@ -991,7 +1018,8 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 | Type-to-type edges (**R7**) | §3. `equivalent_to`, symmetric, non-transitive, non-merging — and the non-merging half checked against the shipped registry |
 | `v0` and "unstable" in the header | Header, line 3 |
 | A design-test section per use case, expected outcomes stated first | §9, §10, §11. **Thirty-four predictions, committed in a separate commit ahead of the results; eleven contortions recorded, none designed away** |
-| An adversarial review loop | §17. **Three rounds, six fresh reviewers, ten BLOCKING and ten MAJOR findings**, every one reproduced by running code. **No round was clean.** Closed at the brief's three-round cap with a convergence note (§17.5), the same way rows 3c and 3d closed |
+| An adversarial review loop | §17. **Three rounds, six fresh reviewers, ten BLOCKING and ten MAJOR findings**, every one reproduced by running code. **No round was clean.** Closed at the brief's three-round cap with a convergence note (§17.5), the same way rows 3c and 3d closed. *(Row 4b ran its own loop over the implementation; see [`4B-RUN.md`](../runs/4B-RUN.md) §6.)* |
+| **Implemented** *(row 4b, and not part of row #4's own criteria)* | Adapter primitives **16–18**, the four capability flags and two declarations, store version **4** on both dialects, `add_edge` / `retract_edge` / `neighbors` / `edge_provenance` on the registry, `equivalent_to` seeded, and **39 contract ids** (`C17`, `C18`) across three reference legs in both stacks |
 | Every new `warnings` value goes through `INTERFACE.md` §5.4 in the same change | §2.8. Five added; §5.4 now enumerates sixteen across four carriers |
 | New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | Three added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent`. §5.12 now enumerates eighteen |
 

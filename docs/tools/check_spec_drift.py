@@ -50,6 +50,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "docs" / "specs" / "INTERFACE.md"
 PACKAGE = ROOT / "docs" / "specs" / "PACKAGE.md"
+EDGES = ROOT / "docs" / "specs" / "EDGES.md"
 sys.path.insert(0, str(ROOT))
 
 from open_ontology import adapter as adapter_module  # noqa: E402
@@ -304,6 +305,110 @@ def _check_warning_vocabulary(spec_text: str) -> list[str]:
     return problems
 
 
+
+# ---------------------------------------------------------------------------
+# Ruling R31 / ROADMAP standing constraint 8 -- spec rules become executable.
+#
+# **The measurement that produced the ruling.** Thirteen of row 3e's twenty-one new
+# contract ids existed only to pin claims the specifications already made; that row's
+# third adversarial round found four false prose sentences no gate could see; and across
+# three rows, not one finding of substance came from reading a diff.
+#
+# **The rule.** Every numbered rule in a spec section ships with either (a) a contract
+# id that exercises it, or (b) an explicit `prose-only` tag with a reason -- and this
+# checker fails on a rule with neither. It applies from row 4b's landing onward, and 4b
+# maps `EDGES.md` §2.4.1, §4.3 and §4.4 first, since it is the row implementing them.
+#
+# **The mapping lives in the SPEC, not here.** Each of the three sections carries a
+# table whose last column names the ids; this reads those tables and holds them against
+# the suite. A dict in this file would be a third artefact to keep in step with two
+# others, which is the shape of drift the checker exists to catch -- and a reader of
+# §4.3 would have to open a Python file to learn which id holds a row.
+#
+# What it does NOT do, stated rather than implied: it cannot tell that a rule was added
+# to a section's PROSE and never added to that section's table. It compares the table to
+# the suite, which is two of the three sides. The third side is what the adversarial
+# loop is for, and `EDGES.md` §17.5 is honest about what that is worth.
+
+#: `EDGES.md` sections that must carry an R31 rule table, and the heading that opens
+#: each. Adding a section here is how a later row brings its own rules under the gate.
+R31_SECTIONS = {
+    "2.4.1": "#### 2.4.1",
+    "4.3": "### 4.3",
+    "4.4": "### 4.4",
+}
+
+_R31_ROW = re.compile(r"^\| (\d[\d.]*-\d+) \|(.*)\|\s*$", re.M)
+_CONTRACT_ID = re.compile(r"`(C\d+-\d+)`")
+
+
+def _section(text: str, heading: str) -> str:
+    start = text.find(heading)
+    if start == -1:
+        return ""
+    body = text[start + len(heading) :]
+    end = re.search(r"^#{2,4} ", body, re.M)
+    return body if end is None else body[: end.start()]
+
+
+def _check_rule_coverage(implemented: set[str]) -> list[str]:
+    """Every numbered rule in the R31 sections has an id or a tagged reason."""
+    problems: list[str] = []
+    if not EDGES.exists():  # pragma: no cover - an installed wheel has no docs/
+        return problems
+    text = EDGES.read_text(encoding="utf-8")
+    for label, heading in R31_SECTIONS.items():
+        body = _section(text, heading)
+        if not body:
+            problems.append(f"EDGES {label}: the section heading {heading!r} is not there")
+            continue
+        rows = [
+            (number, cells)
+            for number, cells in _R31_ROW.findall(body)
+            if number.startswith(f"{label}-")
+        ]
+        if not rows:
+            problems.append(
+                f"EDGES {label}: no rule table (ruling R31 / standing constraint 8 -- "
+                f"every numbered rule ships with a contract id or a `prose-only:` tag)"
+            )
+            continue
+        seen: list[int] = []
+        for number, cells in rows:
+            seen.append(int(number.rsplit("-", 1)[1]))
+            exercised = cells.rsplit("|", 1)[-1].strip()
+            ids = _CONTRACT_ID.findall(exercised)
+            if ids:
+                for cid in ids:
+                    if cid not in implemented:
+                        problems.append(
+                            f"EDGES {number}: names {cid}, and no test in the suite "
+                            f"claims that id"
+                        )
+                continue
+            if exercised.startswith("`prose-only:`") or exercised.startswith("prose-only:"):
+                reason = exercised.split("prose-only:", 1)[1].strip(" `")
+                if len(reason) < 20:
+                    problems.append(
+                        f"EDGES {number}: tagged `prose-only:` with no reason -- R31 "
+                        f"requires the reason, because a tag without one is the "
+                        f"silencing mechanism the ruling exists to prevent"
+                    )
+                continue
+            problems.append(
+                f"EDGES {number}: neither a contract id nor a `prose-only:` tag "
+                f"(ruling R31 / standing constraint 8). Its `exercised by` cell reads "
+                f"{exercised[:60]!r}"
+            )
+        expected = list(range(1, len(seen) + 1))
+        if seen != expected:
+            problems.append(
+                f"EDGES {label}: the rule numbers are {seen}, not {expected} -- a gap "
+                f"is a rule somebody deleted from the table and left in the prose"
+            )
+    return problems
+
+
 def main() -> int:
     text = SPEC.read_text(encoding="utf-8")
     blocks = spec_blocks(text)
@@ -387,6 +492,13 @@ def main() -> int:
     problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
     problems.extend(_check_warning_vocabulary(SPEC.read_text(encoding="utf-8")))
 
+    # Ruling R31, row 4b. The suite is the authority on which ids exist, so it is
+    # read rather than listed: a rule table naming an id nobody wrote is exactly the
+    # drift this constraint is for, pointing the other way.
+    from open_ontology.contract.test_manifest import implemented_ids
+
+    problems.extend(_check_rule_coverage(set(implemented_ids())))
+
     if problems:
         print("the specifications have drifted from the implementation:\n")
         for p in problems:
@@ -407,7 +519,10 @@ def main() -> int:
         f"types.REFUSAL_REASONS ({len(types_module.REFUSAL_REASONS)} values), "
         f"contents and count.\n"
         f"INTERFACE.md 5.4: the closed warnings vocabulary matches "
-        f"types.WARNING_VALUES ({len(types_module.WARNING_VALUES)} values)."
+        f"types.WARNING_VALUES ({len(types_module.WARNING_VALUES)} values).\n"
+        f"EDGES.md: every numbered rule in "
+        f"{', '.join(sorted(R31_SECTIONS))} carries a contract id or a tagged "
+        f"reason (ruling R31, standing constraint 8)."
     )
     return 0
 
