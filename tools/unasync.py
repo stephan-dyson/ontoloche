@@ -216,13 +216,15 @@ __all__ = ["AsyncBaseSqlAdapter"]
 '''
 
 #: Contract-test modules that are GENERATED into the async tree. One is excluded:
-#: ``test_c0_concurrency.py`` races two writers on two threads, and a thread race has
-#: no mechanical async form -- the async equivalent is ``asyncio.gather`` over two
-#: coroutines, a different mechanism rather than a token substitution. Its async
-#: counterpart, ``aio/contract/test_concurrency.py``, is hand-written and claims the
-#: same contract id (C0-08). Both are binding. Same reasoning as the hand-written
-#: driver ``close()`` methods -- 3B-ASYNC.md D-A12.
-HAND_WRITTEN_ASYNC = frozenset({"test_c0_concurrency.py"})
+#: ``test_c0_backend_local.py`` holds the two tests that BUILD BACKENDS DIRECTLY
+#: rather than taking the ``adapter`` fixture, so neither survives token substitution:
+#: C0-08 races two writers on two threads (the async equivalent is ``asyncio.gather``,
+#: a different mechanism) and C0-09 constructs an adapter with ``owns_schema=False``
+#: (the async form is ``await AsyncSQLiteAdapter.open(...)``, D-A1). Its async
+#: counterpart, ``aio/contract/test_c0_backend_local.py``, is hand-written and claims
+#: the same contract ids. Both are binding. Same reasoning as the hand-written driver
+#: ``close()`` methods -- 3B-ASYNC.md D-A12.
+HAND_WRITTEN_ASYNC = frozenset({"test_c0_backend_local.py"})
 
 CONTRACT_TESTS = tuple(
     sorted(

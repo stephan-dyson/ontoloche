@@ -38,9 +38,15 @@ async def exercised(adapter, make_registry, clock):
     registry = await make_registry(adapter, min_auto_approve_tier="sonnet")
     auto = await make_registry(adapter, approval_policy="auto", auto_policy_name="classifier")
 
-    await seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
-    await seed(registry, "task", definition="a unit of work", predicates=["commentable"])
-    await seed(registry, "note", definition="a unit of work", predicates=["commentable"])
+    # Seeding goes through the ungated registry on a backend that cannot hold a pending
+    # proposal: there, an untiered proposal meeting `min_auto_approve_tier` has nowhere
+    # to fall back to and is refused outright (INTERFACE.md 5.4's last bullet, deviation
+    # D-11). That is correct behaviour and it is not what C16 is testing.
+    seeder = registry if (await adapter.capabilities()).stores_proposals else auto
+
+    await seed(seeder, "commentable", kind="predicate", definition="a code path will accept it")
+    await seed(seeder, "task", definition="a unit of work", predicates=["commentable"])
+    await seed(seeder, "note", definition="a unit of work", predicates=["commentable"])
     await registry.register_consumer(
         Consumer(id="comment_service.can_comment", gate="commentable", on_unknown="drop")
     )
@@ -48,22 +54,38 @@ async def exercised(adapter, make_registry, clock):
     await auto.propose_type("citation", "one deficiency, one row", [], "ai:classifier", tier="opus")
     await registry.import_types([{"name": "flight", "status": "active", "apiName": "Flight"}])
 
-    rejected = await registry.propose_type("widget", "a thing", [], "user:pm")
-    await registry.reject(rejected.id, "user:sd", "use `component`")
+    # The rejection and the approver's amendment need somewhere to hold a proposal.
+    # PACKAGE.md 3.2 says stores_proposals=False is still conformant and 7.3 B4 says
+    # such a backend's propose_type IS the decision, so these two write paths simply do
+    # not exist there -- and the invariants below must still hold over everything else.
+    # Row 3c: before this, C16 errored out entirely on such a backend.
+    if (await adapter.capabilities()).stores_proposals:
+        rejected = await registry.propose_type("widget", "a thing", [], "user:pm")
+        await registry.reject(rejected.id, "user:sd", "use `component`")
 
-    amended = await registry.propose_type("survey", "an inspection", [], "user:pm")
-    await registry.approve(amended.id, "user:sd", definition="an inspection visit to a facility")
+        amended = await registry.propose_type("survey", "an inspection", [], "user:pm")
+        await registry.approve(amended.id, "user:sd", definition="an inspection visit to a facility")
+    else:
+        await seed(seeder, "survey", definition="an inspection visit to a facility")
 
     await registry.record_use("task")
     clock.advance(timedelta(minutes=1))
 
-    await seed(registry, "watch", definition="a thing a user watches")
+    await seed(seeder, "watch", definition="a thing a user watches")
     await registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")
 
+    # merge_types' consumer-set guard reads the extent of each consumer's gate, so a
+    # backend that cannot index membership has no consumer evidence and refuses --
+    # correctly, INTERFACE.md 5.10's "the one place we-do-not-know blocks rather than
+    # warns". Acknowledged explicitly there rather than skipped, so the merge still
+    # happens and the invariants below still have a merge to inspect.
+    acknowledge = () if (await adapter.capabilities()).indexes_membership else ("no_consumer_evidence",)
     merged = await registry.merge_types(
-        "note", "task", "the same unit of work", merged_by="user:sd"
+        "note", "task", "the same unit of work", merged_by="user:sd",
+        acknowledge=acknowledge,
     )
     assert isinstance(merged, MergeResult), merged
+    registry.seeder = seeder  # the registry later writes must go through -- see above
     return registry
 
 async def test_c16_01_every_active_entry_has_an_approver(exercised, adapter):
@@ -95,7 +117,7 @@ async def test_c16_03_no_events_bytes_changed_after_they_were_written(exercised,
     assert before
 
     clock.advance(timedelta(hours=1))
-    await seed(exercised, "capture", definition="a captured watch")
+    await seed(exercised.seeder, "capture", definition="a captured watch")
     await exercised.record_use("capture")
 
     after = list(await adapter.read_events("default"))

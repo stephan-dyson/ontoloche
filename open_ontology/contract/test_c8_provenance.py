@@ -5,12 +5,15 @@ Who added this, when, on what evidence, and did anybody actually approve it.
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import UTC, datetime, timedelta
 
 from ..types import Citation, Evidence
 from ._support import DOC_EVIDENCE_URL, seed
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c8_01_missing_evidence_is_empty_never_a_reconstructed_narrative(registry):
     proposal = registry.propose_type("facility", "a nursing home", [], "user:pm")
     registry.approve(proposal.id, "user:sd")
@@ -21,6 +24,7 @@ def test_c8_01_missing_evidence_is_empty_never_a_reconstructed_narrative(registr
     assert provenance.approved_by == "user:sd"
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c8_02_history_is_append_only(registry, clock):
     proposal = registry.propose_type("watch", "a thing a user watches", [], "user:pm")
     registry.approve(proposal.id, "user:sd")
@@ -59,6 +63,7 @@ def test_c8_04_an_imported_row_says_unknown_imported_never_null(registry):
     }
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c8_05_model_tier_is_never_overwritten(registry, clock):
     proposal = registry.propose_type(
         "scope_severity_code",

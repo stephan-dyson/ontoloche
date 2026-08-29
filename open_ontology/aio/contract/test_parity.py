@@ -1,4 +1,4 @@
-"""Surface parity between the sync facade and its async mirror -- not one of the 109.
+"""Surface parity between the sync facade and its async mirror -- not one of the 115.
 
 The byte-for-byte check in ``test_generated_matches_source.py`` proves the *generated*
 files are current. It cannot prove the generator was asked to generate the right

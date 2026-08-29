@@ -39,6 +39,14 @@ def main(argv: list[str] | None = None) -> int:
         help="an argument to pass to the adapter callable (repeatable)",
     )
     parser.add_argument(
+        "--resolver",
+        help=(
+            "pkg.mod:Name -- a zero-argument callable returning a Resolver, for running "
+            "the suite on PACKAGE.md 2.6's production path. The three resolver_dependent "
+            "tests are then skipped with a reason (ruling R8)"
+        ),
+    )
+    parser.add_argument(
         "--include-nonbinding",
         action="store_true",
         help=(
@@ -53,8 +61,13 @@ def main(argv: list[str] | None = None) -> int:
     def factory():
         return target(*known.arg)
 
+    resolver_factory = _load(known.resolver) if known.resolver else None
+
     return run_contract_suite(
-        factory, args=passthrough, include_nonbinding=known.include_nonbinding
+        factory,
+        resolver_factory=resolver_factory,
+        args=passthrough,
+        include_nonbinding=known.include_nonbinding,
     )
 
 

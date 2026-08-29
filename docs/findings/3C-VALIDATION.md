@@ -237,7 +237,7 @@ Landed as its own commit before the walk-through, per the brief. Deviation **D-1
 
 ## 6. Wanted from the supervisor or the founder
 
-**Six items, R5–R10.** R5–R9 come from the UC3 walk-through; **R10 came from the adversarial review loop** and is recorded here rather than in §7 because it amends a v0 surface and belongs with the others a ruling has to cover.
+**Seven items, R5–R11.** R5–R9 come from the UC3 walk-through; **R10 and R11 came from the adversarial review loop** and are recorded here rather than in §7 because they amend a v0 surface or the conformance definition, and belong with the others a ruling has to cover. **R8 is the only one whose recommendation was applied** — it recurred in two consecutive rounds, which is the loop's own signal to decide rather than defer.
 
 **Nothing here is a conflict between the three use cases.** Per `USE-CASES.md`'s rule, a UC3 finding that contradicted UC1 or UC2 would be recorded for the supervisor to resolve; none does. Every UC3 finding is an *absence*, and the CMS and Tenshen design tests stand unchanged. What follows is the other kind of item: **five decisions that would amend a v0 surface, which a design test and a review loop are not allowed to take on their own authority.**
 
@@ -281,7 +281,9 @@ Each names the recommendation, so a ruling is a yes/no rather than a research ta
 
 **Recommendation: mark all three non-binding for third-party adapters the way `C15-02` already is (§5.5), and keep them binding for the two reference backends.** Widening `_PROJECTION_FAMILIES` to include coordinate names is explicitly **not** recommended — that is fitting the table to the second dataset the way it was already fitted to the first, and it would make the next use case's version of this finding harder to see, not easier. Moving the domain-semantic judgement behind `Resolver` is the tidier long-run answer and is a v1 item.
 
-> **APPLIED, not merely recommended** — the one item of R5–R10 that was. It recurred as a MAJOR finding in **two consecutive** adversarial rounds (on `PACKAGE.md` and then on `INTERFACE.md`), which is this loop's own signal to decide rather than defer again. The three tests carry a `resolver_dependent` marker: binding for the two reference backends, skipped with a reason naming §2.6 and this ruling for a foreign adapter. **It changes nothing about this repository's gate** — `PACKAGE.md` §6.1 already requires both reference backends to pass in one run — and removes a promise the suite could not keep to anybody else. **Verified:** a foreign-adapter run skips exactly those three and deselects `C15-02`, printing the reason for each; a reference run still executes all of them (`237 passed` / `273 passed`).
+> **APPLIED, not merely recommended** — the one item of R5–R11 that was. It recurred as a MAJOR finding in **two consecutive** adversarial rounds (on `PACKAGE.md` and then on `INTERFACE.md`), which is this loop's own signal to decide rather than defer again. The three tests carry a `resolver_dependent` marker: binding for the two reference backends, skipped with a reason naming §2.6 and this ruling for a foreign adapter. **It changes nothing about this repository's gate** — `PACKAGE.md` §6.1 already requires both reference backends to pass in one run — and removes a promise the suite could not keep to anybody else. **Verified:** a foreign-adapter run skips exactly those three and deselects `C15-02`, printing the reason for each; a reference run still executes all of them (`237 passed` / `273 passed`).
+>
+> **Corrected once more, in the round after it was applied.** The first implementation gated the skip on whether the *storage adapter* was foreign — the wrong axis for a resolver question. It forgave a foreign backend that had kept the shipped resolver (where the three tests are perfectly valid) and still left §2.6's own **production path** — a reference backend plus a real model resolver — impossible to run, because nothing anywhere let a caller supply a `Resolver` at all. `run_contract_suite(resolver_factory=…)` and `--resolver pkg.mod:Name` now exist, and the skip keys on **the resolver being replaced**. **[Observed]:** with a caller-supplied resolver, exactly those three skip and the run reports `resolver: SUPPLIED BY THE CALLER`; with a foreign adapter and the shipped resolver, all three run.
 >
 > **The supervisor may reverse this.** What a ruling now decides is *confirm or revert*, not *choose from scratch*. The reason it was taken rather than left open: `PACKAGE.md` §0 says a backend is conformant iff the whole suite passes, ruling A5 makes that the Phase 2B gate, and until this change the suite failed legitimate backends for reasons §2.6 says must never gate conformance — a live defect in the gate, not a hypothetical one.
 
@@ -302,6 +304,23 @@ Each names the recommendation, so a ruling is a yes/no rather than a research ta
 **Recommendation: specify `reinstate` in INTERFACE v1**, as a real §5 call with a signature, a data shape and a behaviour-when-uncertain like every other — most plausibly `reinstate(type, reason, *, reinstated_by, namespace) -> TypeEntry | Refusal`, refusing when the retirement's `successor` is itself active, because reinstating a word whose replacement is in use is mechanism 4 arriving through the lifecycle. **Not taken in v0**: a new call is a surface addition, and this row is a validation pass.
 
 **Why it matters beyond tidiness:** UC1 has a classifier that proposes types at runtime, and UC3 has dozens of agencies publishing into one registry. In both, a wrong retirement by one actor permanently removes a word from everyone, with no recorded path back. That is a governance property this document otherwise takes seriously.
+
+### R11 (wanted) — what "conformant" means for a backend that declines several capabilities
+
+**The finding.** Raised by the third adversarial round on `PACKAGE.md`, then enlarged by running it. §3.2 says *"Every other flag may be `False` and the backend can still be conformant"*, and §7.4 calls a `stores_proposals=False` backend — **Tenshen's** — conformant *"as a third backend"*.
+
+**[Observed] neither was true. 26 of 113 tests failed against such a backend**, four of them crashing outright. Causes and fixes are in `PACKAGE.md` §8b.5; the flagship case is now closed and verified (`96 passed, 25 skipped, exit 0`, with the two reference backends still running all 115).
+
+**What remains open, and it is a design question rather than a test bug.** A backend declining **several** optional capabilities at once still fails:
+
+- with `stores_events=False`, an acknowledged merge is correctly refused (`cannot_record_override`, §3.6), so `C16`'s fixture cannot build the store whose invariants `C16` checks;
+- with `indexes_membership=False`, the whole `C10` group's consumer-set guards degrade to `no_consumer_evidence` instead of the specific refusals each test asserts.
+
+Both are the *specified* behaviour. The question is what conformance should mean for a backend that can never complete a merge and can never compute an extent — is it conformant with a much smaller covered surface, or is the honest answer that `indexes_membership` and `stores_events` join `enforces_unique_name` and `transactional` as non-negotiable?
+
+**Recommendation: keep §3.2's two-flag rule, and add a *coverage report* rather than more non-negotiable flags.** A conformance run against a heavily-degraded backend should state which contract ids it could not exercise and why — the same move as `ConsumerReport.complete = False`: make the shortfall visible and enumerable instead of pretending the verdict covers everything. The per-run `CONFORMANCE` summary added by row 3c is where that belongs. **Not taken here**: it changes what a conformance verdict asserts, which is exactly the class of decision this row is not entitled to make alone.
+
+**Why it matters:** UC1's migration story rests on §7.4's verdict. Until the multi-flag case is settled, *"Tenshen conforms as a third backend"* is verified for one declined capability and assumed for the rest.
 
 ### What is NOT wanted
 

@@ -1,4 +1,4 @@
-"""The anti-drift check -- not one of the 109, and the reason 3b is not a fork.
+"""The anti-drift check -- not one of the 115, and the reason 3b is not a fork.
 
 An async mirror maintained by hand is a second copy that will drift; ruling R1's kill
 criterion says so. This package is not maintained by hand. It is regenerated from the

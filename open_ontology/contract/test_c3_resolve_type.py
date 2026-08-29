@@ -68,6 +68,7 @@ def test_c3_05_tier_is_required_not_defaulted(registry):
         registry.resolve_type("facility", ResolveContext())
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c3_06_tier_is_echoed_and_lands_in_provenance_unchanged(registry):
     resolution = registry.resolve_type(
         "facility", ResolveContext(definition_hint="a nursing home"), tier="haiku"
@@ -82,6 +83,7 @@ def test_c3_06_tier_is_echoed_and_lands_in_provenance_unchanged(registry):
     assert registry.provenance("facility").model_tier == "haiku"
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c3_07_a_prior_rejection_surfaces_in_alternatives(registry):
     proposal = registry.propose_type(
         "widget", "a thing somebody wanted once", [], "user:pm"

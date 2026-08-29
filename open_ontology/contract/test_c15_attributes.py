@@ -88,6 +88,7 @@ def test_c15_02_the_census_records_every_key_written_in_off_mode(registry):
     assert census.complete is True
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c15_03_warn_mode_warns_and_does_not_refuse(registry):
     registry.register_attribute_schema(_schema("warn"))
     proposal = registry.propose_type(
@@ -167,6 +168,7 @@ def test_c15_05_a_new_required_field_does_not_invalidate_older_rows(registry):
     assert isinstance(refusal, Refusal) and refusal.reason == "attributes_schema_violation"
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c15_06_the_cms_severity_case_an_ordered_set_with_no_written_ordering(registry):
     """The reason the attribute-schema mechanism exists at all.
 

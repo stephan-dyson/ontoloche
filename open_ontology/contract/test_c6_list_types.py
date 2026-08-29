@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import timedelta
 
 from ._support import seed
@@ -94,6 +96,7 @@ def test_c6_05_orphaned_excludes_the_unknowable_and_says_how_many(adapter, make_
     assert listing.complete is False
 
 
+@pytest.mark.requires_capability("stores_proposals")
 def test_c6_06_unverified_semantics_enumerates_exactly_the_carriers(registry):
     seed(registry, "facility", definition="a nursing home")
     proposal = registry.propose_type(

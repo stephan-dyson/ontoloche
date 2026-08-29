@@ -14,11 +14,13 @@ Who added this, when, on what evidence, and did anybody actually approve it.
 """
 
 from __future__ import annotations
+import pytest
 from datetime import UTC, datetime, timedelta
 from open_ontology.types import Citation, Evidence
 from open_ontology.aio.contract._support import DOC_EVIDENCE_URL, seed
 
 
+@pytest.mark.requires_capability("stores_proposals")
 async def test_c8_01_missing_evidence_is_empty_never_a_reconstructed_narrative(registry):
     proposal = await registry.propose_type("facility", "a nursing home", [], "user:pm")
     await registry.approve(proposal.id, "user:sd")
@@ -28,6 +30,7 @@ async def test_c8_01_missing_evidence_is_empty_never_a_reconstructed_narrative(r
     assert provenance.proposed_by == "user:pm"
     assert provenance.approved_by == "user:sd"
 
+@pytest.mark.requires_capability("stores_proposals")
 async def test_c8_02_history_is_append_only(registry, clock):
     proposal = await registry.propose_type("watch", "a thing a user watches", [], "user:pm")
     await registry.approve(proposal.id, "user:sd")
@@ -63,6 +66,7 @@ async def test_c8_04_an_imported_row_says_unknown_imported_never_null(registry):
         "rid": "ri.o.1",
     }
 
+@pytest.mark.requires_capability("stores_proposals")
 async def test_c8_05_model_tier_is_never_overwritten(registry, clock):
     proposal = await registry.propose_type(
         "scope_severity_code",

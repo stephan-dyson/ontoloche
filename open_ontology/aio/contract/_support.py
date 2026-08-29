@@ -27,6 +27,8 @@ from open_ontology.types import Citation, Evidence
 
 EXTERNAL_FACTORY: Callable[[], Any] | None = None
 
+EXTERNAL_RESOLVER: Callable[[], Any] | None = None
+
 FIXTURE_NAME = "cms_sample_400.csv"
 
 async def snapshot(adapter) -> str:
@@ -334,7 +336,17 @@ def cms_vocabulary(facts: dict) -> list[dict]:
     ]
 
 async def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
-    """Load the sample's vocabulary through the adapter and record its instance counts."""
+    """Load the sample's vocabulary through the adapter and record its instance counts.
+
+    ``propose_type`` returns a ``TypeEntry`` rather than a ``Proposal`` on a backend
+    with ``stores_proposals=False`` -- PACKAGE.md 7.3 B4, which is the Tenshen adapter
+    the document's own design test calls conformant. This harness assumed a ``Proposal``
+    and crashed with ``AttributeError: 'TypeEntry' object has no attribute 'id'``, so
+    **the mandatory C13 group failed a backend §7.4 says conforms** -- the exact
+    "legitimate backend fails for a non-storage reason" class §6.1 exists to prevent.
+    Corrected by row 3c after an adversarial review round; ``seed()`` above always had
+    it right.
+    """
     facts = sample_facts(path)
     entries = []
     for spec in cms_vocabulary(facts):
@@ -347,7 +359,12 @@ async def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
             attributes=spec["attributes"],
             tier="opus",
         )
-        entry = await registry.approve(proposal.id, "user:sd")
+        # B4: no proposal table means propose_type IS the decision.
+        entry = (
+            proposal
+            if isinstance(proposal, TypeEntry)
+            else await registry.approve(proposal.id, "user:sd")
+        )
         for _ in range(spec["uses"]):
             await registry.record_use(spec["name"], by="cms_sample_loader")
         entries.append(entry)

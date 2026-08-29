@@ -11,6 +11,7 @@
 """C6 -- ``list_types`` (6). Mechanism 2: nobody could find the existing types."""
 
 from __future__ import annotations
+import pytest
 from datetime import timedelta
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
@@ -97,6 +98,7 @@ async def test_c6_05_orphaned_excludes_the_unknowable_and_says_how_many(adapter,
     )
     assert listing.complete is False
 
+@pytest.mark.requires_capability("stores_proposals")
 async def test_c6_06_unverified_semantics_enumerates_exactly_the_carriers(registry):
     await seed(registry, "facility", definition="a nursing home")
     proposal = await registry.propose_type(
