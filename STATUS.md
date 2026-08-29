@@ -1,6 +1,6 @@
 # STATUS — where we are, at a glance
 
-**Updated:** 2026-08-28 21:30 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
+**Updated:** 2026-08-29 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
 
 | Roadmap item | Status |
 |---|---|
@@ -16,7 +16,7 @@
 | 3b Async adapter | ✅ done — 267 tests green, both async backends; generated from the sync source, not forked ([docs/runs/3B-ASYNC.md](docs/runs/3B-ASYNC.md)) |
 | Docs folder reorg | ✅ done — `docs/specs` `findings` `runs` `tools` + link checker |
 | `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
-| 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | 🔵 in flight |
+| 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ✅ done — kill-criterion mechanism exercised and **held**; 7 contortions recorded, suite 109 → 117, two design defects fixed ([`docs/findings/3C-VALIDATION.md`](docs/findings/3C-VALIDATION.md)). **R5–R11 want a ruling** |
 | #4 `docs/EDGES.md` v0 | ⏳ queued (after 3c) |
 | #5 Phase 2B Tenshen migration (beacon) | ⏳ beacon row 21.1 spec in progress; **21.2 is no longer blocked — 3b landed** |
 | #6 Actions-registry spec | ⬜ not started |
