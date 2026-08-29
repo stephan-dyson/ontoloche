@@ -16,7 +16,7 @@ outcomes and shapes, never about a score's value.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import ResolveContext
+from open_ontology.types import Resolution, ResolveContext
 from open_ontology.aio.contract._support import seed, snapshot
 
 
@@ -210,7 +210,9 @@ async def test_c3_11_a_retired_name_with_a_live_successor_resolves_to_the_succes
     answer = await registry.propose_type("capture", "something else", [], "user:pm")
     assert answer.status == "retired" and "name_previously_retired" in answer.warnings
 
-async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_asks(registry):
+async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_asks(
+    registry, adapter
+):
     """**Ruling R6, row 3e -- UC3's W1.3, the finding the kill-criterion row rests on.**
 
     docs/findings/3C-VALIDATION.md W1.3, reproduced verbatim: the Department of Parks
@@ -262,11 +264,23 @@ async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_
         "status", ResolveContext(), namespace="oti_311", tier="opus",
         search_namespaces=["dpr", "default"],
     )
-    assert whole.complete is True, "every namespace that exists was named"
-    assert whole.why_incomplete == ""
     assert set(whole.searched_namespaces) == {"oti_311", "dpr", "default"}
     assert "dpr:status" in [name for name, _ in whole.alternatives]
     assert whole.known == len(whole.alternatives), "Rule K"
+    if (await adapter.capabilities()).stores_proposals:
+        assert whole.complete is True, "every namespace that exists was named"
+        assert whole.why_incomplete == ""
+    else:
+        # **`alternatives` is fed from TWO stores** (§5.5's prior rejections come from
+        # `find_proposals`), so on a backend that has no proposal table the list can
+        # never be whole -- which is UC1 Tenshen's own declared shape. This branch is
+        # the finding rather than a concession: [Observed, row 3e second adversarial
+        # round] the first cut computed `complete` from the type store alone and
+        # returned `complete=True, why_incomplete=""` on `sqlite_minimal` next to a
+        # `reason` saying rejections had been omitted -- and *this test asserted it*,
+        # so the suite pinned the contradiction.
+        assert whole.complete is False
+        assert "REJECTIONS" in whole.why_incomplete
 
     # 4. **`kind=` narrows the SCORING and must not hide the collision.** UC3's own
     # shape: DPR publishes `status` as a `value_set`, the 311 team asks for `status` as
@@ -281,8 +295,12 @@ async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_
         "permit", ResolveContext(), namespace="oti_311", tier="opus",
         kind="entity", search_namespaces=["dob", "dpr", "default"],
     )
-    assert "dob:permit" in [name for name, _ in kinded.alternatives], (
-        "a name taken under ANOTHER kind is still a name that is taken"
+    assert ("dob:permit", None) in kinded.alternatives, (
+        "a name taken under ANOTHER kind is still a name that is taken -- and its "
+        "score is None, never 0.0, because nothing scored it (§5.3.1 rule 5, Rule U). "
+        "C3-11 pins the same thing for the in-namespace case; the cross-namespace one "
+        "is what rule 5 exists for and it was checked by name alone until row 3e's "
+        "second adversarial round mutated it to 0.0 and ran both suites green"
     )
     assert "TAKEN" in kinded.reason
 
@@ -304,7 +322,7 @@ async def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_
         "status", ResolveContext(), namespace="oti_311", tier="opus",
         search_namespaces=["dpr", "default", "dob", "archive"],
     )
-    assert named.complete is True
+    assert named.complete is (await adapter.capabilities()).stores_proposals
 
 async def test_c3_13_a_truncated_page_cannot_support_a_completeness_claim(adapter, make_registry):
     """**Rule U, in the one call that gained a `complete=True` to get wrong.**
@@ -335,3 +353,24 @@ async def test_c3_13_a_truncated_page_cannot_support_a_completeness_claim(adapte
     )
     assert resolution.why_incomplete, "and Rule U wants the reason, not just the flag"
     assert "cap" in resolution.why_incomplete
+
+    # **The other store `alternatives` is fed from.** §5.5's prior rejections come from
+    # `find_proposals`, and ruling R6's completeness verdict was computed from the type
+    # store alone -- so a backend that cannot store proposals at all returned
+    # `complete=True` next to a `reason` saying rejections had been omitted from the
+    # very list it had just called whole. [Observed, row 3e second adversarial round]
+    # on `sqlite_minimal`, a reference leg and UC1's own declared shape.
+    no_proposals = await make_registry(AsyncDegradedAdapter(adapter, stores_proposals=False))
+    await seed(no_proposals, "borough", namespace="dpr", definition="one of the five boroughs")
+    blind = await no_proposals.resolve_type(
+        "agency", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert blind.complete is False, (
+        "rejections could not be searched, so the list cannot be called whole"
+    )
+    assert "REJECTIONS" in blind.why_incomplete
+
+    # **§5.3.1 rule 7: a completeness claim without its scope line is not a claim.**
+    with pytest.raises(ValueError):
+        Resolution(outcome="none", reason="", tier="opus", complete=True)

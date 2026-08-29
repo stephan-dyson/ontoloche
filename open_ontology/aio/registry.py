@@ -850,14 +850,34 @@ class AsyncRegistry:
         omitted = [name for name in existing if name not in wanted]
 
         by_namespace: dict[str, list] = {}
+        # **Retired rows are kept, not thrown away.** The first cut filtered them out
+        # after using them to decide which namespaces exist -- so a word RETIRED in a
+        # namespace the caller named came back invisible, under a `complete=True` seal.
+        # In the caller's OWN namespace the identical tombstone is surfaced loudly
+        # (5.3), because discarding it is "Rule U's confident negative, in the call
+        # designed against mechanism 2". Cross-namespace it was dropped. Row 3e, second
+        # adversarial round; in UC3 a retirement by DPR is exactly the *we already
+        # decided about this word* signal the second publisher needs.
+        retired_elsewhere: dict[str, list] = {}
         for rec in census.records:
-            if rec.namespace != namespace and rec.status == "active":
+            if rec.namespace == namespace:
+                continue
+            if rec.status == "active":
                 by_namespace.setdefault(rec.namespace, []).append(rec)
+            elif rec.status == "retired" and rec.name == candidate:
+                retired_elsewhere.setdefault(rec.namespace, []).append(rec)
 
         alternatives: list[Alternative] = []
         seen_labels: set[str] = set()
         exact_elsewhere: list[str] = []
         ambiguous_elsewhere: list[str] = []
+        burned_elsewhere: list[tuple[str, Any]] = []
+        # The home namespace's own rejections are added by `_prior_rejections` in
+        # `resolve_type`; what is decided here is whether that list could be whole.
+        home_rejected, proposals_complete, home_why = await self._rejections_in(
+            namespace, candidate
+        )
+        proposal_whys: list[str] = [home_why] if home_why else []
         for other in wanted:
             if other == namespace:
                 continue
@@ -884,6 +904,8 @@ class AsyncRegistry:
                 exact_elsewhere.append(other)
                 if len({rec.kind for rec in candidates}) > 1:
                     ambiguous_elsewhere.append(other)
+            for tombstone in retired_elsewhere.get(other, ()):
+                burned_elsewhere.append((other, tombstone))
 
             pool = by_namespace.get(other, ())
             if kind is not None:
@@ -899,11 +921,28 @@ class AsyncRegistry:
                     seen_labels.add(label)
                     alternatives.append((label, score))
             label = f"{other}:{candidate}"
-            if other in exact_elsewhere and label not in seen_labels:
+            if (
+                other in exact_elsewhere or other in {n for n, _ in burned_elsewhere}
+            ) and label not in seen_labels:
                 # Score is None, not 0.0: nothing scored it, and Rule U forbids a zero
                 # standing in for "we did not score this".
                 seen_labels.add(label)
                 alternatives.append((label, None))
+            # **The proposal store is the OTHER source `alternatives` is fed from**, and
+            # ruling R6's first cut searched it in the home namespace only. A word
+            # proposed and rejected in another namespace is the cheapest possible record
+            # of *we already decided against this*, which is the whole reason 5.5
+            # surfaces it at home. Row 3e, second adversarial round.
+            rejected, rejected_complete, rejected_why = await self._rejections_in(other, candidate)
+            if not rejected_complete:
+                proposals_complete = False
+                if rejected_why and rejected_why not in proposal_whys:
+                    proposal_whys.append(rejected_why)
+            for name in rejected:
+                label = f"{other}:{name}"
+                if label not in seen_labels:
+                    seen_labels.add(label)
+                    alternatives.append((label, None))
 
         note: str | None = None
         if exact_elsewhere:
@@ -925,11 +964,33 @@ class AsyncRegistry:
                 "near misses in other namespaces are listed in alternatives: "
                 + ", ".join(sorted(name for name, _ in alternatives))
             )
+        if burned_elsewhere:
+            burned = "; ".join(
+                f"{ns}:{rec.name} was RETIRED there ("
+                + (getattr(rec, "retire_reason", None) or "no reason recorded")
+                + (
+                    f", successor {rec.successor!r}"
+                    if getattr(rec, "successor", None)
+                    else ""
+                )
+                + ")"
+                for ns, rec in sorted(burned_elsewhere, key=lambda pair: pair[0])
+            )
+            note = f"{note}; {burned}" if note else burned
 
-        # Rule U, three ways. A namespace nobody named, a page the backend could not
-        # fully answer, and a backend that could not enumerate the namespaces at all are
-        # three different reasons the search was partial, and the caller is told which.
-        complete = not omitted and census.complete
+        # Rule U, four ways. A namespace nobody named, a page the backend could not
+        # fully answer, a backend that could not enumerate the namespaces at all, and a
+        # PROPOSAL store that could not answer are four different reasons the search was
+        # partial, and the caller is told which.
+        #
+        # The fourth was added by row 3e's SECOND adversarial round, and it is the
+        # defect this row's own round-1 fix left behind: rule 8 was applied to
+        # `find_types` and not to `find_proposals`, which is the other store
+        # `alternatives` is fed from. [Observed] on `sqlite_minimal` -- a reference leg
+        # and UC1's declared shape -- one `Resolution` said `complete=True`,
+        # `why_incomplete=""`, and in the adjacent `reason` field that prior rejections
+        # had been omitted from the list it had just called whole.
+        complete = not omitted and census.complete and proposals_complete
         why = ""
         if omitted:
             why = (
@@ -948,7 +1009,42 @@ class AsyncRegistry:
                 "exist and what is in them are partial: "
                 + (census.why_incomplete or "no reason given by the backend")
             )
+        elif not proposals_complete:
+            why = (
+                "every namespace the caller named was searched and the type store "
+                "answered in full, but prior REJECTIONS could not be searched, so "
+                "alternatives is short by however many there are: "
+                + "; ".join(proposal_whys or ["no reason given by the backend"])
+            )
         return tuple(alternatives), tuple(wanted), complete, why, note
+
+    async def _rejections_in(
+        self, namespace: str, candidate: str
+    ) -> tuple[tuple[str, ...], bool, str | None]:
+        """``(rejected names, could we look, why not)`` for one namespace.
+
+        The second store ``Resolution.alternatives`` is fed from (5.5). Split out of
+        ``_prior_rejections`` by row 3e's second adversarial round, which found that
+        ruling R6's completeness verdict was computed from the type store alone -- so a
+        backend with ``stores_proposals=False`` returned ``complete=True`` next to a
+        ``reason`` saying rejections had been omitted.
+        """
+        if not self.caps.stores_proposals:
+            return (), False, (
+                "prior rejections could not be searched in namespace "
+                f"{namespace!r}: " + (self.caps.reason("stores_proposals") or "")
+            )
+        page = await self.adapter.find_proposals(
+            ProposalQuery(namespace=namespace, name=candidate, status="rejected")
+        )
+        if not page.complete:
+            return (
+                tuple(r.name for r in page.records),
+                False,
+                f"the rejected-proposal page for namespace {namespace!r} was partial: "
+                + (page.why_incomplete or "no reason given by the backend"),
+            )
+        return tuple(r.name for r in page.records), True, None
 
     async def _prior_rejections(
         self, namespace: str, candidate: str
@@ -2182,34 +2278,54 @@ class AsyncRegistry:
                 namespace=namespace, entries=(), known=None, complete=False, why_incomplete=why
             )
         rows: list[AttrObservedRecord] = await store.read_attr_observed(namespace, kind=kind)
+        # **One lookup per KIND, hoisted out of the row loop.** The first cut called
+        # `_name_level_schemas` inside the loop, for every key the per-kind schema did
+        # not declare -- one `find_types` plus one `get_attr_schema` per type, per key.
+        # Measured at 21,043 SQL round-trips for 500 types and 21 census keys on one
+        # `attribute_census()` call, each of them a network hop on the Postgres leg.
+        # Row 3e, second adversarial round; the fix is the same "one fetch, reused" move
+        # ruling R6's own cost finding produced one round earlier.
+        per_kind_cache: dict[str, AttributeSchema | None] = {}
+        name_level_cache: dict[str, list[AttributeSchema]] = {}
+        for row in rows:
+            if row.kind not in per_kind_cache:
+                per_kind_cache[row.kind] = await self._schema_for(namespace, row.kind)
+                name_level_cache[row.kind] = await self._name_level_schemas(namespace, row.kind)
         entries = []
         for row in rows:
             # A census row is (kind, key) over EVERY type of that kind, and since
-            # ruling R10 a key can be declared by a name-level schema for one name and
-            # by nothing for the rest. `True` off one override would claim it for types
-            # the override never covered; `False` is a confident negative about a key
-            # that is *required* somewhere -- Rule U, on the call whose whole job is
-            # making the escape hatch enumerable. So the answer is tri-state and the
-            # third state names the schemas it depends on. Row 3e, first adversarial
-            # round.
-            per_kind = await self._schema_for(namespace, row.kind)
-            declared: bool | None = bool(per_kind and row.key in per_kind.fields)
+            # ruling R10 a key can be declared for one name and not for the rest. Both
+            # a confident `True` and a confident `False` are wrong there, and the first
+            # cut fixed only one direction: it asked the per-kind schema, fell back to
+            # the overrides when the answer was `False`, and returned a flat `True` when
+            # the per-kind schema declared a key an override REMOVES -- while the
+            # registry refused a write of that key on the overridden name with "not
+            # declared in the schema". Same Rule U failure, same call, same CMS fixture,
+            # pointing the other way. Row 3e, second adversarial round.
+            #
+            # So the rule is symmetric: `None` whenever ANY name-level schema of the
+            # kind disagrees with the per-kind schema about this key, in either
+            # direction, with `declared_why` naming the names it depends on.
+            per_kind = per_kind_cache.get(row.kind)
+            in_kind = bool(per_kind and row.key in per_kind.fields)
+            disagree = sorted(
+                schema.name
+                for schema in name_level_cache.get(row.kind, ())
+                if schema.name and (row.key in (schema.fields or {})) != in_kind
+            )
+            declared: bool | None = in_kind
             declared_why: str | None = None
-            if not declared:
-                by_name = sorted([
-                    rec.name
-                    for rec in await self._name_level_schemas(namespace, row.kind)
-                    if row.key in (rec.fields or {}) and rec.name
-                ])
-                if by_name:
-                    declared = None
-                    declared_why = (
-                        "the per-kind schema does not declare this key and the "
-                        "name-level schema(s) for "
-                        + ", ".join(repr(n) for n in by_name)
-                        + " do, so whether it is declared depends on which type "
-                        "(PACKAGE.md 5.2b, ruling R10)"
-                    )
+            if disagree:
+                declared = None
+                declared_why = (
+                    "the per-kind schema "
+                    + ("declares" if in_kind else "does not declare")
+                    + " this key and the name-level schema(s) for "
+                    + ", ".join(repr(n) for n in disagree)
+                    + (" do not" if in_kind else " do")
+                    + ", so whether it is declared depends on which type "
+                    "(PACKAGE.md 5.2b, ruling R10)"
+                )
             entries.append(
                 CensusEntry(
                     kind=row.kind,
