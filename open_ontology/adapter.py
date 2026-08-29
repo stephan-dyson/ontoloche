@@ -23,7 +23,7 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 __all__ = [
     "Capabilities",
@@ -41,6 +41,7 @@ __all__ = [
     "AttrSchemaRecord",
     "AttrObservedRecord",
     "CAPABILITY_FLAGS",
+    "TRANSACTION_SCOPES",
 ]
 
 
@@ -62,6 +63,10 @@ CAPABILITY_FLAGS = (
 #: conformant, because the suite asserts honest unknowns rather than values.
 REQUIRED_CAPABILITIES = ("enforces_unique_name", "transactional")
 
+#: PACKAGE.md 3.5, ruling R5. ``transactional`` stays REQUIRED True either way -- a
+#: savepoint adapter IS transactional; what differs is who owns the commit.
+TRANSACTION_SCOPES = ("owned", "savepoint")
+
 
 @dataclass(frozen=True)
 class Capabilities:
@@ -82,12 +87,30 @@ class Capabilities:
     timestamps_usage: bool
     owns_schema: bool
     why: dict[str, str] = field(default_factory=dict)
+    #: Ruling R5 / PACKAGE.md 3.5. ``"owned"`` -- this adapter owns the connection and
+    #: ``transaction()`` commits at depth 0. ``"savepoint"`` -- the connection is the
+    #: host's: ``transaction()`` brackets its writes in a SAVEPOINT, RELEASEs on clean
+    #: exit, ROLLBACKs TO on exception, and NEVER commits. Atomicity (G2) holds inside
+    #: the host's transaction; durability at clean exit belongs to the host, and
+    #: ``why["transaction_scope"]`` is the sentence that says so.
+    transaction_scope: Literal["owned", "savepoint"] = "owned"
 
     def missing_why(self) -> tuple[str, ...]:
-        """Flags that are False with no sentence explaining it. Invariant C0-01."""
-        return tuple(
+        """Flags that are False with no sentence explaining it. Invariant C0-01.
+
+        ``transaction_scope="savepoint"`` is held to the same rule though it is not a
+        bool: it is the one declaration that changes what a *successful* return means --
+        the write is atomic but not yet durable -- so ruling R5 requires the sentence
+        that surfaces wherever a result would otherwise imply durability.
+        """
+        missing = [
             f for f in CAPABILITY_FLAGS if not getattr(self, f) and not self.why.get(f, "").strip()
-        )
+        ]
+        if self.transaction_scope == "savepoint" and not self.why.get(
+            "transaction_scope", ""
+        ).strip():
+            missing.append("transaction_scope")
+        return tuple(missing)
 
     def reason(self, flag: str) -> str:
         """The adapter's own sentence for a False flag, verbatim."""

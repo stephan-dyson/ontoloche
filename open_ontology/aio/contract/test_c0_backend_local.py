@@ -205,3 +205,184 @@ async def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_pa
                 pass
         await guest.close()
         await owner.close()
+
+
+class _Boom(RuntimeError):
+    """The host's work must survive this; the adapter's must not."""
+
+
+async def _borrowed_sqlite(tmp_path):
+    import aiosqlite
+
+    from open_ontology.aio.backends.sqlite import AsyncSQLiteAdapter
+
+    path = str(tmp_path / "borrowed.sqlite")
+    owner = await AsyncSQLiteAdapter.open(path)
+    await owner.migrate()  # the HOST's schema, created and committed before we borrow
+    await owner.close()
+
+    host = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
+    async with host.execute("PRAGMA foreign_keys = ON"):
+        pass
+    async with host.execute("PRAGMA busy_timeout = 5000"):
+        pass
+    guest = await AsyncSQLiteAdapter.open(path, connection=host, owns_schema=False)
+
+    async def outsider(name):
+        other = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
+        try:
+            sql = "SELECT count(*) FROM oo_type WHERE name = ?"
+            async with other.execute(sql, (name,)) as cur:
+                return (await cur.fetchone())[0]
+        finally:
+            await other.close()
+
+    async def host_begin():
+        async with host.execute("BEGIN IMMEDIATE"):
+            pass
+
+    async def host_open():
+        return bool(host.in_transaction)
+
+    async def host_commit():
+        async with host.execute("COMMIT"):
+            pass
+
+    async def teardown():
+        await host.close()
+
+    return guest, outsider, host_begin, host_open, host_commit, teardown
+
+
+async def _borrowed_postgres():
+    import psycopg
+
+    from open_ontology.aio.backends.postgres import AsyncPostgresAdapter
+
+    schema = "oo_borrow_" + uuid.uuid4().hex[:12]
+    owner = await AsyncPostgresAdapter.open(POSTGRES_DSN, schema=schema)
+    await owner.migrate()  # the HOST's schema, committed before we borrow
+
+    # autocommit stays FALSE: a host that manages its own transaction, which is the
+    # shape beacon's AsyncSession has and the shape U1 was wrong for.
+    host = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
+    async with host.cursor() as cur:
+        await cur.execute('SET search_path TO "' + schema + '"')
+    guest = await AsyncPostgresAdapter.open(
+        connection=host, schema=schema, owns_schema=False
+    )
+
+    async def outsider(name):
+        other = await psycopg.AsyncConnection.connect(POSTGRES_DSN, autocommit=True)
+        try:
+            async with other.cursor() as cur:
+                await cur.execute('SET search_path TO "' + schema + '"')
+                await cur.execute("SELECT count(*) FROM oo_type WHERE name = %s", (name,))
+                return (await cur.fetchone())[0]
+        finally:
+            await other.close()
+
+    async def host_begin():
+        # psycopg3 with autocommit=False begins implicitly on the first statement, and
+        # the SET search_path above already was one. Assert it, do not assume it.
+        assert host.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS
+
+    async def host_open():
+        return host.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS
+
+    async def host_commit():
+        await host.commit()
+
+    async def teardown():
+        await host.close()
+        await owner._execute('DROP SCHEMA IF EXISTS "' + schema + '" CASCADE')
+        await owner.close()
+
+    return guest, outsider, host_begin, host_open, host_commit, teardown
+
+
+async def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(
+    backend, tmp_path
+):
+    """C0-12's async twin, hand-written for the same reason C0-08's and C0-09's are:
+    it builds backends directly, with ``await Adapter.open(...)`` (D-A1).
+
+    **U1 / ruling R5 -- and the async leg is the one the defect was found in.**
+    ``AsyncPostgresAdapter.open(connection=...)`` accepted a borrowed connection and
+    then called ``set_autocommit(True)`` on it, and ``transaction()`` committed at depth
+    0: the host shared a connection and did not share a transaction. beacon 21.2 builds
+    its ``AsyncSession`` seam against exactly this call.
+
+    Asserted: (1) an exception inside ``transaction()`` leaves the host's transaction
+    OPEN with only the savepoint rolled back; (2) a clean exit is not durable until the
+    host commits; (3) re-entrant calls join the outermost savepoint (R5 point 3).
+    """
+    if backend == "sqlite":
+        parts = await _borrowed_sqlite(tmp_path)
+    elif backend == "postgres":
+        if not POSTGRES_DSN:
+            pytest.skip("PENDING -- no local Postgres; set OO_POSTGRES_DSN")
+        pytest.importorskip("psycopg", reason="PENDING -- psycopg is not installed")
+        parts = await _borrowed_postgres()
+    else:
+        pytest.skip(
+            "PENDING -- a borrowed connection is a property of the reference backends' "
+            "drivers; a foreign adapter declares its own transaction_scope."
+        )
+    guest, outsider, host_begin, host_open, host_commit, teardown = parts
+
+    try:
+        caps = await guest.capabilities()
+        assert caps.transaction_scope == "savepoint", "borrowed DECLARES; it is not silent"
+        assert caps.transactional is True, (
+            "R5 point 2: a savepoint adapter is still transactional -- G2 atomicity "
+            "holds inside the host's transaction"
+        )
+        assert caps.why.get("transaction_scope", "").strip()
+        assert caps.missing_why() == ()
+
+        await host_begin()
+        assert await guest.migrate() >= 1  # verify-only; the host owns this schema
+
+        # The host's own work, done through the borrowed handle, before anything fails.
+        await guest.put_type(_type("host_row"), expect_absent=True)
+
+        # 1. An exception rolls the SAVEPOINT back and leaves the host transaction open.
+        with pytest.raises(_Boom):
+            async with guest.transaction():
+                await guest.put_type(_type("doomed"), expect_absent=True)
+                raise _Boom("the adapter's failure is not the host's")
+        assert await guest.get_type("default", "doomed", kind="entity") is None
+        assert await guest.get_type("default", "host_row", kind="entity") is not None
+        assert await host_open(), (
+            "the host's outer transaction must still be OPEN -- ending it is the defect "
+            "U1 names: sharing a connection is not sharing a transaction"
+        )
+
+        # 2. Re-entrant calls join the outermost savepoint (R5 point 3).
+        with pytest.raises(_Boom):
+            async with guest.transaction():
+                await guest.put_type(_type("outer"), expect_absent=True)
+                async with guest.transaction():
+                    await guest.put_type(_type("inner"), expect_absent=True)
+                    raise _Boom("joined, so both go")
+        assert await guest.get_type("default", "outer", kind="entity") is None
+        assert await guest.get_type("default", "inner", kind="entity") is None
+        assert await host_open()
+
+        # 3. A clean exit RELEASEs -- and is NOT durable until the host commits.
+        async with guest.transaction():
+            await guest.put_type(_type("clean"), expect_absent=True)
+        assert await guest.get_type("default", "clean", kind="entity") is not None
+        assert await host_open(), "RELEASE is not COMMIT"
+        assert await outsider("clean") == 0, (
+            "the adapter must never commit a connection it does not own: durability at "
+            "clean exit is the host's, and until the host commits nobody else sees it"
+        )
+        assert await outsider("host_row") == 0
+
+        await host_commit()
+        assert await outsider("clean") == 1 and await outsider("host_row") == 1
+        assert await outsider("doomed") == 0 and await outsider("outer") == 0
+    finally:
+        await teardown()

@@ -61,20 +61,28 @@ class AsyncPostgresAdapter(AsyncBaseSqlAdapter):
     ) -> "AsyncPostgresAdapter":
         import psycopg  # an extra, so the base install stays dependency-free
 
-        if connection is not None:
+        borrowed = connection is not None
+        if borrowed:
             conn = connection
         elif conninfo is not None:
             conn = await psycopg.AsyncConnection.connect(conninfo, autocommit=True)
         else:
             raise ValueError("AsyncPostgresAdapter needs a conninfo or a connection")
-        await conn.set_autocommit(True)
+        if not borrowed:
+            # U1 / ruling R5. This line used to run unconditionally, and on a BORROWED
+            # connection it was the bug beacon 21.1 found: sharing a connection is not
+            # sharing a transaction. A connection we were lent keeps every setting the
+            # host chose, and transaction() uses SAVEPOINTs instead of BEGIN/COMMIT.
+            await conn.set_autocommit(True)
         self = cls(conn, psycopg, schema=schema, owns_schema=owns_schema)
+        self._borrowed = borrowed
         if schema:
             # One schema per store keeps two adapters in one process (which the suite
-            # requires) from sharing a table name.
-            async with conn.cursor() as cur:
-                await cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-                await cur.execute(f'SET search_path TO "{schema}"')
+            # requires) from sharing a table name. Over a borrowed connection this is a
+            # write like any other, so it goes through transaction() -- i.e. a savepoint.
+            async with self.transaction():
+                await self._execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+                await self._execute(f'SET search_path TO "{schema}"')
         return self
 
     # ------------------------------------------------------------------ connection
@@ -123,4 +131,8 @@ class AsyncPostgresAdapter(AsyncBaseSqlAdapter):
         return tuple(r[0] for r in rows)
 
     async def close(self) -> None:
+        """A borrowed connection is the host's; closing it here would be the same class
+        of mistake as committing it (ruling R5)."""
+        if self._borrowed:
+            return
         await self.conn.close()
