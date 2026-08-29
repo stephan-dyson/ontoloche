@@ -64,3 +64,36 @@ def test_the_suite_implements_every_enumerated_contract_id():
     assert not missing, f"contract ids with no test: {missing}"
     assert not extra, f"test functions claiming ids PACKAGE.md 6.2 does not enumerate: {extra}"
     assert len(found) == TOTAL
+
+
+def test_the_spec_still_describes_the_code():
+    """Not one of the 115 -- suite bookkeeping, like the id census above.
+
+    Six consecutive adversarial review rounds on ``docs/specs/INTERFACE.md`` each found
+    at least one defect of the same family: a printed data shape or signature that had
+    drifted from this implementation. Each was found by a reader comparing two files by
+    eye, and each had survived earlier readers doing the same. ``check_spec_drift.py``
+    does it mechanically, and found two more the moment it was written
+    (``Provenance.history_why`` and ``TypeListing.excluded_unknown``, both recorded as
+    deviations in INTERFACE.md 11 and both missing from the shapes it prints).
+
+    Running it here means the spec cannot drift from the code without the suite saying
+    so -- the same move as ``test_generated_matches_source.py`` makes for the async
+    mirror. Skipped rather than failed when the checked-in spec is not on disk, since an
+    installed wheel does not ship ``docs/``.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    checker = root / "docs" / "tools" / "check_spec_drift.py"
+    if not checker.exists():  # pragma: no cover - an installed wheel has no docs/
+        import pytest
+
+        pytest.skip("PENDING -- docs/tools/check_spec_drift.py is not in this install")
+
+    done = subprocess.run(
+        [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
