@@ -647,6 +647,8 @@ def provenance(type: str, *, namespace: str = "default") -> Provenance: ...
 
 ### 5.9 `retire`
 
+> **`retire(successor=…)` carries `merge_types`' two IDENTITY guards, and it did not until row #6's third adversarial round** *(2026-08-29)*. `resolve_type` on a retired name returns its successor at **confidence 1.0** (§5.3, which this document calls a guarantee), so a retirement that names a successor performs the same collapse a merge performs — and a reviewer used it to reach `ROADMAP.md`'s **kill row**: the predicate pair `merge_types` had just refused **non-overridably under all five acknowledgements** collapsed through `retire` with **no refusal, no acknowledgement and no warning**, and did so across kinds as well. **The two guards that transfer are §5.10's refusals #2 (`predicate_merge`) and #3 (`kind_mismatch`)** — the two that are about *identity* rather than about *evidence*. They are non-overridable here as they are there, **`force=True` included**: `force` overrides the consumer guards, which are about what could be seen, never the identity guards, which are about what would become true. The guard is narrow — a plain retirement still works, and so does one whose successor shares a **non-empty identical** extent. `C9-18`.
+
 ```python
 def retire(
     type: str,
