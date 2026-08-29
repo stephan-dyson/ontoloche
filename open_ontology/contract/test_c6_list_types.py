@@ -17,7 +17,11 @@ def test_c6_01_any_filter_that_hid_rows_makes_the_listing_incomplete(registry):
     registry.retire("watch", "superseded", retired_by="user:sd")
 
     default = registry.list_types()
-    assert [t.name for t in default.types] == ["facility"]
+    # A store at version 4 ships one seeded family, `default:edge:equivalent_to`
+    # (EDGES.md 3.1, ruling R7), so a census of a fresh store counts it. Listed
+    # rather than filtered out of the assertion: a census that hid a row would stop
+    # being a census, which is this whole group's subject.
+    assert [t.name for t in default.types] == ["equivalent_to", "facility"]
     assert default.complete is False, (
         "include_retired=False is the default AND hides things"
     )
@@ -36,7 +40,8 @@ def test_c6_02_known_counts_the_returned_set_and_is_none_when_uncountable(
     seed(setup, "survey", definition="an inspection visit")
 
     listing = setup.list_types(include_retired=True, status=None, namespace=None)
-    assert listing.known == 2 == len(listing.types)
+    # Two seeded here plus the one the store ships -- EDGES.md 3.1.
+    assert listing.known == 3 == len(listing.types)
 
     blind = make_registry(DegradedAdapter(adapter, pages_countable=False))
     uncountable = blind.list_types(include_retired=True, status=None, namespace=None)
@@ -67,8 +72,16 @@ def test_c6_04_the_true_census_is_complete(registry):
     census = registry.list_types(include_retired=True, status=None, namespace=None)
     assert census.complete is True
     assert census.why_incomplete is None
-    assert sorted(t.name for t in census.types) == ["facility", "watch"]
-    assert census.known == 2
+    # A store at version 4 ships one seeded family, `default:edge:equivalent_to`
+    # (EDGES.md 3.1, ruling R7), so a census of a fresh store counts it. Listed
+    # rather than filtered out of the assertion: a census that hid a row would stop
+    # being a census, which is this whole group's subject.
+    assert sorted(t.name for t in census.types) == [
+        "equivalent_to",
+        "facility",
+        "watch",
+    ]
+    assert census.known == 3
 
 
 @pytest.mark.requires_capability("counts_usage")
@@ -91,7 +104,9 @@ def test_c6_05_orphaned_excludes_the_unknowable_and_says_how_many(adapter, make_
     assert half_blind.usage("survey").orphaned is True
 
     listing = half_blind.list_types(orphaned=True)
-    assert [t.name for t in listing.types] == ["survey"]
+    # The seeded family has never been recorded either, so it is orphaned too --
+    # which is the true answer about a store nobody has written an edge into yet.
+    assert [t.name for t in listing.types] == ["equivalent_to", "survey"]
     assert listing.excluded_unknown == 1, (
         "an unknown orphan state is excluded from both answers and counted, not folded "
         "into whichever answer the caller asked for"
@@ -116,7 +131,10 @@ def test_c6_06_unverified_semantics_enumerates_exactly_the_carriers(registry):
     assert [t.name for t in flagged.types] == ["scope_severity_code"]
 
     clean = registry.list_types(unverified_semantics=False)
-    assert [t.name for t in clean.types] == ["facility"]
+    # The seeded family asserts no domain semantic and carries its own evidence
+    # (ruling R7), so it belongs on the clean side -- which is the assertion that
+    # would catch a seed that quietly arrived unverified.
+    assert [t.name for t in clean.types] == ["equivalent_to", "facility"]
     assert flagged.complete is False and clean.complete is False
 
 
@@ -138,9 +156,14 @@ def test_c6_07_the_census_spans_namespaces_and_a_scoped_listing_says_it_did_not(
 
     census = registry.list_types(include_retired=True, status=None, namespace=None)
     assert census.complete is True and census.why_incomplete is None
-    assert sorted(t.namespace for t in census.types) == ["dot", "dpr", "oti_311"]
-    assert census.known == 3
-    assert len({t.definition for t in census.types}) == 3, "three words, three meanings"
+    assert sorted(t.namespace for t in census.types) == [
+        "default",  # the seeded family -- EDGES.md 3.1
+        "dot",
+        "dpr",
+        "oti_311",
+    ]
+    assert census.known == 4
+    assert len({t.definition for t in census.types}) == 4, "three words, three meanings"
 
     scoped = registry.list_types(include_retired=True, status=None, namespace="dot")
     assert [t.namespace for t in scoped.types] == ["dot"]

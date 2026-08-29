@@ -27,6 +27,8 @@ from .adapter import (
     AttributeStore,
     Capabilities,
     ConsumerRecord,
+    EdgeQuery,
+    EdgeRecord,
     EventRecord,
     ProposalQuery,
     ProposalRecord,
@@ -43,6 +45,28 @@ from .attributes import (
     FieldSpec,
     strictest,
     validate_attributes,
+)
+from .edges import (
+    DEFAULT_MAX_EDGES,
+    DEPTH_CAP,
+    DIRECTIONS,
+    EDGE_LEVELS,
+    EQUIVALENT_TO,
+    EQUIVALENT_TO_ATTRIBUTES,
+    EQUIVALENT_TO_DEFINITION,
+    Edge,
+    EdgeFamily,
+    EdgeProvenance,
+    InstanceRef,
+    NeighborEdge,
+    NeighborReport,
+    NodeRef,
+    TypeRef,
+    family_declaration_problem,
+    level_of,
+    node_key,
+    node_ref,
+    type_of,
 )
 from .errors import NotSupported, UnknownType
 from .policy import NamespacePolicy
@@ -81,6 +105,23 @@ __all__ = ["Registry", "NAME_RE", "CONSUMERS_WHY_INCOMPLETE"]
 _NEAR_MISS_CAP = 5
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+#: How many rows the registry asks the adapter for per page when it is assembling
+#: something to exhaustion -- a depth level of a neighbour walk, or the census of
+#: `kind="edge"` entries. A number rather than `None` so the paging loop EDGES.md
+#: 4.2 requires is exercised on every ordinary call rather than only on a fixture
+#: built to trigger it: a loop that never runs in production is a loop nobody has
+#: evidence for.
+_EDGE_PAGE_SIZE = 256
+
+#: Rule U applied to an edge's history. `neighbors` and `add_edge` do not fetch
+#: events per edge -- on the 9.7M-degree node EDGES.md 4.2 measures, that is the
+#: whole reason the read seam is bounded -- so an empty `history` on an edge they
+#: returned means *not read*, and this says so rather than letting `()` read as
+#: "nothing happened".
+_EDGE_HISTORY_WHY = (
+    "history is not fetched per edge by neighbors or add_edge; call edge_provenance(edge_id) for it"
+)
 
 #: INTERFACE.md 5.1 -- the sentence a caller must be able to print. `complete` is
 #: always False in v0, even when every consumer in a system is registered, because the
@@ -261,6 +302,90 @@ def _prov_from_dict(
     )
 
 
+# ------------------------------------------------------------------- edge (de)serialisation
+#
+# EDGES.md 7.1's boundary, as two functions. `EdgeRecord` is flat and JSON-shaped and
+# the adapter never sees anything else; `Edge` is the facade object with structured
+# references, a typed provenance and a computed warnings list. Both directions live
+# here, above the adapter, for the same reason `_prov_to_dict` does.
+
+
+def _edge_prov_to_dict(p: EdgeProvenance) -> dict:
+    return {
+        "created_at": _iso(p.created_at),
+        "created_by_actor": p.created_by_actor,
+        "created_by": p.created_by,
+        "confidence": p.confidence,
+        "evidence": [_evidence_to_dict(e) for e in p.evidence],
+        "source_version": p.source_version,
+        "model_tier": p.model_tier,
+        "retracted_by": p.retracted_by,
+        "retracted_at": _iso(p.retracted_at),
+        "retract_reason": p.retract_reason,
+        "history_why": p.history_why,
+    }
+
+
+def _edge_prov_from_dict(d: dict, rec: EdgeRecord) -> EdgeProvenance:
+    d = dict(d or {})
+    return EdgeProvenance(
+        created_at=_ts(d.get("created_at")) or rec.created_at,
+        created_by_actor=d.get("created_by_actor") or "unknown",
+        created_by=d.get("created_by") or "user",
+        confidence=d.get("confidence"),
+        evidence=tuple(_evidence_from_dict(e) for e in d.get("evidence") or ()),
+        source_version=d.get("source_version"),
+        model_tier=d.get("model_tier"),
+        # The tombstone is read off the COLUMNS, not off the blob: a backend with
+        # `stores_edge_events=False` still has to answer "why is this retracted?", which
+        # is why EdgeRecord carries the four (EDGES.md 2.6, 7.1).
+        retracted_by=rec.retracted_by,
+        retracted_at=rec.retracted_at,
+        retract_reason=rec.retract_reason,
+        history=(),
+        history_why=d.get("history_why") or _EDGE_HISTORY_WHY,
+    )
+
+
+def _edge_to_record(edge: Edge) -> EdgeRecord:
+    src, dst = node_key(edge.src), node_key(edge.dst)
+    return EdgeRecord(
+        edge_id=edge.edge_id,
+        namespace=edge.namespace,
+        family=edge.family,
+        src_namespace=src[0], src_kind=src[1], src_name=src[2], src_instance_id=src[3],
+        dst_namespace=dst[0], dst_kind=dst[1], dst_name=dst[2], dst_instance_id=dst[3],
+        attributes=dict(edge.attributes),
+        attr_schema_version=edge.attr_schema_version,
+        provenance=_edge_prov_to_dict(edge.provenance),
+        status=edge.status,
+        warnings=tuple(edge.warnings),
+        created_at=edge.provenance.created_at,
+        retract_reason=edge.provenance.retract_reason,
+        retracted_by=edge.provenance.retracted_by,
+        retracted_at=edge.provenance.retracted_at,
+    )
+
+
+def _edge_from_record(rec: EdgeRecord, extra_warnings: tuple[str, ...] = ()) -> Edge:
+    warnings = list(rec.warnings)
+    for w in extra_warnings:
+        if w not in warnings:
+            warnings.append(w)
+    return Edge(
+        edge_id=rec.edge_id,
+        family=rec.family,
+        namespace=rec.namespace,
+        src=node_ref(rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id),
+        dst=node_ref(rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id),
+        provenance=_edge_prov_from_dict(rec.provenance, rec),
+        attributes=dict(rec.attributes or {}),
+        status=rec.status,
+        warnings=tuple(warnings),
+        attr_schema_version=rec.attr_schema_version,
+    )
+
+
 class Registry:
     """The fourteen calls of INTERFACE.md 5, plus three package-local helpers.
 
@@ -279,6 +404,8 @@ class Registry:
         policy: NamespacePolicy | None = None,
         policies: dict[str, NamespacePolicy] | None = None,
         migrate: bool = True,
+        max_edges: int | None = DEFAULT_MAX_EDGES,
+        seed_equivalent_to: bool = True,
     ):
         self.adapter = adapter
         self.resolver = resolver or DeterministicResolver()
@@ -300,10 +427,32 @@ class Registry:
             if self.caps.transaction_scope == "savepoint"
             else None
         )
+        #: EDGES.md 4.2's assembly bound, and it is a DEPLOYMENT parameter rather
+        #: than a `neighbors` argument: 4.2 calls it a circuit breaker, and a
+        #: circuit breaker a caller can raise per call is not one. It is ON by
+        #: default -- round 3 of the spec row's loop found it opt-in, which leaves
+        #: the DEFAULT behaviour as exactly the unbounded materialisation R13 exists
+        #: to prevent. `max_edges=None` disables it, and a deployment that does so
+        #: has chosen the unbounded fetch rather than inherited it.
+        self.max_edges = max_edges
         if migrate:
             # PACKAGE.md 9.2 -- a store from the future raises rather than being read
             # under old assumptions. The failure mode is a loud refusal at startup.
             adapter.migrate()
+        # Gated on `migrate` and NOT on `stores_edges`, and the second half is a
+        # decision the suite forced. Gating on the edge store made the three reference
+        # legs disagree about what is in a fresh vocabulary -- `sqlite_minimal` declares
+        # `stores_edges=False`, so it alone had no `equivalent_to` and five census ids
+        # failed on that leg alone. The rule that falls out is the right one:
+        # **`equivalent_to` is a row of the VOCABULARY, and whether this deployment
+        # happens to have an edge store is not a fact about the vocabulary.** A
+        # type-only backend registers the word honestly and `add_edge` on it refuses
+        # `edge_store_absent` with that backend's own sentence, which is Rule U doing
+        # exactly its job. Gating on `migrate` is the other half: a Registry that
+        # declines to bring the store up to date declines to write to it at all, so a
+        # borrowed connection gets no surprise write at construction time.
+        if seed_equivalent_to and migrate:
+            self._seed_equivalent_to()
 
     # ------------------------------------------------------------------- internals
     def policy(self, namespace: str) -> NamespacePolicy:
@@ -339,6 +488,7 @@ class Registry:
         kind: str | None = None,
         name: str | None = None,
         proposal_id: str | None = None,
+        edge_id: str | None = None,
         detail: dict | None = None,
     ) -> None:
         if not self.caps.stores_events:
@@ -353,6 +503,7 @@ class Registry:
                 kind=kind,
                 name=name,
                 proposal_id=proposal_id,
+                edge_id=edge_id,
                 detail=dict(detail or {}),
             )
         )
@@ -1277,6 +1428,27 @@ class Registry:
         return alts, f"{candidate!r} was proposed and rejected before"
 
     # =========================================================== 5.4 propose_type
+    def _edge_family_refusal(self, kind: str, attributes: dict) -> Refusal | None:
+        """EDGES.md 2.4.1 and ruling R18, at DECLARATION time.
+
+        Called from `propose_type`, from `approve` and from `import_types`, because a
+        rule with one enforcement point is a rule with one door left open -- and the
+        thing on the other side of this one is the ROADMAP.md kill row.
+
+        **Unconditional, not schema-mode gated.** `_check_attributes` refuses only in
+        `enforce` mode, and PACKAGE.md 5.3's default is `off`; a rule that only bites
+        when a deployment has configured a schema is a rule a deployment can turn off.
+        R18 is a rule the REGISTRY knows, and PACKAGE.md 5.6 records it as an exception
+        list of length one for exactly that reason.
+        """
+        if kind != "edge":
+            return None
+        breach = family_declaration_problem(attributes)
+        if breach is None:
+            return None
+        reason, sentence, detail = breach
+        return Refusal(reason, {**detail, "why": sentence})
+
     def propose_type(
         self,
         name: str,
@@ -1308,6 +1480,10 @@ class Registry:
             raise ValueError("tier is required when proposed_by starts with 'ai:'")
         if not NAME_RE.match(name):
             raise ValueError(f"name must match {NAME_RE.pattern}; got {name!r}")
+
+        edge_refusal = self._edge_family_refusal(kind, attributes)
+        if edge_refusal is not None:
+            return edge_refusal
 
         existing = self.adapter.get_type(namespace, name, kind=kind)
         if existing is not None:
@@ -1484,6 +1660,15 @@ class Registry:
                     else rec.predicates,
                 }
             )
+            # Ruling **R18** names `approve()` specifically, and it is checked here
+            # as well as in `propose_type` because a proposal may predate the rule,
+            # and because `approve(definition=..., predicates=...)` is the one call
+            # that amends a pending proposal on its way in.
+            edge_refusal = self._edge_family_refusal(
+                amended.kind, dict(amended.attributes or {})
+            )
+            if edge_refusal is not None:
+                return edge_refusal
             schema, violations = self._check_attributes(
                 amended.namespace, amended.kind, amended.name, amended.attributes
             )
@@ -2507,6 +2692,22 @@ class Registry:
                 if key in row:
                     attributes[key] = row[key]
 
+            # EDGES.md 2.4.1 / R18, at the third door. An import cannot return a
+            # `Refusal` -- it returns entries -- so a breaching family comes back
+            # the way an alias collision does: nothing written, `import_refused`
+            # with the reason. Row 3e found `import_types` was a fourth unguarded
+            # door into mechanism 4; leaving it as the unguarded door into the kill
+            # row would be the same mistake with a different subject.
+            edge_breach = self._edge_family_refusal(row.get("kind", kind), attributes)
+            if edge_breach is not None:
+                out.append(
+                    self._refused_import(
+                        namespace, name, edge_breach.detail.get("why", ""),
+                        reason=edge_breach.reason,
+                    )
+                )
+                continue
+
             # **An import does not un-retire a local name.** A retired row is a
             # governance decision this deployment made; a foreign dump saying the word
             # is active is not a reversal of it, and overwriting the tombstone wiped
@@ -2606,6 +2807,747 @@ class Registry:
             out.append(self._written(self._entry(stored)))
         return out
 
+    # ===================================================================== edges
+    #
+    # EDGES.md v0. Three calls -- two writes and ONE read -- plus one package-local
+    # helper for an edge's history, which EDGES.md 6 names by implication and never
+    # specifies (recorded as a deviation in docs/runs/4B-RUN.md).
+    #
+    # There is no fourth call to manage FAMILIES, and that absence is the test of
+    # EDGES.md 2.3's central decision: a family is a `TypeEntry` with `kind="edge"`,
+    # so `propose_type`, `approve`, `resolve_type`, `usage`, `retire`, `reinstate`,
+    # `consumers` and `predicates` all serve it unchanged.
+
+    def _edges_absent(self, detail: dict) -> Refusal | None:
+        """EDGES.md 4.3's first row. Never an empty report.
+
+        An empty ``NeighborReport`` reads as *"this node has no neighbours"*, which is
+        Rule U's forbidden empty list in the one call that would be believed.
+        """
+        if self.caps.stores_edges:
+            return None
+        return Refusal(
+            "edge_store_absent", {**detail, "why": self.caps.reason("stores_edges")}
+        )
+
+    def _edge_write_warnings(self) -> tuple[str, ...]:
+        """EDGES.md 6.2, and the word *itself* is the finding.
+
+        Each edge write call site stamps this on its OWN behalf. Round 3 of the spec
+        row's loop [Observed] `retract_edge` carrying the warning forward from the
+        edge's prior state instead of applying it, so retracting an edge the host had
+        already committed came back with **no warning at all** -- a borrowed-connection
+        write that looked exactly as durable as an owned one. That is PACKAGE.md 3.4
+        primitive 3 note 2's own recorded bug class, one layer up.
+
+        It reads `edge_transaction_scope`, not `transaction_scope`: EDGES.md 6.2 permits
+        the two to differ when the edge store is a second connection, and a write to the
+        edge store is durable when the EDGE store's owner commits.
+        """
+        if self.caps.edge_transaction_scope != "savepoint":
+            return ()
+        return (
+            "not_durable_until_host_commits:"
+            + self.caps.reason("edge_transaction_scope"),
+        )
+
+    def _edge_family(self, name: str, namespace: str) -> EdgeFamily | None:
+        rec = self.adapter.get_type(namespace, name, kind="edge")
+        if rec is None:
+            return None
+        return EdgeFamily.from_attributes(
+            rec.name, rec.namespace, dict(rec.attributes or {}), rec.status
+        )
+
+    def _all_edge_families(self) -> tuple[list[EdgeFamily], bool, str | None]:
+        """Every registered ``kind="edge"`` entry, in EVERY namespace. EDGES.md 4.1.
+
+        ``edge_families=None`` searches every family the store can answer across every
+        namespace, so ``namespace`` is a no-op in that call shape. Scoping it silently
+        dropped families registered elsewhere in the spec row's first draft -- **Cause C
+        inside the read seam, on the axis UC3 exists to stress** -- and a reviewer
+        reproduced it in twenty lines.
+
+        Retired families are included: their edges were not deleted, so they are
+        searched (EDGES.md 4.3).
+
+        **Paged to exhaustion, with the same rule everything else here follows:** a
+        page the backend could not fully answer makes the report incomplete with the
+        backend's own sentence, never a shorter list of families that reads as whole.
+        """
+        families: list[EdgeFamily] = []
+        cursor: str | None = None
+        complete = True
+        why: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = self.adapter.find_types(
+                TypeQuery(
+                    namespace=None,
+                    kind="edge",
+                    include_retired=True,
+                    limit=_EDGE_PAGE_SIZE,
+                    after=cursor,
+                )
+            )
+            if not page.complete and page.next_after is None:
+                complete = False
+                why = why or page.why_incomplete
+            for rec in page.records:
+                families.append(
+                    EdgeFamily.from_attributes(
+                        rec.name, rec.namespace, dict(rec.attributes or {}), rec.status
+                    )
+                )
+            cursor = page.next_after
+            if cursor is None or cursor in seen_cursors:
+                break
+            seen_cursors.add(cursor)
+        return families, complete, why
+
+    def add_edge(
+        self,
+        family: str,
+        src: NodeRef,
+        dst: NodeRef,
+        created_by_actor: str,
+        *,
+        namespace: str = "default",
+        created_by: str = "user",
+        confidence: float | None = None,
+        evidence: Sequence[Evidence] = (),
+        source_version: str | None = None,
+        model_tier: str | None = None,
+        attributes: dict | None = None,
+    ) -> Edge | Refusal:
+        """Write one edge. EDGES.md 2.2, 2.4.1, 2.6, 2.7.
+
+        There is **no approval loop for an individual edge** and EDGES.md 2.6 argues it
+        rather than assuming it: a single edge is a fact about two things, not a claim
+        about the vocabulary; there are millions of them; and beacon writes them from a
+        weekly scheduled job with no human in the loop. The governance lives one level
+        up, on the family, where it is affordable and where it bites.
+
+        The registry mints ``edge_id`` -- PACKAGE.md 4.2's rule for ``proposal_id`` and
+        ``event_id``, unchanged -- which is why there is no uniqueness capability flag
+        for an adapter to declare.
+        """
+        refusal = self._edges_absent({"family": family, "namespace": namespace})
+        if refusal is not None:
+            return refusal
+
+        fam = self._edge_family(family, namespace)
+        if fam is None:
+            # EDGES.md 4.3: a named family that is not a registered kind="edge" entry in
+            # the namespace it was resolved in. `namespace`'s one job is resolving the
+            # name, and a family registered elsewhere is a different family.
+            return Refusal("edge_family_unknown", {"families": [family], "namespace": namespace})
+
+        if fam.level not in EDGE_LEVELS:
+            # EDGES.md 2.4: `level` is REQUIRED with no default -- "a family that does
+            # not say is a family whose edges cannot be validated". The TypeEntry is
+            # still perfectly legal (INTERFACE.md 2.1 requires no attributes, and
+            # beacon's `work_link_types` rows carry none of the five), so the refusal is
+            # here at WRITE time rather than at registration: refusing the registration
+            # would make this row reject types INTERFACE.md says are legal, on the data
+            # of the one real host. The door this leaves -- declare nothing, then write
+            # anything -- is the one being shut right here.
+            return Refusal(
+                "attributes_schema_violation",
+                {
+                    "family": family,
+                    "namespace": namespace,
+                    "missing": ["level"],
+                    "declared_level": fam.level,
+                    "rule": "EDGES 2.4",
+                    "why": (
+                        f"the kind='edge' entry {namespace}:{family} declares no `level`, "
+                        "so its edges cannot be validated and none may be written"
+                    ),
+                },
+            )
+
+        breach = family_declaration_problem(
+            {
+                "level": fam.level,
+                "symmetric": fam.symmetric,
+                "inverse_label": fam.inverse_label,
+                "endpoint_kinds": {k: list(v) for k, v in fam.endpoint_kinds.items()},
+            }
+        )
+        if breach is not None:
+            # Belt and braces. `propose_type`, `approve` and `import_types` all refuse a
+            # breaching declaration, so reaching this means the row was written by a
+            # path that predates the rule or by a host that owns the schema -- and the
+            # kill row is on the other side of it, so it is checked twice rather than
+            # once.
+            reason, sentence, detail = breach
+            return Refusal(reason, {**detail, "family": family, "why": sentence})
+
+        for end, node in (("src", src), ("dst", dst)):
+            # **Level first, and the order is not arbitrary**: a level mismatch makes
+            # the kind question meaningless. A `value_set` reached as a TypeRef where the
+            # family wants an InstanceRef is refused on `level`, and the detail says so,
+            # which is what UC2's T2.5 observed and what made the two enforcement layers
+            # visible in the first place.
+            if level_of(node) != fam.level:
+                return Refusal(
+                    "endpoint_kind_mismatch",
+                    {
+                        "endpoint": end,
+                        "problem": "level",
+                        "family_level": fam.level,
+                        "node_level": level_of(node),
+                        "node": str(node),
+                    },
+                )
+            kind = type_of(node).kind
+            if kind not in fam.endpoint_kinds[end]:
+                return Refusal(
+                    "endpoint_kind_mismatch",
+                    {
+                        "endpoint": end,
+                        "problem": "kind",
+                        "declared": list(fam.endpoint_kinds[end]),
+                        "node_kind": kind,
+                        "node": str(node),
+                    },
+                )
+
+        if family == EQUIVALENT_TO and type_of(src).kind != type_of(dst).kind:
+            # EDGES.md 3.1's family-specific constraint, beyond `endpoint_kinds`: an
+            # `entity` is not equivalent to a `value_set`. `facility == deficiency_
+            # corrected_status` is a category error, not a claim.
+            #
+            # Hard-coded to the one family this row ships, because 2.4.1 says plainly
+            # that this is "that family's semantics and not a general mechanism". A
+            # declarable `same_kind_endpoints` key would be a sixth attribute invented
+            # for one family, which is how a declared shape starts growing a rule
+            # language. Recorded as **Q27**.
+            return Refusal(
+                "endpoint_kind_mismatch",
+                {
+                    "problem": "family_constraint",
+                    "family": EQUIVALENT_TO,
+                    "src_kind": type_of(src).kind,
+                    "dst_kind": type_of(dst).kind,
+                    "why": (
+                        "equivalent_to requires src.kind == dst.kind (EDGES.md 3.1)"
+                    ),
+                },
+            )
+
+        warnings: list[str] = []
+        for node in (src, dst):
+            # EDGES.md 2.7. `endpoint_kind_mismatch` can only fire when the endpoint's
+            # type IS registered; on an unregistered one the registry cannot know the
+            # kind, so it does not guess. Rule U -- a positive claim about a mismatch
+            # requires having looked -- and the same `<value>:<subject>` shape as
+            # `gate_unregistered` (ruling R8), deliberately.
+            t = type_of(node)
+            if self.adapter.get_type(t.namespace, t.name, kind=t.kind) is None:
+                warnings.append(f"endpoint_type_unregistered:{t}")
+        if fam.status == "retired":
+            warnings.append(f"edge_family_retired:{family}")
+        warnings.extend(self._edge_write_warnings())
+
+        now = self._now()
+        provenance = EdgeProvenance(
+            created_at=now,
+            created_by_actor=created_by_actor,
+            created_by=created_by,
+            confidence=confidence,
+            evidence=tuple(evidence),
+            source_version=source_version,
+            model_tier=model_tier,
+            history_why=_EDGE_HISTORY_WHY,
+        )
+        payload = self.caps.surviving_edge_attributes(dict(attributes or {}))
+        edge_id = _uuid()
+        with self.adapter.transaction():
+            stored = self.adapter.put_edge(
+                _edge_to_record(
+                    Edge(
+                        edge_id=edge_id,
+                        family=family,
+                        namespace=namespace,
+                        src=src,
+                        dst=dst,
+                        provenance=provenance,
+                        attributes=payload,
+                        warnings=tuple(warnings),
+                    )
+                ),
+                expect_absent=True,
+            )
+            self._append_event(
+                namespace, "edge_added", created_by_actor, edge_id=edge_id,
+                detail={"family": family, "src": str(src), "dst": str(dst)},
+            )
+        return _edge_from_record(stored, extra_warnings=tuple(warnings))
+
+    def retract_edge(self, edge_id: str, reason: str, *, retracted_by: str) -> Edge | Refusal:
+        """EDGES.md 2.6. Nothing is deleted; the row stays and an event is appended.
+
+        **Not refused when the store cannot record events, and that is a departure from
+        PACKAGE.md 3.6 that is argued rather than assumed.** 3.6's rule is that a
+        destructive override which cannot be recorded is refused. Retraction is
+        different in the way that rule cares about: **the record IS the row.**
+        ``status``, ``retracted_by``, ``retracted_at`` and the reason are columns on the
+        edge itself, so an unrecordable retraction does not exist. What is lost without
+        events is the *sequence* -- retracted, reinstated, retracted again -- and that is
+        surfaced as a warning.
+
+        There is no reinstatement, by ruling **R19**: R11's ``reinstate`` covers edge
+        FAMILIES, which are ``TypeEntry``s, and never edge instances. A retracted edge
+        is no claim (EDGES.md 3.2); re-asserting it is a new edge whose provenance cites
+        the retracted one.
+        """
+        if not reason or not reason.strip():
+            # INTERFACE.md 5.5's reason, unchanged: the cheapest record of "we already
+            # considered this and decided against it". A caller error, not a policy
+            # refusal, so the closed vocabulary does not grow a value for it.
+            raise ValueError("retract_edge requires a non-empty reason (EDGES.md 2.6)")
+        refusal = self._edges_absent({"edge_id": edge_id})
+        if refusal is not None:
+            return refusal
+
+        with self.adapter.transaction():
+            rec = self.adapter.get_edge(edge_id)
+            if rec is None:
+                # The nineteenth value of INTERFACE.md 5.12. It reused
+                # `edge_family_unknown` until round 3 of the spec row's loop, which
+                # names a different failure -- EDGES.md 2.3's own Cause B, committed
+                # inside a document that argues at length against reusing `kind_mismatch`
+                # for two things.
+                return Refusal("unknown_edge", {"edge_id": edge_id})
+            now = self._now()
+            # The edge's own warnings are carried VERBATIM, duplicates included: two
+            # `endpoint_type_unregistered` entries mean two endpoints were unregistered,
+            # and collapsing them would turn "both ends" into "one end" on the one
+            # shape where the two endpoints share a type.
+            #
+            # The two durability-and-trail values are the exception, stripped and then
+            # recomputed, because they are statements about THIS call.
+            warnings = [
+                w
+                for w in rec.warnings
+                if not w.startswith("not_durable_until_host_commits:")
+                and not w.startswith("retracted_without_event_trail:")
+            ]
+            # Stamped HERE, on this call's own behalf -- never carried forward from the
+            # edge's prior state. See `_edge_write_warnings`.
+            fresh_warnings = list(self._edge_write_warnings())
+            if not self.caps.stores_edge_events:
+                fresh_warnings.append(
+                    "retracted_without_event_trail:"
+                    + self.caps.reason("stores_edge_events")
+                )
+            warnings.extend(w for w in fresh_warnings if w not in warnings)
+            provenance = dict(rec.provenance or {})
+            provenance.update(
+                {
+                    "retracted_by": retracted_by,
+                    "retracted_at": _iso(now),
+                    "retract_reason": reason,
+                }
+            )
+            stored = self.adapter.put_edge(
+                replace(
+                    rec,
+                    status="retracted",
+                    warnings=tuple(warnings),
+                    provenance=provenance,
+                    retract_reason=reason,
+                    retracted_by=retracted_by,
+                    retracted_at=now,
+                )
+            )
+            self._append_event(
+                rec.namespace, "edge_retracted", retracted_by, edge_id=edge_id,
+                detail={"reason": reason, "family": rec.family},
+            )
+        return _edge_from_record(stored)
+
+    def edge_provenance(self, edge_id: str) -> EdgeProvenance | Refusal:
+        """One edge's provenance, with its event history. Package-local.
+
+        EDGES.md 6's capability table promises that ``stores_edge_events=False`` gives
+        ``provenance(edge).history == []`` **with the `why`** -- and EDGES.md specifies
+        no such call anywhere. Supplied here rather than left as a sentence nothing
+        implements, and package-local rather than a fifteenth INTERFACE.md 5 call, the
+        same standing `attribute_census` and `import_types` have. Recorded as a
+        deviation in docs/runs/4B-RUN.md.
+
+        It is a separate call and not a field `neighbors` fills, because filling it
+        there would be one `read_events` per edge in the report -- on the 9.7M-degree
+        node EDGES.md 4.2 measures, that is the whole reason the read seam is bounded.
+        """
+        refusal = self._edges_absent({"edge_id": edge_id})
+        if refusal is not None:
+            return refusal
+        rec = self.adapter.get_edge(edge_id)
+        if rec is None:
+            return Refusal("unknown_edge", {"edge_id": edge_id})
+        edge = _edge_from_record(rec)
+        if not self.caps.stores_edge_events:
+            return replace(
+                edge.provenance,
+                history=(),
+                history_why=self.caps.reason("stores_edge_events"),
+            )
+        rows = self.adapter.read_events(rec.namespace, edge_id=edge_id)
+        return replace(
+            edge.provenance,
+            history=tuple(
+                ProvenanceEvent(
+                    at=r.at, actor=r.actor, event=r.event, detail=dict(r.detail or {})
+                )
+                for r in rows
+            ),
+            history_why=None,
+        )
+
+    # ------------------------------------------------------------- 4, the read seam
+    def neighbors(
+        self,
+        node: NodeRef,
+        edge_families: Sequence[str] | None = None,
+        depth: int = 1,
+        *,
+        namespace: str,
+        direction: str = "both",
+        include_retracted: bool = False,
+    ) -> NeighborReport | Refusal:
+        """EDGES.md 4. The one read call: edges and the nodes they reach, bounded at 2.
+
+        ``namespace`` is required and keyword-only, and it names the namespace **the
+        ``edge_families`` argument is resolved in** -- not the origin's, which the origin
+        carries itself, and not a filter on results. Making it required rather than
+        defaulting to ``"default"`` is deliberate: UC3's whole subject is that
+        ``"default"`` is a wrong answer nobody notices.
+
+        **It returns reachability. It never returns entailment.** ``equivalent_to`` is
+        non-transitive, so a depth-2 result is not a depth-1 claim, and ``at_depth`` on
+        every edge is what gives a consumer the means not to make that inference.
+        """
+        if direction not in DIRECTIONS:
+            raise ValueError(f"direction must be one of {DIRECTIONS}; got {direction!r}")
+        if depth < 1 or depth > DEPTH_CAP:
+            # EDGES.md 4.2. `ValueError`, not a `Refusal`: a caller error like
+            # INTERFACE.md 5.4's empty definition, and R3's closed vocabulary should not
+            # grow a value for a typo. The cap and R13's no-paging rule are ONE decision.
+            raise ValueError(
+                f"depth must be 1 or {DEPTH_CAP} (EDGES.md 4.2, the cap is R13's "
+                f"consequence); got {depth}"
+            )
+        refusal = self._edges_absent({"node": str(node), "namespace": namespace})
+        if refusal is not None:
+            return refusal
+
+        warnings: list[str] = []
+        complete = True
+        why: str | None = None
+
+        # --- which families, and the `None` case spans every namespace (EDGES.md 4.1)
+        if edge_families is None:
+            known, families_complete, families_why = self._all_edge_families()
+            searched = tuple(sorted({f.name for f in known}))
+            symmetric = {(f.namespace, f.name) for f in known if f.symmetric}
+            registered = {(f.namespace, f.name) for f in known}
+            query_namespace: str | None = None
+            query_families: tuple[str, ...] | None = None
+            if not families_complete:
+                complete = False
+                why = (
+                    "the backend could not enumerate every kind='edge' entry, so which "
+                    "families were searched is itself partial: "
+                    + (families_why or "no reason given by the backend")
+                )
+        else:
+            resolved: list[EdgeFamily] = []
+            unknown: list[str] = []
+            for name in dict.fromkeys(edge_families):
+                fam = self._edge_family(name, namespace)
+                if fam is None:
+                    unknown.append(name)
+                else:
+                    resolved.append(fam)
+            if unknown:
+                # EDGES.md 4.3: the WHOLE call, not a partial answer. A caller that
+                # names a family and gets a report back is entitled to believe the
+                # family was searched, and a typo'd name returning a clean empty set is
+                # mechanism C committed by the read seam.
+                return Refusal(
+                    "edge_family_unknown", {"families": unknown, "namespace": namespace}
+                )
+            searched = tuple(edge_families)
+            symmetric = {(f.namespace, f.name) for f in resolved if f.symmetric}
+            registered = {(f.namespace, f.name) for f in resolved}
+            query_namespace = namespace
+            query_families = tuple(sorted({f.name for f in resolved}))
+            for fam in resolved:
+                if fam.status == "retired":
+                    # Not a refusal: its edges were not deleted, so it is searched and
+                    # the caller is told (EDGES.md 4.3).
+                    warnings.append(f"edge_family_retired:{fam.name}")
+
+        origin_type = type_of(node)
+        if self.adapter.get_type(
+            origin_type.namespace, origin_type.name, kind=origin_type.kind
+        ) is None:
+            # EDGES.md 4.3. Not an error: the registry has no node store, so it cannot
+            # distinguish *a node with no edges* from *a node that does not exist*, and
+            # raising would require inventing a fact. `UnknownType`'s reasoning does not
+            # transpose, and 4.3 says which of the two project rules wins and why.
+            warnings.append(f"origin_type_unregistered:{origin_type}")
+
+        # `direction` is pushed to the adapter ONLY when nothing in scope is symmetric.
+        # For a symmetric family there is no in and no out (EDGES.md 2.2), so filtering
+        # on stored src/dst would make the answer depend on which publisher happened to
+        # write the edge first -- a confident, complete, FALSE negative. With any
+        # symmetric family in scope the adapter is asked for both orientations and the
+        # narrowing happens per family, above, which is why this is a per-family rule
+        # rather than a per-call refusal: a mixed query over one symmetric and one
+        # directed family is the ordinary case.
+        push_direction = "both" if (symmetric or edge_families is None) else direction
+
+        seen: dict[str, NeighborEdge] = {}
+        frontier: list[NodeRef] = [node]
+        visited = {str(node)}
+        depth_reached = 0
+        bound_hit = False
+
+        for level in range(1, depth + 1):
+            if not frontier or bound_hit:
+                break
+            frontier_keys = tuple(dict.fromkeys(node_key(n) for n in frontier))
+            fresh: dict[str, Edge] = {}
+            cursor: str | None = None
+            cursors_seen: set[str] = set()
+            while True:
+                page = self.adapter.find_edges(
+                    EdgeQuery(
+                        namespace=query_namespace,
+                        families=query_families,
+                        incident_to=frontier_keys,
+                        direction=push_direction,
+                        include_retracted=include_retracted,
+                        limit=_EDGE_PAGE_SIZE,
+                        after=cursor,
+                    )
+                )
+                if not page.complete and page.next_after is None:
+                    # A page that is incomplete AND has a cursor is just a page; the
+                    # loop below reads the rest. A page that is incomplete with NO
+                    # cursor is the residual case -- the rest cannot be read -- and that
+                    # is what makes the report incomplete.
+                    complete = False
+                    why = why or page.why_incomplete
+                for rec in page.records:
+                    if rec.edge_id in seen or rec.edge_id in fresh:
+                        # **Deduplicated BEFORE the bound is consulted**, and that
+                        # ordering was a BLOCKING finding of the spec row's round 3: the
+                        # bound was compared against each raw page, and at depth >= 2 a
+                        # frontier legitimately re-finds edges already counted at depth
+                        # 1 -- so a walk of 19 distinct edges under a bound of 20 stopped
+                        # at depth 1, returned 15, and reported complete=False with a
+                        # `why` naming a bound nothing had crossed. Two failures in one:
+                        # four real edges silently dropped, and a false claim in the one
+                        # field 4.2 promises will tell the truth.
+                        continue
+                    keep, note = self._edge_passes(
+                        rec, frontier_keys, direction, registered, symmetric
+                    )
+                    if note is not None and note not in warnings:
+                        warnings.append(note)
+                    if not keep:
+                        continue
+                    fresh[rec.edge_id] = _edge_from_record(rec)
+                if self.max_edges is not None and len(seen) + len(fresh) >= self.max_edges:
+                    bound_hit = True
+                    break
+                cursor = page.next_after
+                if cursor is None:
+                    break
+                if cursor in cursors_seen:
+                    # A backend whose `next_after` points at rows it has already
+                    # returned. C0-10 asked "can a BROKEN backend pass?" of the type
+                    # side; the answer here must not be "it hangs". The walk stops and
+                    # says why, rather than looping forever on a cursor that never
+                    # advances.
+                    complete = False
+                    why = why or (
+                        "this backend returned a pagination cursor it had already "
+                        "returned, so a depth level cannot be assembled to exhaustion "
+                        "(PACKAGE.md 3.4 primitive 18)"
+                    )
+                    break
+                cursors_seen.add(cursor)
+
+            next_frontier: list[NodeRef] = []
+            new_here = 0
+            for edge_id, edge in fresh.items():
+                if self.max_edges is not None and len(seen) >= self.max_edges:
+                    bound_hit = True
+                    break
+                seen[edge_id] = NeighborEdge(edge=edge, at_depth=level)
+                new_here += 1
+                for far in (edge.src, edge.dst):
+                    if str(far) not in visited:
+                        visited.add(str(far))
+                        next_frontier.append(far)
+            if new_here:
+                # EDGES.md 4.1: `depth_reached` counts levels that found something NEW.
+                # Computing it from "did the scan return any records" made a genuine
+                # dead end report depth_reached == depth_requested under the API's own
+                # default direction="both", because the level-2 frontier contains the
+                # node reached at level 1 and that node is incident on the edge the walk
+                # arrived on.
+                depth_reached = level
+            frontier = next_frontier
+
+        if bound_hit:
+            complete = False
+            why = why or (
+                f"the assembly bound of {self.max_edges} distinct edges was reached; "
+                "the depth cap bounds HOPS and node degree is unbounded (EDGES.md 4.2). "
+                "This is not paging -- there is no cursor to ask for the rest, because "
+                "ruling R13 says the facade does not page in v0"
+            )
+        # A dead end -- a leaf, a sink, a node with no edges at all -- is
+        # `depth_reached < depth_requested` WITH `complete=True` and no `why`. It is the
+        # common case in real data and it is not an incomplete answer: the walk saw
+        # everything there was. Truncation is the other row of EDGES.md 4.3's table.
+
+        edges = tuple(
+            sorted(seen.values(), key=lambda ne: (ne.at_depth, ne.edge.edge_id))
+        )
+        nodes: list[NodeRef] = []
+        seen_nodes: set[str] = {str(node)}
+        for ne in edges:
+            for far in (ne.edge.src, ne.edge.dst):
+                if str(far) not in seen_nodes:
+                    seen_nodes.add(str(far))
+                    nodes.append(far)
+        return NeighborReport(
+            origin=node,
+            depth_requested=depth,
+            depth_reached=depth_reached,
+            direction=direction,
+            families_searched=searched,
+            edges=edges,
+            nodes=tuple(nodes),
+            known=len(edges),
+            complete=complete,
+            why_incomplete=why,
+            warnings=tuple(dict.fromkeys(warnings)),
+        )
+
+    def _edge_passes(
+        self,
+        rec,
+        frontier_keys: tuple[tuple[str, str, str, str | None], ...],
+        direction: str,
+        registered: set[tuple[str, str]],
+        symmetric: set[tuple[str, str]],
+    ) -> tuple[bool, str | None]:
+        """Does this record belong in the report? ``(keep, warning or None)``.
+
+        **The registry narrows, always** -- whether or not the backend could apply the
+        filters. EDGES.md 7.1 makes that explicit for `indexes_edges_by_family=False`
+        (the query is bounded by the frontier, so the store answers a wider question
+        completely and the registry narrows), and doing it unconditionally means one
+        code path decides what is in a report rather than two that must agree. The
+        store-side filter is then an efficiency claim, and `C17-06` binds it directly at
+        the primitive rather than through the report, which is where an efficiency claim
+        belongs.
+        """
+        key = (rec.namespace, rec.family)
+        note: str | None = None
+        if key not in registered:
+            # EDGES.md 2.7's argument, one level along: there is no foreign key from an
+            # edge to its family, deliberately, and beacon's `work_links` has none to
+            # `work_link_types` either -- its own documentation calls the registry
+            # "advisory rather than enforced". So an edge whose family nobody registered
+            # is REACHABLE, and dropping it here would be the silent per-consumer drop
+            # this whole document is designed against, committed by the read seam on
+            # exactly the host EDGES.md 7.2 maps.
+            #
+            # It is kept, and the caller is told. Twenty-first value of INTERFACE.md
+            # 5.4, added in this change per ruling R3.
+            note = f"edge_family_unregistered:{rec.namespace}:{rec.family}"
+            # Its symmetry is unknown, so `direction` cannot be applied to it -- Rule U,
+            # and the warning above is what says the filter could not be honoured.
+            return True, note
+        if key in symmetric or direction == "both":
+            return True, None
+        src_k = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
+        dst_k = (rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id)
+        if direction == "out":
+            return src_k in frontier_keys, None
+        return dst_k in frontier_keys, None
+
+    def _seed_equivalent_to(self) -> None:
+        """EDGES.md 3.1's family, at store creation. Ruling **R7**.
+
+        Seeded rather than left to a caller because `equivalent_to` is the answer to
+        INTERFACE.md 10b.2 contortion 9 -- *nothing can say "these two mean the same
+        thing, kept apart"* -- and a registry where the answer exists only if somebody
+        remembered to declare it has not answered it. `created_by="seed"` is exactly
+        INTERFACE.md 2.1's value for this.
+
+        Idempotent, and it never overwrites: a deployment that has retired or amended
+        the family has made a governance decision, and a constructor that reasserted the
+        seed on every start would silently reverse it -- which is the shape row 3e found
+        in `import_types`. `seed_equivalent_to=False` declines it outright.
+        """
+        if self.adapter.get_type("default", EQUIVALENT_TO, kind="edge") is not None:
+            return
+        now = self._now()
+        provenance = Provenance(
+            created_at=now,
+            created_by_actor="seed",
+            # Never null on an active type (INTERFACE.md 2.4). A seeded family has no
+            # human approver and saying so is different from leaving the field blank.
+            approved_by="auto:seed",
+            approved_at=now,
+            # A seeded family with NO evidence would carry `no_evidence` on every read
+            # -- the registry warning about its own seed. The evidence is real and is
+            # exactly what INTERFACE.md 2.8 wants recorded: a named human decision, with
+            # the document that carries it.
+            evidence=(
+                Evidence(
+                    kind="human",
+                    summary=(
+                        "ruling R7: a relation between two scoped types is a "
+                        "type-to-type edge, and `equivalent_to` is its first named "
+                        "family -- symmetric, non-merging, provenance-bearing"
+                    ),
+                    locator="docs/specs/EDGES.md 3.1",
+                ),
+            ),
+        )
+        with self.adapter.transaction():
+            self.adapter.put_type(
+                TypeRecord(
+                    namespace="default",
+                    kind="edge",
+                    name=EQUIVALENT_TO,
+                    definition=EQUIVALENT_TO_DEFINITION,
+                    created_by="seed",
+                    status="active",
+                    attributes=dict(EQUIVALENT_TO_ATTRIBUTES),
+                    provenance=_prov_to_dict(provenance),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            self._append_event(
+                "default", "seeded", "seed", kind="edge", name=EQUIVALENT_TO,
+                detail={"why": "EDGES.md 3.1, ruling R7"},
+            )
+
     def _alias_clash(
         self, namespace: str, name: str, kind: str, aliases: Sequence[str]
     ) -> str | None:
@@ -2621,7 +3563,9 @@ class Registry:
                 return other.name
         return None
 
-    def _refused_import(self, namespace: str, name: str, clash: str) -> TypeEntry:
+    def _refused_import(
+        self, namespace: str, name: str, clash: str, *, reason: str = "alias_collision"
+    ) -> TypeEntry:
         """A row an import declined to write, returned as a shape a caller can read.
 
         There is no standing entry to hand back, so this is the imported row as it would
@@ -2632,7 +3576,11 @@ class Registry:
             name=name,
             kind="entity",
             namespace=namespace,
-            definition=f"not imported: {clash!r} already answers to this word",
+            definition=(
+                f"not imported: {clash!r} already answers to this word"
+                if reason == "alias_collision"
+                else f"not imported: {clash}"
+            ),
             created_by="seed",
             provenance=Provenance(created_at=now, created_by_actor="import"),
             status="proposed",
@@ -2644,7 +3592,7 @@ class Registry:
                 type=name, gates_on=(), would_drop=(), would_error=(), known=0,
                 complete=False, why_incomplete="nothing was written",
             ),
-            warnings=("import_refused:alias_collision",),
+            warnings=(f"import_refused:{reason}",),
         )
 
     # ------------------------------------------------------------------ attributes

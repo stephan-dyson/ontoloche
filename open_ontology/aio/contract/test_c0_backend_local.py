@@ -148,7 +148,8 @@ async def _run_the_race(first, second):
 
     # And the store holds one type, approved once -- not a half-written second copy.
     listing = await left.list_types(namespace="default")
-    assert [t.name for t in listing.types] == ["facility"]
+    # Plus the family a version-4 store ships seeded -- EDGES.md 3.1.
+    assert [t.name for t in listing.types] == ["equivalent_to", "facility"]
     approvals = [
         e for e in (await left.provenance("facility")).history if e.event == "approved"
     ]

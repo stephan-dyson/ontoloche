@@ -42,13 +42,20 @@ def loaded(registry):
 def test_c13_01_the_samples_vocabulary_loads_as_eight_type_rows(loaded, adapter):
     registry, _ = loaded
     page = adapter.find_types(TypeQuery(include_retired=True))
-    assert len(page.records) == 8, (
+    # Eight from the sample, plus the one family a version-4 store ships seeded
+    # (`default:edge:equivalent_to`, EDGES.md 3.1). The eight is the number this test
+    # is about; the ninth is subtracted by name rather than by loosening the count,
+    # because "nine or so" is how a count assertion stops catching the 400 case.
+    seeded = [r for r in page.records if (r.kind, r.name) == ("edge", "equivalent_to")]
+    assert len(seeded) == 1
+    records = tuple(r for r in page.records if r not in seeded)
+    assert len(records) == 8, (
         "eight type rows, not four hundred -- reading 'the sample loads' as '400 "
         "citations become types' is the T3/T6 failure the ground truth predicted"
     )
 
     by_kind: dict[str, list[str]] = {}
-    for rec in page.records:
+    for rec in records:
         by_kind.setdefault(rec.kind, []).append(rec.name)
     assert sorted(by_kind["entity"]) == ["citation", "deficiency_tag", "facility", "survey"]
     assert sorted(by_kind["value_set"]) == [

@@ -56,7 +56,19 @@ def test_c3_03_below_min_confidence_is_none_with_alternatives(registry):
     assert "default" in resolution.why_incomplete
 
 
-def test_c3_04_confidence_is_none_when_no_scorer_ran_and_none_is_not_zero(registry):
+def test_c3_04_confidence_is_none_when_no_scorer_ran_and_none_is_not_zero(
+    adapter, make_registry
+):
+    """The subject is an EMPTY vocabulary, so this one builds one.
+
+    A version-4 store ships `default:edge:equivalent_to` seeded (EDGES.md 3.1), and a
+    scorer with something to score against returns a float -- `resolve_type("facility")`
+    scored 0.2857 against it. That is correct behaviour and it is not what this test is
+    about: `confidence is None` means *nothing scored this*, and the only way to reach
+    it is a vocabulary with nothing in it. `seed_equivalent_to=False` is the honest way
+    to say so, rather than asserting `is None or is a float`.
+    """
+    registry = make_registry(adapter, seed_equivalent_to=False)
     resolution = registry.resolve_type("facility", ResolveContext(), tier="opus")
     assert resolution.outcome == "proposal"
     assert resolution.confidence is None
