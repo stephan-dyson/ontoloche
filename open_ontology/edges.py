@@ -349,10 +349,20 @@ class EdgeFamily:
         )
 
 
-def family_declaration_problem(attributes: dict[str, Any]) -> tuple[str, dict] | None:
+def family_declaration_problem(
+    attributes: dict[str, Any],
+) -> tuple[str, str, dict] | None:
     """Is this a legal ``kind="edge"`` declaration? EDGES.md 2.4.1 and ruling R18.
 
-    Returns ``(sentence, detail)`` or ``None``. Checked at DECLARATION time -- in
+    Returns ``(refusal reason, sentence, detail)`` or ``None``. The reason is returned
+    rather than derived by the caller because the two breaches are genuinely different
+    failures: a family naming ``predicate`` as an endpoint kind is an
+    ``endpoint_kind_mismatch`` and says so, while R18's cross-field rule is an
+    ``attributes_schema_violation`` -- PACKAGE.md 5.6 records R18 as an exception list
+    of length one *inside the attribute-schema mechanism*, so that is the vocabulary it
+    belongs to. Neither needed a new value; INTERFACE.md 5.12 stays at twenty-one.
+
+    Checked at DECLARATION time -- in
     ``propose_type``, in ``approve`` (R18 names it) and in ``import_types`` -- and not
     only at write time, because *a rule checked only when an edge is written is a rule a
     family author can opt out of by declaring a permissive ``endpoint_kinds``*. Both
@@ -376,6 +386,7 @@ def family_declaration_problem(attributes: dict[str, Any]) -> tuple[str, dict] |
     level = attributes.get("level")
     if "level" in declared and level not in EDGE_LEVELS:
         return (
+            "attributes_schema_violation",
             f"a kind='edge' family declares level in {list(EDGE_LEVELS)}; "
             f"got {level!r} (EDGES.md 2.4)",
             {"rule": "EDGES 2.4", "key": "level", "value": level},
@@ -389,6 +400,7 @@ def family_declaration_problem(attributes: dict[str, Any]) -> tuple[str, dict] |
     # records it as an exception list of length one.
     if attributes.get("symmetric") and attributes.get("inverse_label") is not None:
         return (
+            "attributes_schema_violation",
             "a symmetric family has no inverse_label: 'A->B' asserts 'B->A', so a name "
             "for reading dst->src is a name for a direction the family says does not "
             "exist (EDGES.md 2.4, ruling R18)",
@@ -403,6 +415,7 @@ def family_declaration_problem(attributes: dict[str, Any]) -> tuple[str, dict] |
     if kinds is not None:
         if not isinstance(kinds, dict) or set(kinds) - {"src", "dst"}:
             return (
+                "attributes_schema_violation",
                 "endpoint_kinds is {'src': [kind...], 'dst': [kind...]} (EDGES.md 2.4)",
                 {"rule": "EDGES 2.4", "key": "endpoint_kinds", "value": kinds},
             )
@@ -410,6 +423,7 @@ def family_declaration_problem(attributes: dict[str, Any]) -> tuple[str, dict] |
             listed = tuple(kinds.get(end) or ())
             if _FORBIDDEN_ENDPOINT_KIND in listed:
                 return (
+                    "endpoint_kind_mismatch",
                     f"`predicate` may not be an endpoint kind ({end}), at either level "
                     "and in any family: two predicates being equivalent is a claim about "
                     "EXTENTS, which INTERFACE.md 5.10 refusal #2 makes non-overridable, "
@@ -424,6 +438,7 @@ def family_declaration_problem(attributes: dict[str, Any]) -> tuple[str, dict] |
                 )
             if level == "instance" and set(listed) - {"entity"}:
                 return (
+                    "endpoint_kind_mismatch",
                     f"a level='instance' family may only declare `entity` endpoints "
                     f"({end} declares {sorted(listed)}): only an entity has instances, "
                     "and a family declaring `edge` at instance level would reify an edge "

@@ -105,6 +105,21 @@ def main() -> int:
         )
     )
 
+    # EDGES.md 6.3 -- U3's shape again, one row down: a host-owned EDGE table with
+    # `description` and `confidence` as real typed columns and no JSON blob. `True`
+    # would silently lose arbitrary keys; `False` alone would disclaim two the backend
+    # round-trips perfectly. Row 4b.
+    cases.append(
+        (
+            "stores_edge_attributes=F +proj",
+            lambda: DegradedAdapter(
+                _fresh(),
+                stores_edge_attributes=False,
+                edge_attribute_projections=("description", "confidence"),
+            ),
+        )
+    )
+
     for label, factory in cases:
         code, tally = _run(factory)
         verdict = "conformant" if code == 0 else "FAILS"

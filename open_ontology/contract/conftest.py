@@ -18,6 +18,7 @@ import uuid
 import pytest
 
 from .._clock import FixedClock
+from ..edges import DEFAULT_MAX_EDGES
 from ..backends.sqlite import SQLiteAdapter
 from ..policy import NamespacePolicy
 from ..registry import Registry
@@ -225,6 +226,11 @@ def make_registry(clock):
     def build(adapter, **policy_kwargs):
         policies = policy_kwargs.pop("policies", None)
         resolver = policy_kwargs.pop("resolver", None)
+        max_edges = policy_kwargs.pop("max_edges", DEFAULT_MAX_EDGES)
+        # EDGES.md 3.1's family is seeded at store creation by default, exactly as a
+        # deployment gets it. A test opts out only when its subject is an EMPTY
+        # vocabulary (C3-04), and says so where it does.
+        seed_equivalent_to = policy_kwargs.pop("seed_equivalent_to", True)
         # PACKAGE.md 7.3 B4: no proposal table *forces* approval_policy="auto" -- there
         # is nowhere to hold a pending proposal. The suite used to run every backend
         # under the default "review", so a conformant proposal-less backend met a policy
@@ -239,6 +245,8 @@ def make_registry(clock):
             resolver=resolver,
             policy=NamespacePolicy(**policy_kwargs),
             policies=policies,
+            max_edges=max_edges,
+            seed_equivalent_to=seed_equivalent_to,
         )
 
     return build

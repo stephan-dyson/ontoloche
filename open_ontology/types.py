@@ -157,6 +157,18 @@ WARNING_VALUES = (
     "edge_family_retired",
     "origin_type_unregistered",
     "no_edge_gate_registered",
+    # Row 4b, the IMPLEMENTATION of EDGES.md v0 -- the twenty-first, and the first
+    # warning value this project has added because writing the code found a case the
+    # specification had not. There is deliberately no foreign key from an edge to its
+    # family (EDGES.md 2.7's argument, and beacon's `work_links` has none to
+    # `work_link_types` either -- its own documentation calls the registry "advisory
+    # rather than enforced"), so an edge whose family nobody registered is REACHABLE by
+    # `neighbors`. Dropping it would be the silent per-consumer drop EDGES.md 12 names
+    # as its dominant mechanism, committed by the read seam on exactly the host EDGES.md
+    # 7.2 maps. It is returned, and this is what says so -- and it also says the
+    # `direction` filter could not be applied to it, because an unregistered family's
+    # `symmetric` is unknown and Rule U forbids guessing.
+    "edge_family_unregistered",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

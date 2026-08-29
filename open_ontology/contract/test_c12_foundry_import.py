@@ -129,7 +129,10 @@ def test_c12_05_an_import_does_not_un_retire_a_local_name(registry, adapter):
     assert getattr(stored, "retire_reason", None) == "superseded by cycle_track", (
         "and the tombstone was not overwritten"
     )
-    assert sorted(t.name for t in registry.list_types().types) == ["cycle_track"]
+    assert sorted(t.name for t in registry.list_types().types) == [
+        "cycle_track",
+        "equivalent_to",  # seeded at store creation -- EDGES.md 3.1
+    ]
 
 
 @pytest.mark.requires_capability("indexes_membership")

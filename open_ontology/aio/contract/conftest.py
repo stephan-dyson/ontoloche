@@ -49,6 +49,7 @@ if sys.platform == "win32":
 from open_ontology._clock import FixedClock
 from open_ontology.aio.backends.sqlite import AsyncSQLiteAdapter
 from open_ontology.aio.registry import AsyncRegistry
+from open_ontology.edges import DEFAULT_MAX_EDGES
 from open_ontology.policy import NamespacePolicy
 
 from open_ontology.contract._coverage import Coverage
@@ -248,6 +249,10 @@ def make_registry(clock):
     async def build(adapter, **policy_kwargs):
         policies = policy_kwargs.pop("policies", None)
         resolver = policy_kwargs.pop("resolver", None)
+        max_edges = policy_kwargs.pop("max_edges", DEFAULT_MAX_EDGES)
+        # EDGES.md 3.1's family is seeded at store creation, exactly as a deployment
+        # gets it. A test opts out only when its subject is an EMPTY vocabulary.
+        seed_equivalent_to = policy_kwargs.pop("seed_equivalent_to", True)
         if resolver is None and _support.EXTERNAL_RESOLVER is not None:
             resolver = _support.EXTERNAL_RESOLVER()
         # PACKAGE.md 7.3 B4 -- no proposal table forces approval_policy="auto".
@@ -261,6 +266,8 @@ def make_registry(clock):
             resolver=resolver,
             policy=NamespacePolicy(**policy_kwargs),
             policies=policies,
+            max_edges=max_edges,
+            seed_equivalent_to=seed_equivalent_to,
         )
 
     return build

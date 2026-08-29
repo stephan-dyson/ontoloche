@@ -421,7 +421,9 @@ async def test_c9_12_reinstate_refuses_to_manufacture_two_live_words_for_one_mea
     assert "bike_lane" in refusal.detail["path_back"]
 
     live = sorted([t.name for t in (await registry.list_types()).types])
-    assert live == ["bike_lane"], "and nothing was written"
+    # `equivalent_to` is seeded at store creation (EDGES.md 3.1); "nothing was written"
+    # is about the refused reinstatement, not about the store being empty.
+    assert live == ["bike_lane", "equivalent_to"], "and nothing was written"
 
     # The other direction: the same collision reached with the reinstatements swapped.
     # `successor_active` catches the first step there, which is why BOTH guards are
@@ -481,7 +483,10 @@ async def test_c9_13_the_successor_relation_is_checked_through_the_chain_not_one
     assert blocked.reason == "alias_collision"
     assert blocked.detail["collides_with"] == "bike_lane"
     assert blocked.detail["relation"] == "predecessor"
-    assert sorted([t.name for t in (await registry.list_types()).types]) == ["bike_lane"]
+    assert sorted([t.name for t in (await registry.list_types()).types]) == [
+        "bike_lane",
+        "equivalent_to",  # seeded at store creation -- EDGES.md 3.1
+    ]
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership")
 async def test_c9_14_the_chain_is_transitive_and_the_scan_is_namespace_scoped(registry):
@@ -610,7 +615,10 @@ async def test_c9_16_a_merge_the_guard_can_only_see_in_events_still_blocks(regis
     blocked = await registry.reinstate("cycle_track", "and this one", reinstated_by="user:dot")
     assert isinstance(blocked, Refusal), "the merge is still on the record, in events"
     assert blocked.reason == "alias_collision"
-    assert sorted([t.name for t in (await registry.list_types()).types]) == ["bike_lane"]
+    assert sorted([t.name for t in (await registry.list_types()).types]) == [
+        "bike_lane",
+        "equivalent_to",  # seeded at store creation -- EDGES.md 3.1
+    ]
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership")
 async def test_c9_17_the_collision_scan_pages_to_exhaustion(adapter, make_registry):
