@@ -9,6 +9,7 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 | [VISION.md](https://github.com/stephan-dyson/open-ontology/blob/main/VISION.md) | The thesis, what was observed, what is assumed, what is not validated. Claims tagged [Observed] / [Inferred] / [Assumed]. |
 | [STATUS.md](https://github.com/stephan-dyson/open-ontology/blob/main/STATUS.md) | **Where we are, at a glance** — one row per roadmap item, one status each. Updated at every landing. |
 | [ROADMAP.md](https://github.com/stephan-dyson/open-ontology/blob/main/ROADMAP.md) | Phases 0–4, kill criteria, standing constraints, and the **"Ordering for the Tenshen rebuild"** table — the live execution order. |
+| [USE-CASES.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/USE-CASES.md) | **The three validation fixtures** every spec and design is tested against — Tenshen (single-writer registry), CMS citations (flat government export), NYC Open Data (many agencies, colliding words) — plus the validation protocol and Wikidata as governance precedent. |
 | [WALKTHROUGH.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/WALKTHROUGH.md) | The product, concretely: a non-technical analyst goes from a spreadsheet to a sent action in five steps. |
 
 ## Specs — the contracts being built against
