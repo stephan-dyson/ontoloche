@@ -76,7 +76,7 @@ from open_ontology import Registry
 
 `Registry` is **one façade object** carrying the `INTERFACE.md` §5 calls as methods, with signatures identical to §5 minus the implicit `self`.
 
-**Counting note, recorded not resolved.** `INTERFACE.md` says "twelve calls" in §0, §5.10 and §13. Enumerating §5.1–§5.11 yields **thirteen** functions: `consumers`, `predicates`, `resolve_type`, `propose_type`, `approve`, `reject`, `list_types`, `usage`, `provenance`, `retire`, `merge_types`, `register_consumer`, `record_use`. §5.5 defines two and §5.11 defines two. The façade exposes thirteen methods. **This is a counting discrepancy in #1, not a design decision here** — flagged in §11 for #1 to correct in its next revision. Nothing in this document depends on which number is right.
+**Counting note — raised here, resolved in #1 by row 3c.** `INTERFACE.md` used to say "twelve calls". Enumerating §5.1–§5.11 yields **thirteen** functions: `consumers`, `predicates`, `resolve_type`, `propose_type`, `approve`, `reject`, `list_types`, `usage`, `provenance`, `retire`, `merge_types`, `register_consumer`, `record_use`. §5.5 defines two and §5.11 defines two. The façade exposes thirteen methods. `INTERFACE.md` §5.10, §12 and §13 now all say thirteen. *(Raised by this document at #2, corrected in #1 during row 3c after a fifth adversarial round — a two-line fix that had been carried as a known-wrong number through four deliverables.)*
 
 Public, in the sense of *"you may build against it, knowing v0 will break it"*:
 
@@ -1307,7 +1307,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 
 ### 11.2 Recorded for #1's next revision, no ruling needed
 
-- **The call count.** `INTERFACE.md` says *twelve calls* in §0, §5.10 and §13; enumerating §5.1–§5.11 gives **thirteen** functions (§2.2). Nothing depends on it; it should be corrected so it is not quoted onward.
+- ~~**The call count.**~~ **Corrected by row 3c**: `INTERFACE.md` §5.10, §12 and §13 now say **thirteen**, which is what enumerating §5.1–§5.11 gives (§2.2).
 - **`INTERFACE.md` §2.1 says the registry never reads `attributes`.** §5 of this document makes reading them possible but off by default, so an untouched deployment matches §2.1 exactly. If #1 adopts the mechanism, that sentence needs a clause.
 - **`INTERFACE.md` §9 does not name the `kind` of a `work_link_types` row.** This document determines `kind="edge"` (§7.1) from §2.2's definition.
 

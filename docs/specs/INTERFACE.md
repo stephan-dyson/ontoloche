@@ -381,7 +381,7 @@ Proposal:
 
 > **Added by row 3c, 2026-08-28, after a third adversarial review round — this was a hole in §13's own exit criterion.** Two sentences in this document were false for exactly this case: the paragraph below says a `TypeEntry` comes back *"only when the namespace policy is `approval_policy=\"auto\"`"*, and §2.7 point 3 says the tier gate shows up as `Refusal(reason="tier_below_auto_approve_policy")` — which is true of `approve()` and **not** of `propose_type`'s internal auto-approval attempt. `2A-RUN.md` §4 deviation **D-11** recorded the gap in the words *"Neither document says what happens when the auto path meets the tier gate"*, and §11's list of deviations touching this document then failed to carry it forward. **It is UC1's own scenario:** Tenshen auto-approves and its classifier's tier is named as Haiku (§9, contortion 4), so this is the first thing a beacon migration hits.
 
-**`warnings` vocabulary, complete — six values across two carriers:**
+**`warnings` vocabulary, complete — seven values across two carriers:**
 
 | value | lands on | from |
 |---|---|---|
@@ -558,6 +558,24 @@ def merge_types(
 ) -> MergeResult | Refusal: ...
 ```
 
+```
+MergeResult:
+    from_:        str            # the type that was retired
+    into:         str            # the survivor
+    namespace:    str
+    merged_by:    str
+    merged_at:    datetime
+    reason:       str
+    entry:        TypeEntry      # `into` as it now stands
+    acknowledged: list[str]      # the guard warnings the caller named, recorded in history
+    aliases_added: list[str]     # `from_`'s name and aliases, now on `into`
+    warnings:     list[str]
+```
+
+**What a merge does, and what it does not.** `from_` is **retired** with `into` as its `successor`, and `from_`'s name joins `into`'s `aliases` — so the old word still resolves and §5.9's rule that a retired name is not reusable still holds. **Nothing is deleted.** A merge is two lifecycle writes and an alias, not a destruction, which is what makes the guard list below a defence rather than a formality.
+
+*(This shape was missing until row 3c, 2026-08-28 — a fifth adversarial review round found `merge_types` was the **one call in §5 with no printed data shape**, which made §13's exit criterion "every call has a signature, a data shape, and a stated behaviour when uncertain" false for it. Four earlier rounds and the whole UC3 pass had walked past it.)*
+
 **Designed against: mechanism 4 — and constrained by 0.1 to the point of near-uselessness, deliberately.**
 
 **It MUST refuse when the two have different consumer sets.** Verbatim from `ROADMAP.md` Phase 1. If `consumers(from_)` and `consumers(into)` differ in their `gates_on` sets, merging asserts that every consumer of one accepts the other — which is exactly the false claim 0.1 describes.
@@ -575,7 +593,7 @@ def merge_types(
 
 **Behaviour when uncertain.** If `consumers()` cannot be computed for either side — which, since `complete` is always false (§5.1), means *always* in the strict reading — v0 takes the weaker rule: refuse when the **known** consumer sets differ, and when both are empty, return `Refusal(reason="no_consumer_evidence")` with `acknowledge=["no_consumer_evidence"]` available. **Merging two types about which nothing is known is the single most destructive thing this interface can do**, so it is the one place where "we do not know" blocks rather than warns.
 
-**Kill-criterion note.** `merge_types` is 1 of 12 calls, refuses by default, and has four non-overridable refusals. **This is not a merge-centred design.** See §12.
+**Kill-criterion note.** `merge_types` is 1 of 13 calls, refuses by default, and has four non-overridable refusals. **This is not a merge-centred design.** See §12.
 
 ---
 
@@ -951,9 +969,9 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 - **`TypeListing` needs `excluded_unknown`** — `C6-05` requires the count of types excluded from an `orphaned=` filter *because their orphan state is unknown* to be reported, and §5.6's four fields cannot (D-5).
 - **`Resolution.alternatives` is typed `tuple[str, float]`**, but §5.5 asks for a prior rejection to surface there and nothing scored it. Implemented as `tuple[str, float | None]`; `0.0` would be Rule U's forbidden zero (D-12).
 - **`merge_types` takes one `namespace`**, which makes a cross-namespace merge unexpressible and refusal #4 unreachable. One additive keyword, `into_namespace` (D-7).
-- **§2.5 states the Foundry status mapping but no §5 call performs it**, while `PACKAGE.md`'s C12 group tests it. Landed as `Registry.import_types`, a method beyond the twelve (D-8).
+- **§2.5 states the Foundry status mapping but no §5 call performs it**, while `PACKAGE.md`'s C12 group tests it. Landed as `Registry.import_types`, a method beyond the thirteen (D-8).
 - **`propose_type` and `reject` can return a `Refusal`** — required by `PACKAGE.md` §3.6 and §5.3, absent from §5.4 and §5.5's signatures (D-10).
-- **The call count** is unchanged and still wrong somewhere: §0, §5.10 and §13 say *twelve*; enumerating §5.1–§5.11 gives thirteen.
+- **The call count is corrected** *(row 3c, 2026-08-28)*. §5.10, §12 and §13 said *twelve*; enumerating §5.1–§5.11 gives **thirteen** — `consumers`, `predicates`, `resolve_type`, `propose_type`, `approve`, `reject`, `list_types`, `usage`, `provenance`, `retire`, `merge_types`, `register_consumer`, `record_use`. All three now say thirteen, and `PACKAGE.md` §2.2's counting note is resolved rather than carried forward. *(A fifth review round also found that §11 had been misciting itself: the twelve appeared in §5.10, §12 and §13, never in §0.)*
 - **D-11 — `propose_type` under `approval_policy="auto"` meeting the tier gate** returns a still-`pending` `Proposal` warning `auto_approval_refused:tier_below_auto_approve_policy`, which is neither of the two outcomes §5.4 and §2.7 describe. **Now documented in §5.4** *(added by row 3c after a third adversarial review round; it was recorded in `2A-RUN.md` and this list had failed to carry it forward, leaving §13's "a stated behaviour when uncertain" false for this call)*.
 
 **Recorded by roadmap row 3c (the UC3 validation pass), 2026-08-28.** §10b runs the NYC Open Data fixture — three agencies, one word, three meanings — against this document and records **five contortions (8–12), none designed away.** Those that this document must answer in v1, in the order they cost the most:
@@ -978,7 +996,7 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 
 **Not tripped.** [Observed, from the shape of this document]
 
-- `merge_types` is **1 of 12 calls**, refuses by default, and carries **four non-overridable refusals** (§5.10). Deleting it entirely would leave the rest of the interface intact and coherent — which is the operational test of whether a design is merge-centred.
+- `merge_types` is **1 of 13 calls**, refuses by default, and carries **four non-overridable refusals** (§5.10). Deleting it entirely would leave the rest of the interface intact and coherent — which is the operational test of whether a design is merge-centred.
 - The mechanism-4 answer here is **`namespace`** — *preserve* the distinction — not merge. §2.6.
 - Nothing in §5 requires collision to be dominant. The spine is `resolve_type` → `propose_type` → `approve`/`reject`, which is mechanisms 1 and 2; the lifecycle half is mechanism 3; `consumers` is C.
 
@@ -990,7 +1008,7 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 
 | Criterion (verbatim) | Where |
 |---|---|
-| *Every call has a signature, a data shape, and a stated behaviour when uncertain* | §5.1–§5.11. Twelve calls; each has all three, plus a named mechanism |
+| *Every call has a signature, a data shape, and a stated behaviour when uncertain* | §5.1–§5.11. **Thirteen** calls; each has all three, plus a named mechanism. `MergeResult`'s shape was added by row 3c — it was the one missing |
 | *The document names which of Phase 0's mechanisms it is designed against* | §6, against **A1** (1 + 3 dominant, 4 minor, C present-unobserved), with per-call labels throughout §5 |
 | *`v0` and "unstable" appear in the header* | Header, line 3 |
 | *Tenshen's `work_link_types` can be expressed in it without contortion — or the contortion is recorded* | §9. **Expressible with seven recorded contortions**, two structural. None designed away |
