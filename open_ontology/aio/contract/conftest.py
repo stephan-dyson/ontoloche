@@ -54,7 +54,13 @@ from open_ontology.policy import NamespacePolicy
 from . import _support
 
 POSTGRES_DSN = os.environ.get("OO_POSTGRES_DSN")
-BACKENDS = ("sqlite", "postgres")
+
+#: PACKAGE.md 6.1, amended by row 3d: **three** reference legs, in one process, in one
+#: run. ``sqlite_minimal`` is a real SQLite store with four of the nine reference tables
+#: absent (``open_ontology/backends/sqlite_minimal.py``) -- five capability flags
+#: declined at once, natively rather than through ``DegradedAdapter``. beacon finding U2:
+#: a test double reporting on itself is not evidence that a degraded backend conforms.
+BACKENDS = ("sqlite", "postgres", "sqlite_minimal")
 
 
 def pytest_configure(config):
@@ -115,18 +121,8 @@ def pytest_generate_tests(metafunc):
     metafunc.parametrize("backend", list(BACKENDS))
 
 
-
-def pytest_generate_tests(metafunc):
-    if "backend" not in metafunc.fixturenames:
-        return
-    if _support.EXTERNAL_FACTORY is not None:
-        metafunc.parametrize("backend", ["external"])
-        return
-    metafunc.parametrize("backend", list(BACKENDS))
-
-
 @pytest.fixture
-async def adapter_factory(backend):
+async def adapter_factory(backend, tmp_path_factory):
     """An async callable returning a fresh, migrated, empty store."""
     made = []
 
@@ -144,6 +140,20 @@ async def adapter_factory(backend):
         async def build():
             adapter = await AsyncSQLiteAdapter.open(":memory:")
             await adapter.migrate()
+            made.append(adapter)
+            return adapter
+
+    elif backend == "sqlite_minimal":
+        from open_ontology.aio.backends.sqlite_minimal import AsyncMinimalSQLiteAdapter
+
+        async def build():
+            # A file, not ``:memory:``: the HOST creates the schema on its own
+            # connection and only then is the store handed over. Two connections to
+            # ``:memory:`` are two different databases.
+            path = str(tmp_path_factory.mktemp("oo_minimal") / "store.sqlite")
+            AsyncMinimalSQLiteAdapter.create_host_schema(path)
+            adapter = await AsyncMinimalSQLiteAdapter.open(path)
+            await adapter.migrate()  # verify-only: it checks, it does not create
             made.append(adapter)
             return adapter
 

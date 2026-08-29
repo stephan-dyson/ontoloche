@@ -718,7 +718,21 @@ Everything above assumes `attributes` is one opaque JSON document the adapter ne
 
 ### 6.1 The rule
 
-> **A backend is conformant iff the whole suite passes against it. The suite is parametrised over both reference backends and must pass on both, in one process, in one run.**
+> **A backend is conformant iff the whole suite passes against it. The suite is parametrised over the three reference legs and must pass on all three, in one process, in one run.**
+
+*(“Both reference backends” until row 3d, 2026-08-29, which added the third — beacon finding **U2**.)*
+
+**The three legs.**
+
+| leg | what it is | why it is a leg and not a double |
+|---|---|---|
+| `sqlite` | the full reference backend, nine tables, every flag `True` | the zero-config case (§4.3) |
+| `postgres` | the full reference backend, the reference deployment (§4.4) | two unlike stores, one observable answer |
+| `sqlite_minimal` | **a real SQLite store with four of the nine tables absent** — no `oo_proposal`, no `oo_event`, no `oo_type_predicate`, and an `oo_type` with no `attributes_json` but with a typed `primary_key_json` the host owns. Five flags declined at once (`stores_proposals`, `stores_events`, `stores_attributes`, `indexes_membership`, `owns_schema`), plus `attribute_projections={"primary_key"}` | §7.4 calls a backend of exactly this shape conformant *"as a third backend"*, and until row 3d **nothing here checked it against a real store**: degradation was simulated by wrapping a fully capable adapter in `DegradedAdapter`, which is a test double reporting on itself |
+
+`open_ontology/backends/sqlite_minimal.py`, and its hand-written async twin. The missing tables are missing **from the SQL**, not behind a Python `if`; the host's DDL lives in the same module (`create_host_schema`) precisely so `migrate()`'s verify-only promise stays testable — nothing the adapter does can create those tables.
+
+**A degraded leg cannot exercise every contract id, and the run says which.** That is the coverage report (§6.4, ruling **R12**), and it is the other half of this leg: a third leg that passed 66 fewer assertions in silence would be worse than no third leg.
 
 Per **A5** (founder-confirmed 2026-08-28), this suite passing on CMS data is the gate for Phase 2B — the condition that replaces §12's "real outside user" and permits Tenshen to depend on the package.
 
@@ -739,7 +753,7 @@ Two rules that keep the definition honest:
 
 ```
 CONFORMANCE (PACKAGE.md 6.1)
-  backends exercised: postgres, sqlite
+  backends exercised: postgres, sqlite, sqlite_minimal
   nonbinding tests excluded from the verdict: none
 ```
 
@@ -747,7 +761,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**125 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **One** added by row 3d — `C0-12`, ruling R5 / beacon finding U1.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**126 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Two** added by row 3d — `C0-12` (ruling R5 / beacon finding U1) and `C15-09` (beacon finding U3).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (12).** No interface call; this is the protocol itself.
 
@@ -937,7 +951,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C14-06 | 6 | zero registered consumers ⇒ `known=0, complete=False` — a null result reported as a null result |
 | C14-07 | 7 | **the package ships no default type**: no name `default_type`, no fallback constant, anywhere in the public surface. The `related_to` fallback is caller policy and stays there |
 
-**C15 — the `attributes` mechanism (8).** §5 of this document.
+**C15 — the `attributes` mechanism (9).** §5 of this document.
 
 | id | asserts |
 |---|---|
@@ -947,6 +961,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C15-04 | `enforce` returns `Refusal("attributes_schema_violation")` with the offending field in `detail` |
 | C15-05 | a v2 schema with a new required field does **not** invalidate v1 rows; they read back verbatim with `attr_schema_version=1` |
 | C15-06 | under `enforce`, a `value_set` without a declared `ordering` when `ordered=True` is refused — the CMS severity case |
+| C15-09 | **a projected key is censused, and the census says it is partial** (§5.7): on a backend with `stores_attributes=False` and a declared projection, `attribute_census` lists the projected key with `complete=False` and a `why_incomplete` naming what it counted. *(Row 3d, beacon finding **U3**. The census used to refuse outright on `stores_attributes=False` and return `entries=()` — a confident wrong answer on a backend that had written the key, in the one call whose job is making the escape hatch enumerable.)* |
 | C15-07 | **one schema per kind cannot serve both CMS `value_set`s:** with `ordering` required, `deficiency_corrected_status` is refused for lacking an order it has no business having; with `ordering` optional, `scope_severity_code` may be created claiming an order and declaring none — the pollution §5.1 says the mechanism exists to prevent. Both horns asserted. *(Row 3c, §5.6 — a limitation of the mechanism, not of any backend)* |
 
 **C16 — whole-store invariants (4).** *(Amended by row 3c: this said "run once at suite end, over everything the suite wrote". The shipped group is **function-scoped** — a fixture drives one store through representative write paths and each test then inspects it. Recorded at 2A as deviation D-9 and never brought inline here. It matters because "everything the suite wrote" would be a stronger claim than the tests make.)*

@@ -60,9 +60,19 @@ def test_c15_01_with_no_schema_attributes_are_opaque_unread_and_unvalidated(regi
 
 
 @pytest.mark.nonbinding
+@pytest.mark.requires_capability("stores_attributes")
+@pytest.mark.requires_attribute_store
 def test_c15_02_the_census_records_every_key_written_in_off_mode(registry):
     """Ruling R2: package-local, outside the conformance definition. It does not solve
-    the escape hatch; it makes the escape hatch enumerable."""
+    the escape hatch; it makes the escape hatch enumerable.
+
+    The two markers were added by row 3d, when the natively-degraded third leg ran this
+    for the first time. Its subject is a census of **arbitrary** keys, which needs
+    ``stores_attributes`` as scaffolding: on a backend that stores none, the only keys
+    ever written are its projections (PACKAGE.md 5.7), and the honest census there is
+    *those keys, `complete=False`, with a why*. That behaviour has its own subject,
+    ``C15-09``; asserting it here would make one test mean two things.
+    """
     seed(
         registry,
         "scope_severity_code",
@@ -321,3 +331,56 @@ def test_c15_08_declining_the_attribute_store_leaves_a_backend_conformant(
         attributes={"ordered": True, "ordering": list("ABC")},
     )
     assert entry.attributes == {"ordered": True, "ordering": list("ABC")}
+
+
+@pytest.mark.nonbinding
+@pytest.mark.requires_attribute_store
+def test_c15_09_a_projected_key_is_censused_and_the_census_says_it_is_partial(
+    adapter, make_registry
+):
+    """**Beacon finding U3's census consequence, and it is a Rule U question.**
+
+    PACKAGE.md 5.7: a backend with `stores_attributes=False` may still own some keys as
+    typed columns, and those keys **are written**. `attribute_census` used to refuse
+    outright on `stores_attributes=False` and return `entries=()` -- which on such a
+    backend is a *confident wrong answer*: it says nothing was ever written when
+    something was, in the one call whose whole job is making the escape hatch
+    enumerable (§5.5).
+
+    The honest answer is both halves at once: the projected keys **are** listed, and
+    `complete` is `False` with a `why_incomplete` naming which keys the count covers.
+    Same move as `ConsumerReport.complete=False`.
+    """
+    caps = adapter.capabilities()
+    if caps.stores_attributes:
+        pytest.skip(
+            "PACKAGE.md 5.7 -- this backend stores arbitrary attributes, so a census "
+            "restricted to its projections has no subject here. C15-02 is the full case."
+        )
+    if not caps.attribute_projections:
+        pytest.skip(
+            "PACKAGE.md 5.7 -- this backend declines attributes AND declares no "
+            "projected columns, so there is no key it stores. C15-08 is that case."
+        )
+    projected = sorted(caps.attribute_projections)[0]
+    registry = make_registry(adapter)
+
+    seed(
+        registry,
+        "scope_severity_code",
+        kind="value_set",
+        definition="the CMS scope and severity code",
+        attributes={projected: ["ccn"], "ordering": ["A", "B", "C"]},
+    )
+
+    census = registry.attribute_census()
+    keys = {e.key: e for e in census.entries}
+    assert projected in keys, (
+        "the projected key WAS written, to a column this backend owns -- a census that "
+        "omits it reports an unknown where the backend has a fact"
+    )
+    assert "ordering" not in keys, "and a key it never stored is not invented into one"
+    assert census.complete is False, "the census covers the projections and nothing else"
+    assert census.why_incomplete and projected in census.why_incomplete, (
+        "and it names which keys it counted, in the backend's own words plus the list"
+    )
