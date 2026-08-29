@@ -30,7 +30,21 @@ import re
 import textwrap
 from collections import defaultdict
 
-__all__ = ["Coverage", "contract_id_of"]
+__all__ = ["Coverage", "contract_id_of", "BORROWED_CAPS"]
+
+#: ``leg -> Capabilities`` of the adapter a ``BorrowedHarness`` actually handed over,
+#: recorded by ``C0-12``/``C0-13``.
+#:
+#: **Why this exists** *(row 3d, third adversarial round, reproduced)*. The verdict used
+#: to read the declaration off the plain ``adapter_factory``. Ruling R5's whole shape is
+#: an adapter that is ``"owned"`` when it opens its own connection and ``"savepoint"``
+#: only when one is lent to it -- which is exactly what beacon will build -- so the
+#: plain factory honestly declares ``"owned"``, the ``"savepoint"`` predicate never
+#: matched, and **`CONFORMANT, DECLARATIONS UNVERIFIED` was dead code for every
+#: realistic third-party adapter.** A savepoint adapter with the precondition check
+#: deleted reached a clean `CONFORMANT`. The borrowed adapter's own declaration is the
+#: one that matters here, so it is the one recorded.
+BORROWED_CAPS: dict[str, object] = {}
 
 #: ``open_ontology/contract/test_c5_approve_reject.py::test_c5_03_x[postgres]`` -> ``C5-03``
 _ID = re.compile(r"::test_c(\d+)_(\d+)_")
@@ -67,6 +81,18 @@ class Coverage:
 
     def __init__(self, legs: tuple[str, ...]):
         self.legs = tuple(legs) + ("external",)
+        self.reset()
+
+    def reset(self) -> None:
+        """Forget everything. Called at session start, because the suite is run
+        IN-PROCESS more than once -- ``run_contract_suite`` and
+        ``check_capability_matrix.py`` both do it -- and pytest reuses the
+        already-imported conftest, so **one ``Coverage`` object served every run and
+        reported their union**. Row 3d, third adversarial round: a second in-process run
+        showed three reference legs at ``NOT CONFORMANT: 0 ids exercised`` that had not
+        been collected at all.
+        """
+        BORROWED_CAPS.clear()
         self.exercised: dict[str, set[str]] = defaultdict(set)
         self.failed: dict[str, set[str]] = defaultdict(set)
         #: Ids whose test blew up in SETUP or TEARDOWN rather than in the call. pytest
@@ -186,15 +212,39 @@ class Coverage:
     )
 
     def unverified(self, leg: str) -> list[str]:
-        caps = self.declared.get(leg)
-        if caps is None:
-            return []
-        out = []
-        for attribute, holds, cid, advice in self.CHECKED_DECLARATIONS:
-            value = getattr(caps, attribute, None)
-            if holds(value) and cid not in self.exercised[leg]:
-                out.append(f"{cid} did not run here: {advice}")
-        return out
+        from . import _support
+
+        out: dict[str, str] = {}
+        # The BORROWED adapter's declaration wins where there is one: R5's shape is an
+        # adapter that is "owned" until a connection is lent to it.
+        for caps in (self.declared.get(leg), BORROWED_CAPS.get(leg)):
+            if caps is None:
+                continue
+            for attribute, holds, cid, advice in self.CHECKED_DECLARATIONS:
+                seen_here = self.exercised.get(leg, set())
+                if holds(getattr(caps, attribute, None)) and cid not in seen_here:
+                    out[cid] = advice
+
+        # And a third-party adapter that supplied no harness has told us nothing about
+        # the modes it has. Silence is not evidence of absence -- Rule U, applied to the
+        # suite's own knowledge of the adapter rather than to the adapter's data.
+        if leg == "external":
+            if _support.EXTERNAL_BORROWED is None:
+                out.setdefault(
+                    "C0-12/C0-13",
+                    "no BorrowedHarness was supplied, so IF this adapter has a "
+                    "savepoint mode at all -- and ruling R5's shape is an adapter that "
+                    "is owned until a connection is lent to it -- nothing here checked "
+                    "it. Pass --borrowed / borrowed_factory= to have it checked",
+                )
+            if _support.EXTERNAL_SCHEMA_HARNESS is None:
+                out.setdefault(
+                    "C0-09",
+                    "no SchemaHarness was supplied, so IF this adapter has an "
+                    "owns_schema=False mode, nothing here checked that migrate() is "
+                    "verify-only. Pass --schema-harness / schema_harness_factory=",
+                )
+        return [f"{cid} did not run here: {advice}" for cid, advice in sorted(out.items())]
 
     def legs_seen(self) -> list[str]:
         seen = set(self.exercised) | set(self.skipped) | set(self.errored)
@@ -209,12 +259,20 @@ class Coverage:
         """
         ids: set[str] = set(self.backend_independent)
         for leg in self.legs:
-            ids |= self.exercised[leg] | set(self.skipped[leg]) | self.errored[leg]
+            ids |= self._seen(leg)
         return ids
 
+    def _seen(self, leg: str) -> set[str]:
+        """Read-only. ``self.exercised[leg]`` on a defaultdict CREATES the key, which
+        made every configured leg look present to ``legs_seen()``. Row 3d, third round."""
+        return (
+            self.exercised.get(leg, set())
+            | set(self.skipped.get(leg, {}))
+            | self.errored.get(leg, set())
+        )
+
     def unaccounted(self, leg: str) -> set[str]:
-        seen = self.exercised[leg] | set(self.skipped[leg]) | self.errored[leg]
-        return self.universe() - seen - self.backend_independent
+        return self.universe() - self._seen(leg) - self.backend_independent
 
     # --------------------------------------------------------------------- report
     def lines(self) -> list[str]:
@@ -226,13 +284,15 @@ class Coverage:
         out.append("  coverage, per leg (PACKAGE.md 6.4 / ruling R12):")
         width = max(len(leg) for leg in legs)
         for leg in legs:
-            done = self.exercised[leg]
+            done = self.exercised.get(leg, set())
             # An id skipped on one test but exercised by another claiming the same id
             # is exercised. C0-08 and C0-12 are hand-written twice for that reason.
-            missing = {cid: why for cid, why in self.skipped[leg].items() if cid not in done}
+            missing = {
+                cid: why for cid, why in self.skipped.get(leg, {}).items() if cid not in done
+            }
             unverified = self.unverified(leg)
             unaccounted = self.unaccounted(leg)
-            if self.failed[leg] or self.errored[leg] or unaccounted:
+            if self.failed.get(leg) or self.errored.get(leg) or unaccounted:
                 verdict = "NOT CONFORMANT"
             elif unverified:
                 verdict = "CONFORMANT, DECLARATIONS UNVERIFIED"
@@ -243,11 +303,11 @@ class Coverage:
                 f"    {leg:<{width}}  {verdict}: {len(done)} ids exercised, "
                 f"{len(missing)} not exercisable on this backend{listed}"
             )
-            if self.failed[leg]:
+            if self.failed.get(leg):
                 out.append(
                     f"    {'':<{width}}  failed here: {', '.join(sorted(self.failed[leg]))}"
                 )
-            if self.errored[leg]:
+            if self.errored.get(leg):
                 out.extend(
                     _wrap(
                         "ERRORED in setup or teardown here (the test never ran): "

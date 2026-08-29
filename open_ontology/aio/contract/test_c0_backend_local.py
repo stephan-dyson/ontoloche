@@ -35,10 +35,16 @@ from open_ontology._clock import FixedClock
 from open_ontology.aio.registry import AsyncRegistry
 from open_ontology.policy import NamespacePolicy
 from open_ontology.adapter import TypeQuery, TypeRecord
-from open_ontology.errors import AlreadyExists, HostTransactionRequired, SchemaMismatch
+from open_ontology.errors import (
+    AlreadyExists,
+    HostTransactionRequired,
+    SavepointOutOfOrder,
+    SchemaMismatch,
+)
 from open_ontology.types import Refusal, TypeEntry
 
 from . import _support
+from open_ontology.contract._coverage import BORROWED_CAPS
 
 POSTGRES_DSN = os.environ.get("OO_POSTGRES_DSN")
 
@@ -343,6 +349,9 @@ async def _borrowed_minimal(tmp_path):
         opened.append(idle)
         return await AsyncMinimalSQLiteAdapter.open(path, connection=idle)
 
+    async def second_adapter():
+        return await AsyncMinimalSQLiteAdapter.open(path, connection=host)
+
     return _support.BorrowedHarness(
         guest,
         outsider,
@@ -351,6 +360,7 @@ async def _borrowed_minimal(tmp_path):
         host_commit,
         teardown,
         idle_adapter=idle_adapter,
+        second_adapter=second_adapter,
     )
 
 
@@ -405,6 +415,9 @@ async def _borrowed_sqlite(tmp_path):
         opened.append(idle)
         return await AsyncSQLiteAdapter.open(path, connection=idle, owns_schema=False)
 
+    async def second_adapter():
+        return await AsyncSQLiteAdapter.open(path, connection=host, owns_schema=False)
+
     return _support.BorrowedHarness(
         guest,
         outsider,
@@ -413,6 +426,7 @@ async def _borrowed_sqlite(tmp_path):
         host_commit,
         teardown,
         idle_adapter=idle_adapter,
+        second_adapter=second_adapter,
     )
 
 
@@ -484,6 +498,11 @@ async def _borrowed_postgres():
                 pass
         return await AsyncPostgresAdapter.open(connection=broken, owns_schema=False)
 
+    async def second_adapter():
+        return await AsyncPostgresAdapter.open(
+            connection=host, schema=schema, owns_schema=False
+        )
+
     return _support.BorrowedHarness(
         guest,
         outsider,
@@ -493,6 +512,7 @@ async def _borrowed_postgres():
         teardown,
         idle_adapter=idle_adapter,
         aborted_adapter=aborted_adapter,
+        second_adapter=second_adapter,
     )
 
 
@@ -534,6 +554,7 @@ async def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(
     outsider, host_begin = harness.outsider, harness.host_begin
     host_open, host_commit, teardown = harness.host_open, harness.host_commit, harness.teardown
 
+    BORROWED_CAPS[backend] = await guest.capabilities()
     try:
         caps = await guest.capabilities()
         assert caps.transaction_scope == "savepoint", "borrowed DECLARES; it is not silent"
@@ -661,5 +682,76 @@ async def test_c0_13_a_borrowed_connection_with_no_usable_transaction_is_refused
                     await aborted.put_type(_type("never_written_either"), expect_absent=True)
             assert "already failed" in str(raised.value).lower()
             assert await harness.outsider("never_written_either") == 0
+    finally:
+        await harness.teardown()
+
+
+async def test_c0_14_scopes_on_one_borrowed_connection_must_nest(backend, tmp_path):
+    """C0-14's async twin. PACKAGE.md 3 item 3, consequence 4.
+
+    The savepoint stack belongs to the CONNECTION, and both engines release
+    cascadingly, so two adapters sharing one borrowed connection must nest their scopes.
+    Strictly nested works; an out-of-order close is refused before any SQL is issued;
+    and the refused adapter is then unusable rather than quietly reusable over
+    bookkeeping it knows is wrong.
+    """
+    if backend == "sqlite":
+        harness = await _borrowed_sqlite(tmp_path)
+    elif backend == "sqlite_minimal":
+        harness = await _borrowed_minimal(tmp_path)
+    elif backend == "postgres":
+        if not POSTGRES_DSN:
+            pytest.skip("PENDING -- no local Postgres; set OO_POSTGRES_DSN")
+        pytest.importorskip("psycopg", reason="PENDING -- psycopg is not installed")
+        harness = await _borrowed_postgres()
+    elif _support.EXTERNAL_BORROWED is not None:
+        harness = await _support.EXTERNAL_BORROWED()
+    else:
+        pytest.skip(
+            "PENDING -- this adapter supplied no BorrowedHarness, so two scopes on one "
+            "connection cannot be driven here."
+        )
+    guest = harness.adapter
+    if harness.second_adapter is None:
+        await harness.teardown()
+        pytest.skip(
+            "PENDING -- this BorrowedHarness supplies no second_adapter, so PACKAGE.md "
+            "3 item 3 consequence 4 cannot be checked."
+        )
+    try:
+        await harness.host_begin()
+        await guest.migrate()
+        second = await harness.second_adapter()
+
+        # 1. Strictly nested works -- that is the case a host actually needs.
+        async with guest.transaction():
+            await guest.put_type(_type("outer_ok"), expect_absent=True)
+            async with second.transaction():
+                await second.put_type(_type("inner_ok"), expect_absent=True)
+        assert await guest.get_type("default", "outer_ok", kind="entity") is not None
+        assert await guest.get_type("default", "inner_ok", kind="entity") is not None
+        assert await harness.host_open()
+
+        # 2. Interleaved: A opens, B opens, A tries to finish first.
+        a_scope = guest.transaction()
+        await a_scope.__aenter__()
+        await guest.put_type(_type("a_row"), expect_absent=True)
+        b_scope = second.transaction()
+        await b_scope.__aenter__()
+        await second.put_type(_type("b_row"), expect_absent=True)
+
+        with pytest.raises(SavepointOutOfOrder) as raised:
+            await a_scope.__aexit__(None, None, None)
+        assert "nest" in str(raised.value).lower()
+
+        # 3. ...and A is unusable rather than quietly reusable.
+        with pytest.raises(SavepointOutOfOrder):
+            async with guest.transaction():
+                await guest.put_type(_type("should_never_exist"), expect_absent=True)
+        assert await guest.get_type("default", "should_never_exist", kind="entity") is None
+
+        await b_scope.__aexit__(None, None, None)
+        assert await second.get_type("default", "b_row", kind="entity") is not None
+        assert await harness.host_open()
     finally:
         await harness.teardown()

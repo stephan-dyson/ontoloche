@@ -109,6 +109,14 @@ class AsyncBaseSqlAdapter:
         # as LIFO, which is a property this code was relying on without knowing it. Row
         # 3d, second adversarial round: a collision is now impossible by construction.
         self._savepoint_token = uuid4().hex[:8]
+        #: Set when a scope could not be ended safely. The adapter is then UNUSABLE, and
+        #: says so on the next transaction() rather than carrying on over bookkeeping it
+        #: knows is wrong -- row 3d, third adversarial round: raising out of _close_scope
+        #: left _depth back at 0 and the stale name still on the shared stack, so the
+        #: caller could open a fresh scope that silently abandoned the old savepoint and
+        #: orphaned it forever. Refusing to corrupt the CONNECTION is not enough if the
+        #: adapter's own state is left corrupt.
+        self._scope_broken: str | None = None
 
     # ------------------------------------------------------------------ subclass API
     async def _execute(self, sql: str, params: tuple | list = ()) -> Any:
@@ -313,6 +321,15 @@ class AsyncBaseSqlAdapter:
     def _scope_stack(self) -> list[str]:
         return _SAVEPOINT_STACKS.setdefault(id(self.conn), [])
 
+    def _break(self, message: str, error) -> None:
+        """This adapter can no longer be trusted with a scope. Say so, from now on.
+
+        The scope is left on the shared stack deliberately: it is still open on the
+        connection, and quietly forgetting it would be the leak this replaces.
+        """
+        self._scope_broken = message
+        raise error
+
     def _leave_scope_stack(self) -> None:
         """Pop this adapter's savepoint, refusing if it is not the top of the stack.
 
@@ -320,18 +337,40 @@ class AsyncBaseSqlAdapter:
         both engines release cascadingly, so ending an outer scope while an inner one is
         open destroys the inner one and (on Postgres) poisons the connection.
         """
+        if self._borrowed and self._host_transaction_state() == "none":
+            # The host committed or rolled back while this scope was open, so the
+            # savepoint is already gone. Issuing RELEASE now raises a raw driver error
+            # ("no such savepoint") through a seam every other case wraps in a named
+            # exception. Row 3d, third adversarial round.
+            _SAVEPOINT_STACKS.pop(id(self.conn), None)
+            self._break(
+                "the host ended this scope's transaction",
+                HostTransactionRequired(
+                    "the host committed or rolled back the transaction this scope was "
+                    "running inside, while the scope was still open -- so the savepoint "
+                    "no longer exists and neither does anything written in it. A host "
+                    "must not end its transaction while a borrowed adapter has a scope "
+                    "open (PACKAGE.md 3 item 3, consequence 4). This adapter is now "
+                    "unusable; construct a new one over the host's next transaction."
+                ),
+            )
         stack = _SAVEPOINT_STACKS.get(id(self.conn))
         if stack is None or self._savepoint not in stack:
             return
         if stack[-1] != self._savepoint:
             above = stack[stack.index(self._savepoint) + 1 :]
-            raise SavepointOutOfOrder(
-                f"this scope ({self._savepoint}) is not the innermost one open on this "
-                f"borrowed connection -- {len(above)} opened after it are still open "
-                f"({', '.join(above)}). Ending it now would destroy them, because both "
-                "engines RELEASE and ROLLBACK TO cascadingly. Two adapters may share one "
-                "borrowed connection, but their scopes must nest: the one opened last "
-                "must finish first (PACKAGE.md 3 item 3, consequence 4)."
+            self._break(
+                "a scope was ended out of order",
+                SavepointOutOfOrder(
+                    f"this scope ({self._savepoint}) is not the innermost one open on "
+                    f"this borrowed connection -- {len(above)} opened after it are still "
+                    f"open ({', '.join(above)}). Ending it now would destroy them, "
+                    "because both engines RELEASE and ROLLBACK TO cascadingly. Two "
+                    "adapters may share one borrowed connection, but their scopes must "
+                    "nest: the one opened last must finish first (PACKAGE.md 3 item 3, "
+                    "consequence 4). This adapter is now unusable -- its savepoint is "
+                    "still open and it will not open another."
+                ),
             )
         stack.pop()
         if not stack:
@@ -339,6 +378,13 @@ class AsyncBaseSqlAdapter:
 
     async def _open_scope(self) -> None:
         """Depth 0 entry. Owned: BEGIN. Borrowed: SAVEPOINT -- ruling R5."""
+        if self._scope_broken:
+            raise SavepointOutOfOrder(
+                f"this adapter is unusable: {self._scope_broken}, and its previous scope "
+                "is still open on the connection. Opening another would abandon it and "
+                "leave it orphaned. Construct a new adapter (PACKAGE.md 3 item 3, "
+                "consequence 4)."
+            )
         if self._borrowed:
             self._require_host_transaction()
             self._savepoint = self._next_savepoint()

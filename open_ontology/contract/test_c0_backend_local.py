@@ -30,11 +30,17 @@ import pytest
 
 from .._clock import FixedClock
 from ..adapter import TypeQuery, TypeRecord
-from ..errors import AlreadyExists, HostTransactionRequired, SchemaMismatch
+from ..errors import (
+    AlreadyExists,
+    HostTransactionRequired,
+    SavepointOutOfOrder,
+    SchemaMismatch,
+)
 from ..policy import NamespacePolicy
 from ..registry import Registry
 from ..types import Refusal, TypeEntry
 from . import _support
+from open_ontology.contract._coverage import BORROWED_CAPS
 
 NOW = datetime(2026, 8, 28, 12, 0, tzinfo=UTC)
 
@@ -408,6 +414,7 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
             # SQLite has no aborted-transaction state: a failed statement does not
             # poison the transaction the way Postgres does.
             aborted_adapter=None,
+            second_adapter=lambda: SQLiteAdapter.open(connection=host, owns_schema=False),
         )
 
     if backend == "sqlite_minimal":
@@ -445,6 +452,7 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
             lambda: host.execute("COMMIT"),
             host.close,
             idle_adapter=minimal_idle,
+            second_adapter=lambda: MinimalSQLiteAdapter(path, connection=host),
         )
 
     if backend == "postgres":
@@ -526,6 +534,9 @@ def _borrowed_pair(backend, tmp_path) -> _support.BorrowedHarness:
             teardown,
             idle_adapter=idle_adapter,
             aborted_adapter=aborted_adapter,
+            second_adapter=lambda: PostgresAdapter.open(
+                connection=host, schema=schema, owns_schema=False
+            ),
         )
 
     if _support.EXTERNAL_BORROWED is not None:
@@ -569,6 +580,7 @@ def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(backend, 
     guest = harness.adapter
     outsider, host_begin = harness.outsider, harness.host_begin
     host_open, host_commit, teardown = harness.host_open, harness.host_commit, harness.teardown
+    BORROWED_CAPS[backend] = guest.capabilities()
     try:
         caps = guest.capabilities()
         assert caps.transaction_scope == "savepoint", "borrowed DECLARES; it is not silent"
@@ -711,5 +723,78 @@ def test_c0_13_a_borrowed_connection_with_no_usable_transaction_is_refused(
                 "the message a host reads has to say which one it made"
             )
             assert harness.outsider("never_written_either") == 0
+    finally:
+        harness.teardown()
+
+
+def test_c0_14_scopes_on_one_borrowed_connection_must_nest(backend, tmp_path):
+    """**Consequence 4 of §3 item 3, and until row 3d nothing tested it.**
+
+    Two adapters may share one borrowed connection -- `C0-08` requires two adapters in
+    one process, and a host holding one session is the shape beacon has. But **the
+    savepoint stack belongs to the connection**, and both engines release cascadingly:
+    `RELEASE SAVEPOINT a` destroys every savepoint opened after `a`, and so does
+    `ROLLBACK TO a`. So A opening a scope, B opening one, and **A finishing first**
+    silently destroys B's -- and B's own exit then fails with a raw driver error which,
+    on Postgres, poisons the whole connection so A's later reads fail too. Reproduced
+    before it was believed.
+
+    Three things are asserted:
+
+    1. **strictly nested scopes work** -- last opened, first closed, no complaint. That
+       is the case a host actually needs, and refusing it would be worse than the bug;
+    2. **an out-of-order close is refused before any SQL is issued**, with
+       `SavepointOutOfOrder` rather than a driver exception;
+    3. **the refused adapter is then unusable and says so.** The first version of the
+       check raised and left the adapter looking closed -- `_depth` back at 0, its stale
+       name still on the shared stack -- so the caller could open a fresh scope that
+       abandoned the old savepoint and orphaned it forever. Refusing to corrupt the
+       connection is not enough if the adapter's own state is left corrupt.
+    """
+    harness = _borrowed_pair(backend, tmp_path)
+    guest = harness.adapter
+    if harness.second_adapter is None:
+        harness.teardown()
+        pytest.skip(
+            "PENDING -- this BorrowedHarness supplies no second_adapter, so two scopes "
+            "on one connection cannot be driven here. Supply one to have PACKAGE.md 3 "
+            "item 3 consequence 4 checked."
+        )
+    try:
+        harness.host_begin()
+        guest.migrate()
+        second = harness.second_adapter()
+
+        # 1. Strictly nested: B opens after A and closes before A. This must work.
+        with guest.transaction():
+            guest.put_type(_type(name="outer_ok"), expect_absent=True)
+            with second.transaction():
+                second.put_type(_type(name="inner_ok"), expect_absent=True)
+        assert guest.get_type("default", "outer_ok", kind="entity") is not None
+        assert guest.get_type("default", "inner_ok", kind="entity") is not None
+        assert harness.host_open(), "and the host's transaction is untouched throughout"
+
+        # 2. Interleaved: A opens, B opens, A tries to finish first.
+        a_scope = guest.transaction()
+        a_scope.__enter__()
+        guest.put_type(_type(name="a_row"), expect_absent=True)
+        b_scope = second.transaction()
+        b_scope.__enter__()
+        second.put_type(_type(name="b_row"), expect_absent=True)
+
+        with pytest.raises(SavepointOutOfOrder) as raised:
+            a_scope.__exit__(None, None, None)
+        assert "nest" in str(raised.value).lower()
+
+        # 3. ...and A is now unusable rather than quietly reusable.
+        with pytest.raises(SavepointOutOfOrder):
+            with guest.transaction():
+                guest.put_type(_type(name="should_never_exist"), expect_absent=True)
+        assert guest.get_type("default", "should_never_exist", kind="entity") is None
+
+        # B can still close its own scope: nothing was issued to the connection.
+        b_scope.__exit__(None, None, None)
+        assert second.get_type("default", "b_row", kind="entity") is not None
+        assert harness.host_open(), "and the host's transaction survived all of it"
     finally:
         harness.teardown()

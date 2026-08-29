@@ -262,6 +262,15 @@ _EXEMPTED: set[str] = set()
 _COVERAGE = Coverage(BACKENDS)
 
 
+def pytest_sessionstart(session):
+    # The suite is run in-process more than once -- run_contract_suite and
+    # check_capability_matrix.py both do it -- and pytest reuses this already-imported
+    # module, so without this one Coverage object reports the union of every run.
+    _COVERAGE.reset()
+    _EXERCISED.clear()
+    _EXEMPTED.clear()
+
+
 def pytest_runtest_logreport(report):
     _COVERAGE.record(report)
     if report.when != "call" or report.outcome not in ("passed", "failed"):

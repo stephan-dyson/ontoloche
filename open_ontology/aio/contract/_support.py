@@ -80,6 +80,10 @@ class BorrowedHarness:
     #: An adapter over a connection whose transaction has already FAILED, or None where
     #: the engine has no such state (SQLite has none). Also ``C0-13``.
     aborted_adapter: Callable[[], Any] | None = None
+    #: A SECOND adapter over the SAME borrowed connection, for ``C0-14``: the savepoint
+    #: stack belongs to the connection, so two adapters sharing one must nest their
+    #: scopes. None if this driver cannot hand out two handles on one connection.
+    second_adapter: Callable[[], Any] | None = None
 
 @dataclass(frozen=True)
 class SchemaHarness:

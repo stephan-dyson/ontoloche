@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Sequence
 from open_ontology._clock import Clock, SystemClock
@@ -186,8 +186,34 @@ class AsyncRegistry:
             )
         )
 
+    def _written(self, result):
+        """Stamp the durability sentence on the result of a WRITE. Reads never carry it.
+
+        **Reproduced regression, row 3d third adversarial round.** The first version
+        attached this inside ``_entry`` and ``_proposal`` -- which also build the results
+        of ``resolve_type`` (the call PACKAGE.md 6.2 calls *"the call that must not
+        write"*) and ``list_types``. So a savepoint-scoped registry stamped
+        ``not_durable_until_host_commits`` on **every read, forever**, including reads of
+        rows the host had committed minutes earlier: the signal degraded into permanent
+        noise on the exact seam it exists to protect, and it contradicted INTERFACE.md
+        5.4's own carrier column, which says *every write result*.
+
+        A write's result is genuinely not durable at the moment it is returned. A read's
+        result is a statement about what the store holds, and this registry has no way to
+        know whether the host has since committed -- so it says nothing, which is Rule U
+        rather than a guess in either direction.
+        """
+        if not self._durability_warning or result is None:
+            return result
+        existing = getattr(result, "warnings", None)
+        if existing is None:
+            return result
+        if self._durability_warning in existing:
+            return result
+        return replace(result, warnings=(*existing, self._durability_warning))
+
     def _write_warnings(self) -> tuple[str, ...]:
-        """The warnings every successful WRITE result carries. Empty on an owned store.
+        """The warnings a directly-constructed WRITE result carries. Empty on an owned store.
 
         Row 3d, third adversarial round: the first pass attached the durability sentence
         in ``_entry`` and ``_proposal`` only, and ``register_consumer`` and ``reject``
@@ -378,8 +404,6 @@ class AsyncRegistry:
         for w in extra_warnings:
             if w not in warnings:
                 warnings.append(w)
-        if self._durability_warning and self._durability_warning not in warnings:
-            warnings.append(self._durability_warning)
         return TypeEntry(
             name=rec.name,
             kind=rec.kind,
@@ -398,9 +422,6 @@ class AsyncRegistry:
         )
 
     def _proposal(self, rec: ProposalRecord) -> Proposal:
-        warnings = list(rec.warnings)
-        if self._durability_warning and self._durability_warning not in warnings:
-            warnings.append(self._durability_warning)
         return Proposal(
             id=rec.proposal_id,
             name=rec.name,
@@ -414,7 +435,7 @@ class AsyncRegistry:
             proposed_at=rec.proposed_at,
             tier=rec.tier,
             status=rec.status,
-            warnings=tuple(warnings),
+            warnings=tuple(rec.warnings),
             near_matches=tuple((n[0], n[1]) for n in (rec.near_matches or [])),
         )
 
@@ -868,7 +889,7 @@ class AsyncRegistry:
                 rec.proposal_id, f"auto:{policy.auto_policy_name}", mode="auto"
             )
 
-        return self._proposal(await self.adapter.get_proposal(rec.proposal_id))
+        return self._written(self._proposal(await self.adapter.get_proposal(rec.proposal_id)))
 
     # ==================================================== 5.5 approve  /  reject
     async def approve(
@@ -1016,7 +1037,7 @@ class AsyncRegistry:
                 proposal_id=rec.proposal_id,
                 detail={"tier": rec.tier, **(amendment or {})},
             )
-        return await self._entry(stored)
+        return self._written(await self._entry(stored))
 
     async def reject(
         self,
@@ -1272,7 +1293,7 @@ class AsyncRegistry:
                     "overrode": [c.id for c in report.gates_on] if force else [],
                 },
             )
-        return await self._entry(stored)
+        return self._written(await self._entry(stored))
 
     # =========================================================== 5.10 merge_types
     async def merge_types(
@@ -1498,7 +1519,7 @@ class AsyncRegistry:
             merged_by=merged_by,
             merged_at=now,
             reason=reason,
-            entry=await self._entry(merged),
+            entry=self._written(await self._entry(merged)),
             acknowledged=acknowledge,
             aliases_added=(left.name,),
             # Every merge records what the divergence check actually said, whether it
@@ -1659,7 +1680,7 @@ class AsyncRegistry:
                     name=name,
                     detail={"system": system, "foundry_status": foundry_status},
                 )
-            out.append(await self._entry(stored))
+            out.append(self._written(await self._entry(stored)))
         return out
 
     # ------------------------------------------------------------------ attributes
