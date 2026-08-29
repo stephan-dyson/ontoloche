@@ -17,8 +17,9 @@
 | Docs folder reorg | ✅ done — `docs/specs` `findings` `runs` `tools` + link checker |
 | `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
 | 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ✅ done — kill-criterion mechanism exercised and **held**; 7 contortions recorded, suite 109 → 117, two design defects fixed ([`docs/findings/3C-VALIDATION.md`](docs/findings/3C-VALIDATION.md)). **R5–R11 want a ruling** |
-| #4 `docs/EDGES.md` v0 | ⏳ queued (after 3c) |
-| #5 Phase 2B Tenshen migration (beacon) | ⏳ beacon row 21.1 spec in progress; **21.2 is no longer blocked — 3b landed** |
+| 3d Upstream fixes from beacon 21.1 (R5 savepoint transactions, degraded reference leg, attribute projections, doc sync) | ⏳ queued (after 3c) |
+| #4 `docs/EDGES.md` v0 | ⏳ queued (after 3d) |
+| #5 Phase 2B Tenshen migration (beacon) | ⏳ beacon 21.1 spec landed (`6e87d61a`, Draft, founder approval pending); 21.2 build should target 3d for the transaction seam |
 | #6 Actions-registry spec | ⬜ not started |
 | #7 Phase 3 ingestion / mapping | ⬜ not started |
 | Phase 4 generalise | ⬜ not started |
