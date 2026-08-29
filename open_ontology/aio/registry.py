@@ -1068,6 +1068,26 @@ class AsyncRegistry:
         rec = await self._require(namespace, type)
         report = await self._consumer_report(rec)
 
+        # **A destructive override that cannot be recorded is refused -- whichever guard
+        # it is overriding.** This used to be checked only inside the `live_consumers`
+        # branch, so on a backend that also declares `indexes_membership=False`
+        # `gates_on` was always empty, the branch never ran, and `force=True` retired a
+        # type with a real registered gating consumer leaving **no refusal, no warning
+        # and no history**. That is Tenshen's own declared shape (PACKAGE.md 7.3 B3 and
+        # B6 together), and B6 states in terms that this case returns
+        # `cannot_record_override`. `merge_types` had the unconditional form since v0;
+        # `retire` now matches it. Row 3c, after an adversarial review round.
+        if force and not self.caps.stores_events:
+            return Refusal(
+                "cannot_record_override",
+                {
+                    "why": self.caps.reason("stores_events"),
+                    "type": type,
+                    "would_override": [c.id for c in report.gates_on],
+                    "gates_on_knowable": self.caps.indexes_membership,
+                },
+            )
+
         if report.gates_on and not force:
             return Refusal(
                 "live_consumers",
@@ -1094,17 +1114,7 @@ class AsyncRegistry:
                     "override_with": "force=True",
                 },
             )
-        if report.gates_on and force and not self.caps.stores_events:
-            # A destructive override that cannot be recorded is refused. An
-            # unrecorded, unattributable change is precisely what this registry
-            # exists to prevent.
-            return Refusal(
-                "cannot_record_override",
-                {
-                    "why": self.caps.reason("stores_events"),
-                    "would_override": [c.id for c in report.gates_on],
-                },
-            )
+
 
         usage = await self._usage_report(rec)
         warnings = list(rec.warnings)
@@ -1192,14 +1202,36 @@ class AsyncRegistry:
         # 2 -- the kill row. A predicate is not a type list; merging two whose extents
         # differ asserts that anything commentable is searchable.
         if "predicate" in (left.kind, right.kind):
+            # **An extent we could not compute is not a byte-identical extent.** On a
+            # backend with indexes_membership=False every extent comes back empty, so
+            # two predicates with genuinely different members compared EQUAL and this
+            # refusal never fired -- the merge fell through to the *overridable*
+            # no_consumer_evidence guard, and `ROADMAP.md`'s kill row ("a capability
+            # predicate gets merged as a duplicate") tripped on the declared capability
+            # shape of Tenshen's own table (PACKAGE.md 7.3 B3). Rule U: unknown is not
+            # equal. Row 3c, after an adversarial review round reproduced the merge.
+            knowable = self.caps.indexes_membership
             left_extent = set((await self._extent(namespace, left.name, True))[0])
             right_extent = set((await self._extent(target_ns, right.name, True))[0])
-            if left.kind != "predicate" or right.kind != "predicate" or left_extent != right_extent:
+            if (
+                not knowable
+                or left.kind != "predicate"
+                or right.kind != "predicate"
+                or left_extent != right_extent
+            ):
                 return Refusal(
                     "predicate_merge",
                     {
                         "from_extent": sorted(left_extent),
                         "into_extent": sorted(right_extent),
+                        "extents_knowable": knowable,
+                        "why": (
+                            None
+                            if knowable
+                            else "this backend cannot compute a predicate's extent, so "
+                            "two predicates cannot be shown to have identical members: "
+                            + (self.caps.reason("indexes_membership") or "")
+                        ),
                         "overridable": False,
                     },
                 )

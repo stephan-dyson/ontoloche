@@ -141,3 +141,49 @@ def test_c9_07_an_unknowable_consumer_set_blocks_the_retirement(adapter, make_re
 
     overridden = blind.retire("task", "I accept the risk", retired_by="user:sd", force=True)
     assert isinstance(overridden, TypeEntry) and overridden.status == "retired"
+
+
+def test_c9_08_force_is_refused_when_it_cannot_be_recorded_whichever_guard_it_overrides(
+    adapter, make_registry
+):
+    """**Tenshen's own declared shape, and PACKAGE.md 7.3 B6 states this in terms.**
+
+    `work_link_types` declares `indexes_membership=False` (B3 -- it has no predicate
+    concept, and B3 says that is *correct*) **and** `stores_events=False` (B6 -- no event
+    table). B6 then says plainly that on such a backend `retire(force=True)` returns
+    `Refusal("cannot_record_override")`.
+
+    [Observed] it did not. The recordability check lived **inside** the
+    `live_consumers` branch, and on a backend that cannot index membership `gates_on` is
+    always empty, so the branch never ran: a type with a real, registered, gating
+    consumer retired with **no refusal, no warning on the returned entry, and no history
+    of any kind** -- the unrecorded, unattributable destructive change this registry
+    exists to prevent, on the one backend UC1 is the fixture for.
+
+    `merge_types` has had the unconditional form since v0 (*"if acknowledge and not
+    stores_events"*, whichever refusal is being overridden). `retire` now matches it.
+    `C9-02` covers one flag, `C9-07` the other; only both together produce this.
+    Added by row 3c after an adversarial review round drove the real registry through
+    the compound shape.
+    """
+    tenshen_shaped = make_registry(
+        DegradedAdapter(adapter, indexes_membership=False, stores_events=False)
+    )
+    seed(tenshen_shaped, "commentable", kind="predicate", definition="a code path accepts it")
+    seed(tenshen_shaped, "blocks", definition="this work item blocks that one",
+         predicates=["commentable"])
+    tenshen_shaped.register_consumer(
+        Consumer(id="aura_render.referent_link", gate="commentable", on_unknown="drop")
+    )
+
+    refusal = tenshen_shaped.retire(
+        "blocks", "no longer needed", retired_by="user:sd", force=True
+    )
+    assert isinstance(refusal, Refusal), "an override nobody can audit is not an override"
+    assert refusal.reason == "cannot_record_override"
+    assert refusal.detail["gates_on_knowable"] is False, (
+        "and it says the consumer set was unknowable, so the reader is not left "
+        "believing an empty would_override means nothing was at stake"
+    )
+    entry = tenshen_shaped.list_types(namespace="default").types
+    assert [t.status for t in entry if t.name == "blocks"] == ["active"], "nothing retired"
