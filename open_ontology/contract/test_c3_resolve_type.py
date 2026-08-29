@@ -169,3 +169,45 @@ def test_c3_10_a_retired_name_is_named_in_the_resolution_not_silently_omitted(re
     assert "nothing in the vocabulary fits" not in resolution.reason, (
         "the confident negative this test exists to remove"
     )
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
+def test_c3_11_a_retired_name_with_a_live_successor_resolves_to_the_successor(registry):
+    """**One fact, and it used to have four answers.** INTERFACE.md 5.10 promises that
+    after a merge *"the old word still resolves"*. [Observed] that promise was kept by
+    accident: a merge writes the old name into the survivor's `aliases`, and the shipped
+    `DeterministicResolver` happens to score an exact alias 1.0, clearing
+    `existing_threshold`. Nothing in the registry -- and nothing in the `Resolver`
+    protocol -- required it.
+
+    So the identical situation gave four different answers:
+
+    | | via `merge_types` | via `retire(successor=)` |
+    |---|---|---|
+    | shipped resolver | `existing` | `proposal` |
+    | a resolver that does not alias-match | `proposal` | `proposal` |
+
+    `retire(successor=)` writes no alias, and PACKAGE.md 2.6 calls a caller-supplied
+    resolver **the production path** -- so the promise held in exactly one of the four
+    cells. It is now the registry's answer, not the resolver's, down both lifecycle
+    paths. Added by row 3c after an adversarial review round drove all four.
+
+    Note what stays true: the retired name is **not reusable** (5.9). `propose_type` on
+    it still returns the tombstone. Resolving *through* it to a live successor and
+    *reusing* it are different acts, and only the first is allowed.
+    """
+    for name, definition in (("capture", "a captured watch"), ("archive_link", "an archived link")):
+        seed(registry, name, definition=definition)
+
+    registry.retire("capture", "superseded", retired_by="user:sd", successor="archive_link")
+
+    resolution = registry.resolve_type("capture", ResolveContext(), tier="opus")
+    assert resolution.outcome == "existing", "the old word resolves (5.10)"
+    assert resolution.type is not None and resolution.type.name == "archive_link"
+    assert resolution.type.status == "active", "to the LIVE successor, never the tombstone"
+    assert "successor" in resolution.reason
+    assert ("capture", None) in resolution.alternatives, "and the dead name is still named"
+
+    # ...and it is still not reusable. Resolving through a name is not reusing it.
+    answer = registry.propose_type("capture", "something else", [], "user:pm")
+    assert answer.status == "retired" and "name_previously_retired" in answer.warnings

@@ -701,9 +701,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**119 tests in seventeen groups.** *(109 at #3; **ten** added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C3-10`, `C5-12`, `C6-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**121 tests in seventeen groups.** *(109 at #3; **twelve** added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C0-10`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
-**C0 — adapter conformance (9).** No interface call; this is the protocol itself.
+**C0 — adapter conformance (10).** No interface call; this is the protocol itself.
 
 | id | asserts | mech |
 |---|---|---|
@@ -713,6 +713,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C0-04 | **§3.1, by source inspection**: all **seven** of §3.1's identifiers — `Refusal`, `Rejection`, `Resolution`, `ConsumerReport`, `UsageReport`, `TypeEntry`, `Proposal` — appear nowhere in `adapter.py` or `backends/`. *(Row 3c: the test checked five of the seven; `ConsumerReport` and `UsageReport` were missing from it, though neither was ever present in the code)* | — |
 | C0-05 | `migrate()` is idempotent; the version row is written in the same transaction as the DDL | — |
 | C0-06 | every `*Record` round-trips; a field the backend cannot store comes back empty, not wrong | — |
+| C0-10 | **keyset pagination actually pages:** seven rows at `limit=3` give three disjoint, ordered, exhaustive pages and a terminating `next_after`. *(Row 3c, and the first defect found by asking whether a BROKEN backend can PASS: an adapter that silently drops `limit` and `after` — a duplicate-forever loop in any real keyset consumer — ran the whole suite to `119 passed, exit 0`. Both reference backends had implemented it correctly and nothing had ever checked)* | — |
 | C0-09 | **`owns_schema=False` makes `migrate()` verify-only** (§9.3): against a store the host application owns, `migrate()` raises `SchemaMismatch` naming what is missing, issues no DDL to fix it, and once the owner has created the schema returns the version and is usable. *(Row 3c. B1 is the first Tenshen contortion and the enterprise-DBA posture is the reference deployment — both reference backends implemented this and nothing asserted it.)* | — |
 | C0-08 | **G1 and G2, RACED:** two adapters on one store and two real concurrent writers — one absent name (exactly one insert wins, one `AlreadyExists`, one row in the store) and one proposal approved twice (exactly one `TypeEntry`, one `Refusal("already_decided")`). *(Row 3c, §8b.5. `C0-02`/`C0-07` call the primitives sequentially, which a read-then-write check passes as happily as a constraint does — §3.5 says a read-then-write check is **not** sufficient, and until this test nothing held it to that. A thread race has no mechanical async form, so the sync module is excluded from `tools/unasync.py` and the async counterpart is hand-written; both claim this id and both are binding.)* | — |
 | C0-07 | **G1's key is *scoped*:** one word under three namespaces is three rows, each `expect_absent=True`, each retrievable with its own definition and attributes; the collision is still raised *within* a namespace; `TypeQuery(namespace=None)` returns all three. *(Row 3c, §8b.2 — the half of G1 that `INTERFACE.md` §2.6's answer to mechanism 4 rests on, and that nothing asserted)* | **4** |
@@ -740,7 +741,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C2-04 | `include_retired` |
 | C2-05 | a predicate is not a supertype: membership of `commentable` implies nothing about `searchable` |
 
-**C3 — `resolve_type` (10).** Mechanisms **2**, and **1** as the gate.
+**C3 — `resolve_type` (11).** Mechanisms **2**, and **1** as the gate.
 
 | id | asserts | note |
 |---|---|---|
@@ -753,6 +754,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C3-07 | a prior rejection for the candidate surfaces in `alternatives` | §5.5 |
 | C3-08 | **[CMS]** `resolve_type("location", context(sibling_columns=["Provider Address","City/Town","State","ZIP Code"]))` ⇒ `not_a_type` / `redundant_projection`. **`resolver_dependent`** — binding for the reference backends, skipped for a foreign adapter (§2.6, Q4) | §10.2 |
 | C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact`. **`resolver_dependent`** (§2.6, Q4) | §10.2, T7 |
+| C3-11 | **a retired name with a live successor resolves to the successor** — registry-guaranteed, down both lifecycle paths and whatever resolver is supplied. *(Row 3c: §5.10's "the old word still resolves" was kept only by accident — a merge writes an alias and the shipped resolver happens to score it 1.0. `retire(successor=)` writes no alias, and §2.6's production path is a caller's own resolver, so one fact had four answers and three were wrong)* |
 | C3-10 | **a retired name is named in the resolution**, with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score — never a bare *"nothing fits"*. *(Row 3c: `resolve_type` read the tombstone and discarded it, answering with a confident negative about a word it knew was burned — Rule U, in the call designed against mechanism 2)* |
 
 **C4 — `propose_type` (9).** Mechanism **1**.
@@ -954,7 +956,7 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 > *Corrected by row 3c after an adversarial review round.* This line read *"the three refusals this document adds are tested at C9-02, C10-08, C15-04"* — which names three ids covering **two** of the reasons, and left **`proposals_not_stored` with no test anywhere in either suite**. That is UC1's own path (§7.3 B4: a backend with no proposal table is conformant and `approve`/`reject` must refuse), so the capability the Tenshen design test most depends on was the one the suite never checked. `C5-12` closes it.
 
-**[Inferred]** the built suite will be larger than 119 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+**[Inferred]** the built suite will be larger than 121 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1295,7 +1297,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (119 tests, seventeen groups — 109 at #3, ten added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (121 tests, seventeen groups — 109 at #3, twelve added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |
@@ -1337,6 +1339,8 @@ The first is forward-only and may be dropped. The second is never applied backwa
 - **Attribute schemas have no proposal→approval loop.** They are deployment configuration, not vocabulary (§5.2). A deployment can therefore change how `value_set` attributes validate with no review — which is mechanism **1**, one level down, in the mechanism built to answer §11's worry about mechanism 1. The dogfooding fix (register a schema as a `TypeEntry`) was rejected for a good reason and the cost is real.
 - **`list_types(orphaned=)` and `list_types(unverified_semantics=)` are O(types)** on every backend (§3.3), because pushing them into the adapter would put policy in the backend.
 - **The deterministic default resolver is not good enough for production** and is not meant to be (§2.6). Every `resolve_type` quality question is a resolver question, and no contract test can catch a bad one.
+- **The façade never asks for a bounded page.** `TypeQuery.limit`/`.after` and `TypePage.next_after` (§3.3) are implemented correctly by both reference backends and, since row 3c, tested by `C0-10` — but **no call site in `Registry` passes either**, so `list_types(namespace=None)` is an unconditional full fetch. §3.3 already accepts O(types) *"at the scale this registry is for"*, so this may be right; what makes it a decision rather than a bug is that paging internally would need `TypeListing.known` to say whether it counts the page or the set, and Rule K has no answer. Question **Q8**.
+- **`record_use` has no batch form.** CMS's real file is 419,479 rows and the design test only ever runs the 400-row sample (§8.4), so one `get_type` + one `bump_usage` per row has never been measured at that scale. Every backend pays it equally, so it is not a conformance question — recorded so it is not discovered for the first time during an actual CMS-scale run.
 - **`ConsumerReport.complete` is `False` forever**, so `merge_types`' consumer-set guard operates on known sets only — `INTERFACE.md` §5.10 already takes the weaker rule, and this package cannot strengthen it.
 
 ### 11.4 What would change this document

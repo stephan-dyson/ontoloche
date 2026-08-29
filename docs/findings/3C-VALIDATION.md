@@ -340,6 +340,16 @@ Both are the *specified* behaviour. The question is what conformance should mean
 
 **Why it matters:** UC1's migration story rests on §7.4's verdict. Until the multi-flag case is settled, *"Tenshen conforms as a third backend"* is verified for one declined capability and assumed for the rest.
 
+### Q8 (wanted) — should the façade ever ask for a bounded page?
+
+**The finding.** The last review round asked the question eleven earlier rounds had not: **can a broken backend PASS the suite?** It can. §3.3 gives `TypeQuery` a `limit` and an opaque `after` cursor and `TypePage` a `next_after`, ordered by `(namespace, kind, name)`, and justifies query objects over kwargs on exactly that machinery. **Nothing exercised any of it.** [Observed]: an adapter identical to the reference one except that it silently drops `limit` and `after` — every page the whole set, which in a real keyset consumer is a duplicate-forever loop — ran the whole suite to `119 passed, exit 0` and printed the CONFORMANCE banner with no caveat.
+
+**Half of it is fixed:** `C0-10` now seeds seven rows, pages them at `limit=3`, and asserts the pages are disjoint, ordered, exhaustive and terminating. The broken adapter fails it. Both reference backends already implemented keyset pagination correctly — a proper `(namespace, kind, name) > (?, ?, ?)` — and nothing had ever checked.
+
+**The half that wants a ruling.** `Registry` never *asks* for a bounded page: [Observed] **no call site in either the sync or the async façade passes `limit` or `after` at all.** So a correct implementation is still never exercised through the product path, and `list_types(namespace=None)` at UC3's stated scale — 2,399 datasets, *"hundreds to low thousands of types"* — is an unconditional full-table fetch. §3.3 already accepts that `list_types(orphaned=)` is O(types) *"at the scale this registry is for"*, so this may be a deliberate and correct choice.
+
+**Recommendation: leave the façade unbounded in v0 and say so in §3.3, rather than leaving it unsaid.** The reason it is not obvious is `complete`/`known`: if `list_types` starts paging internally, a caller receiving one page must be told whether `known` counts the page or the set, and Rule K currently has no answer. **That is a design decision on `TypeListing`, not a bug**, and Phase 3's ingestion loop is the consumer that would force it. Until then the honest position is that pagination is an *adapter* capability the registry does not yet use — now tested, and stated.
+
 ### What is NOT wanted
 
 Four items are recorded and need no ruling — they are collected in `INTERFACE.md` §11 for v1 and cost nothing to defer: `property_not_type` as a fifth `not_a_type` reason (contortion 10), `Provenance.source_version` (contortion 12), cross-namespace `find_consumers`/`attribute_census` (B7), and the catalogue-vs-API name divergence (§1.1), which no registry call can fix and which belongs to Phase 3's ingestion layer.
