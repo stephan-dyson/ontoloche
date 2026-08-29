@@ -200,6 +200,18 @@ def call_params(blocks: list[str], name: str) -> set[str] | None:
 # what this file exists to make unnecessary.
 
 
+#: Number words this checker can read out of prose. Both closed vocabularies state
+#: their size in words, and a number the code does not derive is exactly the half that
+#: goes stale -- three times so far in this repository.
+_WORDS = {
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "twenty-one": 21, "twenty-two": 22, "twenty-three": 23, "twenty-four": 24,
+    "twenty-five": 25, "twenty-six": 26, "twenty-seven": 27, "twenty-eight": 28,
+    "twenty-nine": 29, "thirty": 30,
+}
+
+
 def _check_closed_vocabularies(spec_text: str) -> list[str]:
     """INTERFACE.md 5.12's enumerated values must equal ``types.REFUSAL_REASONS``."""
     problems: list[str] = []
@@ -224,9 +236,8 @@ def _check_closed_vocabularies(spec_text: str) -> list[str]:
         )
     # The count word in the prose has to match too: a number a reader trusts and
     # the code does not derive is exactly the half that went stale.
-    words = {
-        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
-        "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    words = _WORDS
+    _unused = {
         # Hyphenated from here on. Row 3e: the vocabulary reached twenty-one and this
         # check silently stopped working -- ``\w+`` does not cross a hyphen, so the
         # whole 5.12 block failed to parse and the checker reported "could not find the
@@ -242,6 +253,47 @@ def _check_closed_vocabularies(spec_text: str) -> list[str]:
         problems.append(
             f"INTERFACE 5.12 says {m.group(1)!r} values; types.REFUSAL_REASONS "
             f"has {len(actual)}"
+        )
+    return problems
+
+
+def _check_warning_vocabulary(spec_text: str) -> list[str]:
+    """INTERFACE.md 5.4's table must equal ``types.WARNING_VALUES``.
+
+    Added by row 3e's third adversarial round. 5.4 said "eighteen values" over a table
+    that omitted ``gate_unregistered`` -- a value ruling R8 added in row 3d, that v0
+    code emits, that ``C11-05`` tests, and that **the table's own last row named**.
+    Nothing checked it, because this file held only 5.12's vocabulary. The two closed
+    vocabularies are now held the same way, contents and count.
+
+    Values carrying a ``:<detail>`` suffix are compared by their prefix, which is the
+    part the vocabulary closes over.
+    """
+    problems = []
+    m = re.search(r"`warnings` vocabulary, complete \u2014 ([\w-]+) values", spec_text)
+    if m is None:
+        return ["INTERFACE 5.4: could not find the warnings vocabulary heading"]
+    block = spec_text[m.end():]
+    cut = re.search(r"\n\s*---", block)
+    if cut is not None:
+        block = block[: cut.start()]
+    printed = set(re.findall(r"^\| `([a-z_]+)[:`]", block, re.M))
+    actual = set(types_module.WARNING_VALUES)
+    for name in sorted(printed - actual):
+        problems.append(
+            f"INTERFACE 5.4: {name!r} is in the table and absent from "
+            f"types.WARNING_VALUES"
+        )
+    for name in sorted(actual - printed):
+        problems.append(
+            f"INTERFACE 5.4: {name!r} is in types.WARNING_VALUES and absent from the "
+            f"table -- a closed vocabulary nothing derives is one that quietly opens"
+        )
+    said = _WORDS.get(m.group(1).lower())
+    if said is not None and said != len(actual):
+        problems.append(
+            f"INTERFACE 5.4 says {m.group(1)!r} values; types.WARNING_VALUES has "
+            f"{len(actual)}"
         )
     return problems
 
@@ -327,6 +379,7 @@ def main() -> int:
             )
 
     problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
+    problems.extend(_check_warning_vocabulary(SPEC.read_text(encoding="utf-8")))
 
     if problems:
         print("the specifications have drifted from the implementation:\n")
@@ -346,7 +399,9 @@ def main() -> int:
         f"implementation ({len(PACKAGE_SHAPES)} shapes).\n"
         f"INTERFACE.md 5.12: the closed Refusal.reason vocabulary matches "
         f"types.REFUSAL_REASONS ({len(types_module.REFUSAL_REASONS)} values), "
-        f"contents and count."
+        f"contents and count.\n"
+        f"INTERFACE.md 5.4: the closed warnings vocabulary matches "
+        f"types.WARNING_VALUES ({len(types_module.WARNING_VALUES)} values)."
     )
     return 0
 

@@ -14,6 +14,7 @@ registry can be conformant without weakening conformance.
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime
 from typing import Any
 
@@ -60,6 +61,7 @@ class _DegradedBase:
         why: dict[str, str] | None = None,
         pages_countable: bool = True,
         page_cap: int | None = None,
+        page_cursor: bool = False,
         transaction_scope: str | None = None,
         read_only_consumers: bool = False,
         attribute_projections: frozenset[str] | tuple[str, ...] | None = None,
@@ -77,6 +79,11 @@ class _DegradedBase:
         #: adversarial round, which found `resolve_type` ignoring the flag entirely and
         #: reporting `complete=True` over a page the backend had truncated.
         self._page_cap = page_cap
+        #: With ``page_cursor``, the cap is an honest PAGE -- partial, with a cursor to
+        #: the rest -- rather than a hard truncation. The suite needs both shapes: one
+        #: proves a caller pages to exhaustion, the other proves it says so when it
+        #: cannot. Row 3e, third adversarial round.
+        self._page_cursor = page_cursor
         #: Ruling R5's declaration, forced rather than inherited. Not a capability --
         #: nothing is declined -- but a wrapper that can only ever carry ``"owned"``
         #: through cannot exercise the durability warning that every WRITE result is
@@ -155,7 +162,11 @@ class _DegradedBase:
                 complete=False,
                 why_incomplete=caps.reason("indexes_membership"),
             )
-        page = self.inner.find_types(q)
+        # With ``page_cursor`` the cursor is this double's own, not the inner
+        # backend's, so the inner query is asked without it and the window is taken
+        # here.
+        inner_query = dataclasses.replace(q, after=None) if self._page_cursor else q
+        page = self.inner.find_types(inner_query)
         records = tuple(self._degrade_type(r) for r in page.records)
         if not self._pages_countable:
             return TypePage(
@@ -165,6 +176,27 @@ class _DegradedBase:
                 why_incomplete="this backend cannot count a result set",
             )
         if self._page_cap is not None and len(records) > self._page_cap:
+            if self._page_cursor:
+                # **The honest paging shape**: partial, and here is how to get the rest.
+                # PACKAGE.md 3.3 permits it and UC3's scale produces it, and the suite
+                # had no double for it -- so `_active_page`'s and
+                # `_name_level_schemas`' "read to exhaustion" loops were asserted by
+                # nothing, and deleting them ran the whole suite green. Row 3e, third
+                # adversarial round.
+                start = 0 if q.after is None else int(q.after)
+                window = records[start : start + self._page_cap]
+                nxt = start + self._page_cap
+                return TypePage(
+                    records=window,
+                    known=len(window),
+                    complete=nxt >= len(records),
+                    why_incomplete=(
+                        None
+                        if nxt >= len(records)
+                        else f"this backend pages at {self._page_cap} rows"
+                    ),
+                    next_after=None if nxt >= len(records) else str(nxt),
+                )
             return TypePage(
                 records=records[: self._page_cap],
                 known=self._page_cap,

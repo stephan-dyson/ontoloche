@@ -1,4 +1,4 @@
-"""C9 -- ``retire`` and ``reinstate`` (15). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (17). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -260,9 +260,16 @@ def test_c9_09_a_retired_name_can_be_reinstated_and_resolves_again(registry, ada
     assert len(events) == 1
     assert events[0].actor == "user:sd"
     assert events[0].detail["reason"] == "the drift correction was wrong"
+    # **Every field, not one.** §5.9b says the `reinstated` event "carries every one of
+    # them", and this asserted only `retire_reason` -- so a mutation dropping the other
+    # three ran the whole suite green, on the record `cannot_record_override` refuses
+    # the entire call to protect. Row 3e, third adversarial round.
     assert events[0].detail["retire_reason"] == "classifier drift, we think", (
         "the retirement is cleared from the row and kept in the history, never lost"
     )
+    assert events[0].detail["retired_by"] == "user:sd"
+    assert events[0].detail["retired_at"], "the when, not just the why"
+    assert events[0].detail["successor"] == "capture"
 
     # **The clearing itself, asserted on the STORED RECORD.** `TypeEntry` has no
     # retirement fields, so the only surface where the difference is visible is
@@ -374,8 +381,11 @@ def test_c9_12_reinstate_refuses_to_manufacture_two_live_words_for_one_meaning(r
 
     `merge_types` refuses by default and carries four non-overridable refusals;
     `propose_type` on a name a live type holds as an alias returns the tombstone. So
-    mechanism 4 -- two active entries with one word between them -- was unreachable
-    through the surface. `reinstate` opened it, in **four ordinary calls**:
+    mechanism 4 -- two active entries with one word between them -- was *thought* to be
+    unreachable through the surface. It was not: three adversarial rounds found three
+    different walks into it, and `C16-06` is the whole-store invariant that catches the
+    class rather than the entrance. This one is `reinstate`'s, in **four ordinary
+    calls**:
 
         merge bike_lane into cycle_track    # cycle_track gains the alias `bike_lane`
         retire cycle_track                  # ...so `successor_active` no longer bites
@@ -576,3 +586,80 @@ def test_c9_15_reinstate_says_when_it_could_not_look_and_when_it_is_not_yet_dura
         assert any(
             w.startswith("not_durable_until_host_commits:") for w in entry.warnings
         ), "a write over a borrowed connection is not durable until the host commits"
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+def test_c9_16_a_merge_the_guard_can_only_see_in_events_still_blocks(registry, adapter):
+    """**The alias column was the guard's only evidence for a merge, and one ordinary
+    call erases it.** Row 3e, third adversarial round.
+
+    `merge_types` retires `from_` with `into` as its successor **and** writes the alias
+    onto the survivor, and `_lifecycle_collisions` read only `retired` events plus the
+    live `aliases` column. `import_types` rewrites a live row -- wiping its aliases --
+    so inserting one import into §5.9b's own four-call walk erased the evidence and let
+    the walk through: both words active, no refusal, no warning. The graph now reads
+    `merged` events too, which is the record neither call can overwrite.
+    """
+    seed(registry, "bike_lane", definition="A DOT bike facility.")
+    seed(registry, "cycle_track",
+         definition="A DOT bike facility. The newer term for the same thing.")
+    merged = registry.merge_types(
+        "bike_lane", "cycle_track", "one word for one facility", merged_by="user:dot",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    # An ordinary re-import of the survivor, which rewrites the row and its aliases.
+    registry.import_types(
+        [{"name": "cycle_track", "status": "active", "definition": "from the dump"}]
+    )
+    survivor = adapter.get_type("default", "cycle_track", kind="entity")
+    assert survivor is not None and not survivor.aliases, (
+        "the import wiped the alias -- which is the point: the guard cannot rely on it"
+    )
+
+    registry.retire("cycle_track", "we changed our minds", retired_by="user:dot")
+    back = registry.reinstate("bike_lane", "the merge was a mistake", reinstated_by="user:dot")
+    assert isinstance(back, TypeEntry) and back.status == "active"
+
+    blocked = registry.reinstate("cycle_track", "and this one", reinstated_by="user:dot")
+    assert isinstance(blocked, Refusal), "the merge is still on the record, in events"
+    assert blocked.reason == "alias_collision"
+    assert sorted(t.name for t in registry.list_types().types) == ["bike_lane"]
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
+def test_c9_17_the_collision_scan_pages_to_exhaustion(adapter, make_registry):
+    """**§5.9b says the scan "reads to exhaustion through `next_after`" and nothing
+    checked it.** Row 3e, third adversarial round.
+
+    `C9-15`'s paging double returns **no** cursor by design, so it exercises the
+    *cannot read the rest* branch and the exhaustion loop is never entered: a mutation
+    replacing `cursor = page.next_after` with `cursor = None` ran the whole suite green.
+    Against an honest paging backend -- partial **plus** a cursor, which PACKAGE.md
+    §3.3 permits and UC3's scale produces -- that mutation silently converts a refusal
+    into a warning and lets the collision through.
+    """
+    from .doubles import DegradedAdapter
+
+    paging = make_registry(DegradedAdapter(adapter, page_cap=2, page_cursor=True))
+    for filler in ("aa_filler", "bb_filler"):
+        seed(paging, filler, definition=f"a {filler} to push the survivor off page one")
+    seed(paging, "bike_lane", definition="A DOT bike facility.")
+    seed(paging, "cycle_track",
+         definition="A DOT bike facility. The newer term for the same thing.")
+    merged = paging.merge_types(
+        "bike_lane", "cycle_track", "one word", merged_by="user:dot",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    paging.retire("cycle_track", "changed our minds", retired_by="user:dot")
+    assert isinstance(
+        paging.reinstate("bike_lane", "undo", reinstated_by="user:dot"), TypeEntry
+    )
+
+    blocked = paging.reinstate("cycle_track", "and this", reinstated_by="user:dot")
+    assert isinstance(blocked, Refusal), (
+        "the survivor is past page one; a scan that stops there misses the collision"
+    )
+    assert blocked.reason == "alias_collision"
