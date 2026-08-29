@@ -374,7 +374,10 @@ Every round below returned **NOT YET**. Not one finding was dismissed; each was 
 |---|---|---|---|
 | 8 | INTERFACE | 1 MAJOR | **`resolve_type` was blind to retired names.** [Observed]: propose → approve → retire `watch`, then `resolve_type("watch", …)` returns `outcome="proposal"`, `reason="nothing in the vocabulary fits 'watch'"`, empty `alternatives` — a clean green light for a word the registry had just read the tombstone of and discarded. A classifier that trusts it calls `propose_type` and gets the **old retired entry** back, distinguishable from a fresh success only by inspecting `.status`. That is **UC1's own shape** — an auto-approving classifier, one step earlier in the pipeline than Q6 addresses — in the call §5.3 says is *designed against mechanism 2*. Fixed with no new field: the retirement is named in `reason` with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score, exactly as §5.5 already does for a prior rejection. `C3-10`. |
 
-**Three findings, one error.** Round 1's empty `alternatives` for a cross-namespace word, §7.3's `retire` reading an unknowable `gates_on` as *"nothing gates on this"*, and round 8's silent tombstone are the same mistake three times: **a confident answer standing in for a fact the system either had in hand or could not have.** Rule U is the rule this project states most loudly and breaks most often in its own implementation. Neither a reviewer's eye nor a contract test caught the family — each instance was found only when someone drove the real registry through a real scenario, which is the practice worth carrying forward.
+| 9 | INTERFACE | 1 BLOCKING | **`retire(force=True)` lost its audit guard on Tenshen's exact declared shape.** §7.3 B6 says in terms that on a backend with `stores_events=False` a forced retirement returns `Refusal("cannot_record_override")`. The check lived *inside* the `live_consumers` branch — and with `indexes_membership=False` (B3, and B3 says that is *correct*) `gates_on` is always empty, so the branch never ran. [Observed]: a type with a real registered gating consumer retired with **no refusal, no warning and no history**. `merge_types` has had the unconditional form since v0. `C9-08`. |
+| 5 | PACKAGE | 1 BLOCKING, 1 MAJOR | **The kill row itself.** §7.2b. And §3.2's central claim measured for the first time: §7.2c. |
+
+**Four findings, one error.** Round 1's empty `alternatives` for a cross-namespace word, §7.3's `retire` reading an unknowable `gates_on` as *"nothing gates on this"*, round 8's silent tombstone, and §7.2b's unknowable extent comparing *equal* are the same mistake four times: **a confident answer standing in for a fact the system either had in hand or could not have.** Rule U is the rule this project states most loudly and breaks most often in its own implementation. Neither a reviewer's eye nor a contract test caught the family — each instance was found only when someone drove the real registry through a real scenario, which is the practice worth carrying forward.
 
 ### 7.2 The finding that changed the design: `definitions_diverge` was backwards
 
@@ -396,6 +399,25 @@ Every round below returned **NOT YET**. Not one finding was dismissed; each was 
 - **`MergeResult.warnings` stopped being permanently reserved.** Every merge now records `definitions_similarity:<score>` and either `definitions_threshold:<t>` or `definitions_uncertified`, so an auditor asking *"how close was this to the line?"* has an answer, and a merge that went through on an uncertified guard is visibly one nobody's resolver vouched for.
 
 **This is the second time the loop found the same shape of error** — a number standing in for a judgement the system cannot make. The first was `resolve_type`'s empty `alternatives` (round 1). Rule U is the rule this project keeps breaking in its own implementation, which is worth knowing.
+
+### 7.2b The kill row, tripped
+
+`ROADMAP.md`'s kill criterion is one sentence: **"A capability predicate gets merged as a duplicate."** `INTERFACE.md` §12 says it is *"structurally blocked, not merely discouraged"*, because §5.10's refusal #2 is non-overridable. §5.10 compares the two predicates' **extents**.
+
+**[Observed] on a backend declaring `indexes_membership=False`:**
+
+| | `commentable` | `searchable` | `merge_types(commentable → searchable)` |
+|---|---|---|---|
+| fully capable | `[task]` | `[capture, task]` | `Refusal(predicate_merge)` |
+| `indexes_membership=False` | `[]` | `[]` | **MERGED** |
+
+Every extent comes back empty there, so two predicates with genuinely different members compared **equal**, the non-overridable refusal never fired, and the merge fell through to the *overridable* `no_consumer_evidence` guard — which a caller can acknowledge. **That is `PACKAGE.md` §7.3 B3's declared shape for `work_link_types`**, and B3 says the empty membership is *correct*. So the venture's kill criterion tripped on the exact backend UC1 is the fixture for, and finding 0.1's five locally-correct capability lists — the evidence that produced the whole predicate concept — would have been mergeable.
+
+**Fixed by Rule U, again: an extent that could not be computed is not a byte-identical extent.** The refusal now fires whenever membership is unindexed, non-overridably, and says the extents were unknowable. A second, smaller defect surfaced in the same sweep: `cannot_record_override` was checked *before* the four non-overridable guards, so a caller trying to acknowledge past the kill row was told the audit log was missing rather than that the merge was forbidden — the wrong reason for the right outcome. Moved after them.
+
+### 7.2c §3.2's claim, measured
+
+See §6, Q7's table. The one-line version: **the sentence that lets Tenshen be a third backend was false for six of the eight capabilities it covers**, had been for four deliverables, and is now checked by [`../tools/check_capability_matrix.py`](../tools/check_capability_matrix.py) on every suite run.
 
 ### 7.3 The finding that was a live safety bug: `retire()` read blindness as absence
 
