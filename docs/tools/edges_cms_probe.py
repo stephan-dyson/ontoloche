@@ -155,7 +155,9 @@ def main() -> int:
     ok &= check("conducted_at", by_family["conducted_at"], 69)
     ok &= check("cites", by_family["cites"], 400)
     distinct_tags = {
-        str(e.dst) for e in store._edges.values() if e.family == "cites"
+        (e.dst_namespace, e.dst_kind, e.dst_name, e.dst_instance_id)
+        for e in store._edges.values()
+        if e.family == "cites"
     }
     ok &= check("distinct dst of cites", len(distinct_tags), 92)
 

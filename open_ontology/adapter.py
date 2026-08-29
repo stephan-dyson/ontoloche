@@ -224,6 +224,17 @@ class EventRecord:
     kind: str | None = None
     name: str | None = None
     proposal_id: str | None = None
+    #: EDGES.md 5.2 -- the edge this event concerns, if any. `EventRecord` had
+    #: kind/name/proposal_id and no slot for an edge, so an edge event had
+    #: nowhere to go. Additive, defaulted, and set by no v0 code path, because
+    #: row #4 is a spec. It is added in the change that specifies it for the
+    #: reason ruling R3 gives about the closed reason vocabulary: a shape a
+    #: document says exists and the code does not have is drift, whichever side
+    #: moved. (Naming that class here would trip C0-04, which forbids the
+    #: identifier in this file even in prose -- caught by the suite, not by me.)
+    #: The three event values that go with it are `edge_added`,
+    #: `edge_retracted` and `edge_amended` -- stored, never judged (PACKAGE 3.1).
+    edge_id: str | None = None
     detail: dict[str, Any] = field(default_factory=dict)
 
 

@@ -274,8 +274,15 @@ class EventRecord:
     proposal_id: str | None
     at: datetime
     actor: str
+    # EDGES.md 5.2 -- the edge this event concerns, if any. Additive, defaulted,
+    # and set by no v0 code path: row #4 is a spec. It is here rather than in the
+    # build row because a shape a document says exists and the code does not have
+    # is drift whichever side moved -- ruling R3's argument about
+    # `Refusal.reason`, applied to a record.
+    edge_id: str | None = None
     event: str                      # "proposed"|"approved"|"rejected"|"retired"|"merged"|
-                                    #   "amended"|"override"|"imported"|"used"
+                                    #   "amended"|"override"|"imported"|"used"|
+                                    #   "edge_added"|"edge_retracted"|"edge_amended"
     detail: dict
 ```
 

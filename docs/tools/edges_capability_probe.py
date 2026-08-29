@@ -23,7 +23,10 @@ from datetime import datetime
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from docs.tools.edges_probe_kit import (  # noqa: E402
+    DEFAULT_MAX_EDGES,
     EdgeCapabilities,
+    EdgeQuery,
+    assert_adapter_boundary,
     EdgeRegistry,
     EdgeStore,
     Family,
@@ -334,12 +337,12 @@ def main() -> int:  # noqa: C901
                     prov("import:cms", "user"), namespace=NS)
     reg_ni.add_edge("blocks", InstanceRef(CITATION, "9"), InstanceRef(CITATION, "10"),
                     prov("user:x", "user"), namespace="default")
-    raw, raw_complete, _, _ = store_ni.find_edges(
-        incident_to=[InstanceRef(CITATION, "9")], families=["cites"])
+    raw = store_ni.find_edges(EdgeQuery(
+        incident_to=((NS, "entity", "citation", "9"),), families=("cites",)))
     ok &= check("the STORE ignores the family filter and returns both",
-                len(raw), 2)
+                len(raw.records), 2)
     ok &= check("...and says its page IS complete for what it was asked",
-                raw_complete, True,
+                raw.complete, True,
                 "-- the deliberate deviation from find_types' rule, EDGES 7.1")
     rep_ni = reg_ni.neighbors(InstanceRef(CITATION, "9"), ["cites"], 1, namespace=NS)
     ok &= check("the REGISTRY narrows above the store", rep_ni.known, 1)
@@ -376,6 +379,111 @@ def main() -> int:  # noqa: C901
     ok &= check("all 300 assembled from 64-row pages", rep_pg.known, 300,
                 "-- a level built from one page of five would be silently partial")
     ok &= check("and complete", rep_pg.complete, True)
+
+    # ---- round 3: the assembly bound counts DISTINCT edges ---------------
+    print("\nEDGES 4.2 -- the assembly bound counts DISTINCT edges (round 3)")
+    N = TypeRef("t", "entity", "n")
+    rel = Family(name="rel", level="instance", namespace="default",
+                 definition="a relation", inverse_label="rel_by",
+                 endpoint_kinds={"src": ("entity",), "dst": ("entity",)})
+    reg_b = EdgeRegistry(families=[rel], store=EdgeStore(), registered_types=[N],
+                         max_edges=20, page_size=8)
+    hub2 = InstanceRef(N, "hub")
+    leaves = [InstanceRef(N, f"L{i}") for i in range(15)]
+    for lf in leaves:
+        reg_b.add_edge("rel", hub2, lf, prov("u", "user"))
+    for i in range(4):          # leaf-leaf edges, only reachable at depth 2
+        reg_b.add_edge("rel", leaves[i], leaves[i + 1], prov("u", "user"))
+    rep_b = reg_b.neighbors(hub2, ["rel"], 2, namespace="default")
+    print(f"    19 distinct edges, max_edges=20 -> known={rep_b.known} "
+          f"complete={rep_b.complete} why={rep_b.why_incomplete}")
+    ok &= check("all 19 returned", rep_b.known, 19,
+                "-- comparing the bound against the RAW page dropped 4 and "
+                "claimed a bound nothing crossed")
+    ok &= check("and complete, because the bound was NOT hit", rep_b.complete, True)
+    ok &= check("with no why", rep_b.why_incomplete, None)
+
+    print("\nEDGES 4.2 -- and it still fires when the bound IS genuinely hit")
+    reg_b2 = EdgeRegistry(families=[rel], store=EdgeStore(), registered_types=[N],
+                          max_edges=10, page_size=4)
+    for lf in leaves:
+        reg_b2.add_edge("rel", hub2, lf, prov("u", "user"))
+    rep_b2 = reg_b2.neighbors(hub2, ["rel"], 2, namespace="default")
+    ok &= check("bounded", rep_b2.known <= 10, True)
+    ok &= check("and says so", rep_b2.complete, False)
+
+    print("\nEDGES 4.2 -- the bound is ON BY DEFAULT, not opt-in")
+    ok &= check("a registry built with no arguments has a bound",
+                EdgeRegistry(families=[rel], store=EdgeStore()).max_edges,
+                DEFAULT_MAX_EDGES,
+                "-- an opt-in circuit breaker leaves the DEFAULT as the "
+                "unbounded fetch R13 exists to prevent")
+    ok &= check("and disabling it is a deliberate act",
+                EdgeRegistry(families=[rel], store=EdgeStore(),
+                             max_edges=None).max_edges, None)
+
+    # ---- round 3: retract_edge stamps its own durability warning ---------
+    print("\nEDGES 6.2 -- retract_edge stamps the savepoint warning ITSELF")
+    caps_sp2 = EdgeCapabilities(
+        edge_transaction_scope="savepoint",
+        why={"edge_transaction_scope": "this adapter runs over a host-owned connection"},
+    )
+    reg_r = EdgeRegistry(families=[rel], store=EdgeStore(caps_sp2),
+                         registered_types=[N])
+    e_r = reg_r.add_edge("rel", InstanceRef(N, "a"), InstanceRef(N, "b"),
+                         prov("u", "user"))
+    # Simulate an edge the host committed in an EARLIER transaction: durable,
+    # so it carries no warning of its own.
+    from dataclasses import replace as _replace
+
+    from docs.tools.edges_probe_kit import _to_record
+
+    reg_r.store.put_edge(_to_record(_replace(e_r, warnings=())))
+    out_r = reg_r.retract_edge(e_r.edge_id, "superseded", retracted_by="user:sd",
+                               at=NOW)
+    print(f"    warnings: {out_r.warnings}")
+    ok &= check("the retraction carries it on its own",
+                any(w.startswith("not_durable_until_host_commits:")
+                    for w in out_r.warnings), True,
+                "-- it was INHERITED from the edge's prior state, so retracting "
+                "an already-durable edge came back looking durable")
+
+    print("\nEDGES 2.6 -- retract_edge on an edge that does not exist")
+    miss = reg_r.retract_edge("no-such-edge", "x", retracted_by="u", at=NOW)
+    ok &= check("reason", getattr(miss, "reason", None), "unknown_edge",
+                "-- it reused `edge_family_unknown`, which names a different "
+                "failure: INTERFACE 2.3's Cause B")
+
+    # ---- round 3: the adapter boundary, checked the way C0-04 checks it --
+    print("\nPACKAGE 3.1 -- the probe's own adapter speaks records, not the facade")
+    try:
+        assert_adapter_boundary()
+        ok &= check("EdgeStore mentions no facade shape and speaks EdgeRecord/"
+                    "EdgePage", True, True)
+    except AssertionError as exc:
+        ok &= check("adapter boundary", False, True, f"-- {exc}")
+
+    # ---- round 3 MINOR: self-loops and the triangle ----------------------
+    print("\nEDGES 4.1 -- a self-loop counts in `known` and adds no `nodes`")
+    reg_sl = EdgeRegistry(families=[rel], store=EdgeStore(), registered_types=[N])
+    reg_sl.add_edge("rel", InstanceRef(N, "A"), InstanceRef(N, "A"), prov("u", "user"))
+    rep_sl = reg_sl.neighbors(InstanceRef(N, "A"), ["rel"], 1, namespace="default")
+    ok &= check("known counts the edge", rep_sl.known, 1)
+    ok &= check("nodes is empty -- `origin excluded` covers both ends",
+                len(rep_sl.nodes), 0)
+
+    print("\nEDGES 4.4 -- at_depth marks the EDGE's level, not the node's")
+    reg_tri = EdgeRegistry(families=[rel], store=EdgeStore(), registered_types=[N])
+    for a, b in (("A", "B"), ("A", "C"), ("B", "C")):
+        reg_tri.add_edge("rel", InstanceRef(N, a), InstanceRef(N, b), prov("u", "user"))
+    rep_tri = reg_tri.neighbors(InstanceRef(N, "A"), ["rel"], 2, namespace="default")
+    depths = {f"{ne.edge.src}->{ne.edge.dst}": ne.at_depth for ne in rep_tri.edges}
+    print(f"    triangle A-B, A-C, B-C from A: {depths}")
+    ok &= check("all three edges returned", rep_tri.known, 3)
+    ok &= check("B->C is at_depth 2 though BOTH its ends were reached at depth 1",
+                depths.get("t:entity:n#B->t:entity:n#C"), 2,
+                "-- at_depth is a property of the EDGE's discovery, not of a "
+                "newly-reached node")
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
     return 0 if ok else 1

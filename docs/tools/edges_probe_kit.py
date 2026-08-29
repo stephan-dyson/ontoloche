@@ -193,6 +193,11 @@ class NeighborReport:
 # EDGES 6 -- capabilities
 
 
+# EDGES 4.2 -- the assembly bound's default. A number, not None: an opt-in
+# circuit breaker is not a circuit breaker.
+DEFAULT_MAX_EDGES = 10_000
+
+
 @dataclass(frozen=True)
 class EdgeCapabilities:
     stores_edges: bool = True
@@ -217,6 +222,115 @@ class EdgeCapabilities:
 
 
 # --------------------------------------------------------------------------
+# EDGES 7.1 -- the flat record shapes the ADAPTER speaks.
+#
+# Round 3: the first version of this kit had `EdgeStore` storing and returning
+# `Edge` objects -- the rich facade dataclass with structured NodeRefs, an
+# EdgeProvenance and computed warnings. So the boundary EDGES 7.1 calls "the
+# strongest evidence that 2.3's decision was right", and which PACKAGE 3.1 makes
+# a testable rule ("the identifiers ... do not appear in adapter.py"), was
+# asserted and never exercised: the probe's adapter was coupled to the facade.
+# It now speaks flat records, and `_assert_boundary()` below checks it the way
+# C0-04 checks the real one.
+
+
+@dataclass(frozen=True)
+class EdgeRecord:
+    edge_id: str
+    namespace: str
+    family: str
+    src_namespace: str; src_kind: str; src_name: str; src_instance_id: str | None
+    dst_namespace: str; dst_kind: str; dst_name: str; dst_instance_id: str | None
+    attributes: dict
+    attr_schema_version: int | None
+    provenance: dict                # the whole EdgeProvenance, JSON-shaped. Opaque.
+    status: str                     # STORED, never judged
+    warnings: tuple[str, ...]
+    created_at: datetime
+    updated_at: datetime
+    retract_reason: str | None
+    retracted_by: str | None
+    retracted_at: datetime | None
+
+
+@dataclass(frozen=True)
+class EdgeQuery:
+    namespace: str | None = None
+    families: tuple[str, ...] | None = None
+    incident_to: tuple[tuple[str, str, str, str | None], ...] | None = None
+    symmetric_families: frozenset[str] = frozenset()
+    direction: str = "both"
+    include_retracted: bool = False
+    edge_ids: tuple[str, ...] | None = None
+    limit: int | None = None
+    after: str | None = None
+
+
+@dataclass(frozen=True)
+class EdgePage:
+    records: tuple[EdgeRecord, ...]
+    known: int | None               # None = the backend cannot count. NOT 0. Rule U
+    complete: bool
+    why_incomplete: str | None
+    next_after: str | None
+
+
+def _key(node: NodeRef) -> tuple[str, str, str, str | None]:
+    t = _type_of(node)
+    return (t.namespace, t.kind, t.name,
+            node.id if isinstance(node, InstanceRef) else None)
+
+
+def _to_record(e: Edge) -> EdgeRecord:
+    sk, dk = _key(e.src), _key(e.dst)
+    return EdgeRecord(
+        edge_id=e.edge_id, namespace=e.namespace, family=e.family,
+        src_namespace=sk[0], src_kind=sk[1], src_name=sk[2], src_instance_id=sk[3],
+        dst_namespace=dk[0], dst_kind=dk[1], dst_name=dk[2], dst_instance_id=dk[3],
+        attributes=dict(e.attributes), attr_schema_version=e.attr_schema_version,
+        provenance={
+            "created_at": e.provenance.created_at,
+            "created_by_actor": e.provenance.created_by_actor,
+            "created_by": e.provenance.created_by,
+            "confidence": e.provenance.confidence,
+            "evidence": list(e.provenance.evidence),
+            "source_version": e.provenance.source_version,
+            "history": list(e.provenance.history),
+            "history_why": e.provenance.history_why,
+        },
+        status=e.status, warnings=tuple(e.warnings),
+        created_at=e.provenance.created_at, updated_at=e.provenance.created_at,
+        retract_reason=e.provenance.retract_reason,
+        retracted_by=e.provenance.retracted_by,
+        retracted_at=e.provenance.retracted_at,
+    )
+
+
+def _ref(ns: str, kind: str, name: str, iid: str | None) -> NodeRef:
+    t = TypeRef(ns, kind, name)
+    return InstanceRef(t, iid) if iid is not None else t
+
+
+def _from_record(r: EdgeRecord) -> Edge:
+    pr = r.provenance
+    return Edge(
+        edge_id=r.edge_id, family=r.family, namespace=r.namespace,
+        src=_ref(r.src_namespace, r.src_kind, r.src_name, r.src_instance_id),
+        dst=_ref(r.dst_namespace, r.dst_kind, r.dst_name, r.dst_instance_id),
+        provenance=EdgeProvenance(
+            created_at=pr["created_at"], created_by_actor=pr["created_by_actor"],
+            created_by=pr["created_by"], confidence=pr["confidence"],
+            evidence=tuple(pr["evidence"]), source_version=pr["source_version"],
+            retracted_by=r.retracted_by, retracted_at=r.retracted_at,
+            retract_reason=r.retract_reason,
+            history=tuple(pr["history"]), history_why=pr["history_why"],
+        ),
+        attributes=dict(r.attributes), status=r.status,
+        warnings=tuple(r.warnings), attr_schema_version=r.attr_schema_version,
+    )
+
+
+# --------------------------------------------------------------------------
 # EDGES 7.1 -- the three primitives, and the registry facade over them
 
 
@@ -225,36 +339,34 @@ class EdgeStore:
 
     def __init__(self, caps: EdgeCapabilities | None = None) -> None:
         self.caps = caps or EdgeCapabilities()
-        self._edges: dict[str, Edge] = {}
+        self._edges: dict[str, EdgeRecord] = {}
         self._n = 0
 
-    def put_edge(self, edge: Edge) -> Edge:
-        self._edges[edge.edge_id] = edge
-        return edge
+    def put_edge(self, rec: EdgeRecord) -> EdgeRecord:
+        """Primitive 16. Stores the record as given; validates no transition."""
+        self._edges[rec.edge_id] = rec
+        return rec
 
-    def get_edge(self, edge_id: str) -> Edge | None:
+    def get_edge(self, edge_id: str) -> EdgeRecord | None:
+        """Primitive 17. ``None`` means absent, which is a fact, not an unknown."""
         return self._edges.get(edge_id)
 
-    def find_edges(
-        self,
-        *,
-        incident_to: Sequence[NodeRef] | None = None,
-        families: Sequence[str] | None = None,
-        symmetric_families: frozenset[str] = frozenset(),
-        direction: str = "both",
-        include_retracted: bool = False,
-        limit: int | None = None,
-        after: int | None = None,
-    ) -> tuple[tuple[Edge, ...], bool, str | None, int | None]:
-        """Primitive 18. Returns (records, complete, why_incomplete, next_after).
+    def find_edges(self, q: EdgeQuery) -> EdgePage:
+        """Primitive 18. Takes an EdgeQuery, returns an EdgePage.
 
-        `after` is an opaque cursor -- an index into the store's stable order,
-        which is all a probe needs. EDGES 7.1 keyset-pages on
+        `after` is an opaque cursor -- here, a stringified index into the store's
+        stable order, which is all a probe needs. EDGES 7.1 keyset-pages on
         (created_at, edge_id); the registry's obligation is the same either way:
         exhaust the pages for a level, or say the level is incomplete.
         """
-        keys = {str(n) for n in incident_to} if incident_to is not None else None
-        matched: list[Edge] = []
+        incident_to = q.incident_to
+        families = q.families
+        symmetric_families = q.symmetric_families
+        direction = q.direction
+        include_retracted = q.include_retracted
+        limit, after = q.limit, (int(q.after) if q.after is not None else None)
+        keys = set(incident_to) if incident_to is not None else None
+        matched: list[EdgeRecord] = []
         suppressed = 0
         # EDGES 6: indexes_edges_by_family=False means the store CANNOT apply the
         # family filter. It returns the node's edges unfiltered and complete for
@@ -262,15 +374,17 @@ class EdgeStore:
         # deviation from find_types' rule -- see EDGES 7.1.
         apply_family_filter = families is not None and self.caps.indexes_edges_by_family
         for e in self._edges.values():
+            src_k = (e.src_namespace, e.src_kind, e.src_name, e.src_instance_id)
+            dst_k = (e.dst_namespace, e.dst_kind, e.dst_name, e.dst_instance_id)
             if e.status == "retracted" and not include_retracted:
-                if keys is None or str(e.src) in keys or str(e.dst) in keys:
+                if keys is None or src_k in keys or dst_k in keys:
                     suppressed += 1
                 continue
             if apply_family_filter and e.family not in families:
                 continue
             if keys is not None:
-                out_hit = str(e.src) in keys
-                in_hit = str(e.dst) in keys
+                out_hit = src_k in keys
+                in_hit = dst_k in keys
                 # EDGES 2.2/4.1: a SYMMETRIC family has no direction. `A eq B`
                 # IS `B eq A`, so filtering on stored src/dst would make the
                 # answer depend on which publisher happened to write it first --
@@ -295,8 +409,14 @@ class EdgeStore:
         page = matched[start:] if limit is None else matched[start:start + limit]
         nxt = None
         if limit is not None and start + limit < len(matched):
-            nxt = start + limit
-        return tuple(page), suppressed == 0, why, nxt
+            nxt = str(start + limit)
+        return EdgePage(
+            records=tuple(page),
+            known=len(matched),
+            complete=suppressed == 0,
+            why_incomplete=why,
+            next_after=nxt,
+        )
 
 
 class EdgeRegistry:
@@ -307,12 +427,14 @@ class EdgeRegistry:
         families: Iterable[Family] = (),
         store: EdgeStore | None = None,
         registered_types: Iterable[TypeRef] = (),
-        max_edges: int | None = None,
+        max_edges: int | None = DEFAULT_MAX_EDGES,
         page_size: int | None = None,
     ) -> None:
-        # EDGES 4.2: the depth cap bounds HOPS, not degree. `max_edges` is the
-        # deployment's assembly bound; hitting it is an incomplete report with a
-        # why, never a silently truncated one.
+        # EDGES 4.2: the depth cap bounds HOPS, not degree. The assembly bound
+        # is what bounds degree, and it is ON BY DEFAULT -- round 3 pointed out
+        # that an opt-in circuit breaker leaves the DEFAULT as exactly the
+        # unbounded materialisation R13 exists to prevent. Passing
+        # ``max_edges=None`` disables it, which is a deliberate act.
         self.max_edges = max_edges
         self.page_size = page_size
         self.families = {f.name: f for f in families}
@@ -402,17 +524,34 @@ class EdgeRegistry:
             attributes=attrs,
             warnings=tuple(warnings),
         )
-        return self.store.put_edge(edge)
+        return _from_record(self.store.put_edge(_to_record(edge)))
 
     def retract_edge(self, edge_id: str, reason: str, *, retracted_by: str, at: datetime):
         if not reason or not reason.strip():
             raise ValueError("retract_edge requires a non-empty reason (EDGES 2.6)")
         if self.store is None or not self.store.caps.stores_edges:
             return Refusal(True, "edge_store_absent", {"edge_id": edge_id})
-        edge = self.store.get_edge(edge_id)
-        if edge is None:
-            return Refusal(True, "edge_family_unknown", {"edge_id": edge_id})
+        rec = self.store.get_edge(edge_id)
+        if rec is None:
+            # Round 3: this reused `edge_family_unknown`, which is a different
+            # failure -- INTERFACE 5.12's own Cause-B argument against reusing
+            # `kind_mismatch`. `unknown_edge` is the nineteenth value, added to
+            # INTERFACE 5.12 in the same change per ruling R3.
+            return Refusal(True, "unknown_edge", {"edge_id": edge_id})
+        edge = _from_record(rec)
         warnings = list(edge.warnings)
+        if (self.store.caps.edge_transaction_scope == "savepoint"
+                and not any(w.startswith("not_durable_until_host_commits:")
+                            for w in warnings)):
+            # EDGES 6.2 says the stamp is applied at EVERY write call site.
+            # Round 3 [Observed]: this one inherited it from the edge's prior
+            # state instead of applying it, so retracting an already-durable
+            # edge over a borrowed connection came back with no warning at all.
+            # That is PACKAGE 3.4 primitive 3's own recorded bug class, again.
+            warnings.append(
+                "not_durable_until_host_commits:"
+                + self.store.caps.why.get("edge_transaction_scope", "")
+            )
         if not self.store.caps.stores_edge_events:
             # EDGES 2.6: NOT refused -- the record is the row. Warned.
             warnings.append(
@@ -430,7 +569,7 @@ class EdgeRegistry:
                 retract_reason=reason,
             ),
         )
-        return self.store.put_edge(out)
+        return _from_record(self.store.put_edge(_to_record(out)))
 
     # -- the read seam --------------------------------------------------
 
@@ -496,24 +635,36 @@ class EdgeRegistry:
             # level. A level assembled from one page of many would be silently
             # partial, which is the failure Rule K exists for.
             recs: list[Edge] = []
-            cursor: int | None = None
+            fresh: set[str] = set()
+            cursor: str | None = None
             while True:
-                page, page_complete, page_why, cursor = self.store.find_edges(
-                    incident_to=frontier,
-                    families=searched,
+                page = self.store.find_edges(EdgeQuery(
+                    incident_to=tuple(_key(n) for n in frontier),
+                    families=tuple(searched),
                     symmetric_families=symmetric,
                     direction=direction,
                     include_retracted=include_retracted,
                     limit=self.page_size,
                     after=cursor,
-                )
-                if not page_complete:
+                ))
+                if not page.complete:
                     complete = False
-                    why = why or page_why
-                recs.extend(page)
+                    why = why or page.why_incomplete
+                for rec in page.records:
+                    # Round 3 BLOCKING: the bound was compared against the RAW
+                    # page, and at depth >= 2 a frontier legitimately re-finds
+                    # edges already counted -- so a walk well under budget
+                    # reported complete=False with a why naming a bound nothing
+                    # crossed, AND dropped the edges it had not reached yet.
+                    # The bound counts DISTINCT edges. Dedupe first, then check.
+                    if rec.edge_id in seen_edges or rec.edge_id in fresh:
+                        continue
+                    fresh.add(rec.edge_id)
+                    recs.append(_from_record(rec))
                 if self.max_edges is not None and len(seen_edges) + len(recs) >= self.max_edges:
                     bound_hit = True
                     break
+                cursor = page.next_after
                 if cursor is None:
                     break
             # EDGES 7.1: when the store could not apply the family filter
@@ -595,3 +746,28 @@ def prov(actor: str, by: str = "user", **kw: Any) -> EdgeProvenance:
         created_by=by,  # type: ignore[arg-type]
         **kw,
     )
+
+
+def assert_adapter_boundary() -> None:
+    """PACKAGE 3.1 / C0-04's rule, applied to this kit's own adapter.
+
+    The store speaks flat records and knows nothing about the facade shapes.
+    Checked by source inspection, exactly as C0-04 checks the real adapter --
+    because round 3 found this boundary asserted in EDGES 7.1 and exercised
+    nowhere, with the probe's own "adapter" handing back facade objects.
+    """
+    import inspect
+
+    src = inspect.getsource(EdgeStore)
+    for forbidden in ("NeighborReport", "NeighborEdge", "Refusal", "EdgeRegistry",
+                      "EdgeProvenance"):
+        if forbidden in src:
+            raise AssertionError(
+                f"EdgeStore mentions {forbidden!r} -- the adapter stores records "
+                "and decides nothing (PACKAGE 3.1)"
+            )
+    for name, ann in (("put_edge", "EdgeRecord"), ("get_edge", "EdgeRecord"),
+                      ("find_edges", "EdgePage")):
+        sig = str(inspect.signature(getattr(EdgeStore, name)))
+        if ann not in sig:
+            raise AssertionError(f"EdgeStore.{name} does not speak {ann}: {sig}")

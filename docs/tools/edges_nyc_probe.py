@@ -32,6 +32,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from docs.tools.edges_probe_kit import (  # noqa: E402
     EdgeRegistry,
+    _from_record,
     EdgeStore,
     Family,
     InstanceRef,
@@ -305,7 +306,9 @@ def main() -> int:
 
     # ---- T3.8 created_by has no value for a deterministic ingest join -----
     print("\nT3.8 -- what `created_by` says about a deterministic BBL join")
-    sample = next(iter(ereg3.store._edges.values()))
+    # The store holds flat EdgeRecords (EDGES 7.1); read one back through
+    # the primitive rather than reaching into its dict shape.
+    sample = _from_record(next(iter(ereg3.store._edges.values())))
     print(f"    created_by={sample.provenance.created_by!r}  "
           f"created_by_actor={sample.provenance.created_by_actor!r}")
     ok &= check("created_by is one of the three INTERFACE values",
