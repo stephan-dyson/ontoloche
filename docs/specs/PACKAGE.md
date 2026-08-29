@@ -248,6 +248,9 @@ class ProposalRecord:
     decided_at: datetime | None
     decision_reason: str | None
     superseded_by: str | None
+    source_version: str | None = None   # ruling R21, store version 3 — the SOURCE's own
+                                    #   version, carried on the proposal row until
+                                    #   approval writes it into provenance_json. §9.7
 
 @dataclass(frozen=True)
 class ConsumerRecord:
@@ -492,7 +495,7 @@ oo_type
     kind            TEXT         NOT NULL
     name            TEXT         NOT NULL
     definition      TEXT         NOT NULL             -- CHECK length(definition) > 0
-    created_by      TEXT         NOT NULL             -- seed | ai | user
+    created_by      TEXT         NOT NULL             -- seed | ai | user | derived (R17)
     status          TEXT         NOT NULL             -- proposed | active | retired
     aliases_json    TEXT/jsonb   NOT NULL DEFAULT '[]'
     attributes_json TEXT/jsonb   NOT NULL DEFAULT '{}'
@@ -531,6 +534,7 @@ oo_proposal
     decided_at      <ts>
     decision_reason TEXT
     superseded_by   TEXT
+    source_version  TEXT                                  -- the SOURCE's own version (R21, §9.7)
     INDEX (namespace, name, status)                   -- prior-rejection lookup, §5.5
     -- NO unique constraint on (namespace, kind, name): several proposals for one word
     -- over time is normal, and one of them being a retained rejection is the point.
@@ -817,7 +821,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**135 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**137 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Six** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas), `C9-09`, `C9-10` and `C9-11` (ruling **R11**, `reinstate`), `C4-10` (ruling **R17**, `created_by="derived"`) and `C8-06` (ruling **R21**, `Provenance.source_version`).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (14).** No interface call; this is the protocol itself.
 
@@ -879,7 +883,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C3-10 | **a retired name is named in the resolution**, with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score — never a bare *"nothing fits"*. *(Row 3c: `resolve_type` read the tombstone and discarded it, answering with a confident negative about a word it knew was burned — Rule U, in the call designed against mechanism 2)* |
 | C3-12 | **a word taken in another namespace is found when the caller asks** (`INTERFACE.md` §5.3.1, ruling **R6**): the default `search_namespaces=None` reads nothing and still reports `complete=False`; naming a namespace lands the taken name in `alternatives` as `"<namespace>:<name>"` and in `reason`, **without** changing the outcome; and `complete` is `True` only once every namespace that has a type in it was named, with the omitted ones named by name when it is not. *(Row 3e. This is UC3's W1.3 verbatim — `status` registered in `dpr`, asked for in `oti_311`, answered *"nothing in the vocabulary fits"* with an empty `alternatives` while the same context in `dpr` returned `existing` at 1.0. Mechanism **2** reintroduced by §2.6's answer to mechanism **4**, in the call designed against mechanism 2.)* |
 
-**C4 — `propose_type` (9).** Mechanism **1**.
+**C4 — `propose_type` (10).** Mechanism **1**.
 
 | id | asserts |
 |---|---|
@@ -892,6 +896,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C4-07 | under `approval_policy="auto"` the return is a `TypeEntry` with `provenance.approved_by == "auto:<policy>"` — **never blank** |
 | C4-08 | a retired name ⇒ the retired entry plus `warnings=["name_previously_retired"]`, and no new entry |
 | C4-09 | `^[a-z][a-z0-9_]{0,63}$` enforced identically on both backends |
+| C4-10 | **`created_by="derived"` is reachable and distinct** (`INTERFACE.md` §2.1, ruling **R17**): an actor of `derived:<rule>` lands `created_by="derived"`, while `ai:`, `seed`/`import:` and a plain actor still land `ai`, `seed` and `user`. *(Row 3e. Two unrelated fixtures reached for the same missing value — beacon's `EntityMention.match = "deterministic"` and UC3's BBL join, which had to claim `user` for a join no user performed. `import:` stays `seed` on purpose: an import arrives already decided, a rule decides now.)* |
 
 **C5 — `approve` / `reject` (12).** Mechanism **1**.
 
@@ -934,7 +939,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C7-06 | `record_use` on a non-counting backend is a no-op and `usage()` says so |
 | C7-07 | **`last_seen` never moves backwards**: a late or replayed `record_use` stamped with an older time leaves `last_seen` where it was. *(Row 3c: §3.4 primitive 12 states `max(last_seen, at)` unconditionally and nothing tested it; an adapter that overwrites instead passed the whole suite. **Not** the G3 carve-out — G3 waives serialisation under a race, not the `max()` semantic — and a regressed `last_seen` reports a live type as orphaned, which §5.7 calls the sensor for the venture's core bet)* |
 
-**C8 — `provenance` (5).** Mechanisms **1** and **3**.
+**C8 — `provenance` (6).** Mechanisms **1** and **3**.
 
 | id | asserts |
 |---|---|
@@ -943,6 +948,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C8-03 | `approved_by` on an auto-approved entry has the form `auto:<policy>` |
 | C8-04 | an imported row carries `unknown:imported`, never null |
 | C8-05 | `model_tier` is never overwritten by a later approval or amendment |
+| C8-06 | **`source_version` is the SOURCE's version and round-trips from proposal to provenance** (`INTERFACE.md` §2.4a, ruling **R21**): supplied to `propose_type`, readable on the `Proposal` before approval, present on `Provenance` after it, and `None` — never invented, never our own timestamp — when no caller supplied one. *(Row 3e, §10b.5 contortion 12. `EdgeProvenance` had the field and `Provenance` did not: two shapes for one concept, which is the drift the drift-check exists to catch, pointing inward.)* |
 
 **C9 — `retire` and `reinstate` (11).** Mechanism **3**.
 
@@ -1514,6 +1520,20 @@ The first store-schema revision this package has shipped, and it is the case §9
 **What survives is chosen, not incidental.** `oo_type.attr_schema_version` is untouched, so an entry written under a schema this migration drops **still says which generation of `attributes` it belongs to** (§5.4: entries are never rewritten and never retroactively invalidated), and `oo_attr_observed` keeps the spread of versions per key, so `attribute_census` still reports what was written and under what. A migration that dropped those too would have made §5.4's promise unkeepable, which is a different and much worse thing than dropping a config table.
 
 **A store still at version 1 is not read under version-2 assumptions.** `migrate()` applies `0002` in one transaction with its version row (§9.1); a store at version 2 opened by an older package is refused outright (§9.2). `owns_schema=False` stores are unaffected — `migrate()` issues no DDL there and the host owns the column (§9.3).
+
+### 9.7 Store version 3 — `oo_proposal` gains `source_version` *(ruling **R21**, row 3e, 2026-08-29)*
+
+`Provenance` gains `source_version` (`INTERFACE.md` §2.4a): the **source's** own version, never ours. On an approved entry it lives inside `oo_type.provenance_json`, where every other provenance field lives, so **`oo_type` needs no column**. A *proposal* is written before its `Provenance` exists, so the value has to survive on the proposal row until approval — otherwise `propose_type(source_version=…)` accepts a value and loses it, which is worse than not accepting one.
+
+| | |
+|---|---|
+| **migration** | `backends/migrations/{sqlite,postgres}/0003_proposal_source_version.sql` |
+| **shape** | `ALTER TABLE oo_proposal ADD COLUMN source_version TEXT` |
+| **what it discards** | nothing |
+
+**`ALTER`, not drop-and-recreate — and the contrast with §9.6 is the point.** This column is additive and nullable, so there is nothing to lose and no permission to spend. §9.4's licence to drop a v0 store is a real permission and it is spent only where it **buys** something: §9.6 spends it to change a primary key, on the one table whose contents are reproducible by definition. Reaching for it here, where an `ALTER` does the job, would be treating a stated allowance as a default.
+
+A backend with `stores_proposals=False` has no `oo_proposal` table and is unaffected — such a store returns a `TypeEntry` from `propose_type` (§7.3 B4), so the value goes straight into `provenance_json` with no row to survive on.
 
 ---
 

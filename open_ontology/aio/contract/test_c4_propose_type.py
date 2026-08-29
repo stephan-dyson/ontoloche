@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C4 -- ``propose_type`` (9). Mechanism 1: no review.
+"""C4 -- ``propose_type`` (10). Mechanism 1: no review.
 
 The call that makes an addition a *request* rather than a fact. It refuses exactly two
 things and warns about everything else -- refusing a near-duplicate is how you flatten a
@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import pytest
 from open_ontology.policy import NamespacePolicy
-from open_ontology.types import Citation, Evidence, Proposal, TypeEntry
+from open_ontology.types import CREATED_BY, Citation, Evidence, Proposal, TypeEntry
 from open_ontology.aio.contract._support import DOC_EVIDENCE_URL, seed
 
 
@@ -137,3 +137,41 @@ async def test_c4_08_a_retired_name_is_not_silently_reusable(registry, adapter):
 async def test_c4_09_the_name_rule_is_enforced_identically_on_every_backend(registry, name):
     with pytest.raises(ValueError):
         await registry.propose_type(name, "a definition", [DATA_EVIDENCE], "user:sd")
+
+async def test_c4_10_created_by_derived_is_reachable_and_distinct(registry):
+    """**Ruling R17, row 3e -- the fourth `created_by`, and the first change to that
+    vocabulary since it was taken from Tenshen's `work_link_types`.**
+
+    `derived` means *produced by a deterministic rule, with no human and no model in the
+    loop*. Two unrelated fixtures reached for the same missing value and that is why
+    this one of EDGES.md 14's vocabulary questions was taken:
+
+    * beacon's `EntityMention.match` carries exactly this three-way distinction and its
+      first value is literally `deterministic`;
+    * UC3's BBL join relates a tree to a service request by a rule over a shared key,
+      and before R17 it had to claim `created_by="user"` -- a person deciding something
+      no person touched -- or hide the truth in a `created_by_actor` convention that
+      nothing validates.
+
+    The other three still land where they landed. `import:` stays `seed` **on purpose**:
+    an import is a vocabulary arriving already decided (INTERFACE.md 2.5), where
+    `derived` is a decision a rule made just now, and collapsing them loses which of the
+    two happened.
+    """
+    cases = {
+        "derived:socrata_bbl_join": "derived",
+        "ai:classifier": "ai",
+        "seed": "seed",
+        "user:sd": "user",
+    }
+    for actor, expected in cases.items():
+        entry = await seed(
+            registry,
+            f"thing_from_{expected}",
+            definition=f"a type whose origin is {expected}",
+            proposed_by=actor,
+            tier="opus" if actor.startswith("ai:") else None,
+        )
+        assert entry.created_by == expected, f"{actor!r} -> {entry.created_by!r}"
+
+    assert set(CREATED_BY) == {"seed", "ai", "user", "derived"}
