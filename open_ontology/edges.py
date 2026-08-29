@@ -45,6 +45,7 @@ __all__ = [
     "EDGE_LEVELS",
     "DIRECTIONS",
     "FAMILY_ATTRIBUTE_KEYS",
+    "EDGE_PAYLOAD_KIND",
     "DEFAULT_MAX_EDGES",
     "DEPTH_CAP",
     "EQUIVALENT_TO",
@@ -87,6 +88,27 @@ FAMILY_ATTRIBUTE_KEYS = (
     "endpoint_kinds",
     "payload_schema",
 )
+
+#: EDGES.md 2.5, ruling **R34**, row 4c. The `AttributeSchema.kind` an edge PAYLOAD
+#: schema is keyed under -- **not** `"edge"`, and the difference is a defect this row
+#: reproduced before it designed around it.
+#:
+#: 2.5 as written said `payload_schema` names a schema keyed
+#: `(namespace, "edge", <family name>)` -- which is exactly the key ruling **R10**
+#: already gave the name-level schema governing that family's OWN `TypeEntry.attributes`
+#: (its `level`, `symmetric`, `inverse_label`, `endpoint_kinds`, `payload_schema`). One
+#: key, two dicts. **[Observed, row 4c]**: registering a payload schema
+#: `{"role": str}` with `additional="forbid"` under `(default, "edge", "blocks")` made
+#: `propose_type(kind="edge", name="blocks", ...)` refuse
+#: `attributes_schema_violation` with all five declaration keys "not declared in the
+#: schema" -- the family became unregisterable by the act of governing its payload.
+#:
+#: That is INTERFACE.md 2.3's Cause B: one container meaning two things. A schema kind
+#: of its own separates the two spaces with no new table, no new primitive and no
+#: possible collision, and it makes `attribute_census(kind="edge_payload")` the same
+#: enumeration for edge payloads that PACKAGE.md 5.5 gives type attributes. Deviation
+#: **D-4c-1**; 2.5 amended in the same change.
+EDGE_PAYLOAD_KIND = "edge_payload"
 
 #: EDGES.md 2.4.1's third clause, as a value. A predicate is never an endpoint, at
 #: either level, and the rule is GENERAL rather than a family's opt-in: two predicates

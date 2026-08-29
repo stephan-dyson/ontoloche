@@ -95,10 +95,23 @@ class PostgresDialect(Dialect):
         return self._Jsonb(json.loads(json.dumps(obj, sort_keys=True, default=str)))
 
     def dec_json(self, value: Any) -> Any:
-        if value is None:
-            return None
-        if isinstance(value, (str, bytes)):
-            return json.loads(value)
+        """**Return it as it came, and never re-parse it** (row 4c).
+
+        Every ``*_json`` column in this backend's schema is ``jsonb``, so psycopg has
+        already decoded the value before it reaches here. The first cut re-parsed
+        anything that arrived as a ``str`` -- which is precisely a jsonb column holding
+        a JSON *string*, the one case where parsing again is wrong: ``json.loads(
+        "a plain string")`` raises ``JSONDecodeError: Expecting value``.
+
+        **[Observed, row 4c, on `main` before this change]** one type written with
+        ``attributes={"note": "a plain string"}`` made ``attribute_census()`` raise on
+        the Postgres leg and only there. Nothing caught it because no existing test
+        writes a string-valued attribute and then censuses it, and the census is
+        nonbinding under ruling R2 -- so the failure mode was an uncaught exception out
+        of an audit call, on the reference DEPLOYMENT backend, for the most ordinary
+        attribute value there is. Found by wiring ruling R34's edge-payload census onto
+        it; pinned by ``C15-13`` on all three legs.
+        """
         return value
 
     def enc_ts(self, value: datetime | None) -> Any:
