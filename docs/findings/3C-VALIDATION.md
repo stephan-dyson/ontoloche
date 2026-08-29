@@ -234,3 +234,59 @@ Landed as its own commit before the walk-through, per the brief. Deviation **D-1
 - D-1 is marked resolved in [`../runs/2A-RUN.md`](../runs/2A-RUN.md) §4.1 and [`../runs/3B-ASYNC.md`](../runs/3B-ASYNC.md) §5, with the reasoning that produced the ruling left intact.
 
 ---
+
+## 6. Wanted from the supervisor or the founder
+
+**Nothing here is a conflict between the three use cases.** Per `USE-CASES.md`'s rule, a UC3 finding that contradicted UC1 or UC2 would be recorded for the supervisor to resolve; none does. Every UC3 finding is an *absence*, and the CMS and Tenshen design tests stand unchanged. What follows is the other kind of item: **five decisions that would amend a v0 surface, which a design test and a review loop are not allowed to take on their own authority.**
+
+Each names the recommendation, so a ruling is a yes/no rather than a research task.
+
+### R5 (wanted) — cross-namespace lookup in `resolve_type`
+
+**The finding.** §3, W1.3 / contortion 8. `resolve_type` takes `namespace: str` and scores only inside it, so the second publisher of a word is never told the first exists. `resolve_type("status", ns="oti_311")` returns `proposal` with empty `alternatives` while the *same context* asked in `ns="dpr"` returns `existing` at confidence 1.0.
+
+**Why it cannot wait for v1.** §2.6 makes `namespace` the answer to mechanism 4. Scoping without a cross-namespace *lookup* means every publisher re-proposes every word and the registry cannot say so — mechanism **2** reintroduced by the answer to mechanism **4**. UC3 is the fixture for exactly this, and it is the venture's kill-criterion row.
+
+**Recommendation: amend `INTERFACE.md` §5.3 additively in INTERFACE v1, not v0.** One keyword, `search_namespaces: Sequence[str] | None = None`; hits land in `alternatives` as `("<namespace>:<name>", score)`; `Resolution.complete` becomes `true` only when the caller named every namespace. Additive, so no v0 caller changes. **Not taken in v0** because it is a signature change and the ordering rule does not let a design test amend the design.
+
+**Mitigated meanwhile, and this part IS taken:** `Resolution` now carries Rule K's `known`/`complete`/`why_incomplete` and a `scoped_to`, so the empty `alternatives` is an *honest* incomplete answer rather than a silent one. See §7, round 1.
+
+### R6 (wanted) — an `equivalent_to` relation between scoped types
+
+**The finding.** §3, W2.1–W2.2 / contortion 9. `borough` denotes the same five referents in all three agencies, in three encodings. Every cross-type relation v0 has — `merge_types`, `aliases`, `predicates`, `retire(successor=)` — asserts something **stronger** than equivalence, so nothing can record "the same thing, kept apart".
+
+**Recommendation: assign it to deliverable #4, `EDGES.md`, and say so in #4's brief.** An `equivalent_to` between two scoped types is a *relationship between types*, which is #4's subject. **UC3 is therefore evidence that #4 must carry type-to-type edges and not only instance-level ones** — a finding for #4's scope, produced by a design test on #1. The alternative (a field on `TypeEntry`) is rejected here: a pointer to another namespace's entry stored on the entry itself is an edge with the edge machinery missing.
+
+### R7 (wanted) — `Consumer.gate`, and whether a value-level consumer exists
+
+**The finding.** §3, W5.2 / contortion 11. `Consumer.gate` is a predicate name and a predicate's extent is a set of **types**, so the UC3-shaped consumer — a dashboard that accepts only `Closed` and `In Progress` from one agency's `status` — has no representation. Worse, the obvious workaround registers cleanly and then makes `consumers()` report that the consumer **would drop the very type it gates on**, which is internally correct and exactly backwards to a reader.
+
+**Two honest options, and they are mutually exclusive:**
+
+1. **Add a value-level gate** to §2.9 (`gate_values: list[str] | None` alongside `gate`). Cost: the registry starts having to know what a value *is*, which §2.1 spent a whole section refusing.
+2. **Require `gate` to name a registered `kind="predicate"` entry.** Cost: it breaks `C11-02`, which blesses gating on a predicate that does not exist *because that is mechanism C made visible* — a real capability, deliberately kept.
+
+**Recommendation: (2) is wrong and (1) is premature. Take neither in v0; take (1) at v1 if Phase 3 needs it.** The registry's job at v0 is to say what it does not know, and the concrete harm here is the *misleading report*, not the missing feature. **The cheap thing that should be done either way** is for `consumers()` to warn when `gate` names no registered predicate, so "would_drop" is not read as a fact about a live gate. That is a warning, not a signature change, and it is offered as the fallback ruling.
+
+### R8 (wanted) — `C3-08`, `C3-09` and `C4-06` versus `PACKAGE.md` §2.6's own rule
+
+**The finding.** §3.1 and `PACKAGE.md` §8b.3 (B8). §2.6 states that *"no contract test may pass or fail because of resolver quality"*. Three tests do:
+
+- `C3-08`/`C3-09` assert a `not_a_type` outcome that only the shipped `DeterministicResolver` produces — and UC3 showed the rule behind it is a **CMS-fitted lookup table**: the same `location`-rebuilt-from-its-parts pathology returns `redundant_projection` on CMS's address siblings and `proposal` on NYC's `latitude`/`longitude` ones, 50/50 rows in two agencies.
+- `C4-06` is worse: its `unverified_semantics` judgement comes from a hardcoded keyword list inside the façade, **not behind the `Resolver` seam at all**, so a deployment cannot fix it by supplying its own resolver — which §2.6 calls the production path.
+
+**Why it matters:** a conformance definition that a legitimate backend can fail for a non-storage reason is not a conformance definition. This is the thing the suite is load-bearing for (ruling A5 makes it the 2B gate).
+
+**Recommendation: mark all three non-binding for third-party adapters the way `C15-02` already is (§5.5), and keep them binding for the two reference backends.** Widening `_PROJECTION_FAMILIES` to include coordinate names is explicitly **not** recommended — that is fitting the table to the second dataset the way it was already fitted to the first, and it would make the next use case's version of this finding harder to see, not easier. Moving the domain-semantic judgement behind `Resolver` is the tidier long-run answer and is a v1 item.
+
+### R9 (wanted) — attribute schemas keyed per kind, not per type name
+
+**The finding.** `PACKAGE.md` §5.6, asserted by `C15-07`. A schema is keyed `(namespace, kind, version)`, and CMS has two `kind="value_set"` entries with different shapes. Requiring `ordering` refuses `deficiency_corrected_status` for lacking an order it has no business having; making it optional lets `scope_severity_code` be created claiming an order and declaring none — **the exact pollution §5.1 justifies the whole mechanism on.** There is no third option.
+
+**Recommendation: allow a name-level override — `(namespace, kind, name)` schemas that shadow the per-kind one — in PACKAGE v1.** Not v0: it changes `oo_attr_schema`'s key, which is a store-schema change, and §9.4 already says a v0 store may be dropped rather than migrated, so the cost is low but the decision is not this row's. **Recorded and pinned meanwhile**, which is the part a use-case pass is allowed to do.
+
+### What is NOT wanted
+
+Four items are recorded and need no ruling — they are collected in `INTERFACE.md` §11 for v1 and cost nothing to defer: `property_not_type` as a fifth `not_a_type` reason (contortion 10), `Provenance.source_version` (contortion 12), cross-namespace `find_consumers`/`attribute_census` (B7), and the catalogue-vs-API name divergence (§1.1), which no registry call can fix and which belongs to Phase 3's ingestion layer.
+
+---

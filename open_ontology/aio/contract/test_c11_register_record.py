@@ -48,7 +48,7 @@ async def test_c11_02_a_consumer_may_gate_on_a_predicate_that_does_not_exist(reg
     await registry.register_consumer(
         Consumer(id="future_service.render", gate="not_yet_a_predicate", on_unknown="drop")
     )
-    assert await registry.predicates() == []
+    assert list(await registry.predicates()) == []
 
     await seed(registry, "capture", definition="a captured watch")
     report = await registry.consumers("capture")

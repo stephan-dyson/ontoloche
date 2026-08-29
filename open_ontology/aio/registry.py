@@ -59,6 +59,7 @@ from open_ontology.types import (
     Evidence,
     MergeResult,
     PredicateEntry,
+    PredicateListing,
     Proposal,
     Provenance,
     ProvenanceEvent,
@@ -344,9 +345,16 @@ class AsyncRegistry:
         of: str | None = None,
         namespace: str = "default",
         include_retired: bool = False,
-    ) -> list[PredicateEntry]:
+    ) -> PredicateListing:
         """The named capability sets. A predicate is not a supertype: membership of
-        ``commentable`` implies nothing about ``searchable``."""
+        ``commentable`` implies nothing about ``searchable``.
+
+        Rule K (INTERFACE.md 3): this is a list result, so it carries ``known`` and
+        ``complete``. ``include_retired=False`` is the default *and hides things*, and
+        a backend that could not fully answer the page must not have that swallowed --
+        an empty list reading as "this type satisfies no predicates" is 5.2's named
+        failure one level up.
+        """
         wanted: set[str] | None = None
         if of is not None:
             member = await self._require(namespace, of)
@@ -385,7 +393,26 @@ class AsyncRegistry:
                     why_extent_incomplete=why,
                 )
             )
-        return out
+
+        applied = [
+            label
+            for label, used in (
+                ("of", of is not None),
+                ("include_retired=False", not include_retired),
+            )
+            if used
+        ]
+        why_incomplete: str | None = None
+        if applied:
+            why_incomplete = "filters suppressed rows: " + ", ".join(applied)
+        elif not page.complete:
+            why_incomplete = page.why_incomplete
+        return PredicateListing(
+            predicates=tuple(out),
+            known=len(out) if page.known is not None else None,
+            complete=bool(page.complete and not applied),
+            why_incomplete=why_incomplete,
+        )
 
     async def _extent(
         self, namespace: str, predicate: str, include_retired: bool
@@ -430,6 +457,7 @@ class AsyncRegistry:
                 outcome="existing",
                 reason=f"{candidate!r} is already in the vocabulary",
                 tier=tier,
+                scoped_to=namespace,
                 type=await self._entry(exact),
                 confidence=1.0,
             )
@@ -440,6 +468,7 @@ class AsyncRegistry:
                 outcome="not_a_type",
                 reason=not_a_type.reason,
                 tier=tier,
+                scoped_to=namespace,
                 confidence=None,
                 alternatives=(await self._prior_rejections(namespace, candidate))[0],
             )
@@ -463,6 +492,7 @@ class AsyncRegistry:
                 outcome="existing",
                 reason="; ".join(reason_bits),
                 tier=tier,
+                scoped_to=namespace,
                 type=await self._entry(entry) if entry else None,
                 confidence=best_score,
                 alternatives=tuple(alternatives),
@@ -480,6 +510,7 @@ class AsyncRegistry:
                 outcome="none",
                 reason="; ".join(reason_bits),
                 tier=tier,
+                scoped_to=namespace,
                 confidence=best_score,
                 alternatives=tuple(alternatives),
             )
@@ -490,6 +521,7 @@ class AsyncRegistry:
                 outcome="none",
                 reason="; ".join(reason_bits),
                 tier=tier,
+                scoped_to=namespace,
                 confidence=best_score,
                 alternatives=tuple(alternatives),
             )
@@ -518,6 +550,7 @@ class AsyncRegistry:
             outcome="proposal",
             reason="; ".join(reason_bits),
             tier=tier,
+            scoped_to=namespace,
             proposal=proposal,
             confidence=best_score,
             alternatives=tuple(alternatives),

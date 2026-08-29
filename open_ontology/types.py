@@ -42,6 +42,7 @@ __all__ = [
     "ResolveContext",
     "NotAType",
     "PredicateEntry",
+    "PredicateListing",
     "TypeListing",
     "MergeResult",
 ]
@@ -309,6 +310,17 @@ class ResolveContext:
 
 @dataclass(frozen=True)
 class Resolution:
+    """INTERFACE.md 5.3.
+
+    ``alternatives`` is a list result, so Rule K (5.3 / 3) binds it: it carries
+    ``known`` and ``complete``. **``complete`` is always False in v0**, for the same
+    reason ``ConsumerReport.complete`` is (5.1): the near misses are scored inside one
+    namespace, and nothing searched the others. An empty ``alternatives`` therefore
+    never stands in for "there is nothing like this anywhere" -- it means "nothing like
+    this in the namespace you asked in, and we did not look outside it", which is
+    INTERFACE.md 10b.1, contortion 8, reported instead of implied.
+    """
+
     outcome: str
     reason: str
     tier: str
@@ -316,6 +328,25 @@ class Resolution:
     proposal: Proposal | None = None
     confidence: float | None = None
     alternatives: tuple[Alternative, ...] = ()
+    scoped_to: str = "default"
+    known: int = 0
+    complete: bool = False
+    why_incomplete: str = ""
+
+    def __post_init__(self) -> None:
+        if self.complete is not False:
+            raise ValueError(
+                "Resolution.complete is always False in v0 (INTERFACE.md 5.3): "
+                "alternatives are scored within one namespace and the others are "
+                "not searched"
+            )
+        object.__setattr__(self, "known", len(self.alternatives))
+        object.__setattr__(
+            self,
+            "why_incomplete",
+            f"alternatives are scored within namespace {self.scoped_to!r} only; other "
+            f"namespaces were not searched (INTERFACE.md 10b.1, contortion 8)",
+        )
 
 
 @dataclass(frozen=True)
@@ -330,6 +361,31 @@ class PredicateEntry:
     status: str
     provenance: Provenance
     why_extent_incomplete: str | None = None
+
+
+@dataclass(frozen=True)
+class PredicateListing:
+    """INTERFACE.md 5.2. Rule K: a list result carries ``known`` and ``complete``.
+
+    ``predicates()`` hides retired predicates by default and may be handed a page the
+    backend could not fully answer. Returning a bare list made both invisible -- an
+    empty list reading as "this type satisfies nothing" is the failure 5.2 names for
+    ``extent_size``, one level up.
+    """
+
+    predicates: tuple[PredicateEntry, ...]
+    known: int | None
+    complete: bool
+    why_incomplete: str | None = None
+
+    def __iter__(self):
+        return iter(self.predicates)
+
+    def __len__(self) -> int:
+        return len(self.predicates)
+
+    def __getitem__(self, index):
+        return self.predicates[index]
 
 
 @dataclass(frozen=True)
