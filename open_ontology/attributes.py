@@ -62,11 +62,26 @@ class FieldSpec:
 
 @dataclass(frozen=True)
 class AttributeSchema:
-    """Deployment configuration, versioned per ``(namespace, kind)``.
+    """Deployment configuration, versioned per ``(namespace, kind, name)``.
 
     Not a ``TypeEntry`` with ``kind="attribute_schema"``: an attribute schema is not a
     word in the vocabulary, and putting it in the type store means ``list_types()``
     mixes schemas with vocabulary and ``merge_types`` can be pointed at one.
+
+    **``name`` is ruling R10, row 3e.** ``None`` -- the default -- is the per-kind
+    schema this mechanism shipped with, unchanged. A schema with a ``name`` applies to
+    exactly that one type and **shadows** the per-kind schema for it; nothing merges,
+    because a merge of two field maps would silently produce a third schema nobody
+    wrote (PACKAGE.md 5.2).
+
+    The finding it closes is the mechanism's own flagship justification, asserted by
+    ``C15-07``: PACKAGE.md 5.1 justifies this whole section on the CMS scope-and-
+    severity ordering, and CMS has **two** ``kind="value_set"`` entries with different
+    shapes. One schema per kind gets one of two wrong answers and there is no third --
+    ``ordering`` required refuses the unordered set for lacking a field it has no
+    business having, and ``ordering`` optional lets the ordered set be created
+    declaring no order, which is the CMS severity scale back inside somebody's
+    transform, unversioned.
     """
 
     namespace: str
@@ -77,6 +92,8 @@ class AttributeSchema:
     mode: str = "off"
     registered_at: datetime | None = None
     registered_by: str = "deployment"
+    #: ``None`` = the per-kind schema. A string = this type only, shadowing it. R10.
+    name: str | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -85,6 +102,13 @@ class AttributeSchema:
             raise ValueError(f"AttributeSchema.additional must be one of {ADDITIONAL}")
         if self.version < 1:
             raise ValueError("AttributeSchema.version is monotonic from 1")
+        if self.name is not None and not self.name.strip():
+            # An empty string is the STORE's sentinel for "no name" (PACKAGE.md 5.2b);
+            # letting a caller pass one would make two different things one value.
+            raise ValueError(
+                "AttributeSchema.name is either None (the per-kind schema) or a real "
+                "type name; the empty string is the store's own sentinel"
+            )
 
 
 def _type_ok(value: Any, spec_type: str) -> bool:

@@ -32,7 +32,13 @@ SEVERITY_FIELDS = {
 }
 
 
-def _schema(mode: str, version: int = 1, fields=None, additional: str = "allow"):
+def _schema(
+    mode: str,
+    version: int = 1,
+    fields=None,
+    additional: str = "allow",
+    name: str | None = None,
+):
     return AttributeSchema(
         namespace="default",
         kind="value_set",
@@ -41,6 +47,7 @@ def _schema(mode: str, version: int = 1, fields=None, additional: str = "allow")
         additional=additional,
         mode=mode,
         registered_by="deployment",
+        name=name,
     )
 
 
@@ -384,3 +391,135 @@ def test_c15_09_a_projected_key_is_censused_and_the_census_says_it_is_partial(
     assert census.why_incomplete and projected in census.why_incomplete, (
         "and it names which keys it counted, in the backend's own words plus the list"
     )
+
+
+@pytest.mark.requires_capability("stores_attributes")
+@pytest.mark.requires_attribute_store
+def test_c15_10_a_name_level_schema_shadows_the_per_kind_one(registry):
+    """**Ruling R10, row 3e -- `C15-07`'s two horns, both gone, on CMS's own data.**
+
+    `C15-07` pinned the limitation in this mechanism's flagship justification: a schema
+    keyed `(namespace, kind, version)` is **one schema per kind**, and CMS has two
+    `kind="value_set"` entries with different shapes. Requiring `ordering` refuses
+    `deficiency_corrected_status` for lacking an order it has no business having;
+    making `ordering` optional lets `scope_severity_code` be created claiming an order
+    and declaring none -- the CMS severity scale back inside somebody's transform,
+    unversioned, which is the pollution PACKAGE.md 5.1 justifies the whole mechanism on.
+
+    R10 adds the third option `C15-07` said did not exist: `(namespace, kind, name)`
+    schemas that **shadow** the per-kind one. This test drives both CMS value sets
+    through it and asserts the shadowing is a replacement, not a merge -- a merge of two
+    field maps produces a third schema nobody wrote and nobody versioned.
+    """
+    unordered = {"values": ["Past Non-Compliance", "No revisit needed"]}
+
+    # The per-kind schema is the strict one: a value_set must declare its ordering.
+    registry.register_attribute_schema(_schema("enforce"))
+
+    # The ordered set obeys it. This is 5.1's whole argument, and it still works.
+    ordered_ok = registry.propose_type(
+        "scope_severity_code",
+        "Ordered severity scale A-L, where J, K and L are Immediate Jeopardy.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": True, "ordering": list("ABCDEFGHIJKL")},
+    )
+    assert not isinstance(ordered_ok, Refusal)
+
+    # ...and the unordered one is still refused BY THE PER-KIND SCHEMA -- horn 1, which
+    # is the state of the world this ruling starts from.
+    refused = registry.propose_type(
+        "deficiency_corrected_status",
+        "The six status strings CMS uses for whether a deficiency was corrected.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": False, **unordered},
+    )
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+    assert refused.detail["schema_name"] is None, "the PER-KIND schema refused it"
+
+    # R10: one schema for that one name. `ordering` is not in it at all, so it cannot
+    # be required and cannot be silently accepted-as-absent by the other schema either.
+    registry.register_attribute_schema(
+        _schema(
+            "enforce",
+            name="deficiency_corrected_status",
+            fields={
+                "ordered": FieldSpec(
+                    type="bool",
+                    description="whether the values of this set have a meaningful order",
+                ),
+                "values": FieldSpec(
+                    type="list", item_type="str", required=True,
+                    description="the status strings, which have no order to declare",
+                ),
+            },
+        )
+    )
+
+    now_fine = registry.propose_type(
+        "deficiency_corrected_status",
+        "The six status strings CMS uses for whether a deficiency was corrected.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": False, **unordered},
+    )
+    assert not isinstance(now_fine, Refusal), (
+        "the name-level schema shadows the per-kind one: the unordered set is judged "
+        "by its own schema, which never asked for an ordering"
+    )
+
+    # Shadowing, not merging: the per-kind schema's REQUIRED `ordering` field does not
+    # come along. If it merged, the write above would still be refused.
+    entry = (
+        now_fine
+        if isinstance(now_fine, TypeEntry)
+        else registry.approve(now_fine.id, "user:sd")
+    )
+    assert entry.attributes["ordered"] is False
+    assert "ordering" not in entry.attributes
+
+    # And the name-level schema is strict about its OWN fields -- it is a schema, not
+    # an exemption. `values` is required there.
+    missing = registry.propose_type(
+        "deficiency_corrected_status_v2",
+        "A second unordered status set, to prove the override is not an escape hatch.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": False},
+    )
+    assert isinstance(missing, Refusal), "the per-kind schema still governs every other name"
+    assert missing.detail["schema_name"] is None
+
+
+@pytest.mark.requires_capability("stores_attributes")
+@pytest.mark.requires_attribute_store
+def test_c15_11_the_per_kind_schema_still_governs_every_name_without_an_override(registry):
+    """**R10's other half: an override overrides ONE name, and nothing else.**
+
+    The failure mode a name-level key invites is that registering one override quietly
+    relaxes the kind -- a deployment writes one exception and stops noticing that the
+    general rule is still the general rule. Asserted here on a third `value_set` that
+    has no override of its own: it is judged by the per-kind schema exactly as before
+    R10, and the refusal names which schema refused it so the two can be told apart.
+    """
+    registry.register_attribute_schema(_schema("enforce"))
+    registry.register_attribute_schema(
+        _schema(
+            "enforce",
+            name="deficiency_corrected_status",
+            fields={
+                "values": FieldSpec(
+                    type="list", item_type="str", required=True,
+                    description="the status strings, which have no order to declare",
+                )
+            },
+        )
+    )
+
+    third = registry.propose_type(
+        "survey_type_code",
+        "The kind of survey a citation was written during.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": False},          # no `ordering`, and no override for it
+    )
+    assert isinstance(third, Refusal), "a name with no override falls back to the kind"
+    assert third.reason == "attributes_schema_violation"
+    assert third.detail["schema_name"] is None
+    assert "ordering" in str(third.detail)

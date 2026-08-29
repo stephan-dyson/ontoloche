@@ -165,7 +165,12 @@ class AsyncAttributeStore(Protocol):
     async def put_attr_schema(self, rec: AttrSchemaRecord) -> AttrSchemaRecord: ...
 
     async def get_attr_schema(
-        self, namespace: str, kind: str, *, version: int | None = None
+        self,
+        namespace: str,
+        kind: str,
+        *,
+        name: str | None = None,
+        version: int | None = None,
     ) -> AttrSchemaRecord | None: ...
 
     async def observe_attributes(

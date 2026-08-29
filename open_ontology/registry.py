@@ -1115,13 +1115,20 @@ class Registry:
                 return self._entry(existing, extra_warnings=("name_previously_retired",))
             return self._entry(existing)
 
-        schema, violations = self._check_attributes(namespace, kind, attributes)
+        schema, violations = self._check_attributes(namespace, kind, name, attributes)
         warnings: list[str] = []
         if violations:
             if schema and schema.mode == "enforce":
                 return Refusal(
                     "attributes_schema_violation",
-                    {"kind": kind, "violations": violations, "schema_version": schema.version},
+                    {
+                        "kind": kind,
+                        "violations": violations,
+                        "schema_version": schema.version,
+                        # R10: with name-level overrides in play, "which schema refused
+                        # me" is a question the caller now has to be able to answer.
+                        "schema_name": schema.name,
+                    },
                 )
             if schema and schema.mode == "warn":
                 warnings.extend(f"attributes_invalid:{v}" for v in violations)
@@ -1275,7 +1282,7 @@ class Registry:
                 }
             )
             schema, violations = self._check_attributes(
-                amended.namespace, amended.kind, amended.attributes
+                amended.namespace, amended.kind, amended.name, amended.attributes
             )
             if violations and schema and schema.mode == "enforce":
                 return Refusal(
@@ -1284,6 +1291,7 @@ class Registry:
                         "kind": amended.kind,
                         "violations": violations,
                         "schema_version": schema.version,
+                        "schema_name": schema.name,
                     },
                 )
 
@@ -1313,7 +1321,9 @@ class Registry:
         amendment: dict | None = None,
     ) -> TypeEntry:
         now = self._now()
-        schema, _ = self._check_attributes(rec.namespace, rec.kind, rec.attributes)
+        schema, _ = self._check_attributes(
+            rec.namespace, rec.kind, rec.name, rec.attributes
+        )
         provenance = Provenance(
             created_at=rec.proposed_at,
             created_by_actor=rec.proposed_by,
@@ -2019,6 +2029,7 @@ class Registry:
             AttrSchemaRecord(
                 namespace=schema.namespace,
                 kind=schema.kind,
+                name=schema.name,
                 version=schema.version,
                 fields_json={
                     name: {
@@ -2062,6 +2073,10 @@ class Registry:
         rows: list[AttrObservedRecord] = store.read_attr_observed(namespace, kind=kind)
         entries = []
         for row in rows:
+            # `declared` is asked of the PER-KIND schema deliberately: a census row is
+            # (kind, key) over every type of that kind, so a name-level schema (R10)
+            # declares the key for one type and not for the rest, and answering `True`
+            # off one override would be a claim about types it never covered.
             schema = self._schema_for(namespace, row.kind)
             entries.append(
                 CensusEntry(
@@ -2104,6 +2119,7 @@ class Registry:
         return AttributeSchema(
             namespace=rec.namespace,
             kind=rec.kind,
+            name=rec.name,
             version=rec.version,
             fields={
                 name: FieldSpec(
@@ -2121,16 +2137,34 @@ class Registry:
             registered_by=rec.registered_by,
         )
 
-    def _schema_for(self, namespace: str, kind: str) -> AttributeSchema | None:
+    def _schema_for(
+        self, namespace: str, kind: str, name: str | None = None
+    ) -> AttributeSchema | None:
+        """The schema in force for one type -- ruling **R10**, row 3e.
+
+        **A ``(namespace, kind, name)`` schema SHADOWS the ``(namespace, kind)`` one.**
+        It does not merge with it, and that is the decision rather than an omission: a
+        merge of two field maps produces a third schema nobody wrote and nobody
+        versioned, which is the unversioned accumulation PACKAGE.md 5 exists to stop,
+        one level up. A name-level schema is read as the deployment saying *this type is
+        not the general case*, and the general case then does not apply to it.
+
+        ``name=None`` asks for the per-kind schema itself, which is what
+        ``attribute_census`` wants when it reports whether a key is *declared*.
+        """
         store = self._attribute_store()
         if store is None:
             return None
+        if name is not None:
+            override = store.get_attr_schema(namespace, kind, name=name)
+            if override is not None:
+                return self._schema_from_record(override)
         return self._schema_from_record(store.get_attr_schema(namespace, kind))
 
     def _check_attributes(
-        self, namespace: str, kind: str, attributes: dict
+        self, namespace: str, kind: str, name: str | None, attributes: dict
     ) -> tuple[AttributeSchema | None, list[str]]:
-        schema = self._schema_for(namespace, kind)
+        schema = self._schema_for(namespace, kind, name)
         if schema is None or schema.mode == "off":
             return schema, []
         return schema, validate_attributes(schema, attributes)

@@ -654,17 +654,38 @@ class FieldSpec:
 class AttributeSchema:
     namespace: str
     kind: str                       # entity | predicate | edge | value_set | <open>
-    version: int                    # monotonic per (namespace, kind)
+    version: int                    # monotonic per (namespace, kind, name)
     fields: dict[str, FieldSpec]
     additional: str                 # "allow" | "warn" | "forbid"  — unlisted keys
     mode: str                       # "off" | "warn" | "enforce"
     registered_at: datetime
     registered_by: str
+    name: str | None = None         # ruling R10 — None is the per-kind schema; a name
+                                    #   is a schema for that ONE type, shadowing it
 ```
 
-Stored in an eighth table, `oo_attr_schema (namespace, kind, version)` — **not** as a new `TypeEntry` kind. The dogfooding option (register a schema as `kind="attribute_schema"`, getting provenance and the approval loop for free) was considered and **rejected**: an attribute schema is not a word in the vocabulary, and putting it in `oo_type` means `list_types()` mixes schemas with vocabulary and `merge_types` can be pointed at one. That is `INTERFACE.md` §2.3's Cause B — one container meaning two things — committed by the schema itself. **Cost of the rejection, stated: attribute schemas have no proposal→approval loop in v0.** Recorded as a weakness in §11.
+Stored in an eighth table, `oo_attr_schema (namespace, kind, name, version)` — **not** as a new `TypeEntry` kind. The dogfooding option (register a schema as `kind="attribute_schema"`, getting provenance and the approval loop for free) was considered and **rejected**: an attribute schema is not a word in the vocabulary, and putting it in `oo_type` means `list_types()` mixes schemas with vocabulary and `merge_types` can be pointed at one. That is `INTERFACE.md` §2.3's Cause B — one container meaning two things — committed by the schema itself. **Cost of the rejection, stated: attribute schemas have no proposal→approval loop in v0.** Recorded as a weakness in §11.
 
 **`FieldSpec.description` is required and non-empty**, on exactly the reasoning of `INTERFACE.md` §2.1's non-empty `definition`: an undescribed field is how the escape hatch re-forms one level down.
+
+### 5.2b Name-level schemas shadow the per-kind one *(ruling **R10**, row 3e, 2026-08-29)*
+
+`name` is `None` for the per-kind schema — which is every schema this mechanism shipped with — and a type name for a schema that applies to **that one type**. The name-level schema **shadows** the per-kind one; every other name of that kind is judged by the per-kind schema exactly as before.
+
+**Why it is a ruling and not a tidy-up.** §5.6's third bullet records the limitation *in this mechanism's own flagship justification*, and `C15-07` asserts both of its horns: a schema keyed per kind cannot serve CMS's two `kind="value_set"` entries, because `scope_severity_code` must be made to declare an `ordering` (§5.1's whole argument) and `deficiency_corrected_status` has none to declare. Requiring the field refuses the unordered set for lacking something it has no business having; making it optional lets the ordered set be created declaring no order — **which is the CMS severity scale back inside somebody's transform, unversioned, which is the thing §5.1 says this mechanism exists to prevent.** There was no third option until this key change.
+
+**Four rules, and the first is the one to read twice:**
+
+1. **Shadowing is replacement, never merge.** A name-level schema's `fields` are the whole schema for that type; the per-kind schema's fields — including its `required` ones — do not come along. A merge of two field maps produces a third schema **nobody wrote and nobody versioned**, which is the unversioned accumulation this whole section exists to stop, one level up. The cost is stated: a deployment that wants the common fields in an override writes them there.
+2. **Fallback is per lookup, not per field.** `(namespace, kind, name)` if one exists, else `(namespace, kind)`, else no schema. One of the two governs a write; never both.
+3. **An override is a schema, not an exemption.** Its own `required` fields, `enum`s and `additional` rule apply with full force in `enforce` mode. `C15-10` asserts an override refusing its own write.
+4. **`Refusal(reason="attributes_schema_violation").detail` names which schema refused**, as `schema_name` (`None` = the per-kind one) beside `schema_version`. With two schemas in play *"which one refused me"* became a question a caller has to be able to answer.
+
+**Storage, and the one sentinel.** `name` is a `NOT NULL` column whose empty string means *the per-kind schema*. No type name can be empty — `INTERFACE.md` §2.1 requires `^[a-z][a-z0-9_]{0,63}$` — so one column carries both cases, the primary key stays a primary key rather than a partial index over a nullable column, and the two are never confusable. `AttributeSchema(name="")` raises rather than quietly meaning "per-kind": the sentinel belongs to the store, not to the caller. **This is the opposite decision from §5.7's projected `None`**, and deliberately so: there the colliding column belongs to the *host* and writing our sentinel into it is what `owns_schema=False` forbids; here the column is ours.
+
+**`attribute_census`'s `declared` still asks the per-kind schema**, and that is not an oversight. A census row is `(kind, key)` over every type of that kind, so a name-level schema declares a key for one type and not for the rest — answering `True` off one override would be a claim about types it never covered.
+
+**Store version 2.** See §9.6.
 
 ### 5.3 Three modes, and the default is `off`
 
@@ -719,7 +740,7 @@ This is the same move as `ConsumerReport.complete = False`: it does not solve th
 
 - It does not give `is_symmetric`/`inverse_label` a home. It lets them be *declared*; edge shape is still #4 (`INTERFACE.md` §9 contortion 1).
 - It does not validate cross-field rules (*"a symmetric edge must have no inverse label"*). `FieldSpec` is per-field on purpose; a rule language here would be a schema language, which is a much larger thing than v0 needs.
-- **It cannot serve two `value_set`s of one dataset differently, and that includes the two this section is justified on** *(recorded by row 3c, 2026-08-28, after an adversarial review round)*. A schema is keyed `(namespace, kind, version)` — **one per kind, not per type name** — and CMS has two `kind="value_set"` entries with different shapes: `scope_severity_code` must be made to declare an `ordering` (§5.1's whole argument) and `deficiency_corrected_status` has no order to declare. A deployment gets one of two wrong answers and there is no third: `ordering` required refuses the unordered set for lacking a field it has no business having, and `ordering` optional lets the ordered set be created with no ordering — **which is the CMS severity scale back inside somebody's transform, unversioned, which is the exact thing §5.1 says this mechanism exists to prevent.** Both horns are asserted by `C15-07`. The fix — key schemas `(namespace, kind, name)`, or allow a name-level override — is a change to §5.2's storage shape and **wants a ruling**; see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
+- ~~**It cannot serve two `value_set`s of one dataset differently**~~ — **FIXED by ruling R10, row 3e, 2026-08-29; see §5.2b.** *(Recorded by row 3c after an adversarial review round; the two horns stay asserted by `C15-07`, which is now the record of what the key change bought rather than a live limitation.)* A schema was keyed `(namespace, kind, version)` — **one per kind, not per type name** — and CMS has two `kind="value_set"` entries with different shapes. `C15-10` drives both of them through the name-level key and `C15-11` holds the other half: a name with no override of its own is still judged by the per-kind schema, so registering one exception does not quietly relax the kind.
 - It does not stop a deployment from writing `attributes={"stuff": {...}}` and putting an entire nested world in one declared `dict` field. Nothing can, short of a schema language.
 
 ### 5.7 Projected keys — when the backend owns the column *(row 3d, beacon finding U3)*
@@ -794,7 +815,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**130 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **One** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**132 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **Three** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup), `C15-10` and `C15-11` (ruling **R10**, name-level attribute schemas).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (14).** No interface call; this is the protocol itself.
 
@@ -988,7 +1009,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C14-06 | 6 | zero registered consumers ⇒ `known=0, complete=False` — a null result reported as a null result |
 | C14-07 | 7 | **the package ships no default type**: no name `default_type`, no fallback constant, anywhere in the public surface. The `related_to` fallback is caller policy and stays there |
 
-**C15 — the `attributes` mechanism (9).** §5 of this document.
+**C15 — the `attributes` mechanism (11).** §5 of this document.
 
 | id | asserts |
 |---|---|
@@ -1001,6 +1022,8 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C15-09 | **a projected key is censused, and the census says it is partial** (§5.7): on a backend with `stores_attributes=False` and a declared projection, `attribute_census` lists the projected key with `complete=False` and a `why_incomplete` naming what it counted. *(Row 3d, beacon finding **U3**. The census used to refuse outright on `stores_attributes=False` and return `entries=()` — a confident wrong answer on a backend that had written the key, in the one call whose job is making the escape hatch enumerable.)* |
 | C15-08 | **declining the optional `AttributeStore` extension leaves a backend conformant** (§5.5, ruling R2): `attribute_census` returns `entries=()`, `known=None` — never `0` — `complete=False` and a `why`, and attributes still round-trip. *(Row 3c. §5.5 and `2A-RUN.md` D-2 both said so and it was false: four C15 tests called `register_attribute_schema` unguarded, and `DegradedAdapter` re-declared the four extension methods unconditionally, so the tool built to construct degraded backends could not construct the one optional capability that is a **protocol** rather than a flag. Row 3d note: this row was missing from this table although the test existed and `test_manifest.py` counted it — found by an adversarial reviewer building from the document alone.)* |
 | C15-07 | **one schema per kind cannot serve both CMS `value_set`s:** with `ordering` required, `deficiency_corrected_status` is refused for lacking an order it has no business having; with `ordering` optional, `scope_severity_code` may be created claiming an order and declaring none — the pollution §5.1 says the mechanism exists to prevent. Both horns asserted. *(Row 3c, §5.6 — a limitation of the mechanism, not of any backend)* |
+| C15-10 | **a name-level schema shadows the per-kind one** (§5.2b, ruling **R10**): with the strict per-kind schema in force, `scope_severity_code` still obeys it and `deficiency_corrected_status` is still refused **by it** (`detail["schema_name"] is None`); registering a `(namespace, kind, name)` schema for that one name lets it through **judged by its own fields**, and the per-kind schema's `required` `ordering` does **not** come along — shadowing is replacement, never merge. *(Row 3e. `C15-07`'s two horns, closed on CMS's own two value sets.)* |
+| C15-11 | **the per-kind schema still governs every name without an override** (§5.2b rule 2): a third `value_set` with no override is refused by the per-kind schema, and the refusal names which schema refused it. *(Row 3e. The failure mode a name-level key invites is that one exception quietly relaxes the kind; this is the test that would catch it.)* |
 
 **C16 — whole-store invariants (4).** *(Amended by row 3c: this said "run once at suite end, over everything the suite wrote". The shipped group is **function-scoped** — a fixture drives one store through representative write paths and each test then inspects it. Recorded at 2A as deviation D-9 and never brought inline here. It matters because "everything the suite wrote" would be a stronger claim than the tests make.)*
 
@@ -1465,6 +1488,23 @@ Do not conflate them:
 | **attribute schema version** | `oo_type.attr_schema_version`, `oo_attr_schema.version` | the shape of a `kind`'s `attributes` **content** — §5 |
 
 The first is forward-only and may be dropped. The second is never applied backwards to existing rows at all (§5.4). They move independently.
+
+### 9.6 Store version 2 — `oo_attr_schema` gains `name` *(ruling **R10**, row 3e, 2026-08-29)*
+
+The first store-schema revision this package has shipped, and it is the case §9.4 was written for.
+
+| | |
+|---|---|
+| **migration** | `backends/migrations/{sqlite,postgres}/0002_name_level_attr_schemas.sql` |
+| **shape** | `DROP TABLE oo_attr_schema`, then recreate with `name TEXT NOT NULL DEFAULT ''` and `PRIMARY KEY (namespace, kind, name, version)` |
+| **what it discards** | **every attribute schema registered against a v0 store.** Nothing else. |
+| **what it does not touch** | `oo_type`, `oo_proposal`, `oo_event`, `oo_consumer`, `oo_usage`, `oo_type_predicate`, `oo_attr_observed` — the vocabulary, its provenance, its consumers and the census all survive |
+
+**Drop-and-recreate is exercised, not merely permitted.** §9.4 says a `v0` store may be dropped and rebuilt rather than migrated and that this package promises no migration path between v0 schema revisions; the practical form of that promise is that anything in a v0 store that matters must be reproducible from its source. An `AttributeSchema` is **deployment configuration** (§5.2) — it is written by the deployment, from the deployment's own source, and re-registering it is one call. That is why this revision spends the permission here rather than writing an `ALTER`: the data it discards is the one kind in the store that is reproducible by definition.
+
+**What survives is chosen, not incidental.** `oo_type.attr_schema_version` is untouched, so an entry written under a schema this migration drops **still says which generation of `attributes` it belongs to** (§5.4: entries are never rewritten and never retroactively invalidated), and `oo_attr_observed` keeps the spread of versions per key, so `attribute_census` still reports what was written and under what. A migration that dropped those too would have made §5.4's promise unkeepable, which is a different and much worse thing than dropping a config table.
+
+**A store still at version 1 is not read under version-2 assumptions.** `migrate()` applies `0002` in one transaction with its version row (§9.1); a store at version 2 opened by an older package is refused outright (§9.2). `owns_schema=False` stores are unaffected — `migrate()` issues no DDL there and the host owns the column (§9.3).
 
 ---
 

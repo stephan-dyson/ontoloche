@@ -390,6 +390,7 @@ class SqlStore:
         return [
             rec.namespace,
             rec.kind,
+            rec.name or "",
             rec.version,
             self.d.enc_json(rec.fields_json),
             rec.additional,
@@ -399,10 +400,21 @@ class SqlStore:
         ]
 
     def attr_schema_from_row(self, row: Iterable[Any]) -> AttrSchemaRecord:
-        ns, kind, version, fields_json, additional, mode, registered_at, registered_by = row
+        (
+            ns,
+            kind,
+            name,
+            version,
+            fields_json,
+            additional,
+            mode,
+            registered_at,
+            registered_by,
+        ) = row
         return AttrSchemaRecord(
             namespace=ns,
             kind=kind,
+            name=name or None,
             version=version,
             fields_json=self.d.dec_json(fields_json) or {},
             additional=additional,
@@ -1205,12 +1217,16 @@ class BaseSqlAdapter:
         return [self.m.event_from_row(r) for r in rows]
 
     # ------------------------------------------------- optional attribute extension
+    #: ``name`` is store version 2 (ruling R10). The empty string is the per-kind
+    #: schema: no type name can be empty (INTERFACE.md 2.1), so one NOT NULL column
+    #: carries both cases and the primary key stays a primary key.
     _ATTR_SCHEMA_COLS = (
-        "namespace, kind, version, fields_json, additional, mode, registered_at, registered_by"
+        "namespace, kind, name, version, fields_json, additional, mode, "
+        "registered_at, registered_by"
     )
 
     def put_attr_schema(self, rec: AttrSchemaRecord) -> AttrSchemaRecord:
-        marks = self.m.marks(8)
+        marks = self.m.marks(9)
         updates = (
             "fields_json = excluded.fields_json, additional = excluded.additional, "
             "mode = excluded.mode, registered_at = excluded.registered_at, "
@@ -1218,28 +1234,41 @@ class BaseSqlAdapter:
         )
         self._execute(
             f"INSERT INTO oo_attr_schema ({self._ATTR_SCHEMA_COLS}) VALUES ({marks}) "
-            f"ON CONFLICT (namespace, kind, version) DO UPDATE SET {updates}",
+            f"ON CONFLICT (namespace, kind, name, version) DO UPDATE SET {updates}",
             self.m.attr_schema_values(rec),
         )
-        got = self.get_attr_schema(rec.namespace, rec.kind, version=rec.version)
+        got = self.get_attr_schema(
+            rec.namespace, rec.kind, name=rec.name, version=rec.version
+        )
         assert got is not None
         return got
 
     def get_attr_schema(
-        self, namespace: str, kind: str, *, version: int | None = None
+        self,
+        namespace: str,
+        kind: str,
+        *,
+        name: str | None = None,
+        version: int | None = None,
     ) -> AttrSchemaRecord | None:
         ph = self.d.ph
+        # Exact lookup only -- ``name=None`` fetches the PER-KIND schema and never a
+        # name-level one. The fallback from a name to its kind is the registry's
+        # decision (PACKAGE.md 5.2b), and hiding it in the storage layer would make a
+        # primitive answer a question about policy.
         if version is None:
             row = self._fetchone(
                 f"SELECT {self._ATTR_SCHEMA_COLS} FROM oo_attr_schema "
-                f"WHERE namespace = {ph} AND kind = {ph} ORDER BY version DESC LIMIT 1",
-                (namespace, kind),
+                f"WHERE namespace = {ph} AND kind = {ph} AND name = {ph} "
+                f"ORDER BY version DESC LIMIT 1",
+                (namespace, kind, name or ""),
             )
         else:
             row = self._fetchone(
                 f"SELECT {self._ATTR_SCHEMA_COLS} FROM oo_attr_schema "
-                f"WHERE namespace = {ph} AND kind = {ph} AND version = {ph}",
-                (namespace, kind, version),
+                f"WHERE namespace = {ph} AND kind = {ph} AND name = {ph} "
+                f"AND version = {ph}",
+                (namespace, kind, name or "", version),
             )
         return None if row is None else self.m.attr_schema_from_row(row)
 

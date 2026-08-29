@@ -142,13 +142,14 @@ CREATE TABLE oo_usage (
 CREATE TABLE oo_attr_schema (
     namespace     TEXT NOT NULL,
     kind          TEXT NOT NULL,
+    name          TEXT NOT NULL DEFAULT '',
     version       INTEGER NOT NULL,
     fields_json   TEXT NOT NULL DEFAULT '{}',
     additional    TEXT NOT NULL DEFAULT 'allow',
     mode          TEXT NOT NULL DEFAULT 'off',
     registered_at TEXT NOT NULL,
     registered_by TEXT NOT NULL,
-    PRIMARY KEY (namespace, kind, version)
+    PRIMARY KEY (namespace, kind, name, version)
 );
 
 CREATE TABLE oo_attr_observed (
