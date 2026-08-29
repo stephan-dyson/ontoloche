@@ -222,3 +222,50 @@ def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter):
 
     page = adapter.find_types(TypeQuery(namespace="default"))
     assert page.known == len(page.records) and page.complete is True
+
+
+def test_c0_07_g1s_key_is_scoped_so_one_word_in_two_namespaces_is_two_rows(adapter):
+    """G1 is uniqueness of ``(namespace, kind, name)`` -- C0-02 tests the uniqueness,
+    this tests the *scope*, which is the half mechanism 4 depends on.
+
+    INTERFACE.md 2.6 answers semantic collision with ``namespace``: when two publishers
+    mean different things by one word, the answer is scoping and it must not be a merge.
+    That answer is only worth anything if the store will actually hold both rows, keep
+    them apart, and hand each back to the caller that asked in its namespace. Added by
+    row 3c after UC3 (NYC Open Data) found the whole suite exercised two namespaces in
+    exactly one place -- C10-04, the *refusal* -- and never the coexistence the refusal
+    presupposes. See docs/findings/3C-VALIDATION.md.
+
+    The fixture is UC3's: ``status`` means the life state of a tree to Parks, the
+    workflow state of a request to 311, and the service state of a meter to
+    Transportation. No value appears in more than one of the three sets.
+    """
+    adapter.migrate()
+    rows = {
+        "dpr": _type(name="status", namespace="dpr", kind="value_set",
+                     definition="whether a street tree is alive, dead, or a stump",
+                     attributes={"values": ["Alive", "Stump", "Dead"]}),
+        "oti_311": _type(name="status", namespace="oti_311", kind="value_set",
+                         definition="where a 311 service request is in its workflow",
+                         attributes={"values": ["Open", "Closed", "Pending"]}),
+        "dot": _type(name="status", namespace="dot", kind="value_set",
+                     definition="whether a parking meter is in service",
+                     attributes={"values": ["Active", "Inactive"]}),
+    }
+    for rec in rows.values():
+        # expect_absent=True must NOT collide across namespaces -- if it does, the
+        # second publisher cannot register at all and scoping is not an answer.
+        adapter.put_type(rec, expect_absent=True)
+
+    for namespace, rec in rows.items():
+        got = adapter.get_type(namespace, "status", kind="value_set")
+        assert got is not None, f"{namespace}:status went missing"
+        assert got.definition == rec.definition, "one namespace overwrote another"
+        assert got.attributes == rec.attributes
+
+    # And the collision is still refused *within* a namespace.
+    with pytest.raises(AlreadyExists):
+        adapter.put_type(rows["dpr"], expect_absent=True)
+
+    everywhere = adapter.find_types(TypeQuery(namespace=None, kind="value_set"))
+    assert sorted(r.namespace for r in everywhere.records) == ["dot", "dpr", "oti_311"]
