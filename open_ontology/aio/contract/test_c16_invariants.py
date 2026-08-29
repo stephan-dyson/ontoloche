@@ -93,6 +93,7 @@ async def exercised(adapter, make_registry, clock):
     registry.seeder = seeder  # the registry later writes must go through -- see above
     return registry
 
+@pytest.mark.requires_capability("stores_events")
 async def test_c16_01_every_active_entry_has_an_approver(exercised, adapter):
     page = await adapter.find_types(TypeQuery(include_retired=True))
     active = [r for r in page.records if r.status == "active"]
@@ -102,6 +103,7 @@ async def test_c16_01_every_active_entry_has_an_approver(exercised, adapter):
         assert approver, f"{rec.name} is active with no approver"
         assert approver.strip()
 
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
 async def test_c16_02_no_retired_name_was_reused(exercised, adapter):
     page = await adapter.find_types(TypeQuery(include_retired=True))
     retired = {r.name for r in page.records if r.status == "retired"}
@@ -117,6 +119,7 @@ async def test_c16_02_no_retired_name_was_reused(exercised, adapter):
     assert {r.name for r in after.records if r.status == "retired"} == retired
     assert len(after.records) == len(page.records), "and no new entry appeared"
 
+@pytest.mark.requires_capability("stores_events")
 async def test_c16_03_no_events_bytes_changed_after_they_were_written(exercised, adapter, clock):
     before = list(await adapter.read_events("default"))
     assert before
@@ -129,6 +132,7 @@ async def test_c16_03_no_events_bytes_changed_after_they_were_written(exercised,
     assert len(after) > len(before)
     assert after[: len(before)] == before, "append-only: a correction is a new event"
 
+@pytest.mark.requires_capability("stores_events")
 async def test_c16_04_every_list_shaped_result_carries_complete_and_known(exercised):
     for shape in (TypeListing, ConsumerReport):
         names = {f.name for f in dataclass_fields(shape)}

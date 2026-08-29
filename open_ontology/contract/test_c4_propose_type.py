@@ -119,6 +119,7 @@ def test_c4_07_auto_approval_is_legible_never_blank(adapter, make_registry):
     )
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c4_08_a_retired_name_is_not_silently_reusable(registry, adapter):
     seed(registry, "watch", definition="a thing a user watches")
     registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")

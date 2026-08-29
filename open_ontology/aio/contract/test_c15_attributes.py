@@ -51,6 +51,7 @@ def _schema(mode: str, version: int = 1, fields=None, additional: str = "allow")
         registered_by="deployment",
     )
 
+@pytest.mark.requires_capability("stores_attributes")
 async def test_c15_01_with_no_schema_attributes_are_opaque_unread_and_unvalidated(registry):
     entry = await seed(
         registry,
@@ -131,6 +132,7 @@ async def test_c15_04_enforce_mode_refuses_with_the_offending_field(registry):
     assert any(v.startswith("ordering:") for v in refusal.detail["violations"])
     assert refusal.detail["schema_version"] == 1
 
+@pytest.mark.requires_capability("stores_attributes")
 @pytest.mark.requires_attribute_store
 async def test_c15_05_a_new_required_field_does_not_invalidate_older_rows(registry):
     await registry.register_attribute_schema(
@@ -174,7 +176,7 @@ async def test_c15_05_a_new_required_field_does_not_invalidate_older_rows(regist
     )
     assert isinstance(refusal, Refusal) and refusal.reason == "attributes_schema_violation"
 
-@pytest.mark.requires_capability("stores_proposals")
+@pytest.mark.requires_capability("stores_proposals", "stores_attributes")
 @pytest.mark.requires_attribute_store
 async def test_c15_06_the_cms_severity_case_an_ordered_set_with_no_written_ordering(registry):
     """The reason the attribute-schema mechanism exists at all.
@@ -284,6 +286,7 @@ async def test_c15_07_one_schema_per_kind_cannot_serve_two_value_sets_of_one_dat
         "kind cannot hold both CMS value_sets correctly"
     )
 
+@pytest.mark.requires_capability("stores_attributes")
 async def test_c15_08_declining_the_attribute_store_leaves_a_backend_conformant(
     adapter, make_registry
 ):

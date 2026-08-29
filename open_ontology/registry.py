@@ -1317,12 +1317,6 @@ class Registry:
         acknowledge = tuple(acknowledge)
         target_ns = into_namespace or namespace
 
-        if acknowledge and not self.caps.stores_events:
-            return Refusal(
-                "cannot_record_override",
-                {"why": self.caps.reason("stores_events"), "acknowledge": list(acknowledge)},
-            )
-
         left = self._require(namespace, from_)
         right = self._require(target_ns, into)
 
@@ -1391,6 +1385,20 @@ class Registry:
             return Refusal(
                 "cross_namespace_merge",
                 {"from": left.namespace, "into": right.namespace, "overridable": False},
+            )
+
+        # An acknowledgement that cannot be recorded is refused -- but only AFTER the
+        # four non-overridable guards above. A merge those refuse is refused whether or
+        # not anything could be written down, and answering `cannot_record_override`
+        # there gives the wrong reason for the right outcome: a caller trying to
+        # acknowledge past the kill row must be told **predicate_merge, non-overridable**,
+        # not that the audit log is missing. Moved here by row 3c, after a capability
+        # sweep showed the old position (before guard 1) turning three non-overridable
+        # refusals into a capability complaint.
+        if acknowledge and not self.caps.stores_events:
+            return Refusal(
+                "cannot_record_override",
+                {"why": self.caps.reason("stores_events"), "acknowledge": list(acknowledge)},
             )
 
         # 5

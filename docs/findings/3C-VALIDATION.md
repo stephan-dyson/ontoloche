@@ -313,6 +313,22 @@ Each names the recommendation, so a ruling is a yes/no rather than a research ta
 
 **[Observed] neither was true. 26 of 113 tests failed against such a backend**, four of them crashing outright. Causes and fixes are in `PACKAGE.md` §8b.5; the flagship case is now closed and verified (`96 passed, 25 skipped, exit 0`, with the two reference backends still running all 115).
 
+**Then measured properly, and the answer was worse.** A later round swept **every** optional capability, one at a time, nothing else degraded. **[Observed] six of the eight failed**, from 1 failure to 24 — so §3.2's claim was false for most of the flags it covers, not just the one the reviewer found. Two of the six were defects in the **registry**, not the suite, and one of them is the venture's own kill criterion:
+
+| declined alone | before | after |
+|---|---|---|
+| `stores_proposals` | 26 failed | conformant — 101 passed, 25 skipped |
+| `stores_events` | 14 failed, 4 errors | conformant — 109 passed, 17 skipped |
+| `stores_attributes` | 10 failed | conformant — 114 passed, 12 skipped |
+| `stores_aliases` | 2 failed | conformant — 122 passed, 4 skipped |
+| `indexes_membership` | 24 failed | conformant — 100 passed, 26 skipped |
+| `counts_usage` | 8 failed | conformant — 116 passed, 10 skipped |
+| `timestamps_usage` | 3 failed | conformant — 121 passed, 5 skipped |
+| `owns_schema` | passed | conformant |
+| no `AttributeStore` | 5 failed | conformant — 119 passed, 7 skipped |
+
+**[`docs/tools/check_capability_matrix.py`](../tools/check_capability_matrix.py) now runs that table on demand and the suite runs it**, so §3.2's claim is measured rather than asserted — the same move as `check_spec_drift.py`, and for the same reason: the claim was wrong for four deliverables and nobody's eye caught it.
+
 **What remains open, and it is a design question rather than a test bug.** A backend declining **several** optional capabilities at once still fails:
 
 - with `stores_events=False`, an acknowledged merge is correctly refused (`cannot_record_override`, §3.6), so `C16`'s fixture cannot build the store whose invariants `C16` checks;

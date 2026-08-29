@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 #: PACKAGE.md 6.2, group by group.
 EXPECTED_PER_GROUP = {
     0: 9,
@@ -92,6 +94,36 @@ def test_the_spec_still_describes_the_code():
         import pytest
 
         pytest.skip("PENDING -- docs/tools/check_spec_drift.py is not in this install")
+
+    done = subprocess.run(
+        [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+@pytest.mark.nonbinding
+def test_every_optional_capability_can_be_declined_alone():
+    """Not one of the 119 -- suite bookkeeping, and `nonbinding` on purpose.
+
+    `PACKAGE.md` 3.2's claim -- *"every other flag may be False and the backend can
+    still be conformant"* -- was false for **six of the eight** optional capabilities
+    when row 3c first measured it, and had been for four deliverables. It is now
+    checked: `docs/tools/check_capability_matrix.py` runs the whole suite against nine
+    degraded configurations and reports a table.
+
+    **`nonbinding`, because it runs the suite inside the suite.** A third-party backend
+    running `--adapter` should not pay for nine extra full runs, and the claim it checks
+    is about *this repository's* reference backend, not theirs. It is also skipped
+    outside a source checkout, since an installed wheel ships no `docs/`.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    checker = root / "docs" / "tools" / "check_capability_matrix.py"
+    if not checker.exists():  # pragma: no cover - an installed wheel has no docs/
+        pytest.skip("PENDING -- docs/tools/check_capability_matrix.py is not in this install")
 
     done = subprocess.run(
         [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)

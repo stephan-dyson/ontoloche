@@ -31,6 +31,7 @@ async def _with_live_consumer(registry):
         Consumer(id="comment_service.can_comment", gate="commentable", on_unknown="drop")
     )
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c9_01_a_live_consumer_refuses_the_retirement(registry):
     await _with_live_consumer(registry)
     refusal = await registry.retire("task", "we think nobody uses it", retired_by="user:sd")
@@ -39,15 +40,22 @@ async def test_c9_01_a_live_consumer_refuses_the_retirement(registry):
     assert refusal.detail["gates_on"] == ["comment_service.can_comment"]
     assert (await registry.list_types(status="active")).types
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c9_02_force_overrides_and_records_or_is_refused(adapter, make_registry):
     registry = await make_registry(adapter)
     await _with_live_consumer(registry)
 
-    forced = await registry.retire("task", "the service is being deleted", retired_by="user:sd", force=True)
-    assert isinstance(forced, TypeEntry) and forced.status == "retired"
-    retired_events = [e for e in forced.provenance.history if e.event == "retired"]
-    assert retired_events[0].detail["forced"] is True
-    assert retired_events[0].detail["overrode"] == ["comment_service.can_comment"]
+    # The "overrides AND records" half needs a backend that can record. On one that
+    # cannot, the whole call is the refusal below -- which is this test's other half and
+    # the more important one. Split by row 3c's capability sweep.
+    if (await adapter.capabilities()).stores_events:
+        forced = await registry.retire(
+            "task", "the service is being deleted", retired_by="user:sd", force=True
+        )
+        assert isinstance(forced, TypeEntry) and forced.status == "retired"
+        retired_events = [e for e in forced.provenance.history if e.event == "retired"]
+        assert retired_events[0].detail["forced"] is True
+        assert retired_events[0].detail["overrode"] == ["comment_service.can_comment"]
 
     # On a backend that cannot record the override, the override is refused. An
     # unrecorded, unattributable destructive change is what this registry exists to
@@ -59,6 +67,7 @@ async def test_c9_02_force_overrides_and_records_or_is_refused(adapter, make_reg
     assert refusal.reason == "cannot_record_override"
     assert refusal.detail["why"] == NO_EVENTS["stores_events"]
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c9_03_retiring_without_usage_evidence_proceeds_but_warns(adapter, make_registry):
     setup = await make_registry(adapter)
     await seed(setup, "blocks", definition="this work item blocks that one")
@@ -72,6 +81,7 @@ async def test_c9_03_retiring_without_usage_evidence_proceeds_but_warns(adapter,
     assert entry.status == "retired"
     assert "retired_without_usage_evidence" in entry.warnings
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c9_04_a_retired_name_is_not_reusable(registry, adapter):
     await seed(registry, "watch", definition="a thing a user watches")
     await registry.retire("watch", "superseded by `capture`", retired_by="user:sd")
@@ -94,6 +104,7 @@ async def test_c9_05_retire_requires_a_reason(registry):
     with pytest.raises(ValueError):
         await registry.retire("watch", "   ", retired_by="user:sd")
 
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
 async def test_c9_06_the_successor_is_recorded_and_surfaces_in_provenance(registry):
     await seed(registry, "capture", definition="the word that replaced it")
     await seed(registry, "watch", definition="a thing a user watches")
@@ -106,6 +117,7 @@ async def test_c9_06_the_successor_is_recorded_and_surfaces_in_provenance(regist
     assert retired_events[0].detail["successor"] == "capture"
     assert retired_events[0].detail["reason"] == "superseded by `capture`"
 
+@pytest.mark.requires_capability("stores_events")
 async def test_c9_07_an_unknowable_consumer_set_blocks_the_retirement(adapter, make_registry):
     """**Mechanism C, committed by the call built to catch it.** Row 3c, after an
     adversarial review round reproduced this live.

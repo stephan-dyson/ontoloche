@@ -135,6 +135,7 @@ def test_c3_09_cms_processing_date_is_an_export_artefact(registry):
     assert resolution.reason == "export_artefact"
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c3_10_a_retired_name_is_named_in_the_resolution_not_silently_omitted(registry):
     """**Rule U, third instance.** `resolve_type` is the call INTERFACE.md 5.3 says is
     *"designed against mechanism 2 -- nobody could find the existing types"*, and it

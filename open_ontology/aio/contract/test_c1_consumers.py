@@ -65,6 +65,7 @@ async def test_c1_03_an_unknown_type_raises_rather_than_returning_an_empty_repor
     with pytest.raises(UnknownType):
         await world.consumers("nothing_by_this_name")
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c1_04_gates_on_is_the_consumers_whose_gate_includes_the_type(world):
     report = await world.consumers("task")
     assert {c.id for c in report.gates_on} == {
