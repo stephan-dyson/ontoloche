@@ -1,6 +1,6 @@
 # STATUS — where we are, at a glance
 
-**Updated:** 2026-08-28 21:10 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
+**Updated:** 2026-08-28 21:20 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
 
 | Roadmap item | Status |
 |---|---|
@@ -14,7 +14,7 @@
 | #2 `docs/PACKAGE.md` v0 | ✅ done |
 | #3 Phase 2A reference implementation | ✅ done — 229 tests green, both backends |
 | 3b Async adapter | ✅ done — 267 tests green, both async backends; generated from the sync source, not forked ([docs/3B-ASYNC.md](docs/3B-ASYNC.md)) |
-| Docs folder reorg | ⏳ queued (after 3b) |
+| Docs folder reorg | 🔵 in flight (Sonnet, mechanical) |
 | `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
 | 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ⏳ queued (after reorg) |
 | #4 `docs/EDGES.md` v0 | ⏳ queued (after 3c) |
