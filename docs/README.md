@@ -49,5 +49,7 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 |---|---|
 | [make_sample.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/make_sample.py) | Cuts the 400-row Montana sample from the public CMS citations file. |
 | [characterize.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/characterize.py) | Counts the pathologies over all 419,479 rows (the numbers in 0.5). |
+| [check_links.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/check_links.py) | Every relative markdown link in the repo resolves. Run before landing. |
+| [check_spec_drift.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/check_spec_drift.py) | **Every data shape and signature printed in `INTERFACE.md` still matches the code.** Written at row 3c after six review rounds each found one that did not; it found two more immediately. The contract suite runs it. |
 
 **Standing constraint 0 applies to everything here: no employer data, ever — public CMS data only.**

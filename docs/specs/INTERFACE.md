@@ -47,6 +47,8 @@ It is not a schema store and it is not a graph. It holds names, definitions, pro
 | `predicates` | `list[str]` | yes | Names of `kind="predicate"` entries this type satisfies. May be empty |
 | `attributes` | `dict[str, Any]` | yes | Kind-specific payload, **opaque to v0**. Defaults `{}`. The escape hatch that keeps v0 from pretending to know what an edge needs |
 | `aliases` | `list[str]` | no | Prior names, and identifiers imported from elsewhere (a Foundry `apiName`/`rid` lands here or in `provenance.imported_from`, per 0.3 consequence 3) |
+| `warnings` | `list[str]` | yes | Defaults `[]`. The seven values of §5.4's table; two of them (`name_previously_retired`, `retired_without_usage_evidence`) reach a caller **only** here. *(Added by row 3c — implemented at 2A as deviation D-3 and described by §5.4, §5.5 and §5.9, but never listed in this table)* |
+| `attr_schema_version` | `int \| None` | yes | The attribute schema in force **when this entry was written** — `None` means it was written with validation off. Owned by `PACKAGE.md` §5.4, which is why it is opaque here: v0 never reads it, and it is carried so a reader can tell *which generation* of `attributes` they are looking at without the registry pretending to interpret them. §5.4 there: entries written under an older schema are never rewritten and never retroactively invalidated. *(Added by row 3c after a sixth adversarial review round — it is populated on every `TypeEntry` the registry returns and appeared in neither this table nor the deviation ledger)* |
 
 **Why `attributes` is deliberately dumb.** Tenshen's relationship types carry `is_symmetric` and `inverse_label`; CMS's value sets carry an ordering. Neither belongs in a v0 type registry, and inventing homes for both would be designing #4 and #2 here. They go in `attributes` and the registry never reads them. **Recorded as a known weakness, not a solved problem** — `attributes` is where an unversioned schema will accumulate if nobody watches it.
 
@@ -89,7 +91,12 @@ Provenance:
     evidence:          list[Evidence]
     imported_from:     dict | None    # opaque foreign identifiers: {"system": "foundry", "apiName": ..., "rid": ...}
     history:           list[ProvenanceEvent]   # append-only; nothing here is ever rewritten
+    history_why:       str | None     # why `history` is empty, when it is. Rule U:
+                                      #   an empty history must not read as "nothing
+                                      #   happened" on a backend that cannot store events
 ```
+
+*(`history_why` added to this shape by row 3c. It was implemented at 2A as deviation D-4 — `PACKAGE.md` §3.4 primitive 15 requires an empty `history` to carry a `why` — and §11 recorded it, but the shape above never gained the field.)*
 
 **Rule:** `approved_by` is never null on an `active` type. If nothing human approved it, the value is `"auto:<policy-name>"`. **A registry that leaves the field blank invites a reader to assume a human signed off** — that is the rubber-stamping failure `WALKTHROUGH.md` names, arriving through the data model rather than through the UI.
 
@@ -463,10 +470,15 @@ def list_types(
 ```
 TypeListing:
     types:    list[TypeEntry]
-    known:    int
+    known:    int | None          # None = the backend cannot count. NOT 0
     complete: bool
     why_incomplete: str | None
+    excluded_unknown: int | None  # under `orphaned=`, how many rows were excluded
+                                  #   BECAUSE their orphan state is unknown — never
+                                  #   folded into either answer. None when not filtering
 ```
+
+*(`excluded_unknown` added to this shape, and `known` corrected to `int | None`, by row 3c. Both were implemented at 2A — deviations D-5 and Rule K's nullability — and §11 recorded the first, but the shape above never gained either.)*
 
 **Designed against: mechanism 2** — this is the call whose absence means "nobody could find the existing types". The `predicate=` filter is how a caller reads a capability set without flattening it.
 
@@ -554,6 +566,8 @@ def merge_types(
     *,
     merged_by: str,
     namespace: str = "default",
+    into_namespace: str | None = None,   # None = same namespace. Refusal #4 is
+                                         #   unreachable without it — see D-7 below
     acknowledge: list[str] = (),      # explicit acknowledgement of named guard warnings
 ) -> MergeResult | Refusal: ...
 ```
@@ -569,8 +583,10 @@ MergeResult:
     entry:        TypeEntry      # `into` as it now stands
     acknowledged: list[str]      # the guard warnings the caller named, recorded in history
     aliases_added: list[str]     # `from_`'s name and aliases, now on `into`
-    warnings:     list[str]
+    warnings:     list[str]      # RESERVED — always empty in v0. See below
 ```
+
+**`MergeResult.warnings` is reserved and always empty in v0.** [Observed] `merge_types` never populates it. It is kept because every other result shape here carries one and a merge is the call most likely to want one later — but **v0 makes no warning here, and a caller must not read an empty `warnings` as "this merge was clean"**; the guards either refused or were explicitly acknowledged, and `acknowledged` is where that record is. *(Recorded by row 3c after a sixth adversarial review round; an always-empty field asserts nothing false, but a reader who did not know it was always empty could infer something it does not say.)*
 
 **What a merge does, and what it does not.** `from_` is **retired** with `into` as its `successor`, and `from_`'s name joins `into`'s `aliases` — so the old word still resolves and §5.9's rule that a retired name is not reusable still holds. **Nothing is deleted.** A merge is two lifecycle writes and an alias, not a destruction, which is what makes the guard list below a defence rather than a formality.
 
@@ -973,6 +989,8 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 - **`propose_type` and `reject` can return a `Refusal`** — required by `PACKAGE.md` §3.6 and §5.3, absent from §5.4 and §5.5's signatures (D-10).
 - **The call count is corrected** *(row 3c, 2026-08-28)*. §5.10, §12 and §13 said *twelve*; enumerating §5.1–§5.11 gives **thirteen** — `consumers`, `predicates`, `resolve_type`, `propose_type`, `approve`, `reject`, `list_types`, `usage`, `provenance`, `retire`, `merge_types`, `register_consumer`, `record_use`. All three now say thirteen, and `PACKAGE.md` §2.2's counting note is resolved rather than carried forward. *(A fifth review round also found that §11 had been misciting itself: the twelve appeared in §5.10, §12 and §13, never in §0.)*
 - **D-11 — `propose_type` under `approval_policy="auto"` meeting the tier gate** returns a still-`pending` `Proposal` warning `auto_approval_refused:tier_below_auto_approve_policy`, which is neither of the two outcomes §5.4 and §2.7 describe. **Now documented in §5.4** *(added by row 3c after a third adversarial review round; it was recorded in `2A-RUN.md` and this list had failed to carry it forward, leaving §13's "a stated behaviour when uncertain" false for this call)*.
+
+> **The drift this section keeps recording is now checked mechanically** *(row 3c, 2026-08-28)*. Six consecutive adversarial review rounds each found a printed shape or signature that had drifted from the reference implementation — `Resolution`, `predicates()`, `register_consumer`, `PredicateEntry.extent_size`, `MergeResult` (absent entirely), `merge_types`' `into_namespace`, `TypeEntry`'s last two fields. Every one was caught by a reader comparing two files by eye, and every one had survived earlier readers doing the same. [`docs/tools/check_spec_drift.py`](../tools/check_spec_drift.py) compares all fifteen printed shapes and all thirteen signatures against `types.py` and `registry.py`, and **found two more the moment it was written** — `Provenance.history_why` and `TypeListing.excluded_unknown`, both recorded as deviations below and both missing from the shapes above. The contract suite runs it, so this document cannot drift from the code again without the suite saying so.
 
 **Recorded by roadmap row 3c (the UC3 validation pass), 2026-08-28.** §10b runs the NYC Open Data fixture — three agencies, one word, three meanings — against this document and records **five contortions (8–12), none designed away.** Those that this document must answer in v1, in the order they cost the most:
 
