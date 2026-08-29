@@ -14,12 +14,14 @@
 """
 
 from __future__ import annotations
+import pytest
 from datetime import timedelta
 from open_ontology.types import REFUSAL_REASONS, Consumer, Refusal
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c11_01_a_consumer_round_trips_intact(registry):
     stored = await registry.register_consumer(
         Consumer(
@@ -54,6 +56,7 @@ async def test_c11_02_a_consumer_may_gate_on_a_predicate_that_does_not_exist(reg
     report = await registry.consumers("capture")
     assert [c.id for c in report.would_drop] == ["future_service.render"]
 
+@pytest.mark.requires_capability("timestamps_usage", "counts_usage")
 async def test_c11_03_record_use_advances_last_seen(registry, clock):
     await seed(registry, "blocks", definition="this work item blocks that one")
     await registry.record_use("blocks", by="work_link_service")

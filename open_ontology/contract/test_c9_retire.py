@@ -23,6 +23,7 @@ def _with_live_consumer(registry):
     )
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c9_01_a_live_consumer_refuses_the_retirement(registry):
     _with_live_consumer(registry)
     refusal = registry.retire("task", "we think nobody uses it", retired_by="user:sd")
@@ -32,15 +33,22 @@ def test_c9_01_a_live_consumer_refuses_the_retirement(registry):
     assert registry.list_types(status="active").types
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c9_02_force_overrides_and_records_or_is_refused(adapter, make_registry):
     registry = make_registry(adapter)
     _with_live_consumer(registry)
 
-    forced = registry.retire("task", "the service is being deleted", retired_by="user:sd", force=True)
-    assert isinstance(forced, TypeEntry) and forced.status == "retired"
-    retired_events = [e for e in forced.provenance.history if e.event == "retired"]
-    assert retired_events[0].detail["forced"] is True
-    assert retired_events[0].detail["overrode"] == ["comment_service.can_comment"]
+    # The "overrides AND records" half needs a backend that can record. On one that
+    # cannot, the whole call is the refusal below -- which is this test's other half and
+    # the more important one. Split by row 3c's capability sweep.
+    if adapter.capabilities().stores_events:
+        forced = registry.retire(
+            "task", "the service is being deleted", retired_by="user:sd", force=True
+        )
+        assert isinstance(forced, TypeEntry) and forced.status == "retired"
+        retired_events = [e for e in forced.provenance.history if e.event == "retired"]
+        assert retired_events[0].detail["forced"] is True
+        assert retired_events[0].detail["overrode"] == ["comment_service.can_comment"]
 
     # On a backend that cannot record the override, the override is refused. An
     # unrecorded, unattributable destructive change is what this registry exists to
@@ -53,6 +61,7 @@ def test_c9_02_force_overrides_and_records_or_is_refused(adapter, make_registry)
     assert refusal.detail["why"] == NO_EVENTS["stores_events"]
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c9_03_retiring_without_usage_evidence_proceeds_but_warns(adapter, make_registry):
     setup = make_registry(adapter)
     seed(setup, "blocks", definition="this work item blocks that one")
@@ -67,6 +76,7 @@ def test_c9_03_retiring_without_usage_evidence_proceeds_but_warns(adapter, make_
     assert "retired_without_usage_evidence" in entry.warnings
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c9_04_a_retired_name_is_not_reusable(registry, adapter):
     seed(registry, "watch", definition="a thing a user watches")
     registry.retire("watch", "superseded by `capture`", retired_by="user:sd")
@@ -91,6 +101,7 @@ def test_c9_05_retire_requires_a_reason(registry):
         registry.retire("watch", "   ", retired_by="user:sd")
 
 
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
 def test_c9_06_the_successor_is_recorded_and_surfaces_in_provenance(registry):
     seed(registry, "capture", definition="the word that replaced it")
     seed(registry, "watch", definition="a thing a user watches")
@@ -104,6 +115,7 @@ def test_c9_06_the_successor_is_recorded_and_surfaces_in_provenance(registry):
     assert retired_events[0].detail["reason"] == "superseded by `capture`"
 
 
+@pytest.mark.requires_capability("stores_events")
 def test_c9_07_an_unknowable_consumer_set_blocks_the_retirement(adapter, make_registry):
     """**Mechanism C, committed by the call built to catch it.** Row 3c, after an
     adversarial review round reproduced this live.

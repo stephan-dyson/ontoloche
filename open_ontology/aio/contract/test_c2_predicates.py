@@ -15,11 +15,13 @@ duplicates.
 """
 
 from __future__ import annotations
+import pytest
 from open_ontology.types import Consumer
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c2_01_the_extent_is_derived_not_stored_twice(registry, adapter):
     await seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
     await seed(registry, "task", predicates=["commentable"])
@@ -71,6 +73,7 @@ async def test_c2_02_unindexed_membership_reports_an_unknown_extent_not_an_empty
     )
     assert entry.why_extent_incomplete == "work_link_types has no membership table"
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c2_03_of_returns_only_the_predicates_that_type_satisfies(registry):
     await seed(registry, "commentable", kind="predicate", definition="can be commented on")
     await seed(registry, "searchable", kind="predicate", definition="is in the search index")
@@ -80,6 +83,7 @@ async def test_c2_03_of_returns_only_the_predicates_that_type_satisfies(registry
     assert {p.name for p in await registry.predicates(of="task")} == {"commentable", "searchable"}
     assert {p.name for p in await registry.predicates(of="capture")} == {"searchable"}
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c2_04_include_retired(registry):
     await seed(registry, "commentable", kind="predicate", definition="can be commented on")
     await seed(registry, "shareable", kind="predicate", definition="can be shared")
@@ -97,6 +101,7 @@ async def test_c2_04_include_retired(registry):
     assert {p.name for p in everything} == {"commentable", "shareable"}
     assert everything.complete is True and everything.why_incomplete is None
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c2_05_a_predicate_is_not_a_supertype(registry):
     """Membership of `commentable` implies nothing about `searchable`. A registry that
     cannot hold this distinction merges the two and thereby asserts something false."""

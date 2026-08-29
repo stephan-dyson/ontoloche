@@ -64,6 +64,7 @@ def test_c13_01_the_samples_vocabulary_loads_as_eight_type_rows(loaded, adapter)
     assert registry.consumers("facility").complete is False
 
 
+@pytest.mark.requires_capability("counts_usage")
 def test_c13_02_usage_counts_match_the_pre_registered_ground_truth(loaded, record_property):
     registry, result = loaded
     facts = result["facts"]
@@ -93,6 +94,7 @@ def test_c13_02_usage_counts_match_the_pre_registered_ground_truth(loaded, recor
     )
 
 
+@pytest.mark.requires_capability("stores_attributes")
 def test_c13_03_deficiency_corrected_is_six_values_and_none_is_a_yes_no(loaded):
     """T1: the field reads as a boolean from its name and is not one."""
     registry, result = loaded
@@ -115,6 +117,7 @@ def test_c13_03_deficiency_corrected_is_six_values_and_none_is_a_yes_no(loaded):
     assert entry.kind == "value_set"
 
 
+@pytest.mark.requires_capability("stores_attributes")
 def test_c13_04_the_severity_scale_carries_an_external_documentation_citation(loaded):
     """0.5 consequence 3: the inversion was caught by reading CMS documentation, not by
     inspecting data. A tool that never consults domain documentation reproduces that
@@ -140,6 +143,7 @@ def test_c13_04_the_severity_scale_carries_an_external_documentation_citation(lo
     assert "unverified_semantics" not in entry.warnings
 
 
+@pytest.mark.requires_capability("stores_attributes")
 def test_c13_05_value_set_is_accepted_and_survives_a_round_trip(registry, adapter):
     """`value_set` was added as a kind because the CMS data forced it -- the first
     recorded CMS-vs-Tenshen conflict, resolved in CMS's favour."""

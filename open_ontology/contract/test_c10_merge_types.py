@@ -26,6 +26,7 @@ def _shared_consumer(registry, *members):
     )
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c10_01_different_consumer_sets_refuse_and_nothing_overrides_it(registry):
     seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
     seed(registry, "task", definition="a unit of work", predicates=["commentable"])
@@ -53,6 +54,7 @@ def test_c10_01_different_consumer_sets_refuse_and_nothing_overrides_it(registry
     )
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c10_02_the_kill_row_predicate_merge_is_non_overridable(registry):
     """ROADMAP.md's kill criterion: a capability predicate gets merged as a duplicate.
     Structurally blocked, not merely discouraged."""
@@ -114,6 +116,7 @@ def test_c10_04_a_cross_namespace_merge_refuses(registry):
     assert refusal.detail["overridable"] is False
 
 
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
 def test_c10_05_a_retired_operand_refuses_but_can_be_acknowledged(registry):
     _shared_consumer(registry)
     seed(registry, "task", definition="a unit of work", predicates=["commentable"])
@@ -141,6 +144,7 @@ def test_c10_05_a_retired_operand_refuses_but_can_be_acknowledged(registry):
     assert any(w.startswith("definitions_similarity:") for w in merged.warnings)
 
 
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
 def test_c10_06_diverging_definitions_refuse_but_can_be_acknowledged(registry):
     _shared_consumer(registry)
     seed(
@@ -175,6 +179,7 @@ def test_c10_06_diverging_definitions_refuse_but_can_be_acknowledged(registry):
     assert registry.list_types(include_retired=True, status="retired").types[0].name == "milestone"
 
 
+@pytest.mark.requires_capability("stores_events")
 def test_c10_07_two_types_nobody_gates_on_refuse_for_want_of_evidence(registry):
     seed(registry, "task", definition="a unit of work")
     seed(registry, "todo", definition="a unit of work")
@@ -201,17 +206,21 @@ def test_c10_08_every_acknowledgement_is_recorded_or_the_merge_is_refused(
     seed(registry, "task", definition="a unit of work")
     seed(registry, "todo", definition="a unit of work")
 
-    merged = registry.merge_types(
-        "todo",
-        "task",
-        "same thing",
-        merged_by="user:sd",
-        acknowledge=["no_consumer_evidence"],
-    )
-    assert isinstance(merged, MergeResult)
-    events = [e for e in registry.provenance("todo").history if e.event == "merged"]
-    assert events and events[0].detail["acknowledge"] == ["no_consumer_evidence"]
-    assert events[0].detail["into"] == "task"
+    # Same split as C9-02: "every acknowledgement is recorded" needs a backend that can
+    # record one. On a backend that cannot, the acknowledgement is refused -- which is
+    # this test's other half. Row 3c's capability sweep.
+    if adapter.capabilities().stores_events:
+        merged = registry.merge_types(
+            "todo",
+            "task",
+            "same thing",
+            merged_by="user:sd",
+            acknowledge=["no_consumer_evidence"],
+        )
+        assert isinstance(merged, MergeResult)
+        events = [e for e in registry.provenance("todo").history if e.event == "merged"]
+        assert events and events[0].detail["acknowledge"] == ["no_consumer_evidence"]
+        assert events[0].detail["into"] == "task"
 
     blind = make_registry(DegradedAdapter(adapter, stores_events=False, why=NO_EVENTS))
     seed(blind, "chore", definition="a unit of work")

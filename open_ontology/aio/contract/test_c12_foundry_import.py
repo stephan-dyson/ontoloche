@@ -54,6 +54,7 @@ async def imported(registry):
     await registry.import_types(FOUNDRY_ROWS)
     return registry
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c12_01_experimental_becomes_active_plus_a_predicate_never_proposed(imported):
     """`proposed` here means *no one has approved it*; a Foundry experimental type has
     been approved and is in use. Collapsing them silently un-approves a customer's live
@@ -86,6 +87,7 @@ async def test_c12_03_foreign_identifiers_land_in_provenance_not_in_fields_of_ou
     assert "rid" not in entry.attributes
     assert entry.name == "flight", "our identity is our own name, not theirs"
 
+@pytest.mark.requires_capability("stores_attributes")
 async def test_c12_04_visibility_and_groups_land_in_attributes(imported):
     entry = [t for t in (await imported.list_types()).types if t.name == "gate_assignment"][0]
     assert entry.attributes["visibility"] == "PROMINENT"

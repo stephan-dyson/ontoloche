@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import timedelta
 
 from ..types import REFUSAL_REASONS, Consumer, Refusal
@@ -12,6 +14,7 @@ from ._support import seed
 from .doubles import DegradedAdapter
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c11_01_a_consumer_round_trips_intact(registry):
     stored = registry.register_consumer(
         Consumer(
@@ -48,6 +51,7 @@ def test_c11_02_a_consumer_may_gate_on_a_predicate_that_does_not_exist(registry)
     assert [c.id for c in report.would_drop] == ["future_service.render"]
 
 
+@pytest.mark.requires_capability("timestamps_usage", "counts_usage")
 def test_c11_03_record_use_advances_last_seen(registry, clock):
     seed(registry, "blocks", definition="this work item blocks that one")
     registry.record_use("blocks", by="work_link_service")

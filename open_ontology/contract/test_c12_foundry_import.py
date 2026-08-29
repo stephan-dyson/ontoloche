@@ -46,6 +46,7 @@ def imported(registry):
     return registry
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c12_01_experimental_becomes_active_plus_a_predicate_never_proposed(imported):
     """`proposed` here means *no one has approved it*; a Foundry experimental type has
     been approved and is in use. Collapsing them silently un-approves a customer's live
@@ -81,6 +82,7 @@ def test_c12_03_foreign_identifiers_land_in_provenance_not_in_fields_of_our_own(
     assert entry.name == "flight", "our identity is our own name, not theirs"
 
 
+@pytest.mark.requires_capability("stores_attributes")
 def test_c12_04_visibility_and_groups_land_in_attributes(imported):
     entry = [t for t in imported.list_types().types if t.name == "gate_assignment"][0]
     assert entry.attributes["visibility"] == "PROMINENT"

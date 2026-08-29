@@ -119,6 +119,7 @@ async def test_c4_07_auto_approval_is_legible_never_blank(adapter, make_registry
         "a blank field invites a reader to assume a human signed off"
     )
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c4_08_a_retired_name_is_not_silently_reusable(registry, adapter):
     await seed(registry, "watch", definition="a thing a user watches")
     await registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")

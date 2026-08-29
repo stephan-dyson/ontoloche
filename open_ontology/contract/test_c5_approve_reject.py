@@ -107,7 +107,7 @@ def test_c5_06_approving_with_unverified_semantics_succeeds_and_keeps_the_warnin
     assert [t.name for t in listing.types] == ["deficiency_grade"]
 
 
-@pytest.mark.requires_capability("stores_proposals")
+@pytest.mark.requires_capability("stores_proposals", "stores_events", "indexes_membership")
 def test_c5_07_an_approvers_amendment_keeps_the_original_in_history(registry):
     proposal = registry.propose_type(
         "facility", "a nursing home, roughly", [DATA_EVIDENCE], "user:pm", predicates=["searchable"]
@@ -164,7 +164,7 @@ def test_c5_10_reject_records_the_successor(registry, adapter):
     assert stored.superseded_by == "component"
 
 
-@pytest.mark.requires_capability("stores_proposals")
+@pytest.mark.requires_capability("stores_proposals", "stores_events")
 def test_c5_11_an_approval_is_atomic(registry, adapter, monkeypatch):
     """An injected failure between the type write and the event write leaves no type and
     no decided proposal. A half-commit produces an active type with no approval record,

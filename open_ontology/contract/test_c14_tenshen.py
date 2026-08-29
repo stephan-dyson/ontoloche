@@ -8,6 +8,8 @@ half.
 
 from __future__ import annotations
 
+import pytest
+
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -21,6 +23,7 @@ from .doubles import DegradedAdapter
 NO_TIMESTAMPS = {"timestamps_usage": "work_link_types has no last_used_at column"}
 
 
+@pytest.mark.requires_capability("stores_attributes")
 def test_c14_01_contortion_1_edge_shape_lives_unvalidated_in_attributes(registry):
     """`is_symmetric` and `inverse_label` are edge-shape fields and edges are #4. In v0
     they survive only in `attributes`, which the registry never reads -- so a symmetric
@@ -41,6 +44,7 @@ def test_c14_01_contortion_1_edge_shape_lives_unvalidated_in_attributes(registry
     )
 
 
+@pytest.mark.requires_capability("counts_usage")
 def test_c14_02_contortion_2_a_bare_counter_leaves_orphaned_unknowable(
     adapter, make_registry
 ):
@@ -61,6 +65,7 @@ def test_c14_02_contortion_2_a_bare_counter_leaves_orphaned_unknowable(
     assert report.complete is False
 
 
+@pytest.mark.requires_capability("stores_events")
 def test_c14_03_contortion_3_no_status_column_means_everything_migrates_active(registry):
     """Tenshen types are born live and never retired. Migration sets every row active;
     there is no historical retirement to import, and none is invented."""

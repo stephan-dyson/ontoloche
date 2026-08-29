@@ -6,6 +6,8 @@ turn "we did not look" into a number.
 
 from __future__ import annotations
 
+import pytest
+
 from datetime import timedelta
 
 from ._support import seed
@@ -27,6 +29,7 @@ def test_c7_01_a_backend_that_does_not_count_reports_none_not_zero(adapter, make
     assert report.complete is False
 
 
+@pytest.mark.requires_capability("counts_usage")
 def test_c7_02_unknown_timestamps_are_none_not_never(adapter, make_registry):
     setup = make_registry(adapter)
     seed(setup, "blocks", definition="this work item blocks that one")
@@ -55,6 +58,7 @@ def test_c7_03_an_unknown_last_seen_makes_orphaned_none_never_false(adapter, mak
     assert report.why
 
 
+@pytest.mark.requires_capability("timestamps_usage", "counts_usage")
 def test_c7_04_an_active_type_unused_past_the_window_is_orphaned(registry, clock):
     seed(registry, "watch", definition="a thing a user watches")
     registry.record_use("watch")
@@ -67,6 +71,7 @@ def test_c7_04_an_active_type_unused_past_the_window_is_orphaned(registry, clock
     assert report.last_seen is not None
 
 
+@pytest.mark.requires_capability("counts_usage")
 def test_c7_05_nothing_recorded_and_not_counted_are_different_reports(adapter, make_registry):
     setup = make_registry(adapter)
     seed(setup, "blocks", definition="this work item blocks that one")

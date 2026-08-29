@@ -17,6 +17,7 @@ from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c6_01_any_filter_that_hid_rows_makes_the_listing_incomplete(registry):
     await seed(registry, "facility", definition="a nursing home")
     await seed(registry, "watch", definition="a thing a user watches")
@@ -49,6 +50,7 @@ async def test_c6_02_known_counts_the_returned_set_and_is_none_when_uncountable(
     assert uncountable.complete is False
     assert uncountable.why_incomplete
 
+@pytest.mark.requires_capability("indexes_membership")
 async def test_c6_03_the_predicate_filter_is_the_extent_read_the_other_way(registry):
     await seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
     await seed(registry, "task", predicates=["commentable"])
@@ -72,6 +74,7 @@ async def test_c6_04_the_true_census_is_complete(registry):
     assert sorted(t.name for t in census.types) == ["facility", "watch"]
     assert census.known == 2
 
+@pytest.mark.requires_capability("counts_usage")
 async def test_c6_05_orphaned_excludes_the_unknowable_and_says_how_many(adapter, make_registry, clock):
     setup = await make_registry(adapter)
     await seed(setup, "facility", definition="a nursing home")

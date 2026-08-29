@@ -26,7 +26,7 @@ from open_ontology.aio.adapter import (
     TypeQuery,
     TypeRecord,
 )
-from open_ontology.errors import AlreadyExists
+from open_ontology.errors import AlreadyExists, NotSupported
 from open_ontology.aio.contract._support import snapshot
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -80,6 +80,7 @@ async def test_c0_02_g1_uniqueness_comes_from_a_constraint(adapter):
     await adapter.put_type(_type(kind="value_set"), expect_absent=True)
     assert await adapter.get_type("default", "facility", kind="value_set") is not None
 
+@pytest.mark.requires_capability("stores_events")
 async def test_c0_03_g2_an_exception_inside_a_transaction_leaves_the_store_unchanged(adapter):
     await adapter.put_type(_type(), expect_absent=True)
     before = await snapshot(adapter)
@@ -231,12 +232,30 @@ async def test_c0_06_every_record_round_trips_and_a_gap_comes_back_empty(adapter
         proposal_id="p1",
         detail={"tier": "haiku"},
     )
-    await adapter.append_event(event)
-    assert await adapter.read_events("default", name="facility") == [event]
+    if caps.stores_events:
+        await adapter.append_event(event)
+        assert await adapter.read_events("default", name="facility") == [event]
+    else:
+        # PACKAGE.md 3.4 primitives 14 and 15: NotSupported, loudly, never a silent
+        # drop. A store with no audit trail says so rather than pretending to keep one.
+        with pytest.raises(NotSupported):
+            await adapter.append_event(event)
 
     await adapter.bump_usage("default", "entity", "facility", at=NOW, by="user:sd")
     usage = await adapter.get_usage("default", "entity", "facility")
-    assert usage.count == 1 and usage.first_seen == NOW and usage.last_seen == NOW
+    if caps.counts_usage:
+        assert usage is not None and usage.count == 1
+    else:
+        # `get_usage` may return None (nothing recorded at all) or a record with
+        # count=None (this backend does not count). PACKAGE.md 3.4 primitive 13 says
+        # those are DIFFERENT FACTS; either is honest here, and neither may be 0.
+        assert usage is None or usage.count is None, "None, never 0"
+        if usage is None:
+            return
+    if caps.timestamps_usage:
+        assert usage.first_seen == NOW and usage.last_seen == NOW
+    else:
+        assert usage.first_seen is None and usage.last_seen is None, "empty, not wrong"
 
     # A field the backend cannot store comes back EMPTY, not wrong -- so the caller can
     # tell the write did not round-trip instead of believing it did.

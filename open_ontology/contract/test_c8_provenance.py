@@ -24,7 +24,7 @@ def test_c8_01_missing_evidence_is_empty_never_a_reconstructed_narrative(registr
     assert provenance.approved_by == "user:sd"
 
 
-@pytest.mark.requires_capability("stores_proposals")
+@pytest.mark.requires_capability("stores_proposals", "stores_events", "indexes_membership")
 def test_c8_02_history_is_append_only(registry, clock):
     proposal = registry.propose_type("watch", "a thing a user watches", [], "user:pm")
     registry.approve(proposal.id, "user:sd")
