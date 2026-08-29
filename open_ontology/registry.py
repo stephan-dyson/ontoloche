@@ -2453,14 +2453,28 @@ class Registry:
             # predicate gets merged as a duplicate") tripped on the declared capability
             # shape of Tenshen's own table (PACKAGE.md 7.3 B3). Rule U: unknown is not
             # equal. Row 3c, after an adversarial review round reproduced the merge.
+            #
+            # **And two EMPTY extents are not a byte-identical extent either.** Row #6's
+            # second adversarial round reached the same kill row by the other end of the
+            # same expression: `set() == set()`, so two predicates that NOTHING satisfies
+            # compared equal, the refusal did not fire, and the merge fell through to the
+            # overridable guards again -- reproduced end to end against this registry with
+            # two AI-proposed predicates auto-approved at Haiku and merged under two
+            # acknowledgements. An empty extent is *no evidence of membership*, not
+            # *evidence of identical membership*; INTERFACE.md 5.10 says of the guard one
+            # row down that "merging two types about which nothing is known is the single
+            # most destructive thing this interface can do", and that is exactly this
+            # case with a predicate in it. Rule U again, on the other operand: EMPTY is
+            # not EQUAL. Pinned by C10-09.
             knowable = self.caps.indexes_membership
             left_extent = set(self._extent(namespace, left.name, True)[0])
             right_extent = set(self._extent(target_ns, right.name, True)[0])
+            demonstrably_same = bool(left_extent) and left_extent == right_extent
             if (
                 not knowable
                 or left.kind != "predicate"
                 or right.kind != "predicate"
-                or left_extent != right_extent
+                or not demonstrably_same
             ):
                 return Refusal(
                     "predicate_merge",
@@ -2468,8 +2482,13 @@ class Registry:
                         "from_extent": sorted(left_extent),
                         "into_extent": sorted(right_extent),
                         "extents_knowable": knowable,
+                        "extents_empty": not left_extent and not right_extent,
                         "why": (
-                            None
+                            "both extents are EMPTY, which is no evidence of membership "
+                            "rather than evidence of identical membership -- two "
+                            "predicates nothing satisfies are not demonstrably duplicates"
+                            if knowable and not left_extent and not right_extent
+                            else None
                             if knowable
                             else "this backend cannot compute a predicate's extent, so "
                             "two predicates cannot be shown to have identical members: "

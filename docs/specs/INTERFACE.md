@@ -81,7 +81,7 @@ So:
 - A predicate is a `TypeEntry` with `kind="predicate"`. It has a name, a definition, provenance and a lifecycle like anything else.
 - **Membership lives on the member**, in `TypeEntry.predicates`. The predicate's *extent* is derived: `list_types(predicate="commentable")`.
 - A predicate is **not** a supertype, **not** an interface, and **not** a parent in a hierarchy. `commentable` does not mean "a kind of thing"; it means "this code path will accept it".
-- **`merge_types` refuses predicate merges outright** unless the two extents are byte-identical (§5.10).
+- **`merge_types` refuses predicate merges outright** unless the two extents are byte-identical **and non-empty** (§5.10). *(The second clause was added by row #6's second adversarial round, which merged two live predicates through the shipped registry because `set() == set()`.)*
 
 **The structural result that ties 0.1's Cause A to its Cause C:**
 
@@ -770,7 +770,7 @@ MergeResult:
 | # | Refusal | `reason` | Overridable? |
 |---|---|---|---|
 | 1 | Consumer sets differ | `different_consumer_sets` | **No.** Not by `force`, not by `acknowledge` |
-| 2 | Either side has `kind="predicate"` and extents are not byte-identical | `predicate_merge` | **No.** This is the `ROADMAP.md` kill row |
+| 2 | Either side has `kind="predicate"` and the two extents are not **both non-empty and byte-identical** | `predicate_merge` | **No.** This is the `ROADMAP.md` kill row |
 | 3 | Different `kind` | `kind_mismatch` | No |
 | 4 | Different `namespace` | `cross_namespace_merge` | No — cross-namespace collision is what namespaces exist to *preserve*, not resolve |
 | 5 | Either side `retired` | `retired_operand` | Via `acknowledge=["retired_operand"]` |
