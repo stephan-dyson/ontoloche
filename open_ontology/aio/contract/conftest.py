@@ -60,6 +60,50 @@ BACKENDS = ("sqlite", "postgres")
 def pytest_configure(config):
     config.addinivalue_line("markers", "cms: the CMS design test (PACKAGE.md 8)")
     config.addinivalue_line("markers", "nonbinding: outside the conformance definition")
+    config.addinivalue_line(
+        "markers",
+        "resolver_dependent: asserts an outcome only the shipped DeterministicResolver "
+        "produces -- binding for the reference backends, skipped for a foreign adapter",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """PACKAGE.md 2.6: *no contract test may pass or fail because of resolver quality.*
+
+    Three tests did. ``C3-08``/``C3-09`` assert a ``not_a_type`` outcome that only the
+    shipped ``DeterministicResolver``'s lookup table produces, and ``C4-06``'s keyword
+    rule is not even behind the ``Resolver`` seam -- so a third-party backend paired
+    with its own resolver, which 2.6 calls *the production path*, failed mandatory
+    conformance tests for a reason that is neither storage nor its own choice.
+
+    Ruling **R8**, applied by row 3c: they stay **binding for the two reference
+    backends**, where they pin real behaviour of the resolver this package ships, and
+    are **skipped for a foreign adapter**, where they assert nothing about the backend
+    under test. Skipped with a reason, never silently -- and the reason names the
+    ruling, so a third-party author can see what was not run and why.
+    """
+    if _support.EXTERNAL_FACTORY is None:
+        return
+    skip = pytest.mark.skip(
+        reason=(
+            "PACKAGE.md 2.6 / ruling R8 -- this test asserts an outcome only the "
+            "shipped DeterministicResolver produces. It is binding for the reference "
+            "backends and says nothing about a foreign adapter's storage."
+        )
+    )
+    for item in items:
+        if item.get_closest_marker("resolver_dependent"):
+            item.add_marker(skip)
+
+
+def pytest_generate_tests(metafunc):
+    if "backend" not in metafunc.fixturenames:
+        return
+    if _support.EXTERNAL_FACTORY is not None:
+        metafunc.parametrize("backend", ["external"])
+        return
+    metafunc.parametrize("backend", list(BACKENDS))
+
 
 
 def pytest_generate_tests(metafunc):
@@ -158,3 +202,50 @@ def make_registry(clock):
 @pytest.fixture
 async def registry(adapter, make_registry):
     return await make_registry(adapter)
+
+
+# --------------------------------------------------------------------------- reporting
+# PACKAGE.md 6.1: a backend is conformant iff *the whole suite* passes, on *both*
+# reference backends, *in one run*. A bare `pytest --pyargs open_ontology.contract`
+# with no OO_POSTGRES_DSN exits 0 having exercised SQLite alone, and a skip is easy to
+# miss next to a wall of passes. So the run states what it actually covered. Added by
+# row 3c after an adversarial review round; see docs/findings/3C-VALIDATION.md.
+
+_EXERCISED: set[str] = set()
+_EXEMPTED: set[str] = set()
+
+
+def pytest_runtest_logreport(report):
+    if report.when != "call" or report.outcome not in ("passed", "failed"):
+        return
+    for name in BACKENDS + ("external",):
+        if f"[{name}]" in report.nodeid:
+            _EXERCISED.add(name)
+
+
+def pytest_deselected(items):
+    for item in items:
+        _EXEMPTED.add(item.nodeid.rsplit("::", 1)[-1])
+
+
+def pytest_terminal_summary(terminalreporter):
+    write = terminalreporter.write_line
+    write("")
+    write("CONFORMANCE (PACKAGE.md 6.1)")
+    if "external" in _EXERCISED:
+        write("  backends exercised: the supplied adapter factory")
+    else:
+        missing = [b for b in BACKENDS if b not in _EXERCISED]
+        write(f"  backends exercised: {', '.join(sorted(_EXERCISED)) or 'none'}")
+        if missing:
+            write(
+                f"  NOT a conformance run -- {', '.join(missing)} did not execute. "
+                "6.1 requires both reference backends in one run; set OO_POSTGRES_DSN."
+            )
+    if _EXEMPTED:
+        write(
+            f"  nonbinding tests excluded from the verdict: {len(_EXEMPTED)} "
+            f"({', '.join(sorted(_EXEMPTED))})"
+        )
+    else:
+        write("  nonbinding tests excluded from the verdict: none")

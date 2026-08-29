@@ -97,6 +97,7 @@ def test_c3_07_a_prior_rejection_surfaces_in_alternatives(registry):
     assert "rejected" in resolution.reason
 
 
+@pytest.mark.resolver_dependent
 def test_c3_08_cms_location_is_a_redundant_projection_not_a_type(registry):
     """T3: `Location` is exactly rebuilt from four sibling columns in 419,428 of 419,479
     rows and 400 of 400 in the sample. Under a three-outcome surface this returns None,
@@ -116,6 +117,7 @@ def test_c3_08_cms_location_is_a_redundant_projection_not_a_type(registry):
     assert resolution.reason == "redundant_projection"
 
 
+@pytest.mark.resolver_dependent
 def test_c3_09_cms_processing_date_is_an_export_artefact(registry):
     """T7: single-valued (2026-08-01) across the whole file. Zero information."""
     resolution = registry.resolve_type(

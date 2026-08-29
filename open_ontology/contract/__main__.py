@@ -38,6 +38,14 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="an argument to pass to the adapter callable (repeatable)",
     )
+    parser.add_argument(
+        "--include-nonbinding",
+        action="store_true",
+        help=(
+            "also run tests marked nonbinding -- the ones PACKAGE.md places outside "
+            "the conformance definition. Never pass this when deciding conformance."
+        ),
+    )
     known, passthrough = parser.parse_known_args(argv)
 
     target = _load(known.adapter)
@@ -45,7 +53,9 @@ def main(argv: list[str] | None = None) -> int:
     def factory():
         return target(*known.arg)
 
-    return run_contract_suite(factory, args=passthrough)
+    return run_contract_suite(
+        factory, args=passthrough, include_nonbinding=known.include_nonbinding
+    )
 
 
 if __name__ == "__main__":

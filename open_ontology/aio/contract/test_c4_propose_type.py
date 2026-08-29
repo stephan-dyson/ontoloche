@@ -72,6 +72,7 @@ async def test_c4_05_no_evidence_warns_and_the_proposal_is_still_created(registr
     assert "no_evidence" in proposal.warnings, "an honest empty beats a fabricated citation"
     assert proposal.evidence == ()
 
+@pytest.mark.resolver_dependent
 async def test_c4_06_a_domain_semantic_without_an_external_doc_is_unverified(registry):
     asserting = await registry.propose_type(
         "scope_severity_code",

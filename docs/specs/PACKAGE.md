@@ -1,7 +1,7 @@
 # PACKAGE — the `open_ontology` package, its storage-adapter protocol, and the contract suite that defines conformance
 
 **Version:** `v0` — **unstable.** Every module name, class name, primitive signature, table shape and test id here may change without a deprecation path. Standing constraint 4.
-**Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 2 preparation. Deliverable **#2** of the Tenshen-rebuild ordering. **No code yet** — code is deliverable #3 (Phase 2A).
+**Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 2 preparation. Deliverable **#2** of the Tenshen-rebuild ordering. **Deliverable #3 has since landed** — the package, both backends and the 113-test suite are real and green (§8.4, §8b.5, §11); the sections written before it say so where it matters. *(Header corrected by row 3c; it still read "No code yet".)*
 **Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumptions **A1**, **A4** and ruling **A5**.
 **Sits underneath:** [`INTERFACE.md`](INTERFACE.md) v0. Where this document and `INTERFACE.md` disagree, `INTERFACE.md` wins and the disagreement is recorded in §11 rather than resolved silently.
 **Evidence inputs:** [`INTERFACE.md`](INTERFACE.md) (the calls, the refusals, the two design tests) · [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) and [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) (the CMS entities and their pre-registered counts) · `beacon/src/beacon/models/work_link_type.py` and `.../services/work_link_service.py`, read-only on 2026-08-28 (the Tenshen design test) · [`0.3-prior-art.md`](../findings/0.3-prior-art.md) (the Foundry import mapping the suite must test).
@@ -91,7 +91,9 @@ Public, in the sense of *"you may build against it, knowing v0 will break it"*:
 | `backends.sqlite.SQLiteAdapter`, `backends.postgres.PostgresAdapter` | the two reference backends |
 | `contract.run_contract_suite` | conformance must be runnable by people who did not write this package |
 
-Private, meaning it may change between two commits with no note and **the contract suite may not import it**: `_resolve`, `_clock`, `backends._sql`, every module-level name beginning `_`, and the SQL files (they are an implementation of the adapter, not a schema anyone may depend on).
+Private, meaning it may change between two commits with no note and **the contract suite may not import it**: `_resolve`, `backends._sql`, every module-level name beginning `_`, and the SQL files (they are an implementation of the adapter, not a schema anyone may depend on).
+
+**One carve-out, and §2.1 always implied it:** the suite **may** import `_clock`. §2.1's own layout comment says `_clock.py` exists *"so the suite is not time-flaky"* — that is the suite's use, and `conftest.py` has imported `FixedClock` since #3. The blanket sentence above contradicted §2.1 from the first draft and the code sided with §2.1. *(Corrected by row 3c after an adversarial review round.)* `_resolve` stays forbidden and that one matters: a suite that reached into the resolver could pin resolver behaviour, which §2.6 forbids.
 
 **Why a façade object and not module-level functions**, given §5 writes them as free functions: every call needs an adapter, a namespace policy, a clock and a resolver. Module-level functions would need a process-global registry — and the contract suite must hold a SQLite adapter and a Postgres adapter **in one process at once** to parametrise over both. A global makes that impossible. **[Inferred]** — the constraint is the suite's, and it is decisive.
 
@@ -145,6 +147,8 @@ class Resolver(Protocol):
 v0 ships `_resolve.DeterministicResolver`: `difflib.SequenceMatcher` over `name` and `definition`, plus a rule-based `classify` that detects the two `not_a_type` cases the CMS data forced (§8.3). It **records** `tier` into provenance and **does not use it** — the tier gate lives in `approve`, per `INTERFACE.md` §2.7 point 3, not in scoring.
 
 **The consequence, stated plainly:** the deterministic resolver is not good enough for production and is not meant to be. It exists so the suite has a fixed point. `Registry(adapter, resolver=MyModelResolver())` is the production path, and **no contract test may pass or fail because of resolver quality** — the suite asserts *outcomes and shapes* (`confidence is None`, `outcome == "none"`, `alternatives` populated), never scores.
+
+> **Three tests broke that rule, and row 3c enforces it rather than restating it.** `C3-08`/`C3-09` assert a `not_a_type` **outcome** that only the shipped `DeterministicResolver`'s lookup table produces, and `C4-06`'s keyword rule is not behind this seam at all (§8b.3, B8). They now carry a `resolver_dependent` marker: **binding for the two reference backends**, where they pin real behaviour of the resolver this package ships, and **skipped, with a reason naming this section, for a foreign adapter**, where they assert nothing about the backend under test. Ruling **R8**'s recommendation, applied — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, which the supervisor may reverse.
 
 ---
 
@@ -675,7 +679,23 @@ Two rules that keep the definition honest:
 1. **Capability-honest tests.** A test whose subject is a declared-`False` capability asserts the *honest unknown* — `None` plus a non-empty `why` drawn from `Capabilities.why` — not a value. A backend that cannot count usage passes `C7-01` by returning `count=None`; it fails by returning `0`. This is what makes conformance achievable for unlike backends without weakening it.
 2. **Two capabilities are not negotiable.** `enforces_unique_name` and `transactional` must be `True` (§3.5). Everything else may be `False`.
 
-Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backend `python -m open_ontology.contract --adapter beacon.ontology:WorkLinkTypeAdapter`.
+**Running it.** `pytest --pyargs open_ontology.contract`, or against a foreign backend `python -m open_ontology.contract --adapter beacon.ontology:WorkLinkTypeAdapter`.
+
+*(This paragraph amended by row 3c, 2026-08-28, after an adversarial review round found the conformance machinery did not enforce what this section claims.)*
+
+**`nonbinding` now exempts, where before it only annotated.** §5.5 says a backend *"may not be failed for"* `C15-02`. Registering `@pytest.mark.nonbinding` never made that true: the runner passed every test, so a backend that honestly declines the optional `AttributeStore` protocol — behaviour §5.5 explicitly permits — got `complete=False`, failed `C15-02`'s assertion, and was reported as failing the suite. **Verified before it was fixed:** a wrapper that omits `AttributeStore` returns `AttributeCensus(entries=(), known=None, complete=False, why="this backend has no attribute census storage")` and fails that test. `run_contract_suite` and `python -m open_ontology.contract` now pass `-m "not nonbinding"` by default, with `--include-nonbinding` to run them anyway. **A conformance verdict is the default run; the flag is for curiosity.**
+
+**Resolver-dependent tests are binding here and not there.** `C3-08`, `C3-09` and `C4-06` carry a `resolver_dependent` marker. Against the two reference backends they run and must pass — they pin real behaviour of the resolver this package ships. Against a foreign adapter (`--adapter`, or `run_contract_suite`) they are **skipped with a reason naming §2.6 and ruling R8**, because a third-party backend paired with its own resolver — §2.6's own production path — was otherwise failing mandatory conformance tests for a reason that is neither its storage nor its choice. Skipped, never silent: `-rs` prints exactly what was not run and why.
+
+**Every run states what it covered.** §6.1 requires *both* reference backends *in one run*, and a bare `pytest --pyargs open_ontology.contract` with no `OO_POSTGRES_DSN` exits `0` having exercised SQLite alone — a skip is easy to miss beside a wall of passes. The suite now prints, at the end of every run:
+
+```
+CONFORMANCE (PACKAGE.md 6.1)
+  backends exercised: postgres, sqlite
+  nonbinding tests excluded from the verdict: none
+```
+
+and, when a reference backend did not execute, **`NOT a conformance run -- postgres did not execute`** in its place. It is still possible to run the suite without Postgres; it is no longer possible to read the result as conformance.
 
 ### 6.2 The suite, enumerated
 
@@ -688,7 +708,7 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 | C0-01 | `capabilities()` returns every field; every `False` flag has a non-empty `why` | — |
 | C0-02 | **G1**: `put_type(expect_absent=True)` twice raises `AlreadyExists` from a constraint | — |
 | C0-03 | **G2**: an exception inside `transaction()` leaves the store byte-identical | — |
-| C0-04 | **§3.1, by source inspection**: `Refusal`, `Rejection`, `Resolution`, `Proposal`, `TypeEntry` appear nowhere in `adapter.py` or `backends/` | — |
+| C0-04 | **§3.1, by source inspection**: all **seven** of §3.1's identifiers — `Refusal`, `Rejection`, `Resolution`, `ConsumerReport`, `UsageReport`, `TypeEntry`, `Proposal` — appear nowhere in `adapter.py` or `backends/`. *(Row 3c: the test checked five of the seven; `ConsumerReport` and `UsageReport` were missing from it, though neither was ever present in the code)* | — |
 | C0-05 | `migrate()` is idempotent; the version row is written in the same transaction as the DDL | — |
 | C0-06 | every `*Record` round-trips; a field the backend cannot store comes back empty, not wrong | — |
 | C0-08 | **G1 and G2, RACED:** two adapters on one store and two real concurrent writers — one absent name (exactly one insert wins, one `AlreadyExists`, one row in the store) and one proposal approved twice (exactly one `TypeEntry`, one `Refusal("already_decided")`). *(Row 3c, §8b.5. `C0-02`/`C0-07` call the primitives sequentially, which a read-then-write check passes as happily as a constraint does — §3.5 says a read-then-write check is **not** sufficient, and until this test nothing held it to that. A thread race has no mechanical async form, so the sync module is excluded from `tools/unasync.py` and the async counterpart is hand-written; both claim this id and both are binding.)* | — |
@@ -728,8 +748,8 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 | C3-05 | `tier` is required — omitting it is a `TypeError`, not a default | §2.7 |
 | C3-06 | `tier` is echoed on the `Resolution` and lands in provenance unchanged | |
 | C3-07 | a prior rejection for the candidate surfaces in `alternatives` | §5.5 |
-| C3-08 | **[CMS]** `resolve_type("location", context(sibling_columns=["Provider Address","City/Town","State","ZIP Code"]))` ⇒ `not_a_type` / `redundant_projection` | §10.2 |
-| C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact` | §10.2, T7 |
+| C3-08 | **[CMS]** `resolve_type("location", context(sibling_columns=["Provider Address","City/Town","State","ZIP Code"]))` ⇒ `not_a_type` / `redundant_projection`. **`resolver_dependent`** — binding for the reference backends, skipped for a foreign adapter (§2.6, R8) | §10.2 |
+| C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact`. **`resolver_dependent`** (§2.6, R8) | §10.2, T7 |
 
 **C4 — `propose_type` (9).** Mechanism **1**.
 
@@ -740,7 +760,7 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 | C4-03 | a name already taken in `(namespace, kind)` returns the **existing `TypeEntry`** — not an error |
 | C4-04 | a near-duplicate returns a `Proposal` with `warnings=["near_duplicate:<name>"]` and **does not refuse** — the kill-row protection |
 | C4-05 | `evidence=[]` ⇒ `warnings` contains `no_evidence`; the proposal is still created |
-| C4-06 | a definition asserting a domain semantic with no `external_doc` evidence ⇒ `unverified_semantics` |
+| C4-06 | a definition asserting a domain semantic with no `external_doc` evidence ⇒ `unverified_semantics`. **`resolver_dependent`** — the keyword rule behind it is not even behind the `Resolver` seam (§2.6, §8b.3 B8, R8) |
 | C4-07 | under `approval_policy="auto"` the return is a `TypeEntry` with `provenance.approved_by == "auto:<policy>"` — **never blank** |
 | C4-08 | a retired name ⇒ the retired entry plus `warnings=["name_previously_retired"]`, and no new entry |
 | C4-09 | `^[a-z][a-z0-9_]{0,63}$` enforced identically on both backends |
@@ -1165,7 +1185,9 @@ resolve_type("location", ctx(sibling_columns=("latitude","longitude")))
 
 **And there is a second instance, worse than the first** *(added by row 3c after an adversarial review round)*. `C4-06`'s `unverified_semantics` behaviour is driven by a hardcoded keyword list — `_DOMAIN_SEMANTIC_WORDS` in `registry.py`, holding literals like `"immediate jeopardy"`, `"severity"`, `"higher letters"` — read by a module function that `propose_type` calls **directly**. It is not behind the `Resolver` seam at all. So where `C3-08`/`C3-09` at least fail through a component §2.6 says you may replace, **`C4-06` cannot be satisfied by supplying `Registry(adapter, resolver=MyModelResolver())` — the production path §2.6 itself names — because the heuristic is baked into the façade.** A third-party backend with its own resolver still fails a mandatory conformance test for a reason that is neither storage nor its resolver. This is deviation D-6's keyword rule (`INTERFACE.md` §2.8) meeting §2.6's rule, and the collision was not previously recorded anywhere.
 
-**Recommendation, not taken here:** either move the domain-semantic judgement behind `Resolver` so a deployment can override it, or mark `C3-08`, `C3-09` and `C4-06` non-binding for third-party adapters the way `C15-02` already is (§5.5). **Both are changes to what "conformant" means, so this wants a ruling** — [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
+**Recommendation, and it was applied** *(row 3c, after the finding recurred in two consecutive review rounds — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, ruling R8, which the supervisor may reverse)*. The three carry a `resolver_dependent` marker: **binding for the two reference backends, skipped with a reason for a foreign adapter** (§2.6, §6.1). That is the narrower of the two options, and it was chosen because it changes nothing about this repository's own gate — §6.1 already requires both reference backends — while removing a promise the suite could not keep to anyone else.
+
+**What was deliberately NOT done:** widening `_PROJECTION_FAMILIES` to include `latitude`/`longitude`. That fits the table to the second dataset the way it was already fitted to the first, and it would make the *next* use case's version of this finding harder to see rather than easier. Moving the domain-semantic judgement behind `Resolver` is the tidier long-run answer and stays a v1 item.
 
 ### 8b.4 NYC verdict
 
@@ -1246,11 +1268,18 @@ The first is forward-only and may be dropped. The second is never applied backwa
 
 > **Deliverable #3 landed 2026-08-28.** The whole suite is green on both reference backends in one run (`229 passed`) and the CMS design test executes. Fourteen deviations are recorded in [`2A-RUN.md`](../runs/2A-RUN.md) §4; the one that wanted a founder ruling was **D-1** — §3.4 primitive 10 and `C11-04` require a `Refusal` for a read-only consumer source, and ruling R3's closed fourteen had no honest value for it. **Resolved 2026-08-28 by ruling R4**, which added `consumer_source_read_only` as the fifteenth value of `INTERFACE.md` §5.12 in the same change that made the registry return it. Item 1 below (async) was answered by ruling **R1** as new row 3b, **which landed 2026-08-28** ([`3B-ASYNC.md`](../runs/3B-ASYNC.md), `267 passed`); items 2 and 3 by **R2** and **R3**.
 
-### 11.1 For the founder to rule on
+### 11.1 Raised for the founder — all three **ruled**
 
-1. **The async protocol is missing, and Phase 2B cannot land without it** (§7, B2). beacon's data layer is `AsyncSession` throughout; a sync adapter cannot share its transaction, and driving one from a thread is not safe. **Ruling wanted: is `AsyncStorageAdapter` / `AsyncRegistry` inside deliverable #3's scope, or a separate deliverable between #3 and #5?** This is on open-ontology's line, not beacon's, and it is the one item here that changes the ordering table.
-2. **`attribute_census` is a method beyond the calls `INTERFACE.md` §5 enumerates** (§5.5) — the only one this document adds. **Ruling wanted: absorb it into #1's surface, or keep it package-local and outside the conformance definition?** Until ruled, C15-02 is non-binding.
-3. **Three new `Refusal.reason` values** are introduced here — `proposals_not_stored`, `cannot_record_override`, `attributes_schema_violation` (§3.6). §5.5 lists three reasons and reads as closed, though `reason` is typed `str`. **Ruling wanted: amend #1's list, or state that `reason` is an open vocabulary?**
+*(Rewritten by row 3c, 2026-08-28, after an adversarial review round. All three were answered on 2026-08-28 and the note above said so, while the items themselves still read "Ruling wanted" — **a ruling ledger that had drifted out of sync with its own rulings**, in the document of a project whose thesis is that unmaintained statements are the rot mechanism. The questions are kept, because what was asked is worth reading; the answers are now attached to them.)*
+
+1. **The async protocol is missing, and Phase 2B cannot land without it** (§7, B2). beacon's data layer is `AsyncSession` throughout; a sync adapter cannot share its transaction, and driving one from a thread is not safe. *Asked: is `AsyncStorageAdapter` / `AsyncRegistry` inside deliverable #3's scope, or a separate deliverable between #3 and #5?*
+   → **Ruled R1: a separate row, 3b, after #3 and before #5. Landed 2026-08-28** ([`3B-ASYNC.md`](../runs/3B-ASYNC.md)) — generated from the sync source, not forked. The one part that remains **[Assumed]** is SQLAlchemy transaction sharing; see the note in §7 B2.
+2. **`attribute_census` is a method beyond the calls `INTERFACE.md` §5 enumerates** (§5.5) — the only one this document adds. *Asked: absorb it into #1's surface, or keep it package-local?*
+   → **Ruled R2: package-local, outside the conformance definition.** `C15-02` is therefore `nonbinding` permanently, not provisionally — and since row 3c the marker **actually exempts it** from a conformance verdict, which registering the marker never did (§6.1).
+3. **Three new `Refusal.reason` values** are introduced here — `proposals_not_stored`, `cannot_record_override`, `attributes_schema_violation` (§3.6). *Asked: amend #1's list, or state that `reason` is an open vocabulary?*
+   → **Ruled R3: amend #1. `Refusal.reason` is a CLOSED vocabulary**, enumerated in `INTERFACE.md` §5.12, and adding a value requires amending that section in the same change. **Ruling R4** later added a fifteenth, `consumer_source_read_only`, by exactly that route.
+
+**Open items that remain open are not here.** They are the six in [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6 (R5–R10), of which two are this document's: per-kind attribute schemas (**R9**, open) and `C3-08`/`C3-09`/`C4-06` versus §2.6 (**R8** — whose recommendation was *applied* by row 3c after recurring in two consecutive review rounds, so the ruling wanted there is confirm-or-revert rather than decide).
 
 ### 11.2 Recorded for #1's next revision, no ruling needed
 

@@ -92,7 +92,7 @@ from open_ontology.registry import (
 
 
 class AsyncRegistry:
-    """The thirteen calls of INTERFACE.md 5, plus two package-local helpers.
+    """The thirteen calls of INTERFACE.md 5, plus three package-local helpers.
 
     The counting note from PACKAGE.md 2.2 stands: INTERFACE.md says *twelve calls* and
     enumerating 5.1-5.11 yields thirteen functions. Nothing here depends on which

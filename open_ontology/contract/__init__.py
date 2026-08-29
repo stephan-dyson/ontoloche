@@ -8,6 +8,14 @@ this repository.
 
     pytest --pyargs open_ontology.contract
     python -m open_ontology.contract --adapter beacon.ontology:WorkLinkTypeAdapter
+
+**``nonbinding`` is enforced here, not merely declared.** PACKAGE.md 5.5 says a backend
+*"may not be failed for"* ``C15-02``, because ``AttributeStore`` is optional and a
+backend that omits it answers honestly with ``complete=False`` rather than wrongly.
+Registering the marker did not make that true: until row 3c the runner passed every
+test and a conformant backend was told it had failed. ``run_contract_suite`` now
+excludes ``nonbinding`` by default and **says so in the summary**, so a green run can
+never be read without seeing what it exempted.
 """
 
 from __future__ import annotations
@@ -18,21 +26,30 @@ __all__ = ["run_contract_suite"]
 
 
 def run_contract_suite(
-    adapter_factory: Callable[[], Any], *, args: Sequence[str] = ()
+    adapter_factory: Callable[[], Any],
+    *,
+    args: Sequence[str] = (),
+    include_nonbinding: bool = False,
 ) -> int:
-    """Run the whole suite against one backend. Returns pytest's exit code.
+    """Run the conformance suite against one backend. Returns pytest's exit code.
 
     ``adapter_factory`` must return a **fresh, empty** store each time it is called --
     the suite calls it once per test and expects no state to survive between them.
     ``migrate()`` is called for you.
+
+    ``include_nonbinding=False`` (the default) deselects tests marked ``nonbinding``,
+    which are the ones PACKAGE.md declares outside the conformance definition. Pass
+    ``True`` to run them anyway -- useful when you want the whole picture, never when
+    you are deciding whether a backend conforms.
     """
     import pytest
 
     from . import _support
 
+    marker = () if include_nonbinding else ("-m", "not nonbinding")
     previous = _support.EXTERNAL_FACTORY
     _support.EXTERNAL_FACTORY = adapter_factory
     try:
-        return int(pytest.main(["--pyargs", "open_ontology.contract", *args]))
+        return int(pytest.main(["--pyargs", "open_ontology.contract", *marker, *args]))
     finally:
         _support.EXTERNAL_FACTORY = previous
