@@ -2036,6 +2036,64 @@ class Registry:
             )
 
 
+        # **`retire(successor=)` IS a collapse, and it gets the merge's guards.**
+        # `resolve_type` on a retired name returns its successor at confidence 1.0
+        # (5.3, and this registry calls that a guarantee); `related_names` calls
+        # retirement-with-a-successor a *joining* in the same sentence as a merge; and
+        # 5.4's `endpoint_type_merged` treats the two acts as one. So a caller who is
+        # refused `merge_types("commentable", "searchable")` -- NON-OVERRIDABLY, under
+        # every acknowledgement -- could reach the identical outcome by retiring one
+        # with the other as its successor, with no refusal, no acknowledgement and no
+        # warning. **That is `ROADMAP.md`'s kill row, and its third trip in this
+        # project's life** (row 3c on an unknowable extent, row #6 round 2 on an empty
+        # one, row #6 round 3 here). All three are the same category error: a guard
+        # written for one call, over a fact that more than one call can change.
+        #
+        # The two guards that transfer are the two that are about IDENTITY rather than
+        # about evidence -- 5.10's refusals #2 and #3. They are non-overridable there
+        # and they are non-overridable here, `force=True` included: `force` overrides
+        # the CONSUMER guards, which are about what we could see, never the identity
+        # guards, which are about what would become true. Pinned by `C9-18`.
+        if successor is not None:
+            succ = self.adapter.get_type(namespace, successor)
+            if succ is not None:
+                if succ.kind != rec.kind:
+                    return Refusal(
+                        "kind_mismatch",
+                        {
+                            "from": rec.kind,
+                            "into": succ.kind,
+                            "type": type,
+                            "successor": successor,
+                            "why": "a successor redirects `resolve_type` at confidence "
+                            "1.0, so naming one of another kind makes the registry "
+                            "answer a question about one kind with an entry of another",
+                            "overridable": False,
+                        },
+                    )
+                if rec.kind == "predicate":
+                    knowable = self.caps.indexes_membership
+                    left = set(self._extent(namespace, rec.name, True)[0])
+                    right = set(self._extent(namespace, succ.name, True)[0])
+                    if not knowable or not left or left != right:
+                        return Refusal(
+                            "predicate_merge",
+                            {
+                                "from_extent": sorted(left),
+                                "into_extent": sorted(right),
+                                "extents_knowable": knowable,
+                                "extents_empty": not left and not right,
+                                "type": type,
+                                "successor": successor,
+                                "why": "retiring a predicate with another as its "
+                                "successor redirects every `resolve_type` for the "
+                                "first to the second -- the same claim `merge_types` "
+                                "refuses non-overridably unless the two extents are "
+                                "non-empty and identical",
+                                "overridable": False,
+                            },
+                        )
+
         usage = self._usage_report(rec)
         warnings = list(rec.warnings)
         if usage.orphaned is None and "retired_without_usage_evidence" not in warnings:

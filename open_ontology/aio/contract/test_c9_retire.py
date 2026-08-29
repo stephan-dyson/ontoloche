@@ -655,3 +655,67 @@ async def test_c9_17_the_collision_scan_pages_to_exhaustion(adapter, make_regist
         "the survivor is past page one; a scan that stops there misses the collision"
     )
     assert blocked.reason == "alias_collision"
+
+@pytest.mark.requires_capability("indexes_membership", "stores_events")
+async def test_c9_18_retire_with_a_successor_takes_the_merges_identity_guards(registry):
+    """`ROADMAP.md`'s kill row, THIRD trip -- and the first through a call that is
+    not `merge_types`.
+
+    `resolve_type` on a retired name returns its successor at confidence 1.0
+    (`INTERFACE.md` 5.3, which this registry calls a guarantee), so
+    `retire(successor=)` performs the collapse `merge_types` refuses. Row #6's
+    third adversarial round reproduced it: `merge_types("commentable",
+    "searchable")` refused `predicate_merge` NON-OVERRIDABLY under all five
+    acknowledgements, and the identical pair collapsed through `retire` with no
+    refusal, no acknowledgement and no warning -- across kinds too.
+
+    The two guards that transfer are 5.10's refusals #2 and #3, the two about
+    IDENTITY rather than about evidence. `force=True` overrides the consumer
+    guards, which are about what we could see; it does not override these, which
+    are about what would become true.
+    """
+    await seed(registry, "commentable", kind="predicate", definition="a code path will accept it")
+    await seed(registry, "searchable", kind="predicate", definition="a code path will accept it")
+    await seed(registry, "task", predicates=["commentable"])
+    await seed(registry, "doc", predicates=["searchable"])
+    await seed(registry, "person", definition="a human being")
+
+    # The merge is refused non-overridably -- the precondition of this test.
+    merge = await registry.merge_types("commentable", "searchable", "duplicate capability",
+                                 merged_by="user:sd", acknowledge=["predicate_merge"])
+    assert isinstance(merge, Refusal) and merge.reason == "predicate_merge"
+
+    # ... and so is the retirement that would produce the same redirect.
+    refusal = await registry.retire("commentable", reason="duplicate capability",
+                              retired_by="user:sd", successor="searchable")
+    assert isinstance(refusal, Refusal)
+    assert refusal.reason == "predicate_merge"
+    assert refusal.detail["overridable"] is False
+    assert refusal.detail["successor"] == "searchable"
+    assert sorted(refusal.detail["from_extent"]) == ["task"]
+    assert sorted(refusal.detail["into_extent"]) == ["doc"]
+
+    # `force=True` overrides the consumer guards and NOT this one.
+    forced = await registry.retire("commentable", reason="I really mean it",
+                             retired_by="user:sd", successor="searchable", force=True)
+    assert isinstance(forced, Refusal) and forced.reason == "predicate_merge"
+
+    # A successor of another KIND is refused too: a redirect at confidence 1.0
+    # would answer a question about one kind with an entry of another.
+    crossed = await registry.retire("commentable", reason="close enough",
+                              retired_by="user:sd", successor="person")
+    assert isinstance(crossed, Refusal) and crossed.reason == "kind_mismatch"
+    assert crossed.detail["overridable"] is False
+
+    # The guard is NARROW: a plain retirement, and a retirement whose successor
+    # shares a non-empty extent, both still work.
+    plain = await registry.retire("commentable", reason="nothing uses it",
+                            retired_by="user:sd")
+    assert isinstance(plain, TypeEntry) and plain.status == "retired"
+
+    await seed(registry, "linkable", kind="predicate", definition="a code path will accept it")
+    await seed(registry, "shareable", kind="predicate", definition="a code path will accept it")
+    await seed(registry, "note", predicates=["linkable", "shareable"])
+    same = await registry.retire("linkable", reason="genuinely the same set",
+                           retired_by="user:sd", successor="shareable")
+    assert isinstance(same, TypeEntry), same
