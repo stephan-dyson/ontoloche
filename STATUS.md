@@ -1,6 +1,6 @@
 # STATUS — where we are, at a glance
 
-**Updated:** 2026-08-28 20:55 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
+**Updated:** 2026-08-28 21:10 (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
 
 | Roadmap item | Status |
 |---|---|
@@ -15,7 +15,9 @@
 | #3 Phase 2A reference implementation | ✅ done — 229 tests green, both backends |
 | 3b Async adapter | 🔵 in flight — 2 of 3 increments landed |
 | Docs folder reorg | ⏳ queued (after 3b) |
-| #4 `docs/EDGES.md` v0 | ⏳ queued (after reorg) |
+| `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
+| 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ⏳ queued (after reorg) |
+| #4 `docs/EDGES.md` v0 | ⏳ queued (after 3c) |
 | #5 Phase 2B Tenshen migration (beacon) | ⏳ beacon row 21.1 spec in progress; 21.2 build waits on 3b |
 | #6 Actions-registry spec | ⬜ not started |
 | #7 Phase 3 ingestion / mapping | ⬜ not started |
