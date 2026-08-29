@@ -438,14 +438,14 @@ See §6, Q7's table. The one-line version: **the sentence that lets Tenshen be a
 
 That is **mechanism C — the silent per-consumer drop — committed by the call built to prevent it**, and it is worse than round 7's merge finding because a wrong merge is at least recorded in history and a wrong retirement was not. `merge_types` had taken the honest line for the identical uncertainty since v0; `retire` had not. It now returns `Refusal("no_consumer_evidence")`, overridable by `force=True` and recorded like any other override. Pinned by `C9-07`.
 
-### 7.4 What the loop says about the process
+### 7.3b What the loop says about the process
 
-**Eleven rounds, eleven NOT YET verdicts, and the loop did not converge** — see §7.5. Four observations worth carrying to the next spec:
+**Eighteen rounds, eighteen NOT YET verdicts, and the loop did not converge** — see §7.5. Four observations worth carrying to the next spec:
 
 1. **Six of the first eight findings were the same family** — a printed shape or signature drifted from the code. No reviewer caught them all, because each was checking by eye. A twelve-line script catches the family, found two more immediately, and now runs in the suite. **Write that check on the first spec, not the sixth round.**
 2. **The reviewer brief shapes the finding.** Rounds 1–6 produced mostly drift; round 7's brief said *"six rounds found almost nothing about whether the DESIGN survives the three fixtures — push there"*, and it returned the `definitions_diverge` result. A brief that does not say what has already been mined gets what has already been mined.
 3. **Two findings recurred across rounds** (Q4, and the capability-honesty family). The loop's own rule — a finding that recurs is a decision to take, not to defer — was the right call both times.
-4. **The suite was wrong more often than the specs were.** Of the eight contract tests added by this row, six exist because the suite claimed coverage it did not have (`C0-07`, `C0-08`, `C5-12`, `C6-07`, `C9-07`, `C15-08`). A conformance suite that is *the definition of conformance* deserves the same adversarial pressure as the document it enforces.
+4. **The suite was wrong more often than the specs were.** Of the **fifteen** contract tests added by this row, eleven exist because the suite claimed coverage it did not have. A conformance suite that is *the definition of conformance* deserves the same adversarial pressure as the document it enforces.
 
 ### 7.4 The question nobody asked for eleven rounds
 
@@ -466,12 +466,52 @@ Every brief carried two halves: *can a legitimate backend **fail** the suite?* a
 
 **The capability matrix caught one of my own fixes within a minute of writing it.** `C7-07` asserts a count as well as a timestamp, so it failed on a `counts_usage=False` backend — the guard built two rounds earlier flagged the new test before it was committed. That is what these checks are for.
 
-### 7.5 Convergence, honestly
+### 7.5 Convergence, honestly — the loop did **not** converge
 
-**The loop is being closed on the round cap, not on two clean passes.** The protocol asks for two consecutive fresh reviewers with no BLOCKING or MAJOR findings; **that did not happen.** Every round returned NOT YET, and the last round on each document still found real defects.
+**The protocol asks for two consecutive fresh reviewers with no BLOCKING or MAJOR findings. That never happened.** Eighteen rounds ran — eleven on `INTERFACE.md`, seven on `PACKAGE.md` — and **every single one returned NOT YET.** The last round on each document found a defect that no earlier round had, and both were real: a guard blind to the case the document is organised around, and two more backends that passed the suite while broken.
 
-**What that does and does not mean.** It does **not** mean the findings were being churned: no finding recurred unfixed, each round's defects were distinct, and the suite grew from 109 to 117 tests with every addition verified against a deliberately broken backend before being believed. It **does** mean the tail is not empty — a twelfth round would likely find something, most probably another cross-reference between two long documents.
+**This row is therefore closed on an escalation, not on a clean pass.** Saying otherwise would be the exact failure the whole document is built to prevent.
 
-**Why stopping here is the honest call rather than the tired one:** the *family* that dominated rounds 1–6 is now machine-checked and cannot recur silently, the two design-level findings (§7.2, §7.3) are fixed with tests, and the remaining open items are the seven in §6 that need a ruling rather than a fix. **The next round of this loop should run after those rulings, not before them** — several of them (Q1, Q3, Q5, Q7) would change the surface a reviewer is reading.
+**What the loop actually produced.** Twenty-six BLOCKING or MAJOR findings, every one either fixed or recorded with a written reason; **not one dismissed**. The suite grew **109 → 124**, and every addition was verified against a deliberately broken backend *before* being believed. Nine defects were in the shipped **code**, not the prose:
+
+| | defect | where it bit |
+|---|---|---|
+| 1 | `Resolution`/`predicates()` returned bare lists — an empty `alternatives` standing in for *"we did not look"* | UC3, cross-namespace |
+| 2 | `nonbinding` annotated but did not exempt — a conformant backend was reported as failing | the Phase 2B gate itself |
+| 3 | the suite could not be passed by `stores_proposals=False` | UC1, the backend §7.4 calls conformant |
+| 4 | `merge_types`' divergence guard was **anti-correlated** with its purpose | UC1 and UC2 both |
+| 5 | `retire()` read an unknowable `gates_on` as *"nothing gates on this"* | UC1's declared shape |
+| 6 | an unknowable extent compared **equal**, and **the kill row tripped** | UC1's declared shape |
+| 7 | a forced retirement nobody could audit went unrecorded | UC1's declared shape |
+| 8 | one fact — a merged-away name — had four answers depending on lifecycle path and resolver | UC1, UC2 |
+| 9 | `consumers()` reported a predicate's own consumer under `would_drop`, and `retire` let it go | §2.3's "most load-bearing idea" |
+
+**Three whole families are now machine-checked**, and each was found only after several rounds had picked at instances of it one at a time:
+
+- [`check_spec_drift.py`](../tools/check_spec_drift.py) — fifteen printed shapes and thirteen signatures against the code. Six rounds each found one instance; the script found two more the moment it existed.
+- [`check_capability_matrix.py`](../tools/check_capability_matrix.py) — every optional capability declined alone. §3.2's claim was false for **six of eight** flags and had been for four deliverables. *(It then caught one of this row's own new tests within a minute of it being written.)*
+- `C0-10` and `C0-11` — the first two tests written to answer *"can a broken backend **pass**?"* rather than *"can a good one fail?"*
+
+**Why stopping here is the honest call and not the tired one.** The tail is demonstrably not empty — a nineteenth round would probably find something. But the three families above cannot recur silently any more, and **the remaining open items are the eight in §6 that need a *ruling*, not a fix.** Four of them (**Q1**, **Q3**, **Q5**, **Q7**) would change the surface a reviewer is reading, so continuing to review the current surface has a falling return.
+
+**Recommendation: rule on Q1–Q8, then run this loop again from round one against whatever those rulings produce.** What the loop should NOT do is keep going now — that is the churn its own stop condition names.
+
+**And the one instruction to carry forward:** every finding of substance in eighteen rounds came from **driving the real registry through a real scenario**. None came from reading. §7.4's asymmetry is the sharpest version of that — eleven rounds asked whether a good backend could fail, one round asked whether a bad one could pass, and the second question paid out immediately. **Open the next spec's review brief with it.**
 
 ---
+
+---
+
+## 8. Verdict
+
+**UC3 was worth running, and the kill-criterion mechanism held.**
+
+**What UC3 itself changed.** `INTERFACE.md` gained **§10b** and five contortions (8–12); `PACKAGE.md` gained **§8b** and two (B7–B8). **No call signature, data shape or refusal changed because of UC3** — every finding is an *absence*, and the ordering rule does not let a design test amend the design. The three answers the design gives to mechanism 4 all held on real data: three agencies' `status` coexist as scoped types, `cross_namespace_merge` refuses non-overridably even with `acknowledge`, and `AttributeSchema` keyed on `(namespace, kind)` lets a deployment require `unknown_encodings` of 311 and not of Parks, in one store. **`namespace` stopped being an unused field and did its job.**
+
+**What UC3 could not do, and said so.** Contortions 8 and 9 are the two that matter: a proposer in one agency's namespace is never told the word is taken in another, and nothing can record that two scoped types denote the same thing. Both are recorded, both have a recommendation, and neither is fixed here.
+
+**What the adversarial loop changed, which was more.** Eighteen rounds, **eighteen NOT YET verdicts, no clean pass** (§7.5). Twenty-six BLOCKING/MAJOR findings, none dismissed. **Nine were defects in the shipped code**, including the venture's own kill criterion tripping on Tenshen's declared capability shape. The contract suite went **109 → 124**, and three whole families of defect are now machine-checked rather than looked for by eye.
+
+**The honest state of the two specs.** Both are materially more correct than when this row opened and **neither has earned a clean review pass.** Eight questions (§6, **Q1–Q8**) want a ruling before the next loop is worth running; four of them would change the surface a reviewer reads.
+
+**For the record, the thing most worth repeating:** every finding of substance in eighteen rounds came from **driving the real registry through a real scenario**. Not one came from reading either document.
