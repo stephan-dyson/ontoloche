@@ -189,6 +189,11 @@ class ProposalRecord:
     decided_at: datetime | None = None
     decision_reason: str | None = None
     superseded_by: str | None = None
+    #: Ruling R21, row 3e. The SOURCE's own version at the moment the proposal was
+    #: made, carried to the ``Provenance`` written at approval. Not a column of its own
+    #: on ``oo_type``: on an approved entry it lives inside ``provenance_json``, which
+    #: is where every other provenance field lives.
+    source_version: str | None = None
 
 
 @dataclass(frozen=True)

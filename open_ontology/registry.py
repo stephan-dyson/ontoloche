@@ -133,8 +133,18 @@ def _uuid() -> str:
 
 
 def _created_by(actor: str) -> str:
+    """INTERFACE.md 2.1's ``created_by``, read off the actor string.
+
+    ``derived:`` is ruling **R17**, row 3e -- a deterministic rule with no human and no
+    model in the loop. UC3's BBL join is the fixture: an actor of
+    ``derived:socrata_bbl_join`` used to land as ``user``, which said a person decided
+    something no person touched. ``import:`` stays ``seed`` on purpose: an import is a
+    vocabulary arriving from elsewhere already decided (2.5), not a rule deriving one.
+    """
     if actor.startswith("ai:"):
         return "ai"
+    if actor.startswith("derived:"):
+        return "derived"
     if actor.startswith("import:"):
         return "seed"
     if actor == "seed" or actor.startswith("seed:"):
@@ -213,6 +223,7 @@ def _prov_to_dict(p: Provenance) -> dict:
     return {
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "created_by_actor": p.created_by_actor,
+        "source_version": p.source_version,
         "proposed_by": p.proposed_by,
         "approved_by": p.approved_by,
         "approved_at": p.approved_at.isoformat() if p.approved_at else None,
@@ -228,6 +239,7 @@ def _prov_from_dict(
     return Provenance(
         created_at=_ts(d.get("created_at")),
         created_by_actor=d.get("created_by_actor") or "unknown",
+        source_version=d.get("source_version"),
         proposed_by=d.get("proposed_by"),
         approved_by=d.get("approved_by"),
         approved_at=_ts(d.get("approved_at")),
@@ -586,6 +598,7 @@ class Registry:
             status=rec.status,
             warnings=tuple(rec.warnings),
             near_matches=tuple((n[0], n[1]) for n in (rec.near_matches or [])),
+            source_version=rec.source_version,
         )
 
     # ============================================================== 5.1 consumers
@@ -1094,6 +1107,7 @@ class Registry:
         predicates: Sequence[str] = (),
         attributes: dict | None = None,
         tier: str | None = None,
+        source_version: str | None = None,
     ) -> Proposal | TypeEntry | Refusal:
         """An addition, not yet a fact.
 
@@ -1176,6 +1190,7 @@ class Registry:
             status="pending",
             warnings=tuple(warnings),
             near_matches=[[n, s] for n, s in near],
+            source_version=source_version,
         )
 
         auto = policy.approval_policy == "auto" or not self.caps.stores_proposals
@@ -1338,6 +1353,9 @@ class Registry:
             approved_at=now,
             model_tier=rec.tier,
             evidence=tuple(_evidence_from_dict(e) for e in (rec.evidence or [])),
+            # R21 -- the SOURCE's own version, carried from the proposal. Never ours:
+            # `created_at` is when we wrote it.
+            source_version=rec.source_version,
         )
         type_rec = TypeRecord(
             namespace=rec.namespace,
@@ -2123,6 +2141,9 @@ class Registry:
                 approved_by="unknown:imported",
                 approved_at=_ts(row.get("created_at")) or now,
                 imported_from=imported_from,
+                # R21. A dump has a version and 10b.5's finding is that it had nowhere
+                # to go; `imported_from` is foreign SYSTEM identifiers, not a version.
+                source_version=row.get("source_version"),
             )
             rec = TypeRecord(
                 namespace=namespace,

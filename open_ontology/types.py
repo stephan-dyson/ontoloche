@@ -52,7 +52,14 @@ __all__ = [
 KINDS = ("entity", "predicate", "edge", "value_set")
 
 STATUSES = ("proposed", "active", "retired")
-CREATED_BY = ("seed", "ai", "user")
+# INTERFACE.md 2.1. The first three are Tenshen's own `work_link_types` vocabulary,
+# taken deliberately (2.1, 9). `derived` is ruling **R17** (row 3e): produced by a
+# DETERMINISTIC RULE with no human and no model in the loop. Two unrelated fixtures
+# reached for the same missing value -- beacon's `EntityMention.match =
+# "deterministic" and UC3's BBL join, which had to claim `user` for a join no user
+# performed -- and the alternative was a string convention inside `created_by_actor`
+# that nothing validates. EDGES.md 14 Q12.
+CREATED_BY = ("seed", "ai", "user", "derived")
 ON_UNKNOWN = ("drop", "error", "passthrough")
 EVIDENCE_KINDS = ("data", "external_doc", "human", "code")
 PROPOSAL_STATUSES = ("pending", "approved", "rejected", "superseded")
@@ -165,6 +172,17 @@ class Provenance:
     model_tier: str | None = None
     evidence: tuple[Evidence, ...] = ()
     imported_from: dict[str, Any] | None = None
+    #: Ruling **R21**, row 3e -- the SOURCE's own version, never ours.
+    #:
+    #: INTERFACE.md 10b.5, contortion 12: a UC3 type is derived from a dataset that has
+    #: its own ``data_updated_at`` -- 2017-10-04 for one agency, 2026-08-28 for another
+    #: -- and a type proposed from a 2017 snapshot of a "Historical data" set is a
+    #: different claim from one proposed off a daily feed. None of the ten fields had a
+    #: home for it: ``Citation.retrieved_at`` is when *we* fetched, and ``imported_from``
+    #: is foreign SYSTEM identifiers. EDGES.md gave ``EdgeProvenance`` the field first,
+    #: which left two shapes for one concept with one of them missing it -- the drift
+    #: this repo has caught six times, so it is closed here (EDGES.md 14, Q16).
+    source_version: str | None = None
     history: tuple[ProvenanceEvent, ...] = ()
     # Rule U applied to the history itself: a backend with stores_events=False returns
     # an empty history, and this says so rather than letting [] read as "nothing
@@ -275,6 +293,10 @@ class Proposal:
     status: str
     warnings: tuple[str, ...] = ()
     near_matches: tuple[Alternative, ...] = ()
+    #: R21. Carried here as well as on ``Provenance`` so a proposer can read back what
+    #: they supplied before anything is approved -- a value accepted and invisible until
+    #: approval is a value a caller cannot check.
+    source_version: str | None = None
 
 
 @dataclass(frozen=True)

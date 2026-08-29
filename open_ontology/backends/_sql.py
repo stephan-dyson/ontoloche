@@ -152,6 +152,9 @@ PROPOSAL_COLUMNS = (
     "decided_at",
     "decision_reason",
     "superseded_by",
+    # Store version 3, ruling R21 -- the SOURCE's own version, carried on the
+    # proposal row until approval writes it into provenance_json.
+    "source_version",
 )
 
 CONSUMER_COLUMNS = (
@@ -295,6 +298,7 @@ class SqlStore:
             d.enc_ts(rec.decided_at),
             rec.decision_reason,
             rec.superseded_by,
+            rec.source_version,
         ]
 
     def proposal_from_row(self, row: Iterable[Any]) -> ProposalRecord:
@@ -319,6 +323,7 @@ class SqlStore:
             decided_at=d.dec_ts(r["decided_at"]),
             decision_reason=r["decision_reason"],
             superseded_by=r["superseded_by"],
+            source_version=r.get("source_version"),
         )
 
     # --------------------------------------------------------------- consumer record

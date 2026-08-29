@@ -39,7 +39,7 @@ It is not a schema store and it is not a graph. It holds names, definitions, pro
 | `kind` | `str` | yes | Open vocabulary. v0 defines four: `entity`, `predicate`, `edge`, `value_set`. See §2.2 |
 | `namespace` | `str` | yes | Defaults to `"default"`. The answer to mechanism 4 that is **not** merging. See §2.6 |
 | `definition` | `str` | yes | Prose, non-empty. What this word means *here*. Rejected if empty — a type without a definition is how collision starts |
-| `created_by` | `"seed" \| "ai" \| "user"` | yes | Where the vocabulary came from. Field name and values taken deliberately from Tenshen's `work_link_types` (§9) |
+| `created_by` | `"seed" \| "ai" \| "user" \| "derived"` | yes | Where the vocabulary came from. Field name and the **first three** values taken deliberately from Tenshen's `work_link_types` (§9). `derived` added by ruling **R17**, row 3e — see below |
 | `provenance` | `Provenance` | yes | §2.4 |
 | `status` | `"proposed" \| "active" \| "retired"` | yes | §2.5 |
 | `usage` | `UsageReport` | yes | §5.7 — may be entirely unknown, never fabricated |
@@ -49,6 +49,15 @@ It is not a schema store and it is not a graph. It holds names, definitions, pro
 | `aliases` | `list[str]` | no | Prior names, and identifiers imported from elsewhere (a Foundry `apiName`/`rid` lands here or in `provenance.imported_from`, per 0.3 consequence 3) |
 | `warnings` | `list[str]` | yes | Defaults `[]`. The seven values of §5.4's table; two of them (`name_previously_retired`, `retired_without_usage_evidence`) reach a caller **only** here. *(Added by row 3c — implemented at 2A as deviation D-3 and described by §5.4, §5.5 and §5.9, but never listed in this table)* |
 | `attr_schema_version` | `int \| None` | yes | The attribute schema in force **when this entry was written** — `None` means it was written with validation off. Owned by `PACKAGE.md` §5.4, which is why it is opaque here: v0 never reads it, and it is carried so a reader can tell *which generation* of `attributes` they are looking at without the registry pretending to interpret them. §5.4 there: entries written under an older schema are never rewritten and never retroactively invalidated. *(Added by row 3c after a sixth adversarial review round — it is populated on every `TypeEntry` the registry returns and appeared in neither this table nor the deviation ledger)* |
+
+**`derived` — the fourth `created_by`, and the first change to this vocabulary** *(ruling **R17**, row 3e, 2026-08-29)*. `derived` means **produced by a deterministic rule, with no human and no model in the loop**. The registry reads it off the actor, the way it already reads `ai:` and `seed:`: an actor of `derived:<rule>` lands `created_by="derived"`.
+
+**Two unrelated fixtures reached for the same missing value**, which is why this is the only one of [`EDGES.md`](EDGES.md) §14's vocabulary questions that was taken:
+
+- **[Observed, beacon spec]** `EntityMention.match` carries exactly the three-way distinction this field needs and does not have — *derived by a rule* / *inferred by a model* / *asserted by a person* — and its first value is literally `deterministic`.
+- **[Observed, UC3]** the BBL join that relates a tree to a service request is a deterministic rule over a shared key. Before R17 it had to claim `created_by="user"`, which says a person decided something no person touched, or hide the truth in a `created_by_actor` string convention that nothing validates.
+
+**`import:` still maps to `seed`, on purpose.** An import is a vocabulary arriving from elsewhere *already decided* (§2.5) — the decision was made by whoever ran the source system — where `derived` is a decision this system's rule made just now. Collapsing them would lose which of those two happened, which is the distinction the value exists for. Counted in [`EDGES.md`](EDGES.md) §9.2 T1.5b as one of six `created_by`-shaped vocabularies in the two codebases, none of which agreed.
 
 **Why `attributes` is deliberately dumb.** Tenshen's relationship types carry `is_symmetric` and `inverse_label`; CMS's value sets carry an ordering. Neither belongs in a v0 type registry, and inventing homes for both would be designing #4 and #2 here. They go in `attributes` and the registry never reads them. **Recorded as a known weakness, not a solved problem** — `attributes` is where an unversioned schema will accumulate if nobody watches it.
 
@@ -90,6 +99,7 @@ Provenance:
     model_tier:        str | None     # §2.7 — the tier that produced the proposal
     evidence:          list[Evidence]
     imported_from:     dict | None    # opaque foreign identifiers: {"system": "foundry", "apiName": ..., "rid": ...}
+    source_version:    str | None     # the SOURCE's own version — never ours. R21, §2.4a
     history:           list[ProvenanceEvent]   # append-only; nothing here is ever rewritten
     history_why:       str | None     # why `history` is empty, when it is. Rule U:
                                       #   an empty history must not read as "nothing
@@ -97,6 +107,16 @@ Provenance:
 ```
 
 *(`history_why` added to this shape by row 3c. It was implemented at 2A as deviation D-4 — `PACKAGE.md` §3.4 primitive 15 requires an empty `history` to carry a `why` — and §11 recorded it, but the shape above never gained the field.)*
+
+#### 2.4a `source_version` — the source's own version, never ours *(ruling **R21**, row 3e, 2026-08-29)*
+
+Everything else in `Provenance` is a fact about **us**: when we created the entry, who proposed it, when we approved it, when we fetched a citation. `source_version` is the one field that is a fact about the **thing the entry was derived from**, and it is `None` unless a caller supplies one.
+
+**The finding is §10b.5, contortion 12.** A UC3 type is derived from a dataset carrying its own `data_updated_at` — **[Observed]** 2017-10-04 for one agency, 2026-08-28 for another, 2026-08-24 for a third — and *a type proposed from a 2017 snapshot of a "Historical data" dataset is a different claim from one proposed off a daily feed.* None of the ten fields had a home for it: `Evidence.locator` takes the resource URL, `Citation.retrieved_at` takes **our** fetch time, and `imported_from` is documented as foreign **system** identifiers (a Foundry `apiName`/`rid`). Using `imported_from` for a dataset version is the stretch §10b.5 declined to make, and the field was left `None`.
+
+**What actually forced it now** is not that finding on its own — it was collected for v1 like the rest — but that [`EDGES.md`](EDGES.md) §5.3 gave `EdgeProvenance` the field first, because a cross-agency edge is *entirely* a claim about two source snapshots. That left **two shapes for one concept with one of them missing the field**, which is precisely the drift [`check_spec_drift.py`](../tools/check_spec_drift.py) exists to catch, pointing inward. [`EDGES.md`](EDGES.md) §14 Q16; ruled **R21**.
+
+**Where it comes from.** `propose_type(..., source_version=…)` carries it on the `Proposal`, and `approve` writes it into the `Provenance` — so it is supplied once, by the proposer who knows what they read, and is never invented by the registry. `import_types` reads a `source_version` key off the imported row. **Opaque to v0**: a string, never parsed, never compared, never ordered — the same posture as `model_tier` (§2.7), and for the same reason.
 
 **Rule:** `approved_by` is never null on an `active` type. If nothing human approved it, the value is `"auto:<policy-name>"`. **A registry that leaves the field blank invites a reader to assume a human signed off** — that is the rubber-stamping failure `WALKTHROUGH.md` names, arriving through the data model rather than through the UI.
 
@@ -399,6 +419,7 @@ def propose_type(
     predicates: list[str] = (),
     attributes: dict | None = None,
     tier: str | None = None,          # required when proposed_by starts with "ai:"
+    source_version: str | None = None,   # §2.4a — the SOURCE's own version. R21
 ) -> Proposal | TypeEntry: ...
 ```
 
@@ -416,6 +437,7 @@ Proposal:
     proposed_at:   datetime
     tier:          str | None
     status:        "pending" | "approved" | "rejected" | "superseded"
+    source_version: str | None        # §2.4a -- carried to Provenance at approval. R21
     warnings:      list[str]          # "unverified_semantics", "no_evidence", "near_duplicate:<name>"
     near_matches:  list[tuple[str, float]]
 ```

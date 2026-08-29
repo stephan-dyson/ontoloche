@@ -439,6 +439,7 @@ class AsyncRegistry:
             status=rec.status,
             warnings=tuple(rec.warnings),
             near_matches=tuple((n[0], n[1]) for n in (rec.near_matches or [])),
+            source_version=rec.source_version,
         )
 
     # ============================================================== 5.1 consumers
@@ -947,6 +948,7 @@ class AsyncRegistry:
         predicates: Sequence[str] = (),
         attributes: dict | None = None,
         tier: str | None = None,
+        source_version: str | None = None,
     ) -> Proposal | TypeEntry | Refusal:
         """An addition, not yet a fact.
 
@@ -1029,6 +1031,7 @@ class AsyncRegistry:
             status="pending",
             warnings=tuple(warnings),
             near_matches=[[n, s] for n, s in near],
+            source_version=source_version,
         )
 
         auto = policy.approval_policy == "auto" or not self.caps.stores_proposals
@@ -1191,6 +1194,9 @@ class AsyncRegistry:
             approved_at=now,
             model_tier=rec.tier,
             evidence=tuple(_evidence_from_dict(e) for e in (rec.evidence or [])),
+            # R21 -- the SOURCE's own version, carried from the proposal. Never ours:
+            # `created_at` is when we wrote it.
+            source_version=rec.source_version,
         )
         type_rec = TypeRecord(
             namespace=rec.namespace,
@@ -1976,6 +1982,9 @@ class AsyncRegistry:
                 approved_by="unknown:imported",
                 approved_at=_ts(row.get("created_at")) or now,
                 imported_from=imported_from,
+                # R21. A dump has a version and 10b.5's finding is that it had nowhere
+                # to go; `imported_from` is foreign SYSTEM identifiers, not a version.
+                source_version=row.get("source_version"),
             )
             rec = TypeRecord(
                 namespace=namespace,
