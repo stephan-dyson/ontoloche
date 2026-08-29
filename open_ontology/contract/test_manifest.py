@@ -1,11 +1,11 @@
-"""Suite bookkeeping -- not one of the 127.
+"""Suite bookkeeping -- not one of the 128.
 
-PACKAGE.md 6.2 enumerates 127 contract tests in seventeen groups and calls the
+PACKAGE.md 6.2 enumerates 128 contract tests in seventeen groups and calls the
 enumeration *the coverage floor, not a budget*. This checks the floor is actually on the
 floor: every enumerated id exists as a test function, and nothing has quietly gone
 missing while the suite was being written.
 
-The number of collected pytest items is larger than 127 -- both because the suite is
+The number of collected pytest items is larger than 128 -- both because the suite is
 parametrised over backends and because C4-09 is parametrised over malformed names.
 """
 
@@ -18,7 +18,7 @@ import pytest
 
 #: PACKAGE.md 6.2, group by group.
 EXPECTED_PER_GROUP = {
-    0: 12,
+    0: 13,
     1: 9,
     2: 5,
     3: 11,
@@ -36,7 +36,7 @@ EXPECTED_PER_GROUP = {
     15: 9,
     16: 4,
 }
-TOTAL = 127
+TOTAL = 128
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 

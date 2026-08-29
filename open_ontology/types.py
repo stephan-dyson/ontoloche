@@ -164,6 +164,13 @@ class Consumer:
     owner: str | None = None
     registered_at: datetime | None = None
     locator: str | None = None
+    #: Row 3d, third adversarial round. Populated only on the ``Consumer``
+    #: ``register_consumer`` hands back -- a registration made over a borrowed
+    #: connection is not durable until the host commits, and this object looked exactly
+    #: as done as a durable one. Reproduced: the registration vanished on host rollback
+    #: with nothing on the returned object to say it might. Empty on the copies inside a
+    #: ``ConsumerReport``, which are reads, not writes.
+    warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.on_unknown not in ON_UNKNOWN:
@@ -258,6 +265,10 @@ class Rejection:
     rejected_at: datetime
     reason: str
     superseded_by: str | None = None
+    #: Row 3d, third adversarial round -- the same hole as ``Consumer.warnings``:
+    #: a rejection recorded over a borrowed connection vanishes on host rollback and
+    #: the returned object said nothing about it.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

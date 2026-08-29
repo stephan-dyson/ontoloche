@@ -16,6 +16,7 @@ __all__ = [
     "StoreVersionUnknown",
     "NotSupported",
     "HostTransactionRequired",
+    "SavepointOutOfOrder",
 ]
 
 
@@ -86,6 +87,25 @@ class HostTransactionRequired(OpenOntologyError):
     the zero-config default, which is where the mistake is likeliest to be made and
     least likely to be noticed. Both backends now check the precondition first and
     raise this, so the two fail the same documented way.
+    """
+
+
+class SavepointOutOfOrder(OpenOntologyError):
+    """Two adapters over one borrowed connection ended their scopes out of order.
+
+    **A savepoint stack is per CONNECTION, not per adapter** -- and both engines
+    release cascadingly: ``RELEASE SAVEPOINT a`` destroys every savepoint established
+    after ``a``, and so does ``ROLLBACK TO a``. So if adapter A opens a scope, adapter B
+    opens one on the same connection, and **A finishes first**, A's clean exit silently
+    destroys B's savepoint; B's own exit then fails with a raw driver error and, on
+    Postgres, poisons the whole connection -- A's later reads fail too.
+
+    Reproduced end to end (row 3d, third adversarial round). Two adapters in one process
+    is a first-class scenario in this suite and a realistic shape for a host holding one
+    session, so the answer is not "do not do that": the adapter checks the shared stack
+    **before** issuing the doomed statement and raises this instead of corrupting the
+    connection. Strict nesting -- B opens after A and closes before A -- is fine and is
+    what the check permits.
     """
 
 

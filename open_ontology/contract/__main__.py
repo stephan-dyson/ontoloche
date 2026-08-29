@@ -56,6 +56,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--schema-harness",
+        help=(
+            "pkg.mod:Name -- a zero-argument callable returning a SchemaHarness: a store "
+            "whose schema does not exist yet, plus your host's own migration. Required "
+            "to VERIFY an owns_schema=False declaration; without it the run reports that "
+            "declaration as not verified"
+        ),
+    )
+    parser.add_argument(
         "--include-nonbinding",
         action="store_true",
         help=(
@@ -72,11 +81,13 @@ def main(argv: list[str] | None = None) -> int:
 
     resolver_factory = _load(known.resolver) if known.resolver else None
     borrowed_factory = _load(known.borrowed) if known.borrowed else None
+    schema_harness = _load(known.schema_harness) if known.schema_harness else None
 
     return run_contract_suite(
         factory,
         resolver_factory=resolver_factory,
         borrowed_factory=borrowed_factory,
+        schema_harness_factory=schema_harness,
         args=passthrough,
         include_nonbinding=known.include_nonbinding,
     )

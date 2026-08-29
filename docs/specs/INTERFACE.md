@@ -168,6 +168,7 @@ Consumer:
     owner:       str | None
     registered_at: datetime
     locator:     str | None  # file:line, so a human can go look
+    warnings:    list[str]   # on the one `register_consumer` returns; empty in a report
 ```
 
 `on_unknown="drop"` is the dangerous value and it is the **[Observed]** default behaviour of every one of Tenshen's seven allowlists. It is what makes a new type die silently.
@@ -423,7 +424,7 @@ Proposal:
 | `attributes_invalid:<field>:<why>` | `Proposal` | `PACKAGE.md` §5.3, `warn` mode |
 | `name_previously_retired` | **`TypeEntry` only** — the retired entry `propose_type` hands back; no proposal is created (§5.9) | §5.4 |
 | `retired_without_usage_evidence` | **`TypeEntry` only** — the retired entry `retire` returns | §5.9 |
-| `not_durable_until_host_commits:<why>` | **every `TypeEntry` and every `Proposal`** the registry returns, when the adapter declares `transaction_scope="savepoint"` | `PACKAGE.md` §3 item 3, ruling R5. *(Row 3d. The adapter is running inside a transaction **the host owns**: the write is atomic and becomes durable only when the host commits. `status="active"` with nothing else on the object is a durable-sounding answer to a question whose answer is not yet durable, which is the failure Rule U is named after. The `<why>` is the backend's own sentence, verbatim. Added after an adversarial reviewer found the document promising this and the code not doing it — `transaction_scope` appeared nowhere in `registry.py`.)* |
+| `not_durable_until_host_commits:<why>` | **every write result** — `TypeEntry`, `Proposal`, the `Consumer` from `register_consumer`, the `Rejection` from `reject` — when the adapter declares `transaction_scope="savepoint"` | `PACKAGE.md` §3 item 3, ruling R5. *(Row 3d. The adapter is running inside a transaction **the host owns**: the write is atomic and becomes durable only when the host commits. `status="active"` with nothing else on the object is a durable-sounding answer to a question whose answer is not yet durable, which is the failure Rule U is named after. The `<why>` is the backend's own sentence, verbatim. Added after an adversarial reviewer found the document promising this and the code not doing it — `transaction_scope` appeared nowhere in `registry.py`. **Widened one round later**: the first pass attached it in the two helpers that build `TypeEntry` and `Proposal`, and `register_consumer` and `reject` construct their results directly — so a consumer registration made over a borrowed connection came back looking exactly as done as a durable one and then vanished on host rollback, which is mechanism **C** arriving through the transaction seam.)* |
 
 *(Enumerated by row 3c; §5.4 previously listed three inline and the rest arrived scattered across the document. The carrier column was added after a fourth review round pointed out that one flat list invites reading all of them as `Proposal.warnings`.)*
 
@@ -463,6 +464,7 @@ Rejection:
     rejected_at:   datetime
     reason:        str
     superseded_by: str | None
+    warnings:      list[str]   # §5.4's vocabulary; see `not_durable_until_host_commits`
 ```
 
 **Designed against: mechanism 1.** Approval is the review that A1 says HHS never had.

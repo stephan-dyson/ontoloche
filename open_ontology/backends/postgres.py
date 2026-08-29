@@ -90,12 +90,16 @@ class PostgresAdapter(BaseSqlAdapter):
             cur.execute(sql, tuple(params) or None)
             return cur.fetchone()
 
-    def _host_transaction_open(self) -> bool | None:
+    def _host_transaction_state(self) -> str | None:
         status = self.conn.info.transaction_status
-        return status in (
-            self._psycopg.pq.TransactionStatus.INTRANS,
-            self._psycopg.pq.TransactionStatus.INERROR,
-        )
+        if status == self._psycopg.pq.TransactionStatus.INERROR:
+            # In a transaction, and it is already dead. A SAVEPOINT here raises
+            # InFailedSqlTransaction -- the raw driver error HostTransactionRequired
+            # exists to replace. Distinguished, not collapsed into "open".
+            return "aborted"
+        if status == self._psycopg.pq.TransactionStatus.INTRANS:
+            return "open"
+        return "none"
 
     def _begin(self) -> None:
         self._execute("BEGIN")

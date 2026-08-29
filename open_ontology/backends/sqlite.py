@@ -81,8 +81,10 @@ class SQLiteAdapter(BaseSqlAdapter):
     def _fetchone(self, sql: str, params: tuple | list = ()) -> tuple | None:
         return self.conn.execute(sql, tuple(params)).fetchone()
 
-    def _host_transaction_open(self) -> bool | None:
-        return bool(self.conn.in_transaction)
+    def _host_transaction_state(self) -> str | None:
+        # sqlite3 has no aborted-transaction state: a failed statement does not poison
+        # the transaction the way Postgres does, so there are only two answers here.
+        return "open" if self.conn.in_transaction else "none"
 
     def _begin(self) -> None:
         self.conn.execute("BEGIN IMMEDIATE")

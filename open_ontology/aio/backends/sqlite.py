@@ -88,9 +88,9 @@ class AsyncSQLiteAdapter(AsyncBaseSqlAdapter):
         async with self.conn.execute(sql, tuple(params)) as cursor:
             return await cursor.fetchone()
 
-    def _host_transaction_open(self) -> bool | None:
+    def _host_transaction_state(self) -> str | None:
         # aiosqlite proxies the driver connection's attribute; no await needed.
-        return bool(self.conn.in_transaction)
+        return "open" if self.conn.in_transaction else "none"
 
     async def _begin(self) -> None:
         async with self.conn.execute("BEGIN IMMEDIATE"):

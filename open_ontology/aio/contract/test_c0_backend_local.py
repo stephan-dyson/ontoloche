@@ -35,7 +35,7 @@ from open_ontology._clock import FixedClock
 from open_ontology.aio.registry import AsyncRegistry
 from open_ontology.policy import NamespacePolicy
 from open_ontology.adapter import TypeQuery, TypeRecord
-from open_ontology.errors import AlreadyExists, SchemaMismatch
+from open_ontology.errors import AlreadyExists, HostTransactionRequired, SchemaMismatch
 from open_ontology.types import Refusal, TypeEntry
 
 from . import _support
@@ -235,8 +235,34 @@ async def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_pa
         owner = await AsyncPostgresAdapter.open(POSTGRES_DSN, schema=schema)
         await owner._execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
         guest = await AsyncPostgresAdapter.open(POSTGRES_DSN, schema=schema, owns_schema=False)
+    elif _support.EXTERNAL_SCHEMA_HARNESS is not None:
+        # C0-09's async twin of the third-party path. See the sync module.
+        harness = await _support.EXTERNAL_SCHEMA_HARNESS()
+        try:
+            guest = await harness.guest()
+            caps = await guest.capabilities()
+            assert caps.owns_schema is False
+            assert caps.why.get("owns_schema", "").strip()
+            with pytest.raises(SchemaMismatch) as raised:
+                await guest.migrate()
+            assert "oo_type" in str(raised.value)
+            with pytest.raises(SchemaMismatch):
+                await guest.migrate()
+            await harness.create_host_schema()
+            version = await guest.migrate()
+            assert isinstance(version, int) and version >= 1
+            await guest.put_type(_type("facility"), expect_absent=True)
+            assert await guest.get_type("default", "facility", kind="entity") is not None
+        finally:
+            await harness.teardown()
+        return
     else:
-        pytest.skip("PENDING -- owns_schema is a property of the reference backends")
+        pytest.skip(
+            "PENDING -- this adapter supplied no SchemaHarness, so its owns_schema "
+            "declaration cannot be verified here. Pass "
+            "run_async_contract_suite(schema_harness_factory=...) to verify it; until "
+            "then the run reports it as NOT VERIFIED (PACKAGE.md 6.4)."
+        )
 
     try:
         assert (await guest.capabilities()).owns_schema is False
@@ -283,6 +309,7 @@ async def _borrowed_minimal(tmp_path):
     async with host.execute("PRAGMA busy_timeout = 5000"):
         pass
     guest = await AsyncMinimalSQLiteAdapter.open(path, connection=host)
+    opened = [host]
 
     async def outsider(name):
         other = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
@@ -305,10 +332,25 @@ async def _borrowed_minimal(tmp_path):
             pass
 
     async def teardown():
-        await host.close()
+        for conn in opened:
+            try:
+                await conn.close()
+            except Exception:  # noqa: BLE001 - teardown must not mask an assertion
+                pass
+
+    async def idle_adapter():
+        idle = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
+        opened.append(idle)
+        return await AsyncMinimalSQLiteAdapter.open(path, connection=idle)
 
     return _support.BorrowedHarness(
-        guest, outsider, host_begin, host_open, host_commit, teardown
+        guest,
+        outsider,
+        host_begin,
+        host_open,
+        host_commit,
+        teardown,
+        idle_adapter=idle_adapter,
     )
 
 
@@ -328,6 +370,7 @@ async def _borrowed_sqlite(tmp_path):
     async with host.execute("PRAGMA busy_timeout = 5000"):
         pass
     guest = await AsyncSQLiteAdapter.open(path, connection=host, owns_schema=False)
+    opened = [host]
 
     async def outsider(name):
         other = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
@@ -350,10 +393,26 @@ async def _borrowed_sqlite(tmp_path):
             pass
 
     async def teardown():
-        await host.close()
+        for conn in opened:
+            try:
+                await conn.close()
+            except Exception:  # noqa: BLE001 - teardown must not mask an assertion
+                pass
+
+    async def idle_adapter():
+        # A connection with NO transaction on it -- the state C0-13 is about.
+        idle = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
+        opened.append(idle)
+        return await AsyncSQLiteAdapter.open(path, connection=idle, owns_schema=False)
 
     return _support.BorrowedHarness(
-        guest, outsider, host_begin, host_open, host_commit, teardown
+        guest,
+        outsider,
+        host_begin,
+        host_open,
+        host_commit,
+        teardown,
+        idle_adapter=idle_adapter,
     )
 
 
@@ -396,13 +455,44 @@ async def _borrowed_postgres():
     async def host_commit():
         await host.commit()
 
+    made = [host]
+
     async def teardown():
-        await host.close()
+        for conn in made:
+            try:
+                await conn.close()
+            except Exception:  # noqa: BLE001 - teardown must not mask an assertion
+                pass
         await owner._execute('DROP SCHEMA IF EXISTS "' + schema + '" CASCADE')
         await owner.close()
 
+    async def idle_adapter():
+        # autocommit=True leaves the connection IDLE: in no transaction at all.
+        idle = await psycopg.AsyncConnection.connect(POSTGRES_DSN, autocommit=True)
+        made.append(idle)
+        return await AsyncPostgresAdapter.open(connection=idle, owns_schema=False)
+
+    async def aborted_adapter():
+        # A transaction the HOST has already broken: in a transaction, and nothing this
+        # adapter does inside it can succeed -- SAVEPOINT included.
+        broken = await psycopg.AsyncConnection.connect(POSTGRES_DSN)
+        made.append(broken)
+        async with broken.cursor() as cur:
+            try:
+                await cur.execute("SELECT no_such_column_at_all")
+            except Exception:  # noqa: BLE001 - breaking it IS the setup
+                pass
+        return await AsyncPostgresAdapter.open(connection=broken, owns_schema=False)
+
     return _support.BorrowedHarness(
-        guest, outsider, host_begin, host_open, host_commit, teardown
+        guest,
+        outsider,
+        host_begin,
+        host_open,
+        host_commit,
+        teardown,
+        idle_adapter=idle_adapter,
+        aborted_adapter=aborted_adapter,
     )
 
 
@@ -517,3 +607,59 @@ async def test_c0_12_a_borrowed_connection_uses_savepoints_and_never_commits(
         assert await outsider("doomed") == 0 and await outsider("outer") == 0
     finally:
         await teardown()
+
+
+async def test_c0_13_a_borrowed_connection_with_no_usable_transaction_is_refused(
+    backend, tmp_path
+):
+    """C0-13's async twin. PACKAGE.md 3 item 3 consequence 1.
+
+    A borrowed connection must already be inside the host's transaction, and there are
+    two ways it can fail to be: none at all, and one that has already failed. Both are
+    refused with ``HostTransactionRequired`` so the two backends fail the same
+    documented way -- Postgres would otherwise raise a raw driver error and SQLite would
+    silently start a transaction and commit it on RELEASE.
+
+    Its own id because [Observed, row 3d third round] every harness in the suite called
+    ``host_begin()`` first, so an adapter omitting the check passed everything.
+    """
+    if backend == "sqlite":
+        harness = await _borrowed_sqlite(tmp_path)
+    elif backend == "sqlite_minimal":
+        harness = await _borrowed_minimal(tmp_path)
+    elif backend == "postgres":
+        if not POSTGRES_DSN:
+            pytest.skip("PENDING -- no local Postgres; set OO_POSTGRES_DSN")
+        pytest.importorskip("psycopg", reason="PENDING -- psycopg is not installed")
+        harness = await _borrowed_postgres()
+    elif _support.EXTERNAL_BORROWED is not None:
+        harness = await _support.EXTERNAL_BORROWED()
+    else:
+        pytest.skip(
+            "PENDING -- this adapter supplied no BorrowedHarness, so the "
+            "host-transaction precondition cannot be driven here."
+        )
+    if harness.idle_adapter is None and harness.aborted_adapter is None:
+        await harness.teardown()
+        pytest.skip(
+            "PENDING -- this BorrowedHarness supplies neither an idle_adapter nor an "
+            "aborted_adapter, so PACKAGE.md 3 item 3 consequence 1 cannot be checked."
+        )
+    try:
+        if harness.idle_adapter is not None:
+            idle = await harness.idle_adapter()
+            with pytest.raises(HostTransactionRequired) as raised:
+                async with idle.transaction():
+                    await idle.put_type(_type("never_written"), expect_absent=True)
+            assert "transaction" in str(raised.value).lower()
+            assert await harness.outsider("never_written") == 0
+
+        if harness.aborted_adapter is not None:
+            aborted = await harness.aborted_adapter()
+            with pytest.raises(HostTransactionRequired) as raised:
+                async with aborted.transaction():
+                    await aborted.put_type(_type("never_written_either"), expect_absent=True)
+            assert "already failed" in str(raised.value).lower()
+            assert await harness.outsider("never_written_either") == 0
+    finally:
+        await harness.teardown()
