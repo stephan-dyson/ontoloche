@@ -136,10 +136,10 @@ InputRef = TypeRef | InstanceRef | EdgeRef
 InputSpec:
     name:       str             # the argument name, as the host's tool schema spells it
     ref:        "type" | "instance" | "edge"
+    required:   bool
     kinds:      tuple[str, ...] | None   # for ref="type"/"instance": which registry kinds
                                          #   are acceptable. None = any but `predicate`
     families:   tuple[str, ...] | None   # for ref="edge": which families are acceptable
-    required:   bool
 ```
 
 **Why `EdgeRef` carries `family` and `namespace` when `edge_id` alone identifies the edge.** Because an invocation record is read long after the edge store has moved on, and an `edge_id` on its own is unreadable without a join — the objection `EDGES.md` §2.1 raises against a surrogate endpoint. A retracted edge still has a family and a namespace; a bare id has nothing. **[Inferred]** this is what a reader of a year-old invocation actually wants, and it costs two strings.
@@ -167,12 +167,12 @@ InputSpec:
 Precondition:
     kind:       "type_active" | "predicate_holds" | "edge_exists" | "edge_absent"
     subject:    str                 # the InputSpec.name this is about, or a literal ref
+    why:        str                 # REQUIRED, non-empty. What this condition protects
     predicate:  str | None          # for predicate_holds
     family:     str | None          # for edge_exists / edge_absent
     object:     str | None          # for edge_exists / edge_absent: the other input's name
     namespace:  str                 # the FAMILY's namespace, for the edge kinds. Defaults
                                     #   "default", and MUST be supplied when it is not
-    why:        str                 # REQUIRED, non-empty. What this condition protects
 ```
 
 **`namespace` is on the shape because `neighbors` requires it and has no default.** `Registry.neighbors(node, families, depth, *, namespace)` makes it keyword-only **without** a default *"precisely because `"default"` is a wrong answer nobody notices"* — UC3's whole subject. **The printed shape omitted it until round 1**, while the probe kit had silently added it: *"fixed only in the throwaway probe kit"*, which is the failure row 4b names and this row reproduced inside the same document that quotes it. Two readings of the missing field gave **opposite verdicts** on UC3's own fixture — one found the edge, the other returned `edge_family_unknown`.
@@ -218,7 +218,8 @@ Effect:
     op:         "add_edge" | "retract_edge" | "propose_type" | "host_state"
     family:     str | None      # for add_edge / retract_edge: the edge family
     namespace:  str | None      # for propose_type
-    kind:       str | None      # for propose_type. May NOT be "predicate"
+    kind:       str | None      # for propose_type. REQUIRED there, and an
+                                #   ALLOWLIST: entity | edge | value_set
     why:        str             # REQUIRED for op="host_state", non-empty. Rule U
 ```
 
@@ -326,17 +327,21 @@ Invocation:
     family:             str                   # the NAME of a kind="action" TypeEntry
     namespace:          str                   # the FAMILY's namespace. EDGES 2.2's rule
     inputs:             dict[str, InputRef]   # keyed by InputSpec.name. 2.3
-    declared_effects:   tuple[Effect, ...]    # COPIED from the family at invocation time
+    declared_effects:   tuple[Effect, ...]    # COPIED from what the GATE judged. 3.1
     observed_effects:   tuple[Effect, ...]    # what the host reports it actually did
+    declared_policy:    dict                  # approval_mode / min_auto_tier /
+                                              #   reversibility / precondition kinds /
+                                              #   tier order, ALSO as the gate judged them
+    family_version:     int                   # the declaration generation judged against
     outcome:            "applied" | "refused" | "failed" | "compensated"
-    refusal:            Refusal | None        # REQUIRED when outcome == "refused"
     gate_verdict:       "allowed" | "refused" | "not_asked"
+    provenance:         InvocationProvenance  # 3.2
+    refusal:            Refusal | None        # REQUIRED when outcome == "refused"
     compensates:        str | None            # the invocation_id this one compensates
     compensated_by:     str | None            # the invocation_id that compensated this one
                                               #   -- DERIVED by the facade; the store holds
                                               #   only the forward pointer (9)
     reviewed_at:        datetime | None       # set by an `invocation_reviewed` event. 5.2
-    provenance:         InvocationProvenance  # 3.2
     warnings:           list[str]             # INTERFACE 5.4's vocabulary, which this change amends
     attr_schema_version: int | None           # the inputs schema in force when this was written
 ```
@@ -539,25 +544,27 @@ def preflight(
 Preflight:
     family:            str
     namespace:         str
+    family_version:    int                       # 3.1 -- bumped at every declaration door
+    reversibility:     "reversible" | "compensable" | "irreversible"
     verdict:           "allowed" | "refused"
-    refusal:           Refusal | None            # REQUIRED when verdict == "refused"
     declared_effects:  tuple[Effect, ...]        # the blast radius, before anything runs
     preconditions:     tuple[PreconditionResult, ...]
     approval_mode:     "auto" | "review" | "human"
+    known:             int                       # len(preconditions). Rule K
+    complete:          bool                      # False when ANY condition is unknown
+    refusal:           Refusal | None            # REQUIRED when verdict == "refused"
     approved_by:       str | None                # "auto:<policy>" when the gate approves
     tier_floor:        str | None                # the family's min_auto_tier
     tier_floor_why:    str | None                # required when tier_floor is None. Rule U
-    known:             int                       # len(preconditions). Rule K
-    complete:          bool                      # False when ANY condition is unknown
     why_incomplete:    str | None
 
 PreconditionResult:
     condition:     Precondition
     holds:         bool | None    # None = could not be evaluated. Rule U -- NOT False
-    why:           str | None     # REQUIRED when holds is None
     evaluated_by:  str            # "list_types" | "predicates" | "neighbors"
                                   #   NOT `resolve_type` -- it needs a tier and a
                                   #   column-shaped context preflight does not have
+    why:           str | None     # REQUIRED when holds is None
 ```
 
 **`preflight` validates its inputs before it evaluates anything.** Every supplied `InputRef` is checked against its `InputSpec` — ref shape, `kinds`, `families`, required-but-missing — and a `kind="predicate"` ref is refused whatever the family declared. `Refusal(reason="input_kind_mismatch")`, §2.3. **This is the layer round 1 walked the kill row through**, and `record_invocation` runs the same check for the same reason.
@@ -589,6 +596,10 @@ def record_invocation(
     source_version: str | None = None,
     refusal: Refusal | None = None,
     compensates: str | None = None,
+    judged: Preflight | None = None,       # 3.1 -- what the GATE decided. When supplied,
+                                           #   the declaration and the policy on the record
+                                           #   come from HERE, and a `family_version`
+                                           #   mismatch is `declaration_amended:<from>:<to>`
 ) -> Invocation | Refusal: ...
 ```
 
@@ -643,8 +654,8 @@ def projection(
     surface: str,
     *,
     budget: int,
-    reserved: int = 0,
     order: Sequence[str] | None = None,
+    reserved: int = 0,
     namespace: str | None = None,
 ) -> ProjectionReport | Refusal: ...
 ```
@@ -669,16 +680,17 @@ Shape and rules in §10, because the argument for it is the tool-slot ceiling an
 | **`input_kind_mismatch`** | `preflight` and `record_invocation`, when a supplied `InputRef` is not what the `InputSpec` declared — wrong ref shape, wrong kind, wrong family, or missing — **and whenever any input is a `kind="predicate"`, whatever the family declared** | **Added by round 1, and it closes the kill row.** `InputSpec.kinds` bound at declaration and at nothing else, so a family declared with `kinds=None` accepted two predicates and the gate said `allowed`: `merge_capabilities(commentable, searchable)`, end to end. **`endpoint_kind_mismatch` is not reused** — that value is about an *edge's* endpoint, and one word for two objects is `INTERFACE.md` §2.3's Cause B, the same argument that keeps `unknown_edge` separate from `edge_family_unknown` |
 | **`action_store_absent`** | any invocation call against an adapter declaring `stores_invocations=False` | A capability refusal, the **fifth** of that shape after `proposals_not_stored`, `cannot_record_override`, `consumer_source_read_only` and `edge_store_absent` — and it exists for the reason the first of those does: an empty `InvocationReport` would read as *"nothing has ever run"*, which is Rule U's forbidden empty in the one call a caller would believe |
 
-**A seventh was considered and NOT taken: `unknown_invocation`.** `EDGES.md` needed `unknown_edge` because `retract_edge` names an existing edge by id. **No call in this document names an existing invocation by id** — `compensates` names one, and a `compensates` pointing at nothing is recorded with a warning rather than refused, because refusing would discard the compensation record itself (§2.5's argument again) — and `invocations(...)` is a *filter*, where an empty result is the honest answer rather than a silent drop. **Stated so that the absence is a decision rather than an oversight.**
+**One more was considered and NOT taken: `unknown_invocation`.** *(This read "a seventh" until round 3: seven were taken — the six of the first draft plus round 1's `input_kind_mismatch` — so the one declined is the eighth.)* `EDGES.md` needed `unknown_edge` because `retract_edge` names an existing edge by id. **No call in this document names an existing invocation by id** — `compensates` names one, and a `compensates` pointing at nothing is recorded with a warning rather than refused, because refusing would discard the compensation record itself (§2.5's argument again) — and `invocations(...)` is a *filter*, where an empty result is the honest answer rather than a silent drop. **Stated so that the absence is a decision rather than an oversight.**
 
-**Two warning values, added to `INTERFACE.md` §5.4 in this change** — the same rule, extended to warnings by `EDGES.md` §2.8:
+**Three warning values, added to `INTERFACE.md` §5.4 in this change** — the same rule, extended to warnings by `EDGES.md` §2.8:
 
 | value | carrier | from |
 |---|---|---|
 | `effect_undeclared:<op>:<target>` | **`Invocation`** | §2.5 — the host reported an effect the family did not declare. One per surplus effect. The record is **kept**; refusing it would destroy the only evidence the undeclared effect happened. `<target>` is the effect's identity (§2.5); for `host_state`, which has no target, it is the `why` |
 | `approval_unrecorded` | **`Invocation`** | §3.2 — `outcome="applied"` and the gate was not asked, or was asked and refused, so there is no approval to record. **Added by round 1**, which found the first draft fabricating `approved_by="auto:<policy>"` in exactly that case, on an `irreversible`/`human` family invoked by `ai:reaper` |
+| `declaration_amended:<from>:<to>` | **`Invocation`** | §3.1 — the host passed back the `Preflight` it acted on and the family has been re-declared since. **Added by round 2**, which widened a family between the two calls and watched an undeclared `retract_edge` enter the ledger with no warning |
 
-§5.4 goes to **twenty-four** values across nine carriers. *(This sentence said *"twenty-three… across **five** carriers"* until round 1 — the count of carriers contradicting `INTERFACE.md` §5.4's own header and this document's own §18, two screens apart. `check_spec_drift.py` holds the value list and the count word and has never held the carrier count; §14 records that the printed shapes here are held by nothing at all.)*
+§5.4 goes to **twenty-five** values across nine carriers. *(This sentence said *"twenty-three… across **five** carriers"* until round 1 — the count of carriers contradicting `INTERFACE.md` §5.4's own header and this document's own §18, two screens apart. `check_spec_drift.py` holds the value list and the count word and has never held the carrier count. **And it did it again in round 3, in this same paragraph** — the *value* count stayed at twenty-four and two while §14, §18, §19.3 and `INTERFACE.md` §5.4 itself all said twenty-five and three. §14 records that the printed shapes and counts here are held by nothing at all, which is the whole of the explanation.)*
 
 ---
 
@@ -809,21 +821,15 @@ class InvocationPage:
 
 **`Evidence` and `history` are not on the record.** Evidence goes through `append_event`'s existing path with `invocation_id` set (§3.5), which is where `Provenance.history` already lives (`PACKAGE.md` §3.4 primitive 15). Putting them on `InvocationRecord` would give one concept two homes and would make a backend that stores invocations but not events undescribable.
 
-### 9.1 One amendment to an existing primitive, and it is not free
+### 9.1 The `read_events` filter is the BUILD row's, and the round trip is the lesson
 
-**Primitive 15 gains an `invocation_id` filter**, and `EventRecord` gains the field it filters on:
+`InvocationProvenance.history` (§3.2) and `invocations(unreviewed=True)` (§5.2) both read an invocation's events, and the call that reads them is `PACKAGE.md` §3.4's primitive 15 — which has **no `invocation_id` filter, and does not gain one in this row**.
 
-```python
-# 15, amended
-def read_events(
-    self, namespace: str, *, kind=None, name=None,
-    proposal_id=None, edge_id=None, invocation_id=None,
-) -> list[EventRecord]: ...
-```
+**What lands here is the field, not the filter.** `EventRecord.invocation_id` is on `adapter.py` and on `PACKAGE.md` §3.3, defaulted and written by no v0 code path — exactly what row #4 added for `edge_id`, and exactly where it stopped. `read_events(invocation_id=…)` lands in the build row, with the six implementations and the `oo_event` column.
 
-**This is not a fourth primitive and it is not a free change either.** `StorageAdapter` is `runtime_checkable`, and ruling **R30** records that `runtime_checkable` matches on method *names*: adding a **method** silently un-implements the protocol for a third-party backend, while adding a **keyword** to an existing one breaks any backend that implemented the old signature positionally or without `**kwargs`. `EDGES.md`'s `edge_id` made exactly this amendment in row 4b and `PACKAGE.md` §3.4 records what it cost — *"this line was stale for two adversarial rounds… a third-party author implementing `read_events` literally from this block hit a `TypeError` on the first `edge_provenance` call."*
+> **Because row #6 tried the other order and it failed the way `PACKAGE.md` §3.4 says it fails.** This row's first fix pass amended the **Protocol** and this document and `PACKAGE.md` §3.4 — and touched **none** of the six implementations. `StorageAdapter` is `runtime_checkable` and matches on method *names*, so `isinstance(SQLiteAdapter(...), StorageAdapter)` stayed `True`; `check_spec_drift.py` compares the printed signature against the **Protocol**, not against the backends, so the gate added after D-4b-2 passed; and every shipped adapter raised `TypeError` on the keyword. **That is deviation D-4b-2 itself, one row later, inside the fix that cites it.** Round 2's integrator lens found it and the amendment was taken back out; **round 3 found this section still telling the pre-revert story in four places** — a heading, an opening sentence, a printed `# 15, amended` block, and a closing *"both halves landed in the fix"* — which is a printed Protocol signature contradicting the shipped Protocol, in the section that cites the precedent for exactly that. Nothing catches it: §14 records that `check_spec_drift.py` does not read this document at all.
 
-**Round 1 found this document specifying `InvocationProvenance.history`, a `review` mode that reads it, and `read_events` as the way to read it — in a change that never touched `adapter.py`.** Both halves landed in the fix, with `PACKAGE.md` §3.3 and §3.4 amended in the same change and the async mirror regenerated.
+**What the build row owes, precisely.** Primitive 15 gains one keyword; `oo_event` gains one column; six implementations gain both. Ruling **R30** is the reason it is not free even then — `runtime_checkable` matches on names, so adding a **method** silently un-implements the protocol for a third-party backend, while adding a **keyword** breaks any backend that implemented the old signature positionally. `PACKAGE.md` §3.4's own note on `edge_id` records what that cost in row 4b.
 
 ### 9.2 The store — table, version and migration
 
@@ -862,12 +868,14 @@ def read_events(
 
 | fact | value | method |
 |---|---|---|
-| provider cap | `MAX_TOOLS_PER_REQUEST = 128` | `src/beacon/assistant/modes/multi_tool.py:2481` |
-| effective budget | **127** | `budget = MAX_TOOLS_PER_REQUEST - 1`, twice (`multi_tool.py:2600`, `:2813`) — the array also carries `finalize_reply` |
+| provider cap | `MAX_TOOLS_PER_REQUEST = 128` | `src/beacon/assistant/modes/multi_tool.py`, by symbol |
+| effective budget | **127** | `budget = MAX_TOOLS_PER_REQUEST - 1`, **twice** in `multi_tool.py` — the array also carries `finalize_reply` |
 | action modules | **222** | `ls src/beacon/assistant/actions/*.py`, excluding `_`-prefixed |
 | categories | **19**, all of them used | `ALL_CATEGORIES` in `assistant/_base.py:355`; per-module first `category="…"`, defaulting to `common` |
 | `task_detail`'s sum | common **45** + task **48** + project **21** + person **13** = **127** | the per-module count above; 45 = 14 explicit + 31 defaulted |
 | read-only actions | **27** | `grep -rl 'reads_only=True'` |
+
+> **Cited by symbol, not by line, because the lines moved inside this row.** The first draft gave `:2481`, `:2600` and `:2813`; the same commit that landed `manage_life_event.py` (§11.6) shifted all three, and round 3 found the citations pointing at the wrong lines in a table whose own header says the method is published *"so a reader can re-run it"*. A `grep` for the symbol re-runs; a line number is a fact about a tree, and §11.6 is the section about this tree moving. **The values below are the pinned ones — `a895a872`, 2026-08-29 13:05 — and the probe prints what has drifted since** (as of the last run: modules 222 → 223, categories 19 → 20, `task_detail` **still 127**).
 
 The full per-category count, which sums to 222: task 48 · common 45 · calendar 23 · project 21 · shape 19 · person 13 · intake 10 · org 7 · report_source 6 · recurrence 6 · thing 4 · reminder 4 · aura 4 · goal 3 · connect_suggestion 3 · decision 2 · billing 2 · snooze 1 · pin 1.
 
@@ -1199,27 +1207,29 @@ await session.commit()
 
 **Ruling R31** (standing constraint 8): *every numbered rule in a spec section ships with either (a) a contract id that exercises it, or (b) an explicit `prose-only` tag with the reason — and `check_spec_drift.py` fails on a rule with neither.* The ruling names this row by name: *"and to #6 (actions spec) as it is written."*
 
-**Every numbered rule in this document carries one or the other, from the first draft rather than retrofitted.** Eight sections, **61** numbered rules: **57** name a planned contract id, **4** carry a `prose-only:` tag with a reason. *(47 / 43 / 4 in the first draft; round 1 added eleven and round 2 three, every one of them a defect the round found.)*
+**Every numbered rule in this document carries one or the other, from the first draft rather than retrofitted.** Eight sections, **62** numbered rules: **58** name a planned contract id, **4** carry a `prose-only:` tag with a reason.
 
 | section | rules | ids | prose-only |
 |---|---|---|---|
 | §2.2 the declared shape | 5 | `C19-26` … `C19-28`, `C19-44` | 1 — an absence has no test that knows what to look for |
 | §2.4 preconditions | 9 | `C19-01` … `C19-05`, `C19-45` … `C19-47` | 1 — **ACT4**, routed to Phase 3 by **R22** |
-| §2.5 effects | 9 | `C19-06` … `C19-12`, `C19-48`, `C19-49` | 0 |
-| §3 invocations | 6 | `C19-29` … `C19-33` | 1 — a value that does not exist |
+| §2.5 effects | 10 | `C19-06` … `C19-12`, `C19-48`, `C19-49`, `C19-55` | 0 |
+| §3 invocations | 8 | `C19-29` … `C19-33`, `C19-56`, `C19-57` | 1 — a value that does not exist |
 | §5.2 the gate | 7 | `C19-13` … `C19-18`, `C19-50` | 0 |
 | §6 the calls | 8 | `C19-34` … `C19-38`, `C19-51`, `C19-52` | 1 — **R25** routed paging |
 | §8 capability flags | 5 | `C19-39` … `C19-43` | 0 |
-| §10 the ceiling | 9 | `C19-19` … `C19-25`, `C19-53`, `C19-54` | 0 |
-| **total** | **61** | **57** | **4** |
+| §10 the ceiling | 10 | `C19-19` … `C19-25`, `C19-53`, `C19-54`, `C19-58` | 0 |
+| **total** | **62** | **58** | **4** |
+
+> **This table was wrong in three mutually inconsistent ways until round 3 counted it with the checker's own parser, and that is worse than any one of the numbers.** The total row said 61 / 57, §18 agreed with it, the per-section rows summed to 58 / 54, and **four ids — `C19-55`, `C19-56`, `C19-57`, `C19-58`, every one a round-2 addition — appeared in no row of the map at all**, in the section this row exists to make executable. The counts above are **derived**, by running `check_spec_drift.py`'s own `_section` and `_R31_ROW` against this file; `scripts` that do that are one line and this document had none. **§19.4 draws the conclusion: every audit number in this document should be treated as unverified until something derives it, which is precisely what standing constraint 8 exists to fix and what §14 defers to the build row.** Round 1 added eleven rules, round 2 four, round 3 one.
 
 > **The tables moved in round 1, because five of the eight were unreachable from the section they belong to.** `check_spec_drift.py`'s `_section` reads from a heading to the **next heading of any level**, so a table sitting at the end of §3.5 is invisible to a checker asked about §3. **Thirty of the forty-seven rules were unreachable** and the mapping §14 promised could not have been wired to the checker it names. The five tables now sit directly under their own top-level heading, which is where `_section` can see them; the arrangement is verified by running that function's own code against this document.
 
-> **These ids are PLANNED and nothing claims them yet, and that has an operational consequence the build row must not trip over.** `check_spec_drift.py`'s `R31_SECTIONS` currently lists three `EDGES.md` sections, and its `_check_rule_coverage` fails a rule whose named id *"no test in the suite claims"*. **Pointing it at this document today would fail fifty-seven times.** So `ACTIONS.md` is **deliberately not added to `R31_SECTIONS` in this change** — the extension lands in the build row, in the same change that lands the tests, which is the only order in which the gate is ever telling the truth. **Stated because the alternative failure is worse than the obvious one**: a checker wired up early gets silenced, and a silenced checker is how `gate_unregistered` went eighteen-said-nineteen-meant for a row (`INTERFACE.md` §5.4).
+> **These ids are PLANNED and nothing claims them yet, and that has an operational consequence the build row must not trip over.** `check_spec_drift.py`'s `R31_SECTIONS` currently lists three `EDGES.md` sections, and its `_check_rule_coverage` fails a rule whose named id *"no test in the suite claims"*. **Pointing it at this document today would fail fifty-eight times.** So `ACTIONS.md` is **deliberately not added to `R31_SECTIONS` in this change** — the extension lands in the build row, in the same change that lands the tests, which is the only order in which the gate is ever telling the truth. **Stated because the alternative failure is worse than the obvious one**: a checker wired up early gets silenced, and a silenced checker is how `gate_unregistered` went eighteen-said-nineteen-meant for a row (`INTERFACE.md` §5.4).
 >
-> **And nothing holds this document's ELEVEN printed shapes, which is a different gap in the same place.** `check_spec_drift.py` compares `INTERFACE.md`'s, `PACKAGE.md`'s and `EDGES.md`'s printed shapes against the code; it does not read this file at all, and there is no code to hold it against until the build row. **Round 1 found five drifts between this document and its own probe kit** — `Precondition.namespace`, `Invocation.compensates`, `InvocationProvenance.evidence`, and two call signatures — inside the section that argues field names were kept ugly *because* that is the drift the checker was written to catch. All five are fixed; the gap stays until the build row, and it is named here rather than discovered there.
+> **And nothing holds this document's TWELVE printed shapes, which is a different gap in the same place, and round 3 measured what that costs.** `check_spec_drift.py` compares `INTERFACE.md`'s, `PACKAGE.md`'s and `EDGES.md`'s printed shapes against the code; it does not read this file at all, and there is no code to hold it against until the build row. **Round 1 found five drifts between this document and its own probe kit** — `Precondition.namespace`, `Invocation.compensates`, `InvocationProvenance.evidence`, and two call signatures — inside the section that argues field names were kept ugly *because* that is the drift the checker was written to catch. All five were fixed and **round 3 found five more of the same kind plus three whole fields missing** — `Invocation.declared_policy`, `Invocation.family_version`, `Preflight.family_version` and `record_invocation`'s `judged` parameter, which are the *entirety of round 2's gate-to-record fix*, present in rules 3-7 and 3-8 and in the probe and absent from every printed block. **A mechanism specified only in its own rule table is a mechanism the build row cannot build.** All are corrected; the field-order drift and the two different `projection` signatures (§6.4 against §10.3) with them. **The gap stays until the build row and it has now caught this document three rounds running**, which is the argument for extending `check_spec_drift.py` to this file in the same change that lands the code — §14's whole point, arriving as evidence rather than as a plan.
 
-**What the build row inherits, precisely:** a `C19` group of **57** ids, section-mapped above and row-mapped in the eight tables; **4** `prose-only` tags whose reasons are the argument, not a shrug; and the four probes in [`docs/tools/`](../tools/), whose **93** checks are the executable form of most of the 54 and should be **transposed into the suite rather than re-derived** — that is row 4b's own recorded lesson, where ten BLOCKING findings had been fixed *only* in a throwaway probe kit the package does not import.
+**What the build row inherits, precisely:** a `C19` group of **58** ids, section-mapped above and row-mapped in the eight tables; **4** `prose-only` tags whose reasons are the argument, not a shrug; and the four probes in [`docs/tools/`](../tools/), whose **96** checks are the executable form of most of the 58 and should be **transposed into the suite rather than re-derived** — that is row 4b's own recorded lesson, where ten BLOCKING findings had been fixed *only* in a throwaway probe kit the package does not import.
 
 ---
 
@@ -1297,7 +1307,7 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 
 **Neither is tripped, and here is the mechanical form of both.**
 
-**1. Can an action merge anything?** **No, and it is refused at all three declaration doors rather than at the write.** `merge_types` is one of the six governance calls §2.5 excludes from the effect vocabulary as a **general rule**, not a family's opt-in. §13 T3.4 declares a family with `Effect(op="merge_types", …)` at **`propose_type`, `approve` and `import_types`** and is refused at each — the third returning `import_refused:effect_not_permitted` with nothing written, because `import_types` returns entries and cannot return a `Refusal`. **This is a door no previous row had** — a verb is a governed, approved, tool-shaped wrapper, and a merge inside one would be the kill row with a permission slip.
+**1. Can an action merge anything?** **No, and it is refused at all three declaration doors rather than at the write.** `merge_types` is one of the six governance calls §2.5 excludes from the effect vocabulary as a **general rule**, not a family's opt-in. §13 T3.4 declares a family with `Effect(op="merge_types", …)` at **`propose_type`, `approve` and `import_types`** and is refused at each — the third returning `import_refused:effect_not_permitted` with nothing written, because `import_types` returns entries and cannot return a `Refusal`. **In the probe kit, which is the whole of this row's implementation, and *not* in `open_ontology`** — where `_edge_family_refusal` guards `kind="edge"` and nothing guards `kind="action"`, because row #6 ships no action store (§7). Round 3 re-ran round 1's attack against the shipped `Registry.import_types` and it reproduces verbatim: an **active** `kind="action"` entry declaring `merge_types` as an effect *and* breaching §2.2's cross-field rule, written with no warning. **That is a spec-row boundary and not a defect — but §19.2 said "Fixed" without the qualifier, and §14 quotes row 4b's lesson about findings *fixed only in a throwaway probe kit the package does not import* two paragraphs earlier.** The build row's `C19-44` is what makes this sentence true of the package. **This is a door no previous row had** — a verb is a governed, approved, tool-shaped wrapper, and a merge inside one would be the kill row with a permission slip.
 
 > **This paragraph counted THREE doors and named none of them, and round 1 walked through the one it had not thought of.** A reviewer used the shipped `Registry.import_types` to land an **active** `kind="action"` family declaring `merge_types` as an effect *and* breaching §2.2's cross-field rule, with **no warning at all** — while the same call refused a breaching *edge* family correctly, because `registry.py` guards that path and says why in its own docstring: *"a rule with one enforcement point is a rule with one door left open — and the thing on the other side of this one is the `ROADMAP.md` kill row."* The audit below was true of the specification's intent and false of the code, which is the worst place for an audit to be right.
 
@@ -1352,11 +1362,11 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 | Gating — families through the proposal loop, invocations through `approval_mode` / `min_auto_tier` | §5. And §5.3 states what `min_auto_tier` does **not** decide, per **R20** |
 | New `Refusal.reason` values through `INTERFACE.md` §5.12 in the same change (**R3**) | **Seven** added: `action_family_unknown`, `precondition_unmet`, `human_approval_required`, `tier_below_action_policy`, `effect_not_permitted`, `action_store_absent` — and `input_kind_mismatch`, which round 1 added in the change that closed the kill row. §5.12 enumerates **twenty-eight**; `types.REFUSAL_REASONS` carries them in the same commit. A seventh (`unknown_invocation`) is argued and **not** taken |
 | New `warnings` values through `INTERFACE.md` §5.4 in the same change | **Three**: `effect_undeclared:<op>:<target>` (the brief offered it as a *refusal*; the UC1 design test moved it), `approval_unrecorded` (round 1) and `declaration_amended:<from>:<to>` (round 2). §5.4 now **twenty-five** across nine carriers |
-| Capability flags in `PACKAGE.md`'s style, with `why`; adapter primitives ≤ 4 | §8 (three flags, two declarations, three more argued **not** taken) and §9 (**three** primitives, 19–21, **plus one amendment to primitive 15** — `read_events(invocation_id=)`, which §9.1 states with what **R30** says it costs) |
+| Capability flags in `PACKAGE.md`'s style, with `why`; adapter primitives ≤ 4 | §8 (three flags, two declarations, three more argued **not** taken) and §9 (**three** primitives, 19–21). `EventRecord.invocation_id` lands as a field; the `read_events` **filter** is the build row's, and §9.1 records the round trip this row took to learn that — the Protocol was amended without its six implementations, and `runtime_checkable` plus a Protocol-only drift check hid it |
 | Tenancy: none in the protocol (**R24**) | §8, and §11.4 names the consequence for beacon's enterprise blocker instead of claiming a fix |
 | The tool-slot ceiling as a first-class design input | §10. Re-measured, not cited: 128 / 127 / 222 / 19 / 27, and `common 45 + task 48 + project 21 + person 13 = 127` reproduced arithmetically through `projection` |
-| A design-test section per use case, expected outcomes stated first | §11, §12, §13. **Thirty-two predictions, committed in a separate commit ahead of the results; nine contortions recorded, none designed away**; **93 probe checks** across four probes, all passing — 54 in the first draft, 8 round-1 regressions, and a fourth probe (`actions_governance_probe.py`, 31 checks) for the machinery no fixture walks, which is where both rounds found their sharpest defects |
-| Standing constraint 8 from the start | §14. **61** numbered rules across eight sections: **57** planned `C19` ids, **4** `prose-only` tags with reasons, and the tables **relocated in round 1** so the checker can actually reach all eight. `check_spec_drift.py`'s extension is the build row's, and §14 says why wiring it early would be worse than not wiring it |
+| A design-test section per use case, expected outcomes stated first | §11, §12, §13. **Thirty-two predictions, committed in a separate commit ahead of the results; nine contortions recorded, none designed away**; **96 probe checks** across four probes, all passing — 54 in the first draft, 8 round-1 regressions, and a fourth probe (`actions_governance_probe.py`, **34** checks) for the machinery no fixture walks, which is where both rounds found their sharpest defects |
+| Standing constraint 8 from the start | §14. **62** numbered rules across eight sections: **58** planned `C19` ids, **4** `prose-only` tags with reasons, and the tables **relocated in round 1** so the checker can actually reach all eight. `check_spec_drift.py`'s extension is the build row's, and §14 says why wiring it early would be worse than not wiring it |
 | Which mechanism it is designed against, and what would change it | §15 |
 | Kill-criterion check | §17. **Tripped in both rounds — four times in total — and closed each time** — the input vocabulary bound at declaration only, and `propose_type` could name a predicate. Now checked at **six** doors: three declaration call sites, the invocation-time input check, the `propose_type` effect allowlist, and the shipped `merge_types` — whose own guard round 2 found open on two empty extents and which `C10-09` now pins. The Tenshen-shape question is answered honestly rather than favourably |
 | An adversarial review loop | §19 |
@@ -1374,7 +1384,8 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 | Round | Reviewers | Verdicts | BLOCKING | MAJOR | Outcome |
 |---|---|---|---|---|---|
 | **1** | real-data lens · build-it-next-week lens | NOT YET · NOT YET | **7** | **21** + 14 MINOR | **The kill row was constructible, twice, through two different doors.** Every finding reproduced by running code. Eleven new numbered rules, two new vocabulary values, one code change in the package, eight regression checks. §19.2 |
-| **2** | fix-auditor lens · Phase 3 ingestion-consumer lens | NOT YET · NOT YET | **5** | **12** + 7 MINOR | **`ROADMAP.md`'s kill row tripped in test for the second time in this project's life — against the SHIPPED registry — and two of round 1's own fixes were where round 2's defects lived.** Three new numbered rules, a third warning value, two code changes in the package, a **fourth probe**, and `C10-09`. §19.3 |
+| **2** | fix-auditor lens · Phase 3 ingestion-consumer lens | NOT YET · NOT YET | **5** | **12** + 7 MINOR | **`ROADMAP.md`'s kill row tripped in test for the second time in this project's life — against the SHIPPED registry — and two of round 1's own fixes were where round 2's defects lived.** **Four** new numbered rules, a third warning value, two code changes in the package, a **fourth probe**, and `C10-09`. §19.3 |
+| **3** | fix-auditor lens · founder lens | NOT YET · **READY** (with changes) | **3** | **6** + 8 MINOR | **A third kill-row trip, through a call that is not `merge_types` at all** — and the founder lens found **zero** new routes, making the kill-row *record* its condition of sign-off instead. `C9-18`; the whole of round 2's gate-to-record fix was missing from the printed shapes; §14's own arithmetic was wrong three ways. §19.4 |
 
 ### 19.2 Round 1 — what it found
 
@@ -1432,16 +1443,59 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 
 **The gate-to-record window laundered an undeclared effect.** Rule 3-1 copies the declaration *"so amending the family does not re-describe an existing invocation's blast radius"* — and the copy was taken at **record** time from the **current** family, which does exactly what the rule forbids. My proposed fix (copy the whole policy) was refused by the reviewer with the right argument: *it widens the lie* — the ledger would file a `human`/`opus` gate approval against a family it describes as `auto` with no floor. The fix is `family_version` plus `record_invocation(judged=…)`, and `declaration_amended` as the twenty-fifth warning value.
 
-### 19.4 What the two rounds say about the process
+### 19.4 Round 3 — what it found, and the cap
 
-**Both rounds found the kill row, and neither found it by reading.** Four routes in total: predicate inputs unchecked at invocation; a `propose_type` effect naming a predicate; the same effect *omitting* the key; and the shipped merge guard on two empty extents. **Every one was constructed and run.** Not one came from a reviewer noticing a sentence.
+**Two lenses again, both chosen against this project's own record**: the fix-auditor, because four of row 3e's ten BLOCKING lived inside a previous round's fix; and a **founder lens**, asked not whether the document is correct but whether the row should land at all — a question no reviewer had been given in three rows.
 
-**The most uncomfortable finding is not a defect, it is a repeat.** §17's kill-criterion audit was wrong in round 1 — claiming an inherited rule it had half of — and wrong again in round 2, in a different clause, in the same way: a qualifier dropped from a rule this document quotes another document as stating correctly. `EDGES.md` §15 records the identical failure one row earlier and **this document quoted that sentence while repeating the mistake, twice.** *A self-audit written by the author of the thing audited is worth what an adversary makes it worth*, and that is now three rows running where the kill-criterion section is where the loop earns its keep.
+**A third kill-row trip, and this one is not about the comparison at all.** `retire(successor="searchable")` redirects `resolve_type` to the successor at **confidence 1.0** — `INTERFACE.md` §5.3 calls that a guarantee — so it *is* the collapse. It carried none of `merge_types`' guards. A reviewer took the predicate pair the merge had just refused **non-overridably under all five acknowledgements** and collapsed it through retirement with **no refusal, no acknowledgement and no warning**, across kinds as well. Fixed by giving `retire` §5.10's two **identity** guards, non-overridable and `force=True` included; `C9-18` pins it, and pins that the guard is narrow (a plain retirement still works, and so does one whose successor shares a non-empty identical extent).
 
-**The ingestion lens is the one to keep for a spec row.** It produced no finding about correctness — the other lens had that — and produced the two findings that change what the document is *for*: that §4's measurement did not survive its own storage primitive at the venture's real scale, and that §10's required field exists for the section its own customer deletes. **[Inferred]** those are not findable by an adversary reading for defects; they are findable only by an adversary trying to *use* the thing.
+> **The diagnosis widens rather than repeats, and this is the sentence to carry out of the row.** Round 3's founder lens named the first two trips as *one* defect — *a two-valued guard over a three-valued fact* — and that reading is right and is now in `ROADMAP.md`. **This route is not about the comparison.** It is a guard written for **one call** over a fact that **more than one call can change**. `registry.py` already named `retire(successor=)` as reaching *"the same situation"* as a merge and had hardened it for **resolution consistency only**. So `check_merge_guard.py` (row 4c) must enumerate the **callers** as well as the states, and the honest form of the kill-criteria record is *one design defect, found three times, by two different generalisations of the same mistake.*
 
-### 19.5 What round 1 says about the process
+**The rest of round 3 is the audit, not the design, and that split is the convergence evidence.**
 
-**Both lenses found the kill row, by different routes, and neither found it by reading.** The real-data lens constructed `merge_capabilities` and ran it; the build-it lens went through the 43 planned ids asking which it could turn into an assertion and found eleven it could not, which is a *different* kind of question and produced a different half of the list. **[Inferred]** that the second lens is the one to keep for a spec row: a specification's defects are mostly the questions it does not answer, and the only reliable way to find an unanswered question is to try to answer it.
+- **The whole of round 2's gate-to-record fix was missing from the printed shapes.** `declared_policy`, `family_version` and `judged` existed in rules 3-7 and 3-8 and in the probe kit, and in **no printed block**. A mechanism specified only in its own rule table is a mechanism the build row cannot build. Five more field-order drifts and two contradictory `projection` signatures came with it. All twelve shapes now match the implementation, checked by running `dataclasses.fields` against the file.
+- **§14's arithmetic was wrong three mutually inconsistent ways** — total row 61/57, per-section rows summing to 58/54, the file actually holding **62/58** — and **four ids, every one a round-2 addition, appeared in no row of the map the build row inherits.** In the section this row exists to make executable. The counts are derived now.
+- **Round 2's `judged=` fix was itself defective in two ways**: it ran *after* the approval logic, so an approval the gate had granted was nulled by a family amended since — rule 3-3's own field, telling round 1's lie inverted — and `declared_policy["reversibility"]` was the current family's while its three neighbours were the gate's. One dict, two moments, no marker.
+- **§9.1 was still telling the pre-revert story** of a `read_events` amendment round 2 took back out, in four places including a printed Protocol signature that contradicts the shipped Protocol — in the section that cites D-4b-2 as the precedent for exactly that.
+- **`EDGES.md` still carried the pre-round-2 qualifier** in its own kill-criterion audit, left there by the fix that corrected `INTERFACE.md`. §2.5 cites that document as the one stating the rule correctly, and it had stopped being true.
+- **Round 1's `import_types` fix exists only in the probe kit**, which is a legitimate spec-row boundary — the row ships no action store — but §19.2 said *"Fixed"* without the qualifier, two paragraphs after §14 quotes row 4b's lesson about findings *fixed only in a throwaway probe kit the package does not import*.
 
-**The single most uncomfortable finding is not a defect, it is a pattern.** §17's kill-criterion audit was **wrong**, in the section whose entire job is to be believed, and it was wrong in the specific way of claiming an inherited rule it had inherited half of. `EDGES.md` §15 records the identical failure one row earlier — *"in the first draft it was NOT structurally blocked, and this section said it was"* — and this document quoted that sentence while repeating the mistake. **A self-audit written by the author of the thing audited is worth what an adversary makes it worth**, and that is the third row in a row where the kill-criterion section is where the loop earns its keep.
+**And the founder lens, which was not looking for defects, produced the two most useful sentences in the row.** That the kill-row record was *"two unrelated bugs where there is one design defect found twice"* — accepted as a condition of sign-off and now in `ROADMAP.md`. And that §11.6's *"it cannot be pinned, it is somebody else's repository"* was simply **false**: beacon is a git repository and the probe pins `a895a872` now. Its scope verdict is recorded in §16 as **Q47** and its business-model recommendation as **Q48**, because neither is this document's to take.
+
+### 19.5 Convergence — honestly, and the loop did **not** converge
+
+**The brief's stop rule is two consecutive clean rounds, or three rounds plus an honest convergence note. There were no clean rounds. This is the note.**
+
+| | round 1 | round 2 | round 3 |
+|---|---|---|---|
+| BLOCKING | 7 | 5 | **3** |
+| MAJOR | 21 | 12 | **6** |
+| MINOR | 14 | 7 | **8** |
+| kill-row routes found | 2 | 2 | **1** |
+| verdicts | NOT YET · NOT YET | NOT YET · NOT YET | NOT YET · **READY** |
+
+**The findings shrank, and that is the first time in this project's life they have.** Rows 3c, 3d, 3e, #4 and 4b all closed on the cap with a note saying the count did *not* fall. Here it halved twice, the last round produced the first `READY` any reviewer has issued in six rows, and the founder lens — which spent its round attacking the kill row specifically — **found no fifth route**.
+
+**But it did not converge, and two facts say so plainly.**
+
+1. **Every round found a kill-row route the previous round's fix had not closed.** Five in total: predicate inputs unchecked at invocation; a `propose_type` effect naming a predicate; the same effect *omitting* the key; two empty extents comparing byte-identical; and `retire(successor=)`. **Every one was CONSTRUCTED and run. Not one was found by reading.** A search that finds one more of the same thing every round has not finished.
+2. **§17, the kill-criterion audit, was materially wrong in all three rounds** — a rule inherited by half, a qualifier dropped, a door not counted — and §7's self-accounting error recurred *in the paragraph that records fixing it*, twice. §14's rule count was wrong after two rounds of being the section about counting rules.
+
+**So the honest verdict is the one round 3's fix-auditor gave: the design is converging and the self-audit is not.** The defect class moved from *the thing is unsafe* to *the thing describes itself too generously* — which is the class an edit closes rather than a build. **[Inferred]**, and it is the load-bearing inference of this section: a fourth round would find more audit errors and probably a sixth kill-row route, because **every number and every "Fixed:" claim in this document is a hand-written assertion that nothing derives.** That is exactly the gap standing constraint 8 exists to close, and §14 defers it to the build row — so the next thing that would move this document is not a seventh lens. It is the `C19` suite, `check_spec_drift.py` pointed at this file, and `check_merge_guard.py` enumerating the callers.
+
+**What that means for the row.** It lands with the count of what is still unproven attached: **58 planned contract ids that nothing claims yet**, twelve printed shapes no gate holds, and one kill-row guard whose third fix is a patch where a checker is owed. `4B-RUN.md` §6.5 reached the same conclusion from the other side — *the next signal with real information is a real consumer over a real store* — and row #5 is that consumer.
+
+### 19.6 What the three rounds say about the process
+
+**Every kill-row route was CONSTRUCTED, and not one was found by reading.** Five in total: predicate inputs unchecked at invocation; a `propose_type` effect naming a predicate; the same effect *omitting* the key; the shipped merge guard on two empty extents; and `retire(successor=)` performing the collapse with none of the merge's guards. Six reviewers across three rounds; **zero** of the five came from somebody noticing a sentence. That is 3c's lesson — *every finding of substance came from driving the real registry through a real scenario* — holding for a sixth row, on the one section where being wrong matters most.
+
+**The most uncomfortable finding is not a defect, it is a repeat.** §17's kill-criterion audit was materially wrong in **all three rounds**: a rule inherited by half, a qualifier dropped, a door not counted. `EDGES.md` §15 records the identical failure one row earlier — *"in the first draft it was NOT structurally blocked, and this section said it was"* — and **this document quoted that sentence while repeating the mistake three times.** *A self-audit written by the author of the thing audited is worth what an adversary makes it worth.*
+
+**Each lens produced a class of finding the others could not, and that is the reusable result.**
+
+- The **real-data lens** constructs and runs. It found kill-row routes 1, 2 and 4, and it is the only lens that ever finds one.
+- The **build-it-next-week lens** asks *which of these ids could I actually write?* and found eleven it could not. A specification's defects are mostly the questions it does not answer, and the only reliable way to find an unanswered question is to try to answer it.
+- The **ingestion-consumer lens** produced no correctness finding at all and produced the two that changed what the document is *for*: §4's measurement not surviving its own storage primitive at the venture's real scale, and §10's required field existing for the section its own customer deletes. **[Inferred]** those are findable only by an adversary trying to *use* the thing.
+- The **founder lens** found no defects and set the row's most important correction — that the kill-row record was two bugs filed where there is one design defect — plus a scope verdict (**Q47**) no correctness reviewer would ever have raised.
+
+**[Inferred], and it is this row's process contribution:** for a *spec* row, one constructing lens plus one **using** lens beats two correctness lenses, and a founder lens is worth a round of its own at the cap.
