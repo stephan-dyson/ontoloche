@@ -16,7 +16,7 @@
 | 3b Async adapter | ✅ done — 267 tests green, both async backends; generated from the sync source, not forked ([docs/runs/3B-ASYNC.md](docs/runs/3B-ASYNC.md)) |
 | Docs folder reorg | ✅ done — `docs/specs` `findings` `runs` `tools` + link checker |
 | `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
-| 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ✅ done — kill-criterion mechanism exercised and **held**; 7 contortions recorded, suite 109 → 124, **nine** code defects fixed; **18 review rounds, no clean pass** — closed on an escalation ([`docs/findings/3C-VALIDATION.md`](docs/findings/3C-VALIDATION.md)). **Q1–Q7 want a ruling** |
+| 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ✅ done — kill-criterion mechanism exercised and **held**; 7 contortions recorded, suite 109 → 124, **nine** code defects fixed; **18 review rounds, no clean pass** — closed on an escalation ([`docs/findings/3C-VALIDATION.md`](docs/findings/3C-VALIDATION.md)). **Q1–Q7 ruled as R6–R12** 2026-08-29; **Q8 open** |
 | 3d Upstream fixes from beacon 21.1 (R5 savepoint transactions, degraded reference leg, attribute projections, doc sync) | ⏳ queued (after 3c) |
 | #4 `docs/EDGES.md` v0 (now includes type-to-type `equivalent_to` edges, R7) | ⏳ queued (after 3d) |
 | 3e v0.1 amendments (R6 cross-namespace lookup, R10 name-level schemas, R11 `reinstate`) | ⏳ queued (after #4) |

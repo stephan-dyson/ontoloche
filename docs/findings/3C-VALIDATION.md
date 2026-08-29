@@ -235,7 +235,24 @@ Landed as its own commit before the walk-through, per the brief. Deviation **D-1
 
 ---
 
-## 6. Wanted from the supervisor or the founder
+## 6. Wanted from the supervisor or the founder — **Q1–Q7 ruled 2026-08-29; Q8 open**
+
+> **Ruled while this row was still in flight.** The supervisor answered all seven of the questions below as **R6–R12** in [`../decisions/2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md), and recorded a judgment on the kill-row trip. **Q8 was raised after that file was written and is still open.** The questions are kept as written, because what was asked and why is the reviewable part; the dispositions are attached.
+>
+> | | question | ruling | lands in |
+> |---|---|---|---|
+> | **Q1** | cross-namespace lookup in `resolve_type` | **R6 — yes, additive** (`search_namespaces=`) | row **3e** |
+> | **Q2** | an `equivalent_to` relation | **R7 — yes, it is an EDGE**; EDGES v0 must carry *type-level* edges | **#4 EDGES** |
+> | **Q3** | value-level consumer gates | **R8 — neither option in v0; the cheap warning IS taken**. *Founder-visible* | row **3d** |
+> | **Q4** | resolver-dependent contract tests | **R9 — confirmed as applied**; widening the projection table stays forbidden | done |
+> | **Q5** | attribute schemas keyed per name | **R10 — yes, as an override** over the per-kind schema | row **3e** |
+> | **Q6** | `reinstate` | **R11 — yes, specify and implement**; `successor_active` becomes the sixteenth `Refusal.reason` | row **3e** |
+> | **Q7** | conformance for a multi-flag-degraded backend | **R12 — the two-flag rule stands; a coverage report is required.** *Founder-visible* | row **3d** |
+> | **Q8** | should the façade ever ask for a bounded page | **open** — raised after the ruling file | — |
+>
+> **The kill-row trip was judged an implementation defect, not a stop, and the row stays armed** — with the supervisor recording explicitly that the founder may read it the other way, since a guard that silently failed on the very backend it was written for is arguably a design-level failure. That call is the founder's.
+
+
 
 > **Numbering, and why it changed.** These were first written as **R5–R11**, which **collided with the project's own ruling register** — `docs/decisions/` runs R1, R2, R3, R4 and, from 2026-08-29, **R5 (savepoint transactions over a host-owned session)**, ruled by the supervisor while this row was in flight. Two different things called R5 in one repository is mechanism **4** — semantic collision across writers — committed by the governance of the project built to prevent it, and it is recorded here rather than quietly renamed. **The `R` series belongs to the decisions register; a *question wanting a ruling* is a `Q`.** Renumbered accordingly by row 3c; nothing else changed.
 
@@ -348,7 +365,7 @@ Both are the *specified* behaviour. The question is what conformance should mean
 
 **The half that wants a ruling.** `Registry` never *asks* for a bounded page: [Observed] **no call site in either the sync or the async façade passes `limit` or `after` at all.** So a correct implementation is still never exercised through the product path, and `list_types(namespace=None)` at UC3's stated scale — 2,399 datasets, *"hundreds to low thousands of types"* — is an unconditional full-table fetch. §3.3 already accepts that `list_types(orphaned=)` is O(types) *"at the scale this registry is for"*, so this may be a deliberate and correct choice.
 
-**Recommendation: leave the façade unbounded in v0 and say so in §3.3, rather than leaving it unsaid.** The reason it is not obvious is `complete`/`known`: if `list_types` starts paging internally, a caller receiving one page must be told whether `known` counts the page or the set, and Rule K currently has no answer. **That is a design decision on `TypeListing`, not a bug**, and Phase 3's ingestion loop is the consumer that would force it. Until then the honest position is that pagination is an *adapter* capability the registry does not yet use — now tested, and stated.
+**Still open — this one post-dates the ruling file. Recommendation: leave the façade unbounded in v0 and say so in §3.3, rather than leaving it unsaid.** The reason it is not obvious is `complete`/`known`: if `list_types` starts paging internally, a caller receiving one page must be told whether `known` counts the page or the set, and Rule K currently has no answer. **That is a design decision on `TypeListing`, not a bug**, and Phase 3's ingestion loop is the consumer that would force it. Until then the honest position is that pagination is an *adapter* capability the registry does not yet use — now tested, and stated.
 
 ### What is NOT wanted
 
@@ -492,9 +509,9 @@ Every brief carried two halves: *can a legitimate backend **fail** the suite?* a
 - [`check_capability_matrix.py`](../tools/check_capability_matrix.py) — every optional capability declined alone. §3.2's claim was false for **six of eight** flags and had been for four deliverables. *(It then caught one of this row's own new tests within a minute of it being written.)*
 - `C0-10` and `C0-11` — the first two tests written to answer *"can a broken backend **pass**?"* rather than *"can a good one fail?"*
 
-**Why stopping here is the honest call and not the tired one.** The tail is demonstrably not empty — a nineteenth round would probably find something. But the three families above cannot recur silently any more, and **the remaining open items are the eight in §6 that need a *ruling*, not a fix.** Four of them (**Q1**, **Q3**, **Q5**, **Q7**) would change the surface a reviewer is reading, so continuing to review the current surface has a falling return.
+**Why stopping here is the honest call and not the tired one.** The tail is demonstrably not empty — a nineteenth round would probably find something. But the three families above cannot recur silently any more, and **the remaining open items needed a *ruling*, not a fix** — and while this row was still running, **they got one**: the supervisor ruled Q1–Q7 as **R6–R12** ([`../decisions/2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md)). Four of those rulings change the surface a reviewer reads — `search_namespaces` on `resolve_type` (R6), a `consumers()` warning (R8), name-level attribute schemas (R10), and `reinstate` with a sixteenth `Refusal.reason` (R11) — so reviewing the *current* surface has a falling return by construction.
 
-**Recommendation: rule on Q1–Q8, then run this loop again from round one against whatever those rulings produce.** What the loop should NOT do is keep going now — that is the churn its own stop condition names.
+**Recommendation: land rows 3d and 3e, then run this loop again from round one against what they produce.** Continuing now would review a surface four rulings are about to change — which is the churn the loop's own stop condition names.
 
 **And the one instruction to carry forward:** every finding of substance in eighteen rounds came from **driving the real registry through a real scenario**. None came from reading. §7.4's asymmetry is the sharpest version of that — eleven rounds asked whether a good backend could fail, one round asked whether a bad one could pass, and the second question paid out immediately. **Open the next spec's review brief with it.**
 
@@ -512,6 +529,8 @@ Every brief carried two halves: *can a legitimate backend **fail** the suite?* a
 
 **What the adversarial loop changed, which was more.** Eighteen rounds, **eighteen NOT YET verdicts, no clean pass** (§7.5). Twenty-six BLOCKING/MAJOR findings, none dismissed. **Nine were defects in the shipped code**, including the venture's own kill criterion tripping on Tenshen's declared capability shape. The contract suite went **109 → 124**, and three whole families of defect are now machine-checked rather than looked for by eye.
 
-**The honest state of the two specs.** Both are materially more correct than when this row opened and **neither has earned a clean review pass.** Eight questions (§6, **Q1–Q8**) want a ruling before the next loop is worth running; four of them would change the surface a reviewer reads.
+**The honest state of the two specs.** Both are materially more correct than when this row opened and **neither has earned a clean review pass.** Seven of the eight questions were **ruled while this row was in flight** (§6 — R6–R12), and four of those rulings will change the surface: `search_namespaces` (R6), a `consumers()` warning (R8), name-level attribute schemas (R10), `reinstate` and a sixteenth `Refusal.reason` (R11). **Q8 (pagination in the façade) post-dates the ruling file and is open.** The next loop belongs after rows 3d and 3e, not before them.
+
+**The kill row.** It tripped, on Tenshen's own declared capability shape, and was fixed before any real merge. The supervisor judged that an implementation defect in the guard rather than the design flattening a true distinction, and **the row stays armed** — while recording that the founder may read it the other way, since a guard that silently failed on the very backend it was written for is arguably a design-level failure. **That call is the founder's, and this document does not make it.**
 
 **For the record, the thing most worth repeating:** every finding of substance in eighteen rounds came from **driving the real registry through a real scenario**. Not one came from reading either document.
