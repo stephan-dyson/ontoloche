@@ -211,7 +211,7 @@ Two consequences, both stated:
 |---|---|---|
 | `endpoint_type_unregistered:<namespace>:<kind>:<name>` | **`Edge`** | §2.7 — the endpoint's type is not registered, so no kind claim is made in either direction. Rule U, and the same `<name>:<subject>` shape as `gate_unregistered` (ruling R8) |
 | `retracted_without_event_trail:<why>` | **`Edge`** | §2.6 — the retraction stands (the row *is* the record) but its sequence is unrecoverable. `<why>` is the backend's own sentence |
-| `edge_family_retired:<name>` | **`NeighborReport`** | §4.3 — a named family is retired; its edges were not deleted, so it is searched, and the caller is told |
+| `edge_family_retired:<name>` | **`NeighborReport`** and **`Edge`** | §4.3 on the READ — a named family is retired; its edges were not deleted, so it is searched, and the caller is told. **And on the WRITE**: `add_edge` onto a retired family is not refused (retirement is a statement about the vocabulary; an edge is a fact about two things) and the returned `Edge` carries this, because a caller who has just written under a word somebody withdrew is entitled to know. *(The second carrier was added by row 4b, which found its own code emitting the value there while this table listed one carrier — **a closed vocabulary opening by CODE rather than by prose**, which is a worse version of this section's original finding, not a better one. `C17-15` binds both carriers.)* |
 | `origin_type_unregistered:<ref>` | **`NeighborReport`** | §4.3 — the walk's origin names a type nobody registered |
 | `no_edge_gate_registered` | **`ConsumerReport`** | §8 — no predicate's extent contains any edge family, so `would_drop: []` means *nobody told us what traverses edges*, not *nothing will drop this* |
 
@@ -423,10 +423,11 @@ Consequently:
 EdgeProvenance:
     created_at:        datetime
     created_by_actor:  str                  # "user:sd", "ai:classifier", "seed", "import:socrata"
-    created_by:        "seed" | "ai" | "user"      # INTERFACE §2.1's vocabulary, unchanged
+    created_by:        "seed"|"ai"|"user"|"derived"  # INTERFACE §2.1's, incl. R17
     confidence:        float | None         # None = nothing scored it. NOT 0.0 — Rule U
     evidence:          list[Evidence]       # INTERFACE §2.8, unchanged, incl. external_doc + Citation
     source_version:    str | None           # the SOURCE's own version. §5.3
+    model_tier:        str | None           # ruling R20 -- see the paragraph below
     retracted_by:      str | None
     retracted_at:      datetime | None
     retract_reason:    str | None
@@ -436,7 +437,7 @@ EdgeProvenance:
 
 **Why not `Provenance` verbatim.** `Provenance` carries `proposed_by`, `approved_by`, `approved_at` and `model_tier`, and `INTERFACE.md` §2.4 makes a rule of one of them: *"`approved_by` is never null on an `active` type… a registry that leaves the field blank invites a reader to assume a human signed off."* §2.6 above establishes that edge **instances** have no approval loop. Carrying `approved_by` on an edge therefore forces one of two bad answers on every single edge ever written: `None`, which breaks the §2.4 rule the field exists for, or a manufactured `"auto:…"` that asserts an approval nobody performed. **A field whose only honest value is a lie should not be on the shape.** Narrowing is the honest move, and it is the same move `INTERFACE.md` §5.2 makes when it gives `PredicateEntry` its own shape rather than reusing `TypeEntry`.
 
-**`model_tier` is deliberately absent too, and that is a live weakness.** `INTERFACE.md` §2.7 makes tier a product parameter because a cheap tier inverted the CMS severity scale silently. Beacon's `infer_person_relationships` classifies person pairs with **Haiku** and auto-applies at ≥0.7 **[Observed, beacon spec §2.5]** — an AI-written edge from a named cheap tier, which is 0.5's exact shape one level down. The tier is recoverable from `created_by_actor` only by convention (`"ai:haiku_classifier"`), which is not a field. **Recorded as Q15**: should `EdgeProvenance` carry `model_tier`, and should there be a tier gate on AI-written edges the way §2.7 gates auto-approval? This document does not take it, because a tier gate on a weekly batch job is a product decision about beacon's behaviour, not a storage shape.
+**`model_tier` is present, by ruling R20 — and this paragraph argued the opposite until row 4b's second adversarial round.** Q15 below asked whether `EdgeProvenance` should carry it; **R20 answered yes on 2026-08-29, before row 4b started**, and row 4b added the field, threaded it through `add_edge` and round-tripped it (`C17-02`). The shape above and this paragraph both went on denying it, while §14's own Q15 row five hundred lines below printed *"`model_tier`: yes"* — the document contradicting the code, the ruling, and itself, in three places at once. **The hole that allowed it is closed rather than patched**: `check_spec_drift.py` now holds this document's printed shapes against `open_ontology/edges.py`, the way it has held `INTERFACE.md`'s against `types.py` since row 3c and `PACKAGE.md`'s since row 3d. §5.1 was the last printed shape in this repository that nothing checked, and it is the one that drifted. The argument that stood here is kept, because it is why the field matters: `INTERFACE.md` §2.7 makes tier a product parameter because a cheap tier inverted the CMS severity scale silently. Beacon's `infer_person_relationships` classifies person pairs with **Haiku** and auto-applies at ≥0.7 **[Observed, beacon spec §2.5]** — an AI-written edge from a named cheap tier, which is 0.5's exact shape one level down. The tier was recoverable from `created_by_actor` only by convention (`"ai:haiku_classifier"`), which is not a field. **R20 takes the field and declines the gate**: a tier gate on a weekly batch job is a product decision about beacon's behaviour rather than a storage shape, and it is relayed to the beacon program as an observation, not as a requirement.
 
 **`confidence` is `float | None` and `None` is not `0.0`.** Beacon types it `Float` nullable on both `WorkLink` and `PersonLink` **[Observed]**, and `interview_service` selects rows *"with a null `relationship_type` or confidence below 0.7"* — so null confidence is a live, meaningful state in the one host this must sit over. Coercing it to `0.0` would turn *"nothing scored this"* into *"scored zero"*, which is `INTERFACE.md` §5.3's `confidence: None ≠ 0.0` rule verbatim.
 
@@ -469,7 +470,7 @@ with three new `event` values — `edge_added`, `edge_retracted`, `edge_amended`
 
 ## 6. Capability flags for the edge store
 
-In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabilities.why`, surfaced verbatim wherever a result would otherwise imply a fact. **Four flags and two declarations**, added to the existing `Capabilities` — and the distinction is the one §3.2 draws for `transaction_scope` and `attribute_projections`: a flag is something a backend *declines*; a declaration says *how* it does something it can do.
+In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabilities.why`, surfaced verbatim wherever a result would otherwise imply a fact. **Four flags and three declarations**, added to the existing `Capabilities` — and the distinction is the one §3.2 draws for `transaction_scope` and `attribute_projections`: a flag is something a backend *declines*; a declaration says *how* it does something it can do.
 
 ```python
     stores_edges:              bool     # the store holds edges at all
@@ -478,7 +479,10 @@ In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabil
     stores_edge_attributes:    bool     # an arbitrary payload dict survives a round trip
     edge_transaction_scope: Literal["owned", "savepoint"] = "owned"    # R5, §6.2
     edge_attribute_projections: frozenset[str] = frozenset()           # U3's shape, §6.3
+    edge_store_shares_connection: bool = True                          # §6.2's premise
 ```
+
+> **The third declaration was missing from this block until row 4b's second adversarial round**, while `PACKAGE.md` §3.2 printed it correctly and the code has carried it since that row's first commit. It is the **premise** of §6.2's binding rule and not decoration: when the edge store and the type store are the same store on one connection — which both reference backends declare — the two scopes MUST be equal; when they are genuinely two connections they may differ, and **G2 across the seam is gone**. A rule whose premise is unstated is a rule an adapter author can miss by reading. `Capabilities.scope_conflict()` returns the sentence or `None`, and `C17-25` binds it.
 
 | Flag | `False` means | `why` example | What the registry does |
 |---|---|---|---|
@@ -1019,7 +1023,7 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 | `v0` and "unstable" in the header | Header, line 3 |
 | A design-test section per use case, expected outcomes stated first | §9, §10, §11. **Thirty-four predictions, committed in a separate commit ahead of the results; eleven contortions recorded, none designed away** |
 | An adversarial review loop | §17. **Three rounds, six fresh reviewers, ten BLOCKING and ten MAJOR findings**, every one reproduced by running code. **No round was clean.** Closed at the brief's three-round cap with a convergence note (§17.5), the same way rows 3c and 3d closed. *(Row 4b runs its own loop over the implementation; whatever [`4B-RUN.md`](../runs/4B-RUN.md) §6 records is the state of it. **This sentence used to say the loop "ran", in a commit whose own `4B-RUN.md` §6 said it had not started** — round-2 finding B6 of THIS document's loop, recurring one row later inside the change that added the process gate meant to catch it. A cross-reference that asserts the other document's content is a claim; one that names it is a pointer.)* |
-| **Implemented** *(row 4b, and not part of row #4's own criteria)* | Adapter primitives **16–18**, the four capability flags and two declarations, store version **4** on both dialects, `add_edge` / `retract_edge` / `neighbors` / `edge_provenance` on the registry, `equivalent_to` seeded, and **39 contract ids** (`C17`, `C18`) across three reference legs in both stacks |
+| **Implemented** *(row 4b, and not part of row #4's own criteria)* | Adapter primitives **16–18**, the four capability flags and two declarations, store version **4** on both dialects, `add_edge` / `retract_edge` / `neighbors` / `edge_provenance` on the registry, `equivalent_to` seeded, and **41 contract ids** (`C17` 31, `C18` 10) across three reference legs in both stacks. *(This cell said **39** until row 4b's second adversarial round: 29 + 10 was the count before that row's FIRST round added `C17-30` and `C17-31`, and the commit that corrected two other cells of this same table left the third stale. **The third self-accounting error in this document's own summary table, and the second inside row 4b.** §17.5 says a document that self-reports its own evidence needs an adversary pointed at the self-report. It was right again.)* |
 | Every new `warnings` value goes through `INTERFACE.md` §5.4 in the same change | §2.8. Five added; §5.4 now enumerates sixteen across four carriers |
 | New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | **Four** added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent` — and `unknown_edge`, which §17.4 records this document's own round 3 adding. §5.12 enumerated **nineteen** at this row's close. *(This cell said "Three… eighteen" until row 4b, disagreeing with §17.4 three sections below it, with `INTERFACE.md` §5.12's own header, and with `types.REFUSAL_REASONS`' comment — a **three-way** mismatch, in the summary table a reader checks before trusting the rest. Exactly §16's own recorded failure mode, on a different number.)* |
 

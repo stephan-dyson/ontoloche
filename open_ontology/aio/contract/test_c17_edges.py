@@ -382,6 +382,35 @@ async def test_c17_08_the_level_check_runs_before_the_kind_check_and_the_detail_
     assert kind_refusal.detail["declared"] == ["entity"]
     assert kind_refusal.detail["node_kind"] == "value_set"
 
+    # **Rule 2.4.1-6, and it had no test at all until row 4b's second adversarial
+    # round.** `equivalent_to` carries a family-level constraint beyond
+    # `endpoint_kinds` -- `src.kind == dst.kind` -- because an `entity` is not
+    # equivalent to a `value_set`: `facility == deficiency_corrected_status` is a
+    # category error, not a claim. The rule table mapped it to this id, and this id
+    # asserted only the GENERIC `endpoint_kinds` mismatch above; the
+    # `problem="family_constraint"` branch that implements the rule was returned by
+    # the registry and asserted by nothing. Second instance of the same defect class
+    # `C17-30` closed, found by reading the tests behind the mapping.
+    await seed(registry, "borough", kind="value_set", namespace="dpr", definition="the five")
+    await seed(registry, "borough", kind="entity", namespace="dot", definition="a borough")
+    cross_kind = await registry.add_edge(
+        EQUIVALENT_TO,
+        TypeRef("dpr", "value_set", "borough"),
+        TypeRef("dot", "entity", "borough"),
+        "user:dot",
+    )
+    assert isinstance(cross_kind, Refusal)
+    assert cross_kind.reason == "endpoint_kind_mismatch"
+    assert cross_kind.detail["problem"] == "family_constraint"
+    assert cross_kind.detail["src_kind"] == "value_set"
+    assert cross_kind.detail["dst_kind"] == "entity"
+    # And BOTH kinds are individually legal for this family, so the refusal is the
+    # family's own semantics and not `endpoint_kinds` doing it by accident.
+    kinds = (await registry.adapter.get_type("default", EQUIVALENT_TO, kind="edge")).attributes[
+        "endpoint_kinds"
+    ]
+    assert "value_set" in kinds["src"] and "entity" in kinds["dst"]
+
 async def test_c17_09_the_endpoint_rules_bind_at_declaration_time_at_every_door(registry):
     """EDGES.md 2.4.1's fourth clause, and it is the one round 1 was spent on.
 
@@ -417,6 +446,30 @@ async def test_c17_09_the_endpoint_rules_bind_at_declaration_time_at_every_door(
         assert isinstance(refused, Refusal), why
         assert refused.reason == "endpoint_kind_mismatch"
         assert refused.detail["rule"] == "EDGES 2.4.1"
+        assert await registry.adapter.get_type("default", "same_capability", kind="edge") is None
+
+    # **Door two: `approve()`.** This test's own docstring named three doors and its
+    # body called two, until row 4b's second adversarial round read it -- the same
+    # "claimed and not exercised" defect as `C17-30`'s, inside the test that exists to
+    # prove a rule is not talked around. `propose_type` refuses a breaching declaration
+    # up front, so the only way to reach `approve` with one is to write the proposal
+    # past it, which is what a proposal made before the rule existed looks like.
+    if registry.caps.stores_proposals:
+        legal = await registry.propose_type(
+            "same_capability", "two predicates that mean the same thing", [], "user:sd",
+            kind="edge",
+            attributes={"level": "type", "symmetric": True, "inverse_label": None,
+                        "endpoint_kinds": {"src": ["entity"], "dst": ["entity"]}},
+        )
+        assert not isinstance(legal, Refusal), legal
+        pending = await registry.adapter.get_proposal(legal.id)
+        await registry.adapter.put_proposal(
+            type(pending)(**{**pending.__dict__, "attributes": forbidden})
+        )
+        at_approval = await registry.approve(legal.id, "user:sd")
+        assert isinstance(at_approval, Refusal), "the second door"
+        assert at_approval.reason == "endpoint_kind_mismatch"
+        assert at_approval.detail["rule"] == "EDGES 2.4.1"
         assert await registry.adapter.get_type("default", "same_capability", kind="edge") is None
 
     # Door three: an import cannot return a Refusal, so it returns the row unwritten
@@ -596,6 +649,18 @@ async def test_c17_15_a_retired_family_is_searched_and_the_caller_is_told(regist
     assert report.known == 1
     assert "edge_family_retired:blocks" in report.warnings
 
+    # **The second carrier**, which EDGES.md 2.8's table did not list until row 4b's
+    # second adversarial round found the code emitting it. Writing an edge onto a
+    # retired family is not refused -- retirement is a statement about the vocabulary
+    # and an edge is a fact about two things -- but a caller who has just written under
+    # a word somebody withdrew is entitled to know, and `Edge.warnings` is where a write
+    # tells them. A carrier minted by implementation is the closed vocabulary opening by
+    # code rather than by prose, which is worse than opening by prose, so 2.8 now lists
+    # it and this asserts it.
+    late = await registry.add_edge("blocks", task(3), task(4), "user:sd")
+    assert not isinstance(late, Refusal), "not refused -- the family's edges are facts"
+    assert "edge_family_retired:blocks" in late.warnings
+
 @pytest.mark.requires_capability("stores_edges", "stores_attributes")
 async def test_c17_16_direction_filters_directed_families_only(registry):
     """EDGES.md 2.2 and 4.1 -- a BLOCKING finding of the spec row's round 2.
@@ -702,6 +767,26 @@ async def test_c17_18_the_assembly_bound_counts_distinct_edges_and_is_on_by_defa
     assert "not paging" in tight.why_incomplete, (
         "the caller gets no cursor and cannot ask for the next five -- R13 stands"
     )
+
+    # **The exact boundary, and it was the one axis this test never walked** (row 4b,
+    # adversarial round 2, BLOCKING). A walk of exactly `max_edges` distinct edges has
+    # had NOTHING truncated -- every edge that exists was returned and the adapter's
+    # last page came back with no cursor -- and it reported `complete=False` with a
+    # `why` naming a bound nothing had crossed. That is round 3's own B7, on the case
+    # its fix never tried: this test exercised strictly-below and strictly-above and
+    # never `==`, which is exactly where this project's own retro says defects hide.
+    exact = await make_registry(adapter, max_edges=19)
+    at_bound = await exact.neighbors(hub, ["blocks"], 2, namespace="default")
+    assert at_bound.known == 19
+    assert at_bound.complete is True, (
+        "exactly at the bound with nothing truncated is COMPLETE -- a false claim in "
+        "the one field EDGES.md 4.2 promises will tell the truth is worse than no bound"
+    )
+    assert at_bound.why_incomplete is None
+
+    one_less = await make_registry(adapter, max_edges=18)
+    over = await one_less.neighbors(hub, ["blocks"], 2, namespace="default")
+    assert over.known == 18 and over.complete is False, "one below it, and it fires"
 
     default_on = await make_registry(adapter)
     assert default_on.max_edges is not None, "ON by default; disabling it is deliberate"
@@ -1014,6 +1099,30 @@ async def test_c17_26_an_edges_history_is_append_only_and_says_when_it_could_not
     assert blind.history_why == "work_links has no event table", (
         "the backend's own sentence, verbatim -- never a reason the registry invented"
     )
+
+    # The `neighbors` carrier, which PACKAGE.md 6.2's row for this id claimed and this
+    # test did not assert until row 4b's second adversarial round read the two side by
+    # side. Rule U on a field the read seam deliberately does not fill.
+    walked = await registry.neighbors(task(1), ["blocks"], 1, namespace="default",
+                                include_retracted=True)
+    assert walked.edges[0].edge.provenance.history == ()
+    assert "edge_provenance" in walked.edges[0].edge.provenance.history_why
+
+    # **`stores_events=False` with `stores_edge_events=True` is a combination nothing
+    # forbids and neither reference backend can produce** -- and it raised an uncaught
+    # `NotSupported` out of `edge_provenance`, because `read_events` is the same
+    # primitive `stores_events` gates. A declined capability degrades to an honest empty
+    # plus a `why`; it never raises. Row 4b, adversarial round 2.
+    split = await make_registry(
+        AsyncDegradedAdapter(
+            adapter,
+            stores_events=False,
+            why={"stores_events": "this store has no event table"},
+        )
+    )
+    honest = await split.edge_provenance(edge.edge_id)
+    assert honest.history == ()
+    assert honest.history_why == "this store has no event table"
 
 async def test_c17_27_equivalent_to_is_seeded_with_the_exact_shape_the_spec_prints(registry):
     """EDGES.md 3.1 and ruling **R7**, checked field by field.
