@@ -183,6 +183,7 @@ class Capabilities:
     timestamps_usage:     bool     # get_usage returns first_seen / last_seen
     owns_schema:          bool     # False when the schema belongs to the host app (§9.3)
     why: dict[str, str]            # one sentence per False flag — surfaced verbatim as Rule U's `why`
+    transaction_scope: Literal["owned", "savepoint"] = "owned"   # who owns the commit. §3.5, R5
 ```
 
 **The `why` dict is the mechanism, not decoration.** When a flag is `False`, the registry does not invent an explanation; it surfaces the adapter's sentence. `usage("blocks")` on beacon's table returns `last_seen=None, orphaned=None, why="work_link_types has no last_used_at column"` — which is `INTERFACE.md` §9 contortion 2, reported by the system rather than discovered by a human.
@@ -191,7 +192,9 @@ class Capabilities:
 
 > **Measured, not asserted** *(row 3c, 2026-08-29)*. That sentence was **false for six of the eight optional flags** for four deliverables: declining any one of `stores_events`, `stores_attributes`, `stores_aliases`, `indexes_membership`, `counts_usage` or `timestamps_usage` — **one at a time, nothing else degraded** — failed the suite outright, from 1 failure to 24. Two of those turned out to be defects in the *registry*, not the suite (§8b.5); the rest were tests using a capability as scaffolding for a scenario about something else, which now carry `requires_capability` and skip with a reason. [`docs/tools/check_capability_matrix.py`](../tools/check_capability_matrix.py) runs the whole suite against all nine declined configurations and prints the table; the contract suite runs it, `nonbinding`. **All nine now conform.** What it does *not* cover is several capabilities declined **at once** — that is question **Q7** and it is open.
 
-**Invariant, tested (`C0-01`):** every `False` flag has a non-empty entry in `why`.
+**Invariant, tested (`C0-01`):** every `False` flag has a non-empty entry in `why` — and so does `transaction_scope="savepoint"`, which is not a bool but is the one declaration that changes what a *successful* return means (§3.5). *(Row 3d, [Observed]: both reference backends returned an **empty** `why` for `owns_schema=False`, because every fixture backend is `owns_schema=True` and the one test that built such a backend asserted `why.get("owns_schema") or True`. The first borrowed-connection adapter hit it on its first call. Fixed in the backends and the assertion given teeth — `C0-09`, `C0-12`.)*
+
+> **`transaction_scope` is a declaration, not a flag** *(row 3d, ruling **R5**)*. It is `Literal["owned","savepoint"]` rather than a `bool` because the two values are not "can" and "cannot": both are fully transactional, and what differs is **who issues the commit**. It is therefore not in `CAPABILITY_FLAGS` and not part of the two-non-negotiable rule; `transactional` stays REQUIRED `True` in both scopes.
 
 ### 3.3 The record shapes
 
@@ -311,7 +314,22 @@ Pure, cheap, callable before `migrate()`. **Uncertainty:** none — a backend th
 Brings the store to the version this package expects; returns the version now in force. Idempotent. **When `Capabilities.owns_schema is False`, `migrate()` is verify-only:** it checks the columns it needs exist and either returns the version or raises `SchemaMismatch` listing what is missing. It never issues DDL against a schema it does not own. **Uncertainty:** a store whose version is *higher* than the package knows raises `StoreVersionUnknown` — never a silent downgrade (§9).
 
 **3. `transaction() -> ContextManager[None]`**
-Groups writes. Commits on clean exit, rolls back on any exception. Re-entrant calls join the outermost transaction (savepoints are not required). **Uncertainty:** none — `transactional=False` is non-conformant, so this always means what it says.
+Groups writes. Re-entrant calls join the outermost scope. **Uncertainty:** none — `transactional=False` is non-conformant, so this always means what it says. What "commits" means depends on who owns the connection, and the adapter **declares which** in `Capabilities.transaction_scope` (§3.5):
+
+| `transaction_scope` | at depth 0, entry | clean exit | exception | who commits |
+|---|---|---|---|---|
+| `"owned"` (default) | `BEGIN` | `COMMIT` | `ROLLBACK` | this adapter |
+| `"savepoint"` | `SAVEPOINT oo_<n>` | `RELEASE SAVEPOINT oo_<n>` | `ROLLBACK TO SAVEPOINT oo_<n>`, then `RELEASE` | **the host, never this adapter** |
+
+*(Amended by roadmap row 3d, 2026-08-29, per ruling **R5** — beacon finding **U1**. The previous text — "*Commits on clean exit … savepoints are not required*" — never contemplated a session the adapter does not own, and the reference `AsyncPostgresAdapter` accepted a borrowed connection, forced `set_autocommit(True)` on it and committed at depth 0. **Sharing a connection is not sharing a transaction.**)*
+
+**An adapter opened over a borrowed connection** — `PostgresAdapter.open(connection=…)`, `AsyncPostgresAdapter.open(connection=…)`, `SQLiteAdapter.open(connection=…)`, `AsyncSQLiteAdapter.open(connection=…)` — **never touches autocommit, never commits, and never closes the connection.** Three consequences, all stated rather than left to be discovered:
+
+1. **The connection is expected to be inside the host's transaction.** The adapter opens none. On Postgres a `SAVEPOINT` outside a transaction block is an error; on SQLite an outermost `SAVEPOINT` starts one and its `RELEASE` commits it — so a host that lends an idle autocommit connection gets a durability it did not ask for. Lend a connection with a transaction on it.
+2. **Nothing is durable until the host commits.** A clean exit is atomic (G2 holds *inside* the host's transaction) and not yet durable. `why["transaction_scope"]` carries the sentence that says so, and Rule U requires it to surface wherever a result would otherwise read as durable.
+3. **A failed probe is savepoint-protected too.** `migrate()`'s version probe fails by design on a fresh store, and on Postgres a failed statement aborts the whole transaction; the owned-connection recovery is a bare `ROLLBACK`, which on a borrowed connection would discard the host's work. Over a borrowed connection the probe runs inside its own savepoint.
+
+`C0-12` asserts all of it, on both reference backends and in both stacks.
 
 **4. `put_type(rec: TypeRecord, *, expect_absent: bool = False) -> TypeRecord`**
 Upsert on `(namespace, kind, name)`. With `expect_absent=True`, raises `AlreadyExists` if the key is present — **and that must come from a real constraint, not from a read-then-write check** (guarantee **G1**, §3.5). Returns the record as stored, so a backend that could not store `attributes` or `aliases` returns them empty and the registry can tell.
@@ -366,6 +384,8 @@ Required by §5.4 (*name already taken → return the existing entry*) and §5.9
 
 **G2 — atomicity of the decision transactions.**
 `approve` writes four things: the proposal's decision, the new `TypeEntry`, its membership rows, and a `ProvenanceEvent`. A half-commit produces either an approved proposal with no type (an approval nobody can see) or an active type with no approval record — and the second violates `INTERFACE.md` §2.4's rule that `approved_by` is never null on an `active` type, which is the rubber-stamping failure arriving through the data model. `reject`, `retire` and `merge_types` have the same shape.
+
+> **G2 holds in both transaction scopes, and durability is a separate question** *(row 3d, ruling **R5**)*. Over a **borrowed** connection (`transaction_scope="savepoint"`) `transaction()` opens `SAVEPOINT oo_<n>` at depth 0, `RELEASE`s it on clean exit and `ROLLBACK TO`s it on exception; nested calls join the outermost savepoint. The four writes of an `approve` are still all-or-nothing — **that is G2, and it is preserved** — but the outer commit belongs to the host and this adapter never issues it. `transactional` therefore stays REQUIRED `True` for a savepoint adapter: it *is* transactional. What it is not is *durable at clean exit*, and `Capabilities.why["transaction_scope"]` is the sentence the registry surfaces wherever a result would imply otherwise. **What "no" would have cost, recorded so the choice is reviewable:** a host that shares a connection without sharing a transaction, or a second connection and no shared transaction at all — both worse than either honest option (R5 point 5). `C0-12`.
 
 **G3 — monotonic `last_seen` under concurrent `record_use`: NOT required.**
 Named here so it is a decision rather than an omission. `usage` is advisory; a lost update costs one count and at most a slightly-stale `last_seen`, and the orphan judgement already degrades to `None` under uncertainty. Requiring serialisation here would make `record_use` — the highest-frequency call in the surface — take a write lock for no safety gain.
@@ -701,9 +721,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**124 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**125 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **One** added by row 3d — `C0-12`, ruling R5 / beacon finding U1.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
-**C0 — adapter conformance (11).** No interface call; this is the protocol itself.
+**C0 — adapter conformance (12).** No interface call; this is the protocol itself.
 
 | id | asserts | mech |
 |---|---|---|
@@ -717,6 +737,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C0-10 | **keyset pagination actually pages:** seven rows at `limit=3` give three disjoint, ordered, exhaustive pages and a terminating `next_after`. *(Row 3c, and the first defect found by asking whether a BROKEN backend can PASS: an adapter that silently drops `limit` and `after` — a duplicate-forever loop in any real keyset consumer — ran the whole suite to `119 passed, exit 0`. Both reference backends had implemented it correctly and nothing had ever checked)* | — |
 | C0-09 | **`owns_schema=False` makes `migrate()` verify-only** (§9.3): against a store the host application owns, `migrate()` raises `SchemaMismatch` naming what is missing, issues no DDL to fix it, and once the owner has created the schema returns the version and is usable. *(Row 3c. B1 is the first Tenshen contortion and the enterprise-DBA posture is the reference deployment — both reference backends implemented this and nothing asserted it.)* | — |
 | C0-08 | **G1 and G2, RACED:** two adapters on one store and two real concurrent writers — one absent name (exactly one insert wins, one `AlreadyExists`, one row in the store) and one proposal approved twice (exactly one `TypeEntry`, one `Refusal("already_decided")`). *(Row 3c, §8b.5. `C0-02`/`C0-07` call the primitives sequentially, which a read-then-write check passes as happily as a constraint does — §3.5 says a read-then-write check is **not** sufficient, and until this test nothing held it to that. A thread race has no mechanical async form, so the sync module is excluded from `tools/unasync.py` and the async counterpart is hand-written; both claim this id and both are binding.)* | — |
+| C0-12 | **a borrowed connection uses SAVEPOINTs and never commits** (§3 item 3, §3.5, ruling **R5**): an exception inside `transaction()` leaves the **host's** transaction OPEN with only the savepoint rolled back and the host's earlier work intact; a clean exit is visible to the adapter and invisible to every other connection until the host commits; nested calls join the outermost savepoint. *(Row 3d, beacon finding **U1**. `AsyncPostgresAdapter.open(connection=…)` accepted a borrowed connection, called `set_autocommit(True)` on it and committed at depth 0 — the host shared a connection and did not share a transaction. Builds backends directly, so the async twin is hand-written like `C0-08`'s and `C0-09`'s; both claim the id and both are binding.)* | — |
 | C0-07 | **G1's key is *scoped*:** one word under three namespaces is three rows, each `expect_absent=True`, each retrievable with its own definition and attributes; the collision is still raised *within* a namespace; `TypeQuery(namespace=None)` returns all three. *(Row 3c, §8b.2 — the half of G1 that `INTERFACE.md` §2.6's answer to mechanism 4 rests on, and that nothing asserted)* | **4** |
 
 **C1 — `consumers` (9).** Mechanism **C**.

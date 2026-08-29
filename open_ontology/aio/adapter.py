@@ -32,7 +32,7 @@ from __future__ import annotations
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 # The records, queries, pages and capability flags are storage shapes with no I/O in
 # them, so the async mirror does not copy them -- it re-exports the sync package's.

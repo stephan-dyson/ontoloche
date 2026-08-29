@@ -451,12 +451,18 @@ class BaseSqlAdapter:
 
     backend_name = "generic"
     _owns_schema = True
+    #: Ruling R5 / PACKAGE.md 3.5. True when this adapter was handed a connection it
+    #: does not own. It then never touches autocommit and never commits: ``transaction()``
+    #: brackets its writes in a SAVEPOINT and the outer commit belongs to the host.
+    _borrowed = False
 
     def __init__(self, dialect: Dialect):
         self.d = dialect
         self.m = SqlStore(dialect)
         self._depth = 0
         self._failed = False
+        self._savepoint_n = 0
+        self._savepoint: str | None = None
 
     # ------------------------------------------------------------------ subclass API
     def _execute(self, sql: str, params: tuple | list = ()) -> Any:
@@ -501,14 +507,58 @@ class BaseSqlAdapter:
             counts_usage=True,
             timestamps_usage=True,
             owns_schema=self._owns_schema,
-            why={},
+            why=dict(self._why()),
+            transaction_scope="savepoint" if self._borrowed else "owned",
         )
+
+    #: Ruling R5: a savepoint scope is DECLARED, never silent. The sentence is the one
+    #: the registry surfaces wherever a result would otherwise imply durability.
+    BORROWED_WHY = (
+        "this adapter was opened over a connection it does not own: transaction() "
+        "brackets its writes in a SAVEPOINT and never commits, so a clean exit is "
+        "atomic but becomes durable only when the host commits its own transaction"
+    )
+
+    #: The same rule for owns_schema=False. [Observed, row 3d] both reference backends
+    #: returned an EMPTY ``why`` for it -- C0-01's invariant ("every False flag has a
+    #: non-empty why") was never violated by the fixtures, which are all owns_schema=True,
+    #: and C0-09 built one and asserted ``why.get("owns_schema") or True``. The first
+    #: borrowed-connection adapter (C0-12) hit it immediately.
+    HOST_SCHEMA_WHY = (
+        "the schema belongs to the host application, not to this adapter: migrate() "
+        "verifies the columns it needs and issues no DDL (PACKAGE.md 9.3)"
+    )
+
+    def _why(self) -> dict[str, str]:
+        why: dict[str, str] = {}
+        if self._borrowed:
+            why["transaction_scope"] = self.BORROWED_WHY
+        if not self._owns_schema:
+            why["owns_schema"] = self.HOST_SCHEMA_WHY
+        return why
 
     # -------------------------------------------------------------------- 2 migrate
     def _migration_sql(self) -> list[tuple[int, str, str]]:
         return load_migrations(self.backend_name)
 
     def _current_version(self) -> int | None:
+        # Over a BORROWED connection the probe runs inside its own savepoint. Postgres
+        # aborts the whole transaction on a failed statement, and the owned-connection
+        # recovery below is a bare ROLLBACK -- which on a host's connection would
+        # discard work that is not ours. Found while implementing ruling R5: the very
+        # first call a borrowed adapter makes is this probe, and on a fresh store it
+        # fails by design.
+        if self._borrowed:
+            probe = self._next_savepoint("oo_probe")
+            self._execute(f"SAVEPOINT {probe}")
+            try:
+                row = self._fetchone("SELECT max(version) FROM oo_schema_version")
+            except Exception:
+                self._execute(f"ROLLBACK TO SAVEPOINT {probe}")
+                self._execute(f"RELEASE SAVEPOINT {probe}")
+                return None
+            self._execute(f"RELEASE SAVEPOINT {probe}")
+            return None if row is None else row[0]
         try:
             row = self._fetchone("SELECT max(version) FROM oo_schema_version")
         except Exception:
@@ -573,11 +623,43 @@ class BaseSqlAdapter:
         return latest
 
     # ---------------------------------------------------------------- 3 transaction
+    def _next_savepoint(self, prefix: str = "oo") -> str:
+        self._savepoint_n += 1
+        return f"{prefix}_{self._savepoint_n}"
+
+    def _open_scope(self) -> None:
+        """Depth 0 entry. Owned: BEGIN. Borrowed: SAVEPOINT -- ruling R5."""
+        if self._borrowed:
+            self._savepoint = self._next_savepoint()
+            self._execute(f"SAVEPOINT {self._savepoint}")
+        else:
+            self._begin()
+
+    def _close_scope(self) -> None:
+        """Depth 0 clean exit. Owned: COMMIT. Borrowed: RELEASE -- the outer commit is
+        the host's and this adapter never issues it."""
+        if self._borrowed:
+            self._execute(f"RELEASE SAVEPOINT {self._savepoint}")
+            self._savepoint = None
+        else:
+            self._commit()
+
+    def _abort_scope(self) -> None:
+        """Depth 0 failure. Owned: ROLLBACK. Borrowed: ROLLBACK TO, then RELEASE, which
+        leaves the HOST's transaction open with everything before the savepoint intact."""
+        if self._borrowed:
+            self._execute(f"ROLLBACK TO SAVEPOINT {self._savepoint}")
+            self._execute(f"RELEASE SAVEPOINT {self._savepoint}")
+            self._savepoint = None
+        else:
+            self._rollback()
+
     @contextmanager
     def transaction(self):
-        """Re-entrant: an inner call joins the outermost transaction."""
+        """Re-entrant: an inner call joins the outermost transaction -- or, over a
+        borrowed connection, the outermost savepoint (ruling R5 point 3)."""
         if self._depth == 0:
-            self._begin()
+            self._open_scope()
             self._failed = False
         self._depth += 1
         try:
@@ -585,7 +667,7 @@ class BaseSqlAdapter:
         except BaseException:
             self._depth -= 1
             if self._depth == 0:
-                self._rollback()
+                self._abort_scope()
                 self._failed = False
             else:
                 self._failed = True
@@ -595,9 +677,9 @@ class BaseSqlAdapter:
             if self._depth == 0:
                 if self._failed:
                     self._failed = False
-                    self._rollback()
+                    self._abort_scope()
                 else:
-                    self._commit()
+                    self._close_scope()
 
     # ------------------------------------------------------------------- 4 put_type
     def put_type(self, rec: TypeRecord, *, expect_absent: bool = False) -> TypeRecord:

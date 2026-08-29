@@ -29,6 +29,7 @@ class PostgresAdapter(BaseSqlAdapter):
         conninfo: str | None = None,
         *,
         connection_factory: Callable[[], Any] | None = None,
+        connection: Any | None = None,
         schema: str | None = None,
         owns_schema: bool = True,
     ):
@@ -37,20 +38,41 @@ class PostgresAdapter(BaseSqlAdapter):
         super().__init__(PostgresDialect())
         self._psycopg = psycopg
         self._owns_schema = owns_schema
-        if connection_factory is not None:
+        if connection is not None:
+            # BORROWED -- ruling R5 / U1. The host owns this connection and its
+            # transaction. Touching autocommit here is what the bug was: it silently
+            # ends (or forbids) the caller's transaction on a connection we were lent.
+            self.conn = connection
+            self._borrowed = True
+        elif connection_factory is not None:
             self.conn = connection_factory()
+            self.conn.autocommit = True
         elif conninfo is not None:
             self.conn = psycopg.connect(conninfo, autocommit=True)
+            self.conn.autocommit = True
         else:
-            raise ValueError("PostgresAdapter needs a conninfo or a connection_factory")
-        self.conn.autocommit = True
+            raise ValueError("PostgresAdapter needs a conninfo, a connection_factory or a connection")
         self.schema = schema
         if schema:
             # One schema per store keeps two adapters in one process (which the suite
-            # requires) from sharing a table name.
-            with self.conn.cursor() as cur:
-                cur.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-                cur.execute(f'SET search_path TO "{schema}"')
+            # requires) from sharing a table name. Over a borrowed connection this is a
+            # write like any other, so it goes through transaction() -- i.e. a savepoint.
+            with self.transaction():
+                self._execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+                self._execute(f'SET search_path TO "{schema}"')
+
+    @classmethod
+    def open(
+        cls,
+        conninfo: str | None = None,
+        *,
+        connection: Any | None = None,
+        schema: str | None = None,
+        owns_schema: bool = True,
+    ) -> "PostgresAdapter":
+        """The sync twin of ``AsyncPostgresAdapter.open``. Nothing here needs to await;
+        it exists so the borrowed-connection call reads identically in both stacks."""
+        return cls(conninfo, connection=connection, schema=schema, owns_schema=owns_schema)
 
     # ------------------------------------------------------------------ connection
     def _execute(self, sql: str, params: tuple | list = ()) -> Any:
@@ -98,4 +120,8 @@ class PostgresAdapter(BaseSqlAdapter):
         return tuple(r[0] for r in rows)
 
     def close(self) -> None:
+        """A borrowed connection is the host's; closing it here would be the same class
+        of mistake as committing it (ruling R5)."""
+        if self._borrowed:
+            return
         self.conn.close()

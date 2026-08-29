@@ -79,7 +79,15 @@ class _DegradedBase:
         base = self.inner.capabilities()
         values = {flag: getattr(base, flag) for flag in CAPABILITY_FLAGS}
         values.update(self._flags)
-        return Capabilities(**values, why={**base.why, **self._why})
+        # ``transaction_scope`` is carried through, never re-decided: this wrapper takes
+        # capabilities AWAY from a backend and who owns the commit is not one of them.
+        # Dropping it here would have made a wrapped borrowed adapter claim to own a
+        # connection it does not (ruling R5).
+        return Capabilities(
+            **values,
+            why={**base.why, **self._why},
+            transaction_scope=base.transaction_scope,
+        )
 
     def migrate(self) -> int:
         return self.inner.migrate()

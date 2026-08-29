@@ -36,15 +36,40 @@ __all__ = ["SQLiteAdapter"]
 class SQLiteAdapter(BaseSqlAdapter):
     backend_name = "sqlite"
 
-    def __init__(self, path: str = ":memory:", *, owns_schema: bool = True):
+    def __init__(
+        self,
+        path: str = ":memory:",
+        *,
+        connection: Any | None = None,
+        owns_schema: bool = True,
+    ):
         super().__init__(SqliteDialect())
         self.path = path
         self._owns_schema = owns_schema
+        if connection is not None:
+            # BORROWED -- ruling R5 / U1. SQLite supports SAVEPOINT, so the borrowed
+            # case is not Postgres-only: 2B's harness can prove the seam on either.
+            # The connection's settings are the HOST's; we set none of them, exactly as
+            # we set no autocommit on a borrowed psycopg connection.
+            self.conn = connection
+            self._borrowed = True
+            return
         self.conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
         if path != ":memory:":
             self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA busy_timeout = 5000")
+
+    @classmethod
+    def open(
+        cls,
+        path: str = ":memory:",
+        *,
+        connection: Any | None = None,
+        owns_schema: bool = True,
+    ) -> "SQLiteAdapter":
+        """The sync twin of ``AsyncSQLiteAdapter.open``; nothing here needs to await."""
+        return cls(path, connection=connection, owns_schema=owns_schema)
 
     # ------------------------------------------------------------------ connection
     def _execute(self, sql: str, params: tuple | list = ()) -> Any:
@@ -74,5 +99,11 @@ class SQLiteAdapter(BaseSqlAdapter):
         return tuple(r[1] for r in rows)
 
     def close(self) -> None:
-        """Closes only what this adapter opened. There is no Registry.close()."""
+        """Closes only what this adapter opened. There is no Registry.close().
+
+        A borrowed connection is the host's; closing it here would be the same class of
+        mistake as committing it (ruling R5).
+        """
+        if self._borrowed:
+            return
         self.conn.close()

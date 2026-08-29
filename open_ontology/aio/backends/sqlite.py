@@ -45,8 +45,21 @@ class AsyncSQLiteAdapter(AsyncBaseSqlAdapter):
 
     @classmethod
     async def open(
-        cls, path: str = ":memory:", *, owns_schema: bool = True
+        cls,
+        path: str = ":memory:",
+        *,
+        connection: Any | None = None,
+        owns_schema: bool = True,
     ) -> "AsyncSQLiteAdapter":
+        if connection is not None:
+            # BORROWED -- ruling R5 / U1. SQLite supports SAVEPOINT, so the borrowed
+            # case is not Postgres-only: 2B's harness can prove the seam on either
+            # backend. Every connection setting below is the HOST's to choose; we set
+            # none of them, exactly as we set no autocommit on a borrowed psycopg one.
+            self = cls(connection, path, owns_schema=owns_schema)
+            self._borrowed = True
+            return self
+
         import aiosqlite  # an extra, so the base install stays dependency-free
 
         conn = await aiosqlite.connect(path, isolation_level=None, check_same_thread=False)
@@ -99,5 +112,11 @@ class AsyncSQLiteAdapter(AsyncBaseSqlAdapter):
         return tuple(r[1] for r in rows)
 
     async def close(self) -> None:
-        """Closes only what this adapter opened. There is no AsyncRegistry.close()."""
+        """Closes only what this adapter opened. There is no AsyncRegistry.close().
+
+        A borrowed connection is the host's; closing it here would be the same class of
+        mistake as committing it (ruling R5).
+        """
+        if self._borrowed:
+            return
         await self.conn.close()
