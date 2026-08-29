@@ -1,4 +1,4 @@
-"""Does INTERFACE.md still describe the code? -- run it and find out.
+"""Do INTERFACE.md and PACKAGE.md still describe the code? -- run them and find out.
 
 Six consecutive adversarial review rounds on `docs/specs/INTERFACE.md` each found at
 least one defect of **the same family**: a printed data shape or signature that had
@@ -27,6 +27,17 @@ A shape the spec prints that the code does not have, or a field the code returns
 the spec never mentions, is a finding either way: the first misleads an implementer, the
 second is a surface nobody agreed to.
 
+**PACKAGE.md is checked the same way, added by row 3d (beacon finding U4).** That
+finding was one more of the same family: 3.3's printed ``TypeRecord`` had lost
+``retire_reason``, ``retired_by``, ``retired_at`` and ``successor`` -- four fields the
+landed dataclass has and the document a third-party adapter author reads does not. The
+fifteen INTERFACE shapes were mechanically checked and the ten PACKAGE ones were not,
+so the drift moved into the half of the specification nobody was checking. The
+difference from INTERFACE.md is only in shape: PACKAGE prints real ``@dataclass``
+blocks rather than ``Name:`` sketches, so the parser reads a ``class X:`` header. Names
+only, again -- the spec writes what a field *is called*, and a container type that
+differs on purpose is not drift.
+
 Run: ``python docs/tools/check_spec_drift.py`` -- exit 0 clean, 1 with a report.
 """
 
@@ -38,8 +49,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "docs" / "specs" / "INTERFACE.md"
+PACKAGE = ROOT / "docs" / "specs" / "PACKAGE.md"
 sys.path.insert(0, str(ROOT))
 
+from open_ontology import adapter as adapter_module  # noqa: E402
+from open_ontology import attributes as attributes_module  # noqa: E402
 from open_ontology import registry as registry_module  # noqa: E402
 from open_ontology import types as types_module  # noqa: E402
 
@@ -84,7 +98,28 @@ CALLS = (
 #: an entry here is a decision on the record, not a way to silence the check.
 SPEC_OMITS: dict[str, set[str]] = {}
 
+#: PACKAGE.md prints these as real ``@dataclass`` blocks, and they are meant to BE the
+#: whole record -- a third-party adapter author builds from them. ``{printed name:
+#: (module, attribute)}``. Row 3d, beacon finding U4.
+PACKAGE_SHAPES = {
+    "Capabilities": (adapter_module, "Capabilities"),
+    "TypeRecord": (adapter_module, "TypeRecord"),
+    "ProposalRecord": (adapter_module, "ProposalRecord"),
+    "ConsumerRecord": (adapter_module, "ConsumerRecord"),
+    "UsageRecord": (adapter_module, "UsageRecord"),
+    "EventRecord": (adapter_module, "EventRecord"),
+    "TypeQuery": (adapter_module, "TypeQuery"),
+    "TypePage": (adapter_module, "TypePage"),
+    "ProposalQuery": (adapter_module, "ProposalQuery"),
+    "FieldSpec": (attributes_module, "FieldSpec"),
+    "AttributeSchema": (attributes_module, "AttributeSchema"),
+}
+
+#: Same rule as SPEC_OMITS, for PACKAGE.md. An entry is a decision on the record.
+PACKAGE_OMITS: dict[str, set[str]] = {}
+
 _FENCE = re.compile(r"```(?:python)?\n(.*?)```", re.S)
+_CLASS = re.compile(r"^class ([A-Z]\w*)[:(]", re.M)
 _FIELD = re.compile(r"^\s{4}([a-z_][a-z0-9_]*)\s*:", re.M)
 _TABLE_FIELD = re.compile(r"^\|\s*`([a-z_][a-z0-9_]*)`\s*\|", re.M)
 
@@ -99,6 +134,36 @@ def shape_fields(blocks: list[str], name: str) -> set[str] | None:
         for chunk in re.split(r"\n(?=\S)", block):
             if chunk.lstrip().startswith(f"{name}:"):
                 return set(_FIELD.findall(chunk))
+    return None
+
+
+def package_shape_fields(blocks: list[str], name: str) -> set[str] | None:
+    """The field names PACKAGE.md prints for ``class <name>:``, or None if it prints none.
+
+    PACKAGE prints executable-looking ``@dataclass`` blocks, so the header is
+    ``class Name:`` and the body is four-space-indented ``field: type`` lines, often with
+    a trailing comment. A method definition ends the record -- ``Capabilities`` prints
+    none, but a future shape might.
+    """
+    for block in blocks:
+        for m in _CLASS.finditer(block):
+            if m.group(1) != name:
+                continue
+            body = block[m.end() :]
+            end = re.search(r"^(?:@|class |\S)", body, re.M)
+            if end:
+                body = body[: end.start()]
+            body = re.split(r"^    def ", body, maxsplit=1, flags=re.M)[0]
+            # PACKAGE.md packs some records: `namespace: str; kind: str; name: str`.
+            # Reading only the first field of such a line invents five findings that are
+            # not drift, which is how a checker teaches people to ignore it.
+            return {
+                name
+                for line in body.splitlines()
+                for name in _FIELD.findall(
+                    "\n".join("    " + part.strip() for part in line.split(";"))
+                )
+            }
     return None
 
 
@@ -171,8 +236,34 @@ def main() -> int:
         for name in sorted(printed - actual):
             problems.append(f"{call}(): the spec declares {name!r}; the code does not take it")
 
+    # --- PACKAGE.md's printed dataclasses. Row 3d, beacon finding U4.
+    package_blocks = spec_blocks(PACKAGE.read_text(encoding="utf-8"))
+    for printed, (module, attribute) in PACKAGE_SHAPES.items():
+        cls = getattr(module, attribute, None)
+        if cls is None or not hasattr(cls, "__dataclass_fields__"):
+            problems.append(f"PACKAGE {printed}: {module.__name__} has no dataclass {attribute}")
+            continue
+        fields = package_shape_fields(package_blocks, printed)
+        if fields is None:
+            problems.append(
+                f"PACKAGE {printed}: listed as a printed shape and PACKAGE.md prints no "
+                f"`class {printed}:` block -- an adapter author has nothing to build from"
+            )
+            continue
+        actual = set(cls.__dataclass_fields__)
+        allowed = PACKAGE_OMITS.get(printed, set())
+        for name in sorted(actual - fields - allowed):
+            problems.append(
+                f"PACKAGE {printed}.{name}: the code has it, PACKAGE.md's printed shape "
+                f"does not -- a third-party adapter built from the document is wrong"
+            )
+        for name in sorted(fields - actual):
+            problems.append(
+                f"PACKAGE {printed}.{name}: printed by PACKAGE.md, absent from the code"
+            )
+
     if problems:
-        print(f"{SPEC.relative_to(ROOT)} has drifted from the implementation:\n")
+        print("the specifications have drifted from the implementation:\n")
         for p in problems:
             print(f"  - {p}")
         print(
@@ -184,7 +275,9 @@ def main() -> int:
 
     print(
         f"{SPEC.relative_to(ROOT)}: every printed shape and signature matches the "
-        f"implementation ({len(SHAPES)} shapes, {len(CALLS)} calls)."
+        f"implementation ({len(SHAPES)} shapes, {len(CALLS)} calls).\n"
+        f"{PACKAGE.relative_to(ROOT)}: every printed dataclass matches the "
+        f"implementation ({len(PACKAGE_SHAPES)} shapes)."
     )
     return 0
 

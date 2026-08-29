@@ -203,6 +203,8 @@ class Capabilities:
 
 Flat, frozen dataclasses. Every field is `str`, `int`, `bool`, `datetime`, `None`, or a JSON-serialisable `dict`/`list`. No nesting of interface objects.
 
+> **These blocks are checked against the code** *(row 3d, beacon finding **U4**)*. `TypeRecord` had lost `retire_reason`, `retired_by`, `retired_at` and `successor` — four fields the landed dataclass has and this document, which is what a third-party adapter author builds from, did not. `INTERFACE.md`'s fifteen printed shapes were mechanically diffed against `types.py` from row 3c onward and this document's eleven were not, so the drift simply moved into the half nobody was checking. [`check_spec_drift.py`](../tools/check_spec_drift.py) now covers both, and the contract suite runs it.
+
 ```python
 @dataclass(frozen=True)
 class TypeRecord:
@@ -220,6 +222,13 @@ class TypeRecord:
     warnings: tuple[str, ...]
     created_at: datetime
     updated_at: datetime
+    # The retirement tombstone. INTERFACE §5.9: a retired name is not reusable and the
+    # reason is not optional, so these are columns, not something derived from events —
+    # a backend with `stores_events=False` still has to answer "why is this retired?".
+    retire_reason: str | None
+    retired_by: str | None
+    retired_at: datetime | None
+    successor: str | None           # the word that replaced it, if there is one. §5.10
 
 @dataclass(frozen=True)
 class ProposalRecord:
