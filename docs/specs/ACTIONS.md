@@ -748,3 +748,96 @@ For every family in `would_evict`, the registry reads the family's `TypeEntry.pr
 | 10-5 | `consumers_at_risk` inherits `ConsumerReport.complete == False` and can never be a complete casualty list | `C19-23` |
 | 10-6 | A projection whose `order` names only groups no family carries is refused with `action_family_unknown`, not answered with an empty report | `C19-24` |
 | 10-7 | The 128 ceiling is a provider's and the registry neither enforces nor assumes it — `budget` is a caller's argument with no default | `C19-25` |
+
+---
+
+## 11. Design test 1 — UC1 Tenshen: three of the 222 actions, expressed without moving one of them
+
+**The subject [Observed 2026-08-29].** `beacon`'s assistant action registry: 222 modules, 19 categories, a `MAX_TOOLS_PER_REQUEST` of 128 and a busiest page at 127 (§10.1). Read-only; nothing in beacon is edited by this row, and **the test is whether three of its actions can be *described* as families while the code stays exactly where it is** — beacon spec §10.7's position, which this document is written to preserve rather than to overturn.
+
+**Three actions, three categories, one of them `task`**, chosen so no two share a shape:
+
+| action | category | `reads_only` | `undoable` | why this one |
+|---|---|---|---|---|
+| `add_task_stakeholder` | **`task`** | False | **True**, with an `undo` payload | writes an edge in a family `EDGES.md` §9 already maps, and its failure path collapses two causes into one code |
+| `delete_person` | `person` | False | False — *"Not reversible via undo."* | the largest undeclared blast radius in the repo: **15** foreign keys reference `people.id` |
+| `search_tasks` | `common` (defaulted) | **True** | False | the empty-effects case, and the one that tests whether `effects: []` can ever be honest |
+
+### 11.1 Expected outcomes — **stated before the walk-through**
+
+| # | Prediction | Expected |
+|---|---|---|
+| **T1.1** | All three express as `kind="action"` `TypeEntry` rows with the eight keys of §2.2, and **no beacon file changes** | **PASS.** If any of the three needs a field §2.2 does not have, §2.1's decision is wrong and this row should stop |
+| **T1.2** | `add_task_stakeholder`'s failure path — *"task not yours or already linked"*, **one `code="mutation_failed"` for two unrelated causes** — splits under §2.4 | **PREDICTED PARTIAL, and the partiality is the finding.** *Already linked* is `edge_absent` and becomes a typed `precondition_unmet`. *Not yours* is **authorization**, which §1 rules out as the host's, so it stays inside the action. Expect one of two causes typed, and expect the other to be named as out of scope rather than quietly absorbed |
+| **T1.3** | `delete_person` declares `reversibility="irreversible"`; declaring `approval_mode="auto"` alongside it is refused | **PASS**, `Refusal(reason="human_approval_required")` at **declaration**, per §2.2's one cross-field rule. Expect the refusal to fire at the declaration door and not only at `preflight` |
+| **T1.4** | `delete_person`'s blast radius becomes partly declarable | **PREDICTED: 3 edge families declarable, the rest admitted unknown.** 15 FKs reference `people.id` — 7 `CASCADE`, 6 `SET NULL`, 2 with no `ondelete`. Expect **4 of the 7 cascades** to belong to three edge families (`person_links` twice — both legs — `task_stakeholders`, `project_stakeholders`) and to become three `retract_edge` effects; expect the remaining **11** FKs to be expressible only as `host_state` with a `why`. **From 0 declared to 3 declared plus a stated unknown** |
+| **T1.5** | `delete_person` has a second effect nobody would guess from its SPEC | **PREDICTED YES.** `person_service.delete_person` calls `connection_service.unlink` when the person is a verified pair-binding, **and that call commits** before the delete. Expect a second `host_state` effect, and expect the design test to record that a mid-action commit is invisible to `reversibility` |
+| **T1.6** | `search_tasks` declares `effects: []` honestly | **PASS.** `reads_only=True` and `covers_routes=[]` **[Observed]**. Expect `reversibility="reversible"`, `approval_mode="auto"`, `min_auto_tier=None`, and expect `preflight` to report `tier_floor=None` with a `why` rather than warning |
+| **T1.7** | The 127/128 arithmetic reproduces through `projection` | **PASS, to the number.** `projection("task_detail", budget=127, order=("common","task","project","person"))` over beacon's real counts → `counts` = 45/48/21/13, all four in `fits`, `over_by=0`. Then a **49th** `task` family → `would_evict=("person",)`, `over_by=1`. Expect beacon's own comment reproduced arithmetically rather than quoted |
+| **T1.8** | `projection(order=None)` answers `counts` and nothing else | **PASS**, `order_source=None`, `fits=()`, `would_evict=()`, `complete=False`, and a `why_incomplete` naming that the registry does not choose |
+| **T1.9** | `consumers_at_risk` on the eviction | **PREDICTED EMPTY, AND THE EMPTY IS THE POINT.** Beacon registers no consumers in this registry, so the list is empty — and an empty list here reads as *"no casualties"*. Expect `complete=False` to ride with it, and expect the walk-through to say plainly that an empty `consumers_at_risk` is `ConsumerReport.complete == False` wearing a different name |
+| **T1.10** | **The enterprise blocker.** §10.7: *"the action surface cannot vary per user or per tenant"* — `all_actions()` caches a process-global snapshot | **PREDICTED: OUT OF SCOPE BY R24, and expressing 222 actions as families does NOT unblock it.** R24 ruled the protocol tenant-blind; the blocker is `registry.py`'s caching, one function's contract. Expect the design test to name the consequence — *a customer-defined action surface needs a change in beacon **and** a tenancy dimension this protocol declines to have* — rather than to claim a fix |
+| **T1.11** | **The household blocker.** §10.3's multi-actor access | **PREDICTED: UNTOUCHED.** Same reason. Expect no claim |
+| **T1.12** | Nothing in beacon moves | **PASS expected.** The three families are declared in a registry *beside* beacon, about beacon's actions. Zero beacon files edited; the probe parses them read-only |
+
+### 11.2 What a failure would mean
+
+**T1.1 failing** would mean §2.2's eight keys are the wrong eight, and the honest response is to fix §2.2 rather than to contort beacon. **T1.7 failing** would mean §10's arithmetic does not describe the one product that has the problem, which would make §10 a hypothesis rather than a design input. **T1.10 producing a claimed fix** would be the worse failure: a spec that quietly acquires a tenancy dimension in a design test is a spec that overturned a ruling in a walk-through.
+
+---
+
+## 12. Design test 2 — UC2 CMS: `flag_facility_for_review`, and the value the precondition cannot see
+
+**CMS wins any conflict with Tenshen** (`ROADMAP.md`, rule of the ordering). Data: the checked-in 400-row Montana sample, `open_ontology/contract/fixtures/cms_sample_400.csv`, cut from the public CMS file by [`make_sample.py`](../tools/make_sample.py). Counts pre-registered in [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md).
+
+**The action.** `flag_facility_for_review(facility)` — one input, an `InstanceRef` to a `cms:entity:facility`; the intended precondition is *"this facility has at least one citation whose `Scope Severity Code` is in the Immediate-Jeopardy band `{J, K, L}`"*; the intended effect is an edge, not a property.
+
+**Why this action and not another.** `scope_severity_code` is the value set **[Observed, `0.5-RESULTS.md`]** that the cheapest model tier **inverted** — reported that higher letters are less serious, when J/K/L are Immediate Jeopardy — with every number it produced still correct and nothing erroring. An action gated on that scale, invoked by that tier, unattended, is 0.5's failure with a write attached.
+
+### 12.1 Expected outcomes — **stated before the walk-through**
+
+| # | Prediction | Expected |
+|---|---|---|
+| **T2.1** | The family expresses under §2.2 | **PASS.** One `InstanceRef` input, `reversibility="reversible"` (a flag is an edge, and an edge retracts), `approval_mode="auto"`, `min_auto_tier` set |
+| **T2.2** | **The severity precondition is expressible** | **PREDICTED NO — the central finding of this fixture.** §2.4's four kinds are about types, predicates and edges; *"a value of a column of a row"* is none of them. Expect contortion **ACT4**, and expect it to be recorded as the **third** surface reaching for `INTERFACE.md` contortion 11 / ruling **R22**, after `Consumer.gate` and `EDGES.md` Q17 |
+| **T2.3** | The obvious modelling escape hatch — make severity an edge, `citation:42 --has_severity--> value_set:scope_severity_code` — is available | **PREDICTED REFUSED, at two layers**, by `EDGES.md` §2.4.1: the permissive family is refused **at declaration**, and a correctly declared family refuses the write with `endpoint_kind_mismatch` on `level`. Expect the refusal that CMS itself motivated to close the door CMS now wants open — and expect that to be recorded as consistency, not as a new hole |
+| **T2.4** | What *is* expressible instead | **PREDICTED: `type_active` on the value set, and `edge_exists` on `cites`.** Both are conditions about the **vocabulary**, not about the data. Expect the walk-through to say so plainly rather than presenting them as a substitute |
+| **T2.5** | `min_auto_tier="sonnet"`; an invocation by `ai:haiku_classifier` at tier `haiku` | **REFUSED**, `Refusal(reason="tier_below_action_policy")`, `detail` carrying both the actor's tier and the family's floor. **Nothing is recorded by `preflight`**; the host may record the refusal itself with `outcome="refused"` |
+| **T2.6** | The same invocation at tier `opus` | **ALLOWED**, `approved_by="auto:<policy>"`, `approved_at` set — and `approved_by` is **never null** on the resulting `applied` invocation (§3.2) |
+| **T2.7** | The floor with **no deployment-supplied tier order** | **PREDICTED REFUSED, and this is a pre-registered choice rather than a discovered one.** The registry does not know that `haiku` is below `sonnet` (`INTERFACE.md` §2.7). With no order, the floor cannot be evaluated; treating unknown as *satisfied* would let a mis-configured deployment auto-approve everything. Expect `precondition_unmet`-shaped honesty: a refusal whose `detail` says **unknown**, not **false** |
+| **T2.8** | The fixture's numbers reproduce | 400 citations · 10 facilities · severity histogram **B 2 · C 5 · D 235 · E 82 · F 41 · G 31 · J 4** · **3 of 10** facilities carry an Immediate-Jeopardy (`J`) citation · **8 of 10** carry actual harm (`G` or above) |
+| **T2.9** | The effect names an edge family that must already be registered | **PASS.** `add_edge` on `flagged_for_review`; declaring it before that family is registered as `kind="edge"` is refused at **declaration** with `edge_family_unknown` — `EDGES.md`'s existing value, not a new one (rule 2.5-7) |
+| **T2.10** | 0.5's inversion is caught **twice**, by two independent gates | **PASS expected.** A Haiku-proposed *family* whose definition asserts the ordering carries `unverified_semantics` and is refused for auto-approval by `tier_below_auto_approve_policy` (`INTERFACE.md` §2.7); a Haiku *invocation* of the approved family is refused by `tier_below_action_policy` (§5.2). **Two different values, two different objects, one failure** — and if they turn out to be the same gate twice, §7's argument for a separate value is wrong |
+
+### 12.2 What a failure would mean
+
+**T2.2 coming out PASS** would mean this document grew a value-level query language without noticing, which is §2.4's stated boundary breached inside its own design test. **T2.3 coming out permitted** would mean `EDGES.md` §2.4.1's rule is not general after all, one row after that document spent an adversarial round making it general. **T2.10 collapsing to one gate** would mean §7's `tier_below_action_policy` is a duplicate and should be withdrawn.
+
+---
+
+## 13. Design test 3 — UC3 NYC: `reconcile_borough`, whose effect is an edge and never a merge
+
+**The subject [Observed 2026-08-28, re-verified 2026-08-29 by row #4].** Three datasets, three agencies, one word: **A** `uvpi-gqnh` (DPR trees, `data_updated_at` 2017-10-04), **B** `erm2-nwe9` (311 requests, 2026-08-28), **C** `693u-uax6` (DOT parking meters, 2026-08-24). Namespaces `dpr`, `oti_311`, `dot`. `EDGES.md` §11 wrote `A ≡ B` and `B ≡ C` as `equivalent_to` edges — **a chain, not a triangle**, because each publisher joins the one it found.
+
+**UC3 conflicts are recorded as Q-numbered questions for the supervisor, never as R-numbers** (`USE-CASES.md` conflict rule).
+
+**The action.** `reconcile_borough(a, b)` — two `TypeRef` inputs; precondition *there is an `equivalent_to` edge between them*; effect *write a `reconciled_with` edge*. **Never a merge.**
+
+### 13.1 Expected outcomes — **stated before the walk-through**
+
+| # | Prediction | Expected |
+|---|---|---|
+| **T3.1** | Two `TypeRef` inputs of `kind="value_set"` are legal | **PASS.** §2.3's `ref="type"` with `kinds=("value_set",)`. `predicate` would be refused; `value_set` is exactly the endpoint `EDGES.md` §2.4.1 permits at type level |
+| **T3.2** | The precondition `edge_exists(equivalent_to, a, b)` is evaluated by `neighbors` and by nothing else | **PASS**, `PreconditionResult.evaluated_by == "neighbors"`, `known=1`. This is §2.4's no-query-language claim made mechanical |
+| **T3.3** | **The precondition holds for `dpr ≡ oti_311` and FAILS for `dpr ≡ dot`** | **PREDICTED REFUSED for the two-hop pair, and this is the sharpest test in the document.** `equivalent_to` is symmetric and **not transitive** (`EDGES.md` §3.1); the precondition is a `depth=1` question. So an action **cannot manufacture the transitivity the edge family refuses**. Expect `Refusal(reason="precondition_unmet")` with `detail` naming the `edge_exists` condition |
+| **T3.4** | Declaring `merge_types` as an effect | **REFUSED at declaration**, `Refusal(reason="effect_not_permitted")`. §2.5's general rule. **This is `ROADMAP.md`'s kill row arriving through a new door, and the door must be shut before the action exists rather than when it runs** |
+| **T3.5** | **`merge_types` stays untouched.** With the `equivalent_to` edge present **and** `reconcile_borough` declared, approved and invoked, ask the **shipped** `Registry.merge_types(from_="borough", into="borough", namespace="dpr", into_namespace="oti_311")` | **STILL REFUSED**, `cross_namespace_merge`, non-overridably — **and again** under `acknowledge=["cross_namespace_merge","definitions_diverge"]`. `EDGES.md` T3.12 re-run with an action layer on top of it. Expect the check to run against `open_ontology.Registry`, not against the probe's own model |
+| **T3.6** | The invocation's `created_by` | **`derived`** (**R17**), because a reconciliation driven by a deterministic rule over two type names has no human and no model in the loop. Expect **no contortion** — `EDGES.md` T3.8 hit this wall before R17 landed and had to claim `user`; expect the same shape to pass now, which is the ruling paying off one row later |
+| **T3.7** | `source_version` carries both dataset versions | **PASS.** `"uvpi-gqnh@2017-10-04 / erm2-nwe9@2026-08-28"` on the invocation — **R21**'s field, and a nine-year gap between the two endpoints of one reconciliation |
+| **T3.8** | Three namespaces, one invocation | **PASS.** The family is registered in `default`; `Invocation.namespace` is the **family's**, and the inputs keep their own — `EDGES.md` §2.2's rule inherited verbatim. Expect no new ambiguity |
+| **T3.9** | `projection` over a cross-agency surface | **PREDICTED UNREMARKABLE, and worth checking anyway.** Namespaces and `reachability` surfaces are orthogonal; expect a projection whose `order` names one surface to include families from three namespaces, and expect that to be correct rather than surprising |
+| **T3.10** | Anything UC3 wants that UC1 or UC2 does not | **PREDICTED: at most one, and it is Q-numbered rather than ruled.** UC3 is closest to the customer, so a conflict here is the supervisor's call — `USE-CASES.md`'s conflict rule |
+
+### 13.2 What a failure would mean
+
+**T3.3 coming out PASS** would mean the action layer manufactures transitivity `equivalent_to` refuses, and `reconcile_borough` should not ship. **T3.4 or T3.5 failing** is the kill row, reopened by this document — and unlike row #4, this document would have opened it with a *verb*, which is a door no previous row had. Either failure stops the row.
