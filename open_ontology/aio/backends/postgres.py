@@ -13,7 +13,7 @@ and says so loudly::
 
 The suite's ``conftest`` therefore selects a selector event loop on ``win32``. An
 application embedding this backend has to do the same; recorded as D-A3 in
-``docs/3B-ASYNC.md``.
+``docs/runs/3B-ASYNC.md``.
 
 The two things that differ from SQLite are the sync backend's, unchanged: ``jsonb`` and
 ``timestamptz`` (handled in ``PostgresDialect``, borrowed from the sync package, not

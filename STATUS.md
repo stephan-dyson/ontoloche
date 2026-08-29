@@ -10,10 +10,10 @@
 | 0.3 Prior art | ✅ done |
 | 0.4 Ingestion question | 🟡 assumed (A3) — office visit refines |
 | 0.5 Proposal-quality test | ✅ done |
-| #1 `docs/INTERFACE.md` v0 | ✅ done |
-| #2 `docs/PACKAGE.md` v0 | ✅ done |
+| #1 `docs/specs/INTERFACE.md` v0 | ✅ done |
+| #2 `docs/specs/PACKAGE.md` v0 | ✅ done |
 | #3 Phase 2A reference implementation | ✅ done — 229 tests green, both backends |
-| 3b Async adapter | ✅ done — 267 tests green, both async backends; generated from the sync source, not forked ([docs/3B-ASYNC.md](docs/3B-ASYNC.md)) |
+| 3b Async adapter | ✅ done — 267 tests green, both async backends; generated from the sync source, not forked ([docs/runs/3B-ASYNC.md](docs/runs/3B-ASYNC.md)) |
 | Docs folder reorg | 🔵 in flight (Sonnet, mechanical) |
 | `docs/USE-CASES.md` — the three validation fixtures | ✅ done |
 | 3c Use-case validation pass (UC3 + adversarial loop on INTERFACE/PACKAGE) | ⏳ queued (after reorg) |

@@ -22,23 +22,23 @@ pytest --pyargs open_ontology.aio.contract      # the same 109 ids, awaited
   non-technical analyst goes from a spreadsheet to a sent action in five steps, without a
   developer at any point. Read this to argue with the product; read the two above to argue
   with the strategy.
-- [`docs/INTERFACE.md`](docs/INTERFACE.md) — **the Phase 1 deliverable: the type-registry
+- [`docs/specs/INTERFACE.md`](docs/specs/INTERFACE.md) — **the Phase 1 deliverable: the type-registry
   contract, `v0` and unstable.** Twelve calls built around a proposal→approval loop, with
   `consumers(type)` — *"if I add this, what will silently ignore it?"* — first-class. Includes
   the Tenshen and CMS design tests, and the conflicts both produced.
-- [`docs/PACKAGE.md`](docs/PACKAGE.md) — **the Phase 2 deliverable: the package contract.** The
+- [`docs/specs/PACKAGE.md`](docs/specs/PACKAGE.md) — **the Phase 2 deliverable: the package contract.** The
   fifteen-primitive storage-adapter protocol built on one rule — *the adapter stores records and
   does not know what a proposal, an approval or a refusal is* — the nine table shapes, and the
   109 contract tests enumerated id by id.
-- [`docs/2A-RUN.md`](docs/2A-RUN.md) and [`docs/3B-ASYNC.md`](docs/3B-ASYNC.md) — **the run
+- [`docs/runs/2A-RUN.md`](docs/runs/2A-RUN.md) and [`docs/runs/3B-ASYNC.md`](docs/runs/3B-ASYNC.md) — **the run
   records.** What was actually executed, with the verbatim pytest output and every deviation
   from the specs recorded rather than silently resolved. `3B-ASYNC.md` also carries the async
   design: the async tree is *generated* from the sync source by `tools/unasync.py`, so there is
   one implementation of the registry rather than two that drift.
-- [`docs/0.3-prior-art.md`](docs/0.3-prior-art.md) — what the two visible prior interfaces
+- [`docs/findings/0.3-prior-art.md`](docs/findings/0.3-prior-art.md) — what the two visible prior interfaces
   actually look like, read on 2026-08-28. Verdict: no interface worth matching call-for-call;
   Foundry's status vocabulary worth matching field-for-field.
-- [`docs/FINDINGS-0.1-tenshen-archaeology.md`](docs/FINDINGS-0.1-tenshen-archaeology.md) —
+- [`docs/findings/FINDINGS-0.1-tenshen-archaeology.md`](docs/findings/FINDINGS-0.1-tenshen-archaeology.md) —
   the first piece of real evidence. Seven entity vocabularies in one codebase, traced to
   their origin commits. It changed the interface: **most "duplicate" types are not
   duplicates**, and the failure that actually shipped a bug was a type being *silently

@@ -1,6 +1,6 @@
 # Rulings 2026-08-28 — the three items PACKAGE.md v0 left open
 
-Supervisor rulings under the founder's make-assumptions directive (`2026-08-28-assumptions-in-lieu-of-office-answers.md`). All three are sequencing / design-consistency calls, not product calls; the founder may reverse any of them. Raised by deliverable #2's author at landing (`48c89dd`, `docs/PACKAGE.md` §11).
+Supervisor rulings under the founder's make-assumptions directive (`2026-08-28-assumptions-in-lieu-of-office-answers.md`). All three are sequencing / design-consistency calls, not product calls; the founder may reverse any of them. Raised by deliverable #2's author at landing (`48c89dd`, `docs/specs/PACKAGE.md` §11).
 
 ## R1 — AsyncStorageAdapter is a new row 3b, not part of #3
 

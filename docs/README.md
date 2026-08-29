@@ -16,24 +16,24 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 
 | Doc | Status | What it is |
 |---|---|---|
-| [INTERFACE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/INTERFACE.md) | v0, unstable | The type-registry contract: twelve calls around a proposal→approval loop; `consumers`, `predicates`, lifecycle; the closed fourteen-value `Refusal.reason` vocabulary (§5.12); Tenshen and CMS design tests. |
-| [PACKAGE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/PACKAGE.md) | v0, unstable | The `open_ontology` package: a fifteen-primitive storage-adapter protocol, SQLite + Postgres backends, `attributes` schema-per-kind, and the **109-test contract suite that defines conformance** (the Phase 2B gate). |
+| [INTERFACE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) | v0, unstable | The type-registry contract: twelve calls around a proposal→approval loop; `consumers`, `predicates`, lifecycle; the closed fourteen-value `Refusal.reason` vocabulary (§5.12); Tenshen and CMS design tests. |
+| [PACKAGE.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) | v0, unstable | The `open_ontology` package: a fifteen-primitive storage-adapter protocol, SQLite + Postgres backends, `attributes` schema-per-kind, and the **109-test contract suite that defines conformance** (the Phase 2B gate). |
 
 ## Findings — evidence, in the order it was produced
 
 | Doc | Roadmap row | Headline |
 |---|---|---|
-| [FINDINGS-0.1-tenshen-archaeology.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/FINDINGS-0.1-tenshen-archaeology.md) | 0.1 | Seven vocabularies in one codebase: five are capability predicates, not duplicates; the only shipped incident was a **silent per-consumer drop**. Forced `consumers` and `predicate` into the interface. |
-| [0.3-prior-art.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/0.3-prior-art.md) | 0.3 | No existing interface worth matching call-for-call; Foundry's `status` vocabulary worth matching field-for-field. Migration off Foundry is possible today, onto it is not. |
-| [0.5-ground-truth-PREREGISTERED.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/0.5-ground-truth-PREREGISTERED.md) | 0.5 | Ground truth for the proposal-quality test, committed **before** any proposal was generated. |
-| [0.5-RESULTS.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/0.5-RESULTS.md) | 0.5 | Four blind agents, four model tiers, public CMS data: structure right 4/4; Opus 0 errors in 12 claims; **Haiku silently inverted the CMS severity scale.** Model tier is a product parameter. |
+| [FINDINGS-0.1-tenshen-archaeology.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/FINDINGS-0.1-tenshen-archaeology.md) | 0.1 | Seven vocabularies in one codebase: five are capability predicates, not duplicates; the only shipped incident was a **silent per-consumer drop**. Forced `consumers` and `predicate` into the interface. |
+| [0.3-prior-art.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/0.3-prior-art.md) | 0.3 | No existing interface worth matching call-for-call; Foundry's `status` vocabulary worth matching field-for-field. Migration off Foundry is possible today, onto it is not. |
+| [0.5-ground-truth-PREREGISTERED.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/0.5-ground-truth-PREREGISTERED.md) | 0.5 | Ground truth for the proposal-quality test, committed **before** any proposal was generated. |
+| [0.5-RESULTS.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/0.5-RESULTS.md) | 0.5 | Four blind agents, four model tiers, public CMS data: structure right 4/4; Opus 0 errors in 12 claims; **Haiku silently inverted the CMS severity scale.** Model tier is a product parameter. |
 
 ## Run records — what the code actually does
 
 | Doc | Row | Result |
 |---|---|---|
-| [2A-RUN.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/2A-RUN.md) | #3 | **229 passed, 0 failed, 0 skipped** in one run — SQLite 113 + Postgres 16.14 113 + 3 backend-independent; CMS design test reproduces every pre-registered count; fourteen recorded deviations. |
-| [3B-ASYNC.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/3B-ASYNC.md) | 3b | **267 passed, 0 failed, 0 skipped** in one run — the **same 109 contract ids, same test-function names**, on async SQLite + async Postgres 16.14; sync suite still green (`229 passed`), both stacks in one process `496 passed`. The async tree is **generated** from the sync source by `tools/unasync.py`, not forked — a stale mirror fails the suite. Fourteen new deviations, the fourteen of 2A inherited. |
+| [2A-RUN.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/runs/2A-RUN.md) | #3 | **229 passed, 0 failed, 0 skipped** in one run — SQLite 113 + Postgres 16.14 113 + 3 backend-independent; CMS design test reproduces every pre-registered count; fourteen recorded deviations. |
+| [3B-ASYNC.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/runs/3B-ASYNC.md) | 3b | **267 passed, 0 failed, 0 skipped** in one run — the **same 109 contract ids, same test-function names**, on async SQLite + async Postgres 16.14; sync suite still green (`229 passed`), both stacks in one process `496 passed`. The async tree is **generated** from the sync source by `tools/unasync.py`, not forked — a stale mirror fails the suite. Fourteen new deviations, the fourteen of 2A inherited. |
 
 ## Decisions — assumptions and rulings, each with what would revise it
 
@@ -46,9 +46,7 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 
 | File | Use |
 |---|---|
-| [make_sample.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/make_sample.py) | Cuts the 400-row Montana sample from the public CMS citations file. |
-| [characterize.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/characterize.py) | Counts the pathologies over all 419,479 rows (the numbers in 0.5). |
+| [make_sample.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/make_sample.py) | Cuts the 400-row Montana sample from the public CMS citations file. |
+| [characterize.py](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/characterize.py) | Counts the pathologies over all 419,479 rows (the numbers in 0.5). |
 
 **Standing constraint 0 applies to everything here: no employer data, ever — public CMS data only.**
-
-*Planned tidy-up (after roadmap row 3b lands, so no in-flight commit is disturbed): move files into `docs/specs/`, `docs/findings/`, `docs/runs/`, `docs/tools/` and rewrite the relative links. This index is updated in the same change.*

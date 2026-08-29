@@ -2,9 +2,9 @@
 
 **Version:** `v0` — **unstable.** Every module name, class name, primitive signature, table shape and test id here may change without a deprecation path. Standing constraint 4.
 **Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 2 preparation. Deliverable **#2** of the Tenshen-rebuild ordering. **No code yet** — code is deliverable #3 (Phase 2A).
-**Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumptions **A1**, **A4** and ruling **A5**.
+**Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumptions **A1**, **A4** and ruling **A5**.
 **Sits underneath:** [`INTERFACE.md`](INTERFACE.md) v0. Where this document and `INTERFACE.md` disagree, `INTERFACE.md` wins and the disagreement is recorded in §11 rather than resolved silently.
-**Evidence inputs:** [`INTERFACE.md`](INTERFACE.md) (the calls, the refusals, the two design tests) · [`0.5-RESULTS.md`](0.5-RESULTS.md) and [`0.5-ground-truth-PREREGISTERED.md`](0.5-ground-truth-PREREGISTERED.md) (the CMS entities and their pre-registered counts) · `beacon/src/beacon/models/work_link_type.py` and `.../services/work_link_service.py`, read-only on 2026-08-28 (the Tenshen design test) · [`0.3-prior-art.md`](0.3-prior-art.md) (the Foundry import mapping the suite must test).
+**Evidence inputs:** [`INTERFACE.md`](INTERFACE.md) (the calls, the refusals, the two design tests) · [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) and [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) (the CMS entities and their pre-registered counts) · `beacon/src/beacon/models/work_link_type.py` and `.../services/work_link_service.py`, read-only on 2026-08-28 (the Tenshen design test) · [`0.3-prior-art.md`](../findings/0.3-prior-art.md) (the Foundry import mapping the suite must test).
 **Claim tags:** **[Observed]** seen directly · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 
 ---
@@ -26,7 +26,7 @@ The contract suite is not a test of the package. **It is the definition of confo
 - **No ingestion or mapping.** Landed rows → typed entities is **Phase 3**; this package is handed a decided vocabulary, not a CSV.
 - **No instance resolution.** *"I already know 38 of these facilities"* is entity resolution and belongs to **Phase 3 ingestion** (`INTERFACE.md` §10.3; `ROADMAP.md` Phase 3, supervisor's provisional assignment 2026-08-28, founder may move it). Mentioned once, here, and not designed.
 - **No ORM is mandated** — see §2.5. The protocol is defined over dataclasses, so a third-party adapter *may* be written with one.
-- **No async in v0** — and this is a real gap, not a preference. See §7 contortion **B2**; it blocks ROADMAP #5 and is escalated in §11. **Closed 2026-08-28 by ruling R1's row 3b**, which took option 3 below: `AsyncStorageAdapter` / `AsyncRegistry` alongside the sync ones, generated from them rather than forked ([`3B-ASYNC.md`](3B-ASYNC.md)).
+- **No async in v0** — and this is a real gap, not a preference. See §7 contortion **B2**; it blocks ROADMAP #5 and is escalated in §11. **Closed 2026-08-28 by ruling R1's row 3b**, which took option 3 below: `AsyncStorageAdapter` / `AsyncRegistry` alongside the sync ones, generated from them rather than forked ([`3B-ASYNC.md`](../runs/3B-ASYNC.md)).
 - **No embeddings, no vector store, no model call.** `resolve_type`'s near-match scoring is a pluggable `Resolver`; v0 ships a deterministic default so the contract suite never depends on a model. See §2.6.
 - **No auth, no multi-tenancy** beyond `namespace`; no UI; no CLI beyond a contract-suite runner.
 
@@ -645,7 +645,7 @@ returning, per `(kind, key)`: `n`, `first_seen`, `last_seen`, an example, whethe
 
 This is the same move as `ConsumerReport.complete = False`: it does not solve the problem, it makes the problem **visible and enumerable** rather than silent. It also gives the only sane migration path — you read the census, *then* write a schema that matches reality, *then* turn on `warn`, *then* `enforce`.
 
-> **Recorded by deliverable #3, 2026-08-28 — this section specifies two tables and a facade method but adds no primitive to carry them,** while §3.4 stays at fifteen and `C0-04` polices the boundary. Phase 2A reaches them through an **optional `AttributeStore` protocol, outside the fifteen and outside conformance**, which is consistent with ruling R2. A backend that does not implement it is still fully conformant, and `attribute_census` then reports `complete=False` with a `why` rather than an empty census. See [`2A-RUN.md`](2A-RUN.md) §4.4, deviation D-2.
+> **Recorded by deliverable #3, 2026-08-28 — this section specifies two tables and a facade method but adds no primitive to carry them,** while §3.4 stays at fifteen and `C0-04` polices the boundary. Phase 2A reaches them through an **optional `AttributeStore` protocol, outside the fifteen and outside conformance**, which is consistent with ruling R2. A backend that does not implement it is still fully conformant, and `attribute_census` then reports `complete=False` with a `why` rather than an empty census. See [`2A-RUN.md`](../runs/2A-RUN.md) §4.4, deviation D-2.
 
 **Flagged: `attribute_census` is a method beyond the calls enumerated in `INTERFACE.md` §5.** It is the only one this document adds. §11 asks for a ruling: absorb it into #1, or keep it package-local and out of the conformance definition. Until ruled, the suite tests it (`C15-02`) but a backend may not be failed for it — the tests are marked `xfail_if_not_declared`.
 
@@ -975,7 +975,7 @@ beacon's data layer is `sqlalchemy.ext.asyncio.AsyncSession` throughout. Three o
 
 **But the consequence must not be buried: Phase 2B cannot land on a sync-only package.** `AsyncStorageAdapter` is a **named prerequisite of ROADMAP #5** and it belongs to this deliverable's line, not to the beacon program. Escalated in §11.
 
-> **Resolved 2026-08-28 — option 3, and B2 is closed.** Ruling **R1** made it row **3b**, which landed with `AsyncStorageAdapter`, `AsyncRegistry`, async SQLite and async Postgres, and the same 109 contract ids green on both (`267 passed`). Option 3's stated cost — two implementations to keep in step — was avoided rather than paid: the async tree is **generated from the sync source** by `tools/unasync.py` and a suite check fails when it is stale, so there is no second copy of the registry logic. Option 1's objection stands and is why the sync package is untouched: a synchronous CMS ingest script still needs no event loop. See [`3B-ASYNC.md`](3B-ASYNC.md).
+> **Resolved 2026-08-28 — option 3, and B2 is closed.** Ruling **R1** made it row **3b**, which landed with `AsyncStorageAdapter`, `AsyncRegistry`, async SQLite and async Postgres, and the same 109 contract ids green on both (`267 passed`). Option 3's stated cost — two implementations to keep in step — was avoided rather than paid: the async tree is **generated from the sync source** by `tools/unasync.py` and a suite check fails when it is stale, so there is no second copy of the registry logic. Option 1's objection stands and is why the sync package is untouched: a synchronous CMS ingest script still needs no event loop. See [`3B-ASYNC.md`](../runs/3B-ASYNC.md).
 
 **B3 — seven `TypeRecord` fields have no column; three of them must exist, and the cost is a three-column additive migration.**
 
@@ -1046,7 +1046,7 @@ Stating this is not pedantry: reading "the sample loads through the adapter" as 
 
 ### 8.2 Expected row counts, from the pre-registered ground truth
 
-Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Aug2026.csv` (CMS Provider Data Catalog, downloaded 2026-08-28). Ground truth frozen in [`0.5-ground-truth-PREREGISTERED.md`](0.5-ground-truth-PREREGISTERED.md) as `093f102`, before any proposal was generated.
+Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Aug2026.csv` (CMS Provider Data Catalog, downloaded 2026-08-28). Ground truth frozen in [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) as `093f102`, before any proposal was generated.
 
 | `kind` | `name` | rows in `oo_type` | `oo_usage.count` | source of the count |
 |---|---|---|---|---|
@@ -1061,7 +1061,7 @@ Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Au
 
 **Totals: 8 rows in `oo_type`, 8 in `oo_usage`, 8 in `oo_proposal`, ≥16 in `oo_event`** (a `proposed` and an `approved` per type), and 0 in `oo_consumer` — nothing in a CSV registers a consumer, and `consumers()` correctly reports `known: 0, complete: False`.
 
-**Caution on the one [Inferred] count.** The seven severity codes present in the sample (B, C, D, E, F, G, J) come from [`0.5-RESULTS.md`](0.5-RESULTS.md)'s quotation of run **D**, which is the run that got the *ordering* backwards. The letter list itself was not among the two claims verified as errors, but it was also not independently counted. **The contract test must compute this number from the sample rather than assert it**, and record it — grading against a number taken from an unverified quotation is exactly the moved-target failure the pre-registration exists to prevent. The four `[Observed]` counts are asserted; this one is computed and reported.
+**Caution on the one [Inferred] count.** The seven severity codes present in the sample (B, C, D, E, F, G, J) come from [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md)'s quotation of run **D**, which is the run that got the *ordering* backwards. The letter list itself was not among the two claims verified as errors, but it was also not independently counted. **The contract test must compute this number from the sample rather than assert it**, and record it — grading against a number taken from an unverified quotation is exactly the moved-target failure the pre-registration exists to prevent. The four `[Observed]` counts are asserted; this one is computed and reported.
 
 ### 8.3 What the CMS path exercises beyond counts
 
@@ -1077,13 +1077,13 @@ Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Au
 
 ### 8.4 A reproducibility gap, recorded
 
-**[Observed]** the 400-row `sample_state.csv` is **not in this repository**, and `docs/make_sample.py` does not produce it: that script takes a **seeded 300-row reservoir sample** of the full national file and writes `sample_300.csv`. The 400-row contiguous Montana file that 0.5 actually used is described in the ground truth but not checked in, and `nh_full.csv` (165 MB) is not either.
+**[Observed]** the 400-row `sample_state.csv` is **not in this repository**, and `docs/tools/make_sample.py` does not produce it: that script takes a **seeded 300-row reservoir sample** of the full national file and writes `sample_300.csv`. The 400-row contiguous Montana file that 0.5 actually used is described in the ground truth but not checked in, and `nh_full.csv` (165 MB) is not either.
 
 Standing constraint 0 argues *for* fixing this, not against: the data is public CMS data, and *"a test that cannot be run on public data is a test this project does not run."*
 
 **Task for deliverable #3:** check the 400-row public sample in at `open_ontology/contract/fixtures/cms_sample_400.csv` (~80 KB), and add a `make_sample_state.py` that regenerates it from the public file so the provenance is checkable. Until it exists, the C13 group is `skipif`-gated on the fixture and **the CMS design test is therefore not yet runnable — it is specified, not passing.** Said plainly so nobody reads §8.2 as a result.
 
-> **DONE, deliverable #3, 2026-08-28.** The fixture is checked in (**152,927 bytes**, not ~80 KB — the `Deficiency Description` column is long) and `tools/make_sample_state.py` regenerates it. The source file re-downloaded that day is **165,336,194 bytes, byte-for-byte the size the ground truth records**, so the fixture is the sample 0.5 actually cut. The C13 group runs and §8.2 is now a result: every [Observed] count matches, and the one [Inferred] count was **computed** — 7 distinct severity codes, B C D E F G J — rather than asserted against run D's quotation. See [`2A-RUN.md`](2A-RUN.md) §3.
+> **DONE, deliverable #3, 2026-08-28.** The fixture is checked in (**152,927 bytes**, not ~80 KB — the `Deficiency Description` column is long) and `tools/make_sample_state.py` regenerates it. The source file re-downloaded that day is **165,336,194 bytes, byte-for-byte the size the ground truth records**, so the fixture is the sample 0.5 actually cut. The C13 group runs and §8.2 is now a result: every [Observed] count matches, and the one [Inferred] count was **computed** — 7 distinct severity codes, B C D E F G J — rather than asserted against run D's quotation. See [`2A-RUN.md`](../runs/2A-RUN.md) §3.
 
 ### 8.5 CMS verdict
 
@@ -1148,7 +1148,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 
 ## 11. Open items, and what would change this
 
-> **Deliverable #3 landed 2026-08-28.** The whole suite is green on both reference backends in one run (`229 passed`) and the CMS design test executes. Fourteen deviations are recorded in [`2A-RUN.md`](2A-RUN.md) §4; the one wanting a founder ruling is **D-1** — §3.4 primitive 10 and `C11-04` require a `Refusal` for a read-only consumer source, and ruling R3's closed fourteen has no honest value for it. Item 1 below (async) was answered by ruling **R1** as new row 3b, **which landed 2026-08-28** ([`3B-ASYNC.md`](3B-ASYNC.md), `267 passed`); items 2 and 3 by **R2** and **R3**.
+> **Deliverable #3 landed 2026-08-28.** The whole suite is green on both reference backends in one run (`229 passed`) and the CMS design test executes. Fourteen deviations are recorded in [`2A-RUN.md`](../runs/2A-RUN.md) §4; the one wanting a founder ruling is **D-1** — §3.4 primitive 10 and `C11-04` require a `Refusal` for a read-only consumer source, and ruling R3's closed fourteen has no honest value for it. Item 1 below (async) was answered by ruling **R1** as new row 3b, **which landed 2026-08-28** ([`3B-ASYNC.md`](../runs/3B-ASYNC.md), `267 passed`); items 2 and 3 by **R2** and **R3**.
 
 ### 11.1 For the founder to rule on
 

@@ -1,6 +1,6 @@
 # Roadmap — open-ontology
 
-**Status:** Draft v0.4, 2026-08-28 — Phase 0 closed (0.3 done on evidence), **Phase 1 v0 shipped**, **ordering deliverable #2 (`docs/PACKAGE.md` v0) shipped**; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
+**Status:** Draft v0.4, 2026-08-28 — Phase 0 closed (0.3 done on evidence), **Phase 1 v0 shipped**, **ordering deliverable #2 (`docs/specs/PACKAGE.md` v0) shipped**; **rebuild-on-top confirmed by the founder 2026-08-28**. Assumptions and what would revise each: [`docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
 **Priority:** **Top priority, behind CASA/compliance only.** See §0.
 **Companion:** [`VISION.md`](VISION.md) — the thesis, the evidence, and what is not validated.
 
@@ -39,7 +39,7 @@ That last row is why this phase is not optional. If the cause is semantic collis
 
 ### 0.1 — Tenshen archaeology — ✅ **COMPLETE 2026-08-27**
 
-**Finding:** [`docs/FINDINGS-0.1-tenshen-archaeology.md`](docs/FINDINGS-0.1-tenshen-archaeology.md)
+**Finding:** [`docs/findings/FINDINGS-0.1-tenshen-archaeology.md`](docs/findings/FINDINGS-0.1-tenshen-archaeology.md)
 
 **Scope, stated first:** this examined **Tenshen**, not Foundry. The four mechanisms below are hypotheses about *HHS*; a single-owner codebase with no teams cannot test them, and **nothing in this finding challenges them.** They are tested at §0.2.
 
@@ -102,7 +102,7 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 ### 0.3 — Prior art — ✅ **COMPLETE 2026-08-28**
 
-**Finding:** [`docs/0.3-prior-art.md`](docs/0.3-prior-art.md)
+**Finding:** [`docs/findings/0.3-prior-art.md`](docs/findings/0.3-prior-art.md)
 
 **Verdict:** **no interface worth matching call-for-call; one vocabulary worth matching field-for-field.** Both candidates are pure *declaration* registries. `foundry-ontology-open`'s `Ontology` class is five `register_*` methods plus `get_linked_types` / `validate_ontology` / `summary` / `to_dict`, with **no** proposal, approval, retirement, usage, provenance or consumer concept. Foundry's public Ontology API is **read-only for type metadata** — `GET .../objectTypes` and `GET .../fullMetadata` exist; creating an object type via API does not, and the open request for it is [palantir/foundry-platform-python#318](https://github.com/palantir/foundry-platform-python/issues/318) (2026-01-19). **The proposal→approval loop has no prior art in either.**
 
@@ -133,7 +133,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 ### 0.5 — The proposal-quality test — ✅ **RUN 2026-08-28**
 
-**Results:** [`docs/0.5-RESULTS.md`](docs/0.5-RESULTS.md) · ground truth pre-registered first in [`docs/0.5-ground-truth-PREREGISTERED.md`](docs/0.5-ground-truth-PREREGISTERED.md)
+**Results:** [`docs/findings/0.5-RESULTS.md`](docs/findings/0.5-RESULTS.md) · ground truth pre-registered first in [`docs/findings/0.5-ground-truth-PREREGISTERED.md`](docs/findings/0.5-ground-truth-PREREGISTERED.md)
 
 **Verdict: the bet survives at the top model tier, and dies at the cheap one.** Four blind agents, four tiers. Structure correct 4/4. Opus made **zero factual errors in 12 checked claims** and recomputed a poisoned metric correctly unprompted; one Sonnet also caught the temporal anomaly and asked the user rather than asserting. **Haiku inverted the CMS severity scale** — turning a worst-violations report into its opposite while every number stayed correct and nothing errored.
 
@@ -148,7 +148,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **No office file can ever be used for this.** Federal data does not leave the building, and a venture resting on the founder's day-job access is compromised regardless of care taken. **The public equivalent is better anyway** — same domain, same agency family, reproducible by any reader, zero conflict-of-interest surface.
 
-**Data, counted over all 419,479 rows 2026-08-28:** [`NH_HealthCitations_Aug2026.csv`](https://data.cms.gov/provider-data/dataset/r5ix-sfxw) — CMS nursing-home health citations. 165,336,194 bytes, 23 columns, **14,627 facilities**, updated 2026-08-01. Confirmed pathologies: a boolean-sounding column holding **six** status strings with no yes/no among them; **1.28%** of rows (5,338 of 416,948) with a correction date *preceding* the survey date; a `Location` column **99.988% redundant** with four others; and 104 facility names shared across multiple CCNs, so name-based resolution merges distinct facilities. Ground truth is pre-registered in [`docs/0.5-ground-truth-PREREGISTERED.md`](docs/0.5-ground-truth-PREREGISTERED.md).
+**Data, counted over all 419,479 rows 2026-08-28:** [`NH_HealthCitations_Aug2026.csv`](https://data.cms.gov/provider-data/dataset/r5ix-sfxw) — CMS nursing-home health citations. 165,336,194 bytes, 23 columns, **14,627 facilities**, updated 2026-08-01. Confirmed pathologies: a boolean-sounding column holding **six** status strings with no yes/no among them; **1.28%** of rows (5,338 of 416,948) with a correction date *preceding* the survey date; a `Location` column **99.988% redundant** with four others; and 104 facility names shared across multiple CCNs, so name-based resolution merges distinct facilities. Ground truth is pre-registered in [`docs/findings/0.5-ground-truth-PREREGISTERED.md`](docs/findings/0.5-ground-truth-PREREGISTERED.md).
 
 **Do:** hand the file (or a slice) to a capable model cold and ask it to produce step 2's proposal. Score it against the ground truth a human establishes separately. **Measure, do not eyeball.**
 
@@ -166,7 +166,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 ## Phase 1 — The interface. One document, no implementation. — ✅ **v0 SHIPPED 2026-08-28**
 
-**Deliverable:** [`docs/INTERFACE.md`](docs/INTERFACE.md) — the vocabulary/type registry contract, versioned **`v0` and explicitly labelled unstable**. **Written 2026-08-28 against assumption A1.** All four exit criteria met (checked in its §13).
+**Deliverable:** [`docs/specs/INTERFACE.md`](docs/specs/INTERFACE.md) — the vocabulary/type registry contract, versioned **`v0` and explicitly labelled unstable**. **Written 2026-08-28 against assumption A1.** All four exit criteria met (checked in its §13).
 
 **What shipped:** twelve calls — the ten the surface below names, plus `approve`/`reject` named and shaped, plus `retire`, plus `register_consumer`/`record_use` (named because `consumers()` and `usage()` are otherwise unimplementable). Data model, model tier as a parameter, and an evidence slot carrying external-documentation citations.
 
@@ -176,7 +176,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Kill criterion checked, not tripped** (§12 of the document): `merge_types` is 1 of 12 calls with four non-overridable refusals, and the mechanism-4 answer is `namespace` — preserve, not merge.
 
-**Next:** ~~deliverable #2, `docs/PACKAGE.md`~~ — **shipped 2026-08-28**, see the ordering table below. Next is **#3, Phase 2A**.
+**Next:** ~~deliverable #2, `docs/specs/PACKAGE.md`~~ — **shipped 2026-08-28**, see the ordering table below. Next is **#3, Phase 2A**.
 
 <details>
 <summary>Phase 1 as briefed (kept for provenance)</summary>
@@ -220,21 +220,21 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 | # | open-ontology deliverable | Tenshen slice it unblocks | Session model |
 |---|---|---|---|
-| 1 | ~~**`docs/INTERFACE.md` v0**~~ — **DONE 2026-08-28** ([`docs/INTERFACE.md`](docs/INTERFACE.md)) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
-| 2 | ~~**`docs/PACKAGE.md` v0**~~ — **DONE 2026-08-28** ([`docs/PACKAGE.md`](docs/PACKAGE.md)) — `open_ontology` package shape, a **fifteen-primitive** storage-adapter protocol, SQLite + Postgres table shapes, the `attributes` schema-per-kind mechanism, and **109 contract tests as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
-| 3 | ~~**Phase 2A** reference implementation, passing the contract tests on CMS data~~ — **DONE 2026-08-28** ([`docs/2A-RUN.md`](docs/2A-RUN.md)). The repo's first code: 15-primitive adapter, the twelve calls, SQLite **and** Postgres, **all 109 contract tests green on both backends in one run (229 passed, 0 failed, 0 skipped)**, and the CMS design test executing against the pre-registered ground truth | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") — **MET** | Opus build, Sonnet mechanical |
-| 3b | ~~**AsyncStorageAdapter** — async mirror of the 15-primitive protocol + an async run of the same contract suite~~ — **DONE 2026-08-28** ([`docs/3B-ASYNC.md`](docs/3B-ASYNC.md)). `AsyncStorageAdapter`, `AsyncRegistry`, async SQLite **and** async Postgres, **the same 109 contract ids green on both in one run (267 passed, 0 failed, 0 skipped)**, sync suite still green (`229 passed`), 496 for both stacks in one process. **Generated from the sync source, not forked** *(ruling R1, [`docs/decisions/2026-08-28-package-v0-rulings.md`](docs/decisions/2026-08-28-package-v0-rulings.md))* | **the async gate for #5** — **MET** | Opus |
+| 1 | ~~**`docs/specs/INTERFACE.md` v0**~~ — **DONE 2026-08-28** ([`docs/specs/INTERFACE.md`](docs/specs/INTERFACE.md)) | Slice 0 (one entity-type vocabulary); `work_link_types` migration (2B) | Opus |
+| 2 | ~~**`docs/specs/PACKAGE.md` v0**~~ — **DONE 2026-08-28** ([`docs/specs/PACKAGE.md`](docs/specs/PACKAGE.md)) — `open_ontology` package shape, a **fifteen-primitive** storage-adapter protocol, SQLite + Postgres table shapes, the `attributes` schema-per-kind mechanism, and **109 contract tests as the definition of conformance** | 2B needs `pip install` + Tenshen's own tables behind the adapter | Opus |
+| 3 | ~~**Phase 2A** reference implementation, passing the contract tests on CMS data~~ — **DONE 2026-08-28** ([`docs/runs/2A-RUN.md`](docs/runs/2A-RUN.md)). The repo's first code: 15-primitive adapter, the twelve calls, SQLite **and** Postgres, **all 109 contract tests green on both backends in one run (229 passed, 0 failed, 0 skipped)**, and the CMS design test executing against the pre-registered ground truth | **the gate for 2B** (assumption A5 — replaces §12's "real outside user") — **MET** | Opus build, Sonnet mechanical |
+| 3b | ~~**AsyncStorageAdapter** — async mirror of the 15-primitive protocol + an async run of the same contract suite~~ — **DONE 2026-08-28** ([`docs/runs/3B-ASYNC.md`](docs/runs/3B-ASYNC.md)). `AsyncStorageAdapter`, `AsyncRegistry`, async SQLite **and** async Postgres, **the same 109 contract ids green on both in one run (267 passed, 0 failed, 0 skipped)**, sync suite still green (`229 passed`), 496 for both stacks in one process. **Generated from the sync source, not forked** *(ruling R1, [`docs/decisions/2026-08-28-package-v0-rulings.md`](docs/decisions/2026-08-28-package-v0-rulings.md))* | **the async gate for #5** — **MET** | Opus |
 | 3c | **Use-case validation pass** — run INTERFACE v0 and PACKAGE v0 against **UC3 NYC Open Data** (multi-agency semantic collision) per [`docs/USE-CASES.md`](docs/USE-CASES.md), plus an adversarial review loop on both; record what changes (or that nothing does) | none directly — it is the kill-criterion mechanism finally exercised; every later spec inherits the protocol | Opus |
 | 4 | **`docs/EDGES.md` v0** — typed relationship store, `neighbors(node, edge_types, depth)` read seam, provenance on edges | Slice 1 (read seam), Slice 2 (`relations`), spec §4.3 provenance | Opus |
 | 5 | **Phase 2B** — Tenshen migration, in beacon | — | beacon program's call |
 | 6 | Actions-registry spec | none yet — Tenshen's actions stay in code (spec §10.7) | later |
 | 7 | **Phase 3** ingestion / mapping | none — the venture's wedge, not Tenshen's need | later |
 
-**Alongside, not gating:** ~~0.3 prior art~~ **done 2026-08-28, before #1** ([`docs/0.3-prior-art.md`](docs/0.3-prior-art.md)); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
+**Alongside, not gating:** ~~0.3 prior art~~ **done 2026-08-28, before #1** ([`docs/findings/0.3-prior-art.md`](docs/findings/0.3-prior-art.md)); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
 
 **Rule of the ordering:** nothing in #1–#4 may take a shape *because* Tenshen has it. If a Tenshen need and a CMS-data need conflict, the CMS need wins and the conflict is recorded in the spec — that recorded conflict is Phase 2's exit criterion ("the interface changed at least once") arriving early.
 
-### Deliverable #2 result — `docs/PACKAGE.md` v0, 2026-08-28
+### Deliverable #2 result — `docs/specs/PACKAGE.md` v0, 2026-08-28
 
 **What shipped:** a zero-dependency `open_ontology` package (Python 3.11 floor, stdlib + one driver per backend, **no ORM mandated** — justified in its §2.4); a **fifteen-primitive** storage adapter built on one rule — *the adapter stores records and does not know what a proposal, an approval or a refusal is*; SQLite and Postgres table shapes over nine tables; the **`attributes` schema-per-kind mechanism decided** rather than deferred (versioned per kind, three modes, default `off` so #1's "opaque to v0" contract is untouched, plus an unconditional key census so the escape hatch accumulates *visibly*); and **109 contract tests in seventeen groups**, covering every `INTERFACE.md` §5 refusal with none untested.
 
@@ -248,7 +248,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 **Blocking finding for #5, and it is on this line, not beacon's:** **the adapter protocol is synchronous and beacon's data layer is `AsyncSession` throughout.** A sync adapter cannot share beacon's transaction, and driving one from a thread is not safe. `AsyncStorageAdapter` / `AsyncRegistry` is a **prerequisite of #5** and is not yet scheduled — **founder ruling wanted: inside #3's scope, or a new row between #3 and #5?** Two smaller rulings are in `PACKAGE.md` §11.1 (`attribute_census` as a call beyond §5; three new `Refusal.reason` values).
 
-**Known gap, recorded not papered over — ~~open~~ CLOSED by #3 on 2026-08-28:** the CMS design test was **specified, not executed** — the 400-row `sample_state.csv` 0.5 actually used was not in the repo and `docs/make_sample.py` regenerates a *different* (300-row random) sample. The public 400-row sample is now checked in at `open_ontology/contract/fixtures/cms_sample_400.csv` with `tools/make_sample_state.py` to regenerate it, and the CMS test runs. The source file re-downloaded on 2026-08-28 is byte-for-byte the size the ground truth records, so the fixture is the sample 0.5 actually cut.
+**Known gap, recorded not papered over — ~~open~~ CLOSED by #3 on 2026-08-28:** the CMS design test was **specified, not executed** — the 400-row `sample_state.csv` 0.5 actually used was not in the repo and `docs/tools/make_sample.py` regenerates a *different* (300-row random) sample. The public 400-row sample is now checked in at `open_ontology/contract/fixtures/cms_sample_400.csv` with `tools/make_sample_state.py` to regenerate it, and the CMS test runs. The source file re-downloaded on 2026-08-28 is byte-for-byte the size the ground truth records, so the fixture is the sample 0.5 actually cut.
 
 **Next:** ~~#3, Phase 2A~~ and ~~#3b, the async adapter~~ — **both shipped 2026-08-28**, see the results below. Next is **#4, `docs/EDGES.md`**; **#5 (Phase 2B) is no longer blocked on an async adapter.**
 
@@ -256,7 +256,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 ### Deliverable #3 result — Phase 2A, the reference implementation, 2026-08-28
 
-**What shipped: the repo's first code, and the 2B gate is met.** [`docs/2A-RUN.md`](docs/2A-RUN.md) carries the run record and the exact commands.
+**What shipped: the repo's first code, and the 2B gate is met.** [`docs/runs/2A-RUN.md`](docs/runs/2A-RUN.md) carries the run record and the exact commands.
 
 **The result in one line:** `229 passed in 49.25s` — **all 109 contract tests green on SQLite *and* on Postgres 16.14, in one process, in one run**, plus the CMS design test executing against the pre-registered ground truth. Zero runtime dependencies in the base install; Python 3.11 floor.
 
@@ -266,7 +266,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 **The severity case runs end to end.** `INTERFACE.md` §10's worked example, verbatim, as test `C5-03`: a haiku-tier `value_set` proposal asserting *"higher letters are LESS serious"* with no evidence carries `no_evidence` and `unverified_semantics`, is refused for auto-approval with `tier_below_auto_approve_policy`, and if a human approves it anyway stays permanently enumerable.
 
-**Fourteen deviations recorded, none silently resolved** ([`docs/2A-RUN.md`](docs/2A-RUN.md) §4). **One wants a founder ruling: D-1.** `PACKAGE.md` §3.4 and test `C11-04` require `register_consumer` against a read-only consumer source to return a `Refusal`, but ruling **R3** closed `Refusal.reason` at fourteen values and none of them says this honestly. Implemented as a raised `NotSupported` — a loud failure, which is what `C11-04` is actually about — pending a ruling to either add a fifteenth reason (amending `INTERFACE.md` §5.12 in the same change, per R3) or confirm the exception. The other thirteen are fields the docs require but do not list, methods beyond the twelve that a test demands (the Foundry import mapping; `into_namespace`, without which the `cross_namespace_merge` refusal is unreachable), and one genuine internal contradiction: **§2.8 says v0 does not detect a domain semantic automatically, while §10's worked example and `C4-06` require the warning to fall out of the call alone.** Resolved with a conservative rule that over-warns; if §2.8 is meant literally the fix is an explicit proposer flag, which is an `INTERFACE.md` change.
+**Fourteen deviations recorded, none silently resolved** ([`docs/runs/2A-RUN.md`](docs/runs/2A-RUN.md) §4). **One wants a founder ruling: D-1.** `PACKAGE.md` §3.4 and test `C11-04` require `register_consumer` against a read-only consumer source to return a `Refusal`, but ruling **R3** closed `Refusal.reason` at fourteen values and none of them says this honestly. Implemented as a raised `NotSupported` — a loud failure, which is what `C11-04` is actually about — pending a ruling to either add a fifteenth reason (amending `INTERFACE.md` §5.12 in the same change, per R3) or confirm the exception. The other thirteen are fields the docs require but do not list, methods beyond the twelve that a test demands (the Foundry import mapping; `into_namespace`, without which the `cross_namespace_merge` refusal is unreachable), and one genuine internal contradiction: **§2.8 says v0 does not detect a domain semantic automatically, while §10's worked example and `C4-06` require the warning to fall out of the call alone.** Resolved with a conservative rule that over-warns; if §2.8 is meant literally the fix is an explicit proposer flag, which is an `INTERFACE.md` change.
 
 **What this does not establish, stated plainly.** Both reference backends are SQL and both declare every capability `True`. The interesting half of the conformance claim — *an unlike backend with real gaps is conformant without weakening conformance* — is exercised by a degraded-adapter wrapper this repo wrote, not by a third party's store. **The first real test of it is `work_link_types` behind the adapter, which is 2B.**
 
@@ -276,7 +276,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 ### Deliverable #3b result — the async mirror, 2026-08-28
 
-**What shipped, and the #5 gate is met.** [`docs/3B-ASYNC.md`](docs/3B-ASYNC.md) carries the run record, the design and the exact commands.
+**What shipped, and the #5 gate is met.** [`docs/runs/3B-ASYNC.md`](docs/runs/3B-ASYNC.md) carries the run record, the design and the exact commands.
 
 **The result in one line:** `267 passed in 61.22s` — **the same 109 contract ids, with the same test-function names, green on async SQLite *and* async Postgres 16.14, in one process, in one run.** The sync suite is still green in the same working tree (`229 passed`), and both stacks against both backends in one process is `496 passed`. The base install still has **zero runtime dependencies**; the one new optional dependency is `aiosqlite` under an `[aio]` extra. Async Postgres needed nothing new — `psycopg` v3 already ships `AsyncConnection`, so that leg is **green, not PENDING**.
 
@@ -288,7 +288,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 
 **One thing the async run establishes that the sync run structurally could not.** `approve`'s docstring says the read and all four writes are one transaction, *which is what turns `already_decided` from a race into an idempotent refusal*. In one synchronous process that is an argument. `test_concurrency.py` makes it a test: two registries, two connections, one event loop, `asyncio.gather` over two approvals of the same proposal — **exactly one `TypeEntry`, exactly one `Refusal("already_decided")`, one `approved` event in provenance**, on both backends, which reach the guarantee by different mechanisms (`BEGIN IMMEDIATE` and `SELECT … FOR UPDATE`).
 
-**Fourteen new deviations recorded, none silently resolved** ([`docs/3B-ASYNC.md`](docs/3B-ASYNC.md) §5); the fourteen of 2A are **inherited unchanged**, because the mirror is generated from the code that implements them — **D-1 still wants the same founder ruling, and now wants it in two places.** The new ones that a caller can feel: **D-A1** (construction is `await AsyncRegistry.open(...)`); **D-A3** (on Windows, `psycopg` refuses asyncio's default `ProactorEventLoop` — an embedding application must select a selector loop, as the suite does); **D-A4** (async SQLite is a thread offload because SQLite has no async C API — this is *not* R1's hazard, which is a synchronous adapter driven from a thread by an async caller); **D-A11** (`AsyncPostgresAdapter.open` takes an already-open connection where the sync one takes a factory).
+**Fourteen new deviations recorded, none silently resolved** ([`docs/runs/3B-ASYNC.md`](docs/runs/3B-ASYNC.md) §5); the fourteen of 2A are **inherited unchanged**, because the mirror is generated from the code that implements them — **D-1 still wants the same founder ruling, and now wants it in two places.** The new ones that a caller can feel: **D-A1** (construction is `await AsyncRegistry.open(...)`); **D-A3** (on Windows, `psycopg` refuses asyncio's default `ProactorEventLoop` — an embedding application must select a selector loop, as the suite does); **D-A4** (async SQLite is a thread offload because SQLite has no async C API — this is *not* R1's hazard, which is a synchronous adapter driven from a thread by an async caller); **D-A11** (`AsyncPostgresAdapter.open` takes an already-open connection where the sync one takes a factory).
 
 **What this does not establish, stated plainly.** The async tree has never been driven by an `AsyncSession` it did not create. R1's actual requirement — an adapter that can *share beacon's transaction* — is demonstrated here only as far as "every primitive is a coroutine awaited on the caller's loop". **The first real test of it is `work_link_types` behind the async adapter, which is 2B.** Both async reference backends still declare every capability `True`.
 
@@ -301,14 +301,14 @@ This is the phase that unlocks Tenshen. **Both tracks start together.**
 ### 2A — open-ontology reference implementation — **DONE 2026-08-28**
 Postgres-backed, built against messy CSV-shaped data. **Not** built against Tenshen's schema.
 
-**Landed:** the `open_ontology` package — 15-primitive adapter, the twelve calls, SQLite and Postgres backends, 109 contract tests green on both in one run, the CMS design test executing. Run record: [`docs/2A-RUN.md`](docs/2A-RUN.md).
+**Landed:** the `open_ontology` package — 15-primitive adapter, the twelve calls, SQLite and Postgres backends, 109 contract tests green on both in one run, the CMS design test executing. Run record: [`docs/runs/2A-RUN.md`](docs/runs/2A-RUN.md).
 
 ### 2B — Tenshen migration
 `work_link_types` migrates to call the `v0` interface, backed by Tenshen's own tables. **One service, one table — not a rewrite, and not 222 actions.**
 
 **Depends on:** Tenshen ruling **Q7a** (`docs/specs/2026-08-27-ontology-layer-exploration-design.md` §7). If Q7a is *file-it-with-the-lint*, the lint is this phase's instrumentation. If Q7a is *do-not-file*, 2B still proceeds but loses its sensor.
 
-~~**Also depends on an async adapter protocol, which does not yet exist**~~ — **shipped 2026-08-28 as row #3b** ([`docs/3B-ASYNC.md`](docs/3B-ASYNC.md)). beacon's data layer is `AsyncSession` throughout and a synchronous adapter cannot share its transaction, so `AsyncStorageAdapter` / `AsyncRegistry` now exist, generated from the sync source, with the same 109 contract ids green on async SQLite and async Postgres (`267 passed`). **Still to be proved by 2B and not by 3b:** that the adapter can share an `AsyncSession` it did not create. Two notes for whoever does 2B — construction is `await AsyncRegistry.open(adapter)` (deviation D-A1), and `AsyncPostgresAdapter.open` takes an already-open connection (D-A11), which is what beacon will have. **Concrete price of 2B otherwise:** one `ALTER TABLE` on `work_link_types` adding `status`, `attributes_json` and `provenance_json`; `consumers()` needs no schema change at all.
+~~**Also depends on an async adapter protocol, which does not yet exist**~~ — **shipped 2026-08-28 as row #3b** ([`docs/runs/3B-ASYNC.md`](docs/runs/3B-ASYNC.md)). beacon's data layer is `AsyncSession` throughout and a synchronous adapter cannot share its transaction, so `AsyncStorageAdapter` / `AsyncRegistry` now exist, generated from the sync source, with the same 109 contract ids green on async SQLite and async Postgres (`267 passed`). **Still to be proved by 2B and not by 3b:** that the adapter can share an `AsyncSession` it did not create. Two notes for whoever does 2B — construction is `await AsyncRegistry.open(adapter)` (deviation D-A1), and `AsyncPostgresAdapter.open` takes an already-open connection (D-A11), which is what beacon will have. **Concrete price of 2B otherwise:** one `ALTER TABLE` on `work_link_types` adding `status`, `attributes_json` and `provenance_json`; `consumers()` needs no schema change at all.
 
 **Why two implementations and not one:** an interface stressed by two unlike consumers is the only cheap cure for the N=1 problem `VISION.md` §9 names. Tenshen alone reproduces it; Tenshen plus government data does not.
 
@@ -327,7 +327,7 @@ Postgres-backed, built against messy CSV-shaped data. **Not** built against Tens
 
 **Shape decided by:** Phase 0.4's answer.
 
-**Provisionally homed here (supervisor assignment 2026-08-28, under the make-assumptions ruling; founder may move it):** **instance resolution** — the walkthrough's *"I already know 38 of these"* — which `docs/INTERFACE.md` §10.3 found belongs to no deliverable. It is the mapping layer's problem (rows → entities), not the type registry's, so it lives with ingestion. **[Assumed]**
+**Provisionally homed here (supervisor assignment 2026-08-28, under the make-assumptions ruling; founder may move it):** **instance resolution** — the walkthrough's *"I already know 38 of these"* — which `docs/specs/INTERFACE.md` §10.3 found belongs to no deliverable. It is the mapping layer's problem (rows → entities), not the type registry's, so it lives with ingestion. **[Assumed]**
 
 **Why after Phase 2, not before:** ingestion without a curation engine fills an ontology faster — building the pollution machine before the filter. `VISION.md` §5 states this directly.
 

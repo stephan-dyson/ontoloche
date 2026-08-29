@@ -5,7 +5,7 @@ contract tests, and the CMS design test.
 **Result:** **the whole suite is green on both reference backends, in one process, in one
 run.** The CMS design test executes and reproduces every pre-registered ground-truth
 count. Per **A5** this is the Phase 2B gate.
-**Implements:** [`INTERFACE.md`](INTERFACE.md) v0 and [`PACKAGE.md`](PACKAGE.md) v0.
+**Implements:** [`INTERFACE.md`](../specs/INTERFACE.md) v0 and [`PACKAGE.md`](../specs/PACKAGE.md) v0.
 Fourteen recorded deviations, none silently resolved — §4.
 
 ---
@@ -104,7 +104,7 @@ python -m open_ontology.contract --adapter beacon.ontology:WorkLinkTypeAdapter
 
 The source file downloaded from the CMS Provider Data Catalog on 2026-08-28 is
 **165,336,194 bytes — byte-for-byte the size
-[`0.5-ground-truth-PREREGISTERED.md`](0.5-ground-truth-PREREGISTERED.md) records for the
+[`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) records for the
 file 0.5 used.** So the fixture is the sample 0.5 actually cut, not a lookalike.
 
 **Eight type rows, not four hundred.** The registry stores types, not instances; the 400

@@ -40,7 +40,7 @@ The three are chosen so that **no two share a failure mode**. Each column is som
 
 **What it tests.** Entity extraction from rows (facility, citation, tag, value sets); `resolve_type`'s `not_a_type` outcome; `value_set` as a kind; model tier as a product parameter; evidence against external documentation; the contract suite's CMS leg (`2A-RUN.md` reproduces every pre-registered count).
 
-**Rules of use.** CMS wins any conflict with Tenshen (ROADMAP "Rule of the ordering"). The 400-row Montana sample is checked in; the full file is regenerated with `docs/make_sample.py`.
+**Rules of use.** CMS wins any conflict with Tenshen (ROADMAP "Rule of the ordering"). The 400-row Montana sample is checked in; the full file is regenerated with `docs/tools/make_sample.py`.
 
 **Data:** https://data.cms.gov/provider-data/dataset/r5ix-sfxw
 

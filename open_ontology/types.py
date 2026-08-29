@@ -145,7 +145,7 @@ class Provenance:
     # Rule U applied to the history itself: a backend with stores_events=False returns
     # an empty history, and this says so rather than letting [] read as "nothing
     # happened". PACKAGE.md 3.4 primitive 15 requires it; INTERFACE.md 2.4 does not
-    # list it -- recorded as deviation D-4 in docs/2A-RUN.md.
+    # list it -- recorded as deviation D-4 in docs/runs/2A-RUN.md.
     history_why: str | None = None
 
 
@@ -210,7 +210,7 @@ class TypeEntry:
     aliases: tuple[str, ...] = ()
     # PACKAGE.md 3.3 stores these on TypeRecord; INTERFACE.md 2.1's table omits the
     # field while 5.9 and 5.5 both describe returned entries carrying warnings.
-    # Recorded as deviation D-3 in docs/2A-RUN.md.
+    # Recorded as deviation D-3 in docs/runs/2A-RUN.md.
     warnings: tuple[str, ...] = ()
     attr_schema_version: int | None = None
 

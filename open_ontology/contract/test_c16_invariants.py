@@ -4,7 +4,7 @@ PACKAGE.md 6.2 describes these as running once at suite end over everything the 
 wrote. The suite's adapters are function-scoped so that a failure in one test cannot
 make another fail for the wrong reason, so these run instead over a store exercised by
 **every write path the suite uses** -- propose, auto-approve, amend, reject, retire,
-merge, import, record_use. Recorded as deviation D-9 in docs/2A-RUN.md.
+merge, import, record_use. Recorded as deviation D-9 in docs/runs/2A-RUN.md.
 """
 
 from __future__ import annotations

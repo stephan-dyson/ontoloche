@@ -2,8 +2,8 @@
 
 **Version:** `v0` — **unstable.** Every name, field and return shape here may change without a deprecation path. Standing constraint 4: an interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.
 **Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 1. Deliverable #1 of the Tenshen-rebuild ordering.
-**Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumption **A1**. If A1 is wrong, this document is wrong in the way §11 describes.
-**Evidence inputs:** [`FINDINGS-0.1-tenshen-archaeology.md`](FINDINGS-0.1-tenshen-archaeology.md) (forced `consumers` and `predicate`) · [`0.5-RESULTS.md`](0.5-RESULTS.md) (forced model tier and external-doc evidence) · [`0.3-prior-art.md`](0.3-prior-art.md) (forced the status vocabulary and the refusal to copy `register_*`) · [`WALKTHROUGH.md`](WALKTHROUGH.md) (the flow this must serve).
+**Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumption **A1**. If A1 is wrong, this document is wrong in the way §11 describes.
+**Evidence inputs:** [`FINDINGS-0.1-tenshen-archaeology.md`](../findings/FINDINGS-0.1-tenshen-archaeology.md) (forced `consumers` and `predicate`) · [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) (forced model tier and external-doc evidence) · [`0.3-prior-art.md`](../findings/0.3-prior-art.md) (forced the status vocabulary and the refusal to copy `register_*`) · [`WALKTHROUGH.md`](../WALKTHROUGH.md) (the flow this must serve).
 **Claim tags:** **[Observed]** seen directly · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 
 ---
@@ -20,7 +20,7 @@ It is not a schema store and it is not a graph. It holds names, definitions, pro
 
 ## 1. Non-goals — one line each
 
-- **No storage.** No tables, no SQL, no migrations, no adapter protocol. → deliverable **#2, `docs/PACKAGE.md`**.
+- **No storage.** No tables, no SQL, no migrations, no adapter protocol. → deliverable **#2, `docs/specs/PACKAGE.md`**.
 - **No HTTP.** No routes, no auth, no pagination-over-the-wire. → **#2**.
 - **No package layout.** No module names, no `pip` name, no conformance test suite. → **#2**.
 - **No relationships or edges.** No `neighbors()`, no traversal, no edge storage — a *relationship type* can be registered here as a type, but the edges themselves are → deliverable **#4, `docs/EDGES.md`**.
@@ -149,7 +149,7 @@ Citation:
 
 **v0 does not attempt to detect automatically whether a definition asserts a domain semantic.** That is a model judgement and belongs to the proposer. **[Assumed]** that proposers will flag it honestly; §11 lists what would change this.
 
-> **Recorded by deliverable #3, 2026-08-28 — this sentence and §10's worked example disagree.** §10 shows `propose_type(...)` producing `p.warnings == ["no_evidence", "unverified_semantics"]` from a call that carries no such flag, and `PACKAGE.md` test `C4-06` asserts the same. A flag-only design cannot satisfy §10; a detection-only design contradicts this sentence. Phase 2A implements a **conservative keyword rule** that deliberately over-warns — a spurious `unverified_semantics` costs one enumerable entry, a missed one is the 0.5 severity inversion going unlabelled. If this sentence is meant literally, the fix is an explicit proposer-supplied flag on `propose_type`, which is a change to §5.4. See [`2A-RUN.md`](2A-RUN.md) §4.5, deviation D-6.
+> **Recorded by deliverable #3, 2026-08-28 — this sentence and §10's worked example disagree.** §10 shows `propose_type(...)` producing `p.warnings == ["no_evidence", "unverified_semantics"]` from a call that carries no such flag, and `PACKAGE.md` test `C4-06` asserts the same. A flag-only design cannot satisfy §10; a detection-only design contradicts this sentence. Phase 2A implements a **conservative keyword rule** that deliberately over-warns — a spurious `unverified_semantics` costs one enumerable entry, a missed one is the 0.5 severity inversion going unlabelled. If this sentence is meant literally, the fix is an explicit proposer-supplied flag on `propose_type`, which is a change to §5.4. See [`2A-RUN.md`](../runs/2A-RUN.md) §4.5, deviation D-6.
 
 ### 2.9 `Consumer` — a registered code path that gates on a predicate
 
@@ -544,13 +544,13 @@ A project whose thesis is that governed vocabularies resist rot does not ship an
 
 `different_consumer_sets` · `predicate_merge` · `kind_mismatch` · `cross_namespace_merge` · `retired_operand` · `definitions_diverge` · `no_consumer_evidence` · `live_consumers` · `tier_below_auto_approve_policy` · `already_decided` · `unknown_proposal` · `proposals_not_stored` · `cannot_record_override` · `attributes_schema_violation`
 
-**Adding a value requires amending this section in the same change that introduces it.** A `Refusal` whose `reason` is not in this list is a conformance failure, and the contract suite (`PACKAGE.md` §6) should assert it. Ruling record: [`decisions/2026-08-28-package-v0-rulings.md`](decisions/2026-08-28-package-v0-rulings.md).
+**Adding a value requires amending this section in the same change that introduces it.** A `Refusal` whose `reason` is not in this list is a conformance failure, and the contract suite (`PACKAGE.md` §6) should assert it. Ruling record: [`decisions/2026-08-28-package-v0-rulings.md`](../decisions/2026-08-28-package-v0-rulings.md).
 
-> **Recorded by deliverable #3, 2026-08-28 — a conflict this closure creates, ruling wanted.** `PACKAGE.md` §3.4 primitive 10 and contract test `C11-04` require `register_consumer` against a **read-only consumer source** (a checked-in config file) to return a `Refusal` rather than a silent no-op. **None of the fourteen says that honestly** — `proposals_not_stored` is about proposals, `cannot_record_override` is about an audit trail, and reusing either is the confident wrong answer Rule U forbids. Phase 2A therefore **raises `NotSupported`**, which is a loud failure and satisfies what `C11-04` is actually about, and records the conflict rather than adding a fifteenth value unilaterally. **Ruling wanted: add a fifteenth reason (e.g. `consumer_source_read_only`), amending this section in the same change per R3 — or confirm the exception.** See [`2A-RUN.md`](2A-RUN.md) §4.1, deviation D-1.
+> **Recorded by deliverable #3, 2026-08-28 — a conflict this closure creates, ruling wanted.** `PACKAGE.md` §3.4 primitive 10 and contract test `C11-04` require `register_consumer` against a **read-only consumer source** (a checked-in config file) to return a `Refusal` rather than a silent no-op. **None of the fourteen says that honestly** — `proposals_not_stored` is about proposals, `cannot_record_override` is about an audit trail, and reusing either is the confident wrong answer Rule U forbids. Phase 2A therefore **raises `NotSupported`**, which is a loud failure and satisfies what `C11-04` is actually about, and records the conflict rather than adding a fifteenth value unilaterally. **Ruling wanted: add a fifteenth reason (e.g. `consumer_source_read_only`), amending this section in the same change per R3 — or confirm the exception.** See [`2A-RUN.md`](../runs/2A-RUN.md) §4.1, deviation D-1.
 
 ## 6. Which mechanism this is designed against
 
-**Against A1** ([`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md)): *HHS's dominant mechanism is **1 + 3 together** — anyone could add a type with no review, and nothing was ever retired — with contractor rotation as the named cause. Collision (4) is present but not dominant. Silent per-consumer drop (C) is present but unobserved by the office, because no existing tool surfaces it.*
+**Against A1** ([`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md)): *HHS's dominant mechanism is **1 + 3 together** — anyone could add a type with no review, and nothing was ever retired — with contractor rotation as the named cause. Collision (4) is present but not dominant. Silent per-consumer drop (C) is present but unobserved by the office, because no existing tool surfaces it.*
 
 | Mechanism | Status under A1 | The calls that answer it |
 |---|---|---|
@@ -673,7 +673,7 @@ Note the collision with **§2.7**: auto-approval is refused below `min_auto_appr
 
 ## 10. The CMS design test — facility, citation, tag
 
-**CMS wins any conflict with Tenshen** (brief; `ROADMAP.md` "Rule of the ordering"). The entities are the pre-registered ground truth from [`0.5-ground-truth-PREREGISTERED.md`](0.5-ground-truth-PREREGISTERED.md) plus the fourth entity the Opus run added and [`0.5-RESULTS.md`](0.5-RESULTS.md) recorded as **better than the ground truth**.
+**CMS wins any conflict with Tenshen** (brief; `ROADMAP.md` "Rule of the ordering"). The entities are the pre-registered ground truth from [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) plus the fourth entity the Opus run added and [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) recorded as **better than the ground truth**.
 
 | Entity | `kind` | `name` | Key (in `attributes`) | Notable evidence |
 |---|---|---|---|---|
@@ -764,7 +764,7 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 | **A5's relaxation is not confirmed** by the founder | 2A cannot gate 2B | Ordering changes, not this interface |
 | **A domain expert says the proposals are organised wrongly** even when factually correct | 0.5's unmeasured Score 3 lands badly | The `Evidence`/`warnings` machinery is insufficient — the gap is in the *proposal*, not the registry, and Phase 3 is affected more than Phase 1 |
 
-**Recorded by deliverable #3 (Phase 2A), 2026-08-28.** The reference implementation landed with **fourteen deviations, all in [`2A-RUN.md`](2A-RUN.md) §4** rather than silently resolved. Those that touch *this* document, for its next revision:
+**Recorded by deliverable #3 (Phase 2A), 2026-08-28.** The reference implementation landed with **fourteen deviations, all in [`2A-RUN.md`](../runs/2A-RUN.md) §4** rather than silently resolved. Those that touch *this* document, for its next revision:
 
 - **`TypeEntry.warnings` is not in §2.1's field table**, yet §5.4, §5.5 and §5.9 all describe returned entries carrying warnings and `PACKAGE.md` stores them. Implemented as a top-level field (D-3).
 - **`Provenance` needs a `history_why`** — `PACKAGE.md` §3.4 primitive 15 requires an empty `history` to carry a `why`, and §2.4 has nowhere to put it (D-4).
