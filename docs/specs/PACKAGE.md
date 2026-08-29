@@ -182,10 +182,23 @@ class Capabilities:
     counts_usage:         bool     # get_usage returns a count
     timestamps_usage:     bool     # get_usage returns first_seen / last_seen
     owns_schema:          bool     # False when the schema belongs to the host app (§9.3)
+    stores_edges:              bool = False   # EDGES §6 — there is an edge store at all
+    stores_edge_events:        bool = False   # append_event with an edge_id is durable
+    indexes_edges_by_family:   bool = False   # a family filter need not scan the node's edges
+    stores_edge_attributes:    bool = False   # an arbitrary edge payload survives a round trip
     why: dict[str, str]            # one sentence per False flag — surfaced verbatim as Rule U's `why`
     transaction_scope: Literal["owned", "savepoint"] = "owned"   # who owns the commit. §3.5, R5
     attribute_projections: frozenset[str] = frozenset()          # keys owned as typed columns. §5.7
+    edge_transaction_scope: Literal["owned", "savepoint"] = "owned"  # EDGES §6.2, R5 inherited
+    edge_attribute_projections: frozenset[str] = frozenset()         # EDGES §6.3, U3's shape
+    edge_store_shares_connection: bool = True                        # EDGES §6.2's binding rule
 ```
+
+> **The four edge flags default to `False`, and that is the load-bearing choice** *(row 4b, EDGES §6)*. An adapter written against the fifteen-primitive protocol has no edge store. Defaulting `stores_edges` to `True` would make every such adapter claim one, and the registry would then call `put_edge` on an object that does not have the method; defaulting it `False` makes every edge call on a pre-4b backend return `Refusal(reason="edge_store_absent")`, which is the true answer. They are ordinary members of `CAPABILITY_FLAGS` rather than a separate tuple, because `check_capability_matrix.py` declines one flag at a time off that tuple, `C0-01` requires a `why` off that tuple, and `DegradedAdapter` validates its kwargs against it — an edge flag living anywhere else is an edge flag none of those three reaches.
+>
+> **`C0-01`'s invariant has one carve-out, and it is stated rather than assumed.** When `stores_edges` is `False` the other three are **vacuous, not declined**: there is no edge store, so *"why do you not index edges by family?"* has no answer beyond the first sentence. Requiring three more would teach an adapter author to write sentences nobody reads, which is how a `why` dict stops being the mechanism this section says it is. `Capabilities.missing_why()` skips them in that one case and in no other.
+>
+> **`edge_transaction_scope` carries one binding rule, and it is checkable** (EDGES §6.2). When the edge store and the type store share a connection — `edge_store_shares_connection=True`, which is what both reference backends declare because `oo_edge` sits in the same schema as `oo_type` — the two scopes **MUST** be equal. An adapter declaring otherwise is claiming that half its writes are the host's to commit and half its own, on one transaction, which is not a thing that can be true. `Capabilities.scope_conflict()` returns the sentence or `None`, and `C17-14` binds it. When they are genuinely two connections the two may differ, and then **atomicity across the seam is gone** — approving an `equivalent_to` family and writing the first edge are no longer one transaction. Stated rather than papered over: a two-connection deployment does not get **G2** across the seam, and says so in `why["edge_transaction_scope"]`.
 
 **The `why` dict is the mechanism, not decoration.** When a flag is `False`, the registry does not invent an explanation; it surfaces the adapter's sentence. `usage("blocks")` on beacon's table returns `last_seen=None, orphaned=None, why="work_link_types has no last_used_at column"` — which is `INTERFACE.md` §9 contortion 2, reported by the system rather than discovered by a human.
 
@@ -319,6 +332,46 @@ class ProposalQuery:
     status: str | None = None
     limit: int | None = None
     after: str | None = None
+
+@dataclass(frozen=True)
+class EdgeRecord:                        # EDGES §7.1, row 4b
+    edge_id:       str                   # generated ABOVE the store — §4.2's rule
+    namespace:     str                   # the FAMILY's namespace, never the endpoints'
+    family:        str
+    src_namespace: str; src_kind: str; src_name: str; src_instance_id: str | None
+    dst_namespace: str; dst_kind: str; dst_name: str; dst_instance_id: str | None
+    attributes:    dict = field(default_factory=dict)      # opaque to the adapter
+    attr_schema_version: int | None = None
+    provenance:    dict = field(default_factory=dict)      # the whole EdgeProvenance, JSON. Opaque
+    status:        str = "active"        # "active" | "retracted" — STORED, never judged
+    warnings:      tuple[str, ...] = ()
+    created_at:    datetime | None = None
+    updated_at:    datetime | None = None
+    # The retraction tombstone, columns for the same reason TypeRecord's are: a backend
+    # with stores_edge_events=False still has to answer "why is this retracted?"
+    retract_reason: str | None = None
+    retracted_by:   str | None = None
+    retracted_at:   datetime | None = None
+
+@dataclass(frozen=True)
+class EdgeQuery:                         # EDGES §7.1
+    namespace:   str | None = None       # the family's namespace. None = any
+    families:    tuple[str, ...] | None = None
+    # The frontier: one call serves a whole depth level rather than N calls
+    incident_to: tuple[tuple[str, str, str, str | None], ...] | None = None
+    direction:   str = "both"            # "both" | "out" | "in"
+    include_retracted: bool = False
+    edge_ids:    tuple[str, ...] | None = None
+    limit:       int | None = None       # the ADAPTER pages. R13: the façade does not
+    after:       str | None = None       # opaque cursor; ordering is (created_at, edge_id)
+
+@dataclass(frozen=True)
+class EdgePage:
+    records:     tuple[EdgeRecord, ...]
+    known:       int | None              # None = the backend cannot count. NOT 0. Rule U
+    complete:    bool
+    why_incomplete: str | None = None
+    next_after:  str | None = None
 ```
 
 > **The adapter pages. The registry does not, in v0, and this says so** *(ruling **R13**, row 3d)*. `TypeQuery.limit` / `TypeQuery.after` are real keyset pagination, implemented by both reference backends and tested by `C0-10` — seven rows at `limit=3` give three disjoint, ordered, exhaustive pages and a terminating `next_after`. **No call site in either facade passes either of them.** `list_types(namespace=None)` is a full fetch, and at UC3 scale (dozens of agencies publishing independently) that is a real cost, stated here rather than discovered.
@@ -329,7 +382,9 @@ class ProposalQuery:
 
 Two filters from `INTERFACE.md` §5.6 are deliberately **absent** from `TypeQuery`: `unverified_semantics` and `orphaned`. Both are *derived* — one from `provenance.evidence` and the approval warnings, the other from `status` + `usage` + the policy's orphan window. Pushing them into the adapter would put registry policy inside the backend, which is exactly what §3.1 forbids. The registry computes them from `find_types` + `get_usage` and reports `complete: false` when it had to page to do it. **Cost, stated: `list_types(orphaned=True)` is O(types), not O(matches), on every backend.** Acceptable at the scale this registry is for (hundreds to low thousands of types); recorded so nobody is surprised.
 
-### 3.4 The fifteen primitives
+### 3.4 The eighteen primitives
+
+*(Fifteen until row 4b, which added EDGES §7.1's three. The heading is the count the code has; a number in prose that nothing derives is the thing that goes stale, four times so far in this repository, so `C17-01` derives it.)*
 
 Each has a signature, a data shape, and its uncertainty behaviour. **The uniform uncertainty rule: a primitive that cannot answer returns `None` (or a page with `known=None, complete=False`) plus a `why` drawn from `Capabilities.why` — never `0`, never `[]`, never `False`.**
 
@@ -409,6 +464,25 @@ Append-only. **The adapter must have no update or delete path for events** — `
 
 **15. `read_events(namespace: str, *, kind: str | None = None, name: str | None = None, proposal_id: str | None = None) -> list[EventRecord]`**
 Ordered by `at`, then by insertion. **Uncertainty:** `stores_events=False` ⇒ the registry returns `Provenance.history == []` **with a `why`**, and — see §3.6 — refuses any destructive override that it cannot record.
+
+---
+
+*The last three are EDGES §7.1's, added by row 4b. **Three, not eight** — and the count is the evidence that EDGES §2.3's decision was right, because a family needs no primitive at all: it is a `TypeEntry`, so `put_type` / `get_type` / `find_types` already serve it.*
+
+**16. `put_edge(rec: EdgeRecord, *, expect_absent: bool = False) -> EdgeRecord`**
+Upsert on `edge_id`. Writes `status`, `retract_reason`, `retracted_by`, `retracted_at` **as given** and validates no transition (§3.1). Returns the record as stored, so a backend that could not store `attributes` returns them reduced to `edge_attribute_projections` and the registry can tell.
+**Uncertainty:** `stores_edges=False` ⇒ raises `NotSupported`; the registry checks the capability first and never calls it, surfacing `Refusal(reason="edge_store_absent")`. It does not pretend to store and lose.
+**There is deliberately no uniqueness constraint on `(family, src, dst)`** (EDGES §6.1): two `blocks` edges between one pair, written by a human in March and by a classifier in August, are two facts with different provenance, and forcing the second write to fail or overwrite makes it an edit of a provenance-bearing record, which `INTERFACE.md` §5.8 forbids. **And there is no uniqueness *flag*,** because `edge_id` is minted above the store exactly as `proposal_id` and `event_id` are (§4.2), neither of which has one either.
+
+**17. `get_edge(edge_id: str) -> EdgeRecord | None`**
+`None` means *absent*, which is a fact — the adapter always knows whether a key exists. `NotSupported` when `stores_edges=False`.
+
+**18. `find_edges(q: EdgeQuery) -> EdgePage`**
+The one call behind `neighbors`. **Traversal is not pushed into the adapter**: the registry issues one `find_edges` per depth level, with the whole frontier in `incident_to`, and **exhausts the pages for that level** — a level assembled from one page of five would be silently partial, which is what Rule K exists to prevent. `EdgeQuery.limit`/`after` are therefore used by the registry internally, which is not a contradiction of **R13**: R13 is about the *façade* exposing paging to a caller, and `neighbors` exposes none. Ordering is `(created_at, edge_id)`; `C17-05` binds the keyset the way `C0-10` binds `find_types`'.
+**Uncertainty:** the general rule is `find_types`' — a filter the backend cannot apply returns `complete=False` with a `why`, never a filtered-looking empty page. **One case deviates deliberately.** `find_edges` with `q.families` set on `indexes_edges_by_family=False` returns the node's edges **unfiltered, with `complete=True`**, and the registry filters above. The type case has no bound — the alternative to an index is scanning the whole type table, so the honest answer is *"I cannot answer this"* — whereas the edge case is already bounded by `q.incident_to`, so the backend genuinely **can** answer a slightly wider question completely and the registry narrows it. A backend that could not even do that returns `complete=False` with the `why`, and the general rule applies again.
+**Second uncertainty, and it is the one a reader misses:** with `include_retracted=False` (the default) a page that **suppressed** a retracted edge is `complete=False` with a `why`, because a default that hides things is `list_types`' rule (`INTERFACE.md` §5.6). The adapter is the only party that knows the count, so the adapter says it.
+
+**No fourth primitive for retraction, and no fifth for counting.** Retraction is `put_edge` with a changed `status`; counting is `EdgePage.known`. Both were considered and dropped, because a primitive that exists only to express a policy transition is a policy inside the adapter.
 
 ### 3.5 The two storage guarantees, and the one that is not required
 

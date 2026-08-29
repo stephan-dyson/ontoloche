@@ -24,6 +24,11 @@ absent                       consequence
 ``oo_type_predicate``        ``indexes_membership=False``. ``find_types(predicate=...)``
                              answers ``known=None, complete=False`` and a ``why`` --
                              never ``known=0``
+``oo_edge``                  ``stores_edges=False``. EDGES.md 6: every edge call returns
+                             a refusal naming the absent store, never an empty report --
+                             an empty neighbour report reads as "this node has no
+                             neighbours", which is Rule U's forbidden empty in the one
+                             call that would be believed
 ``oo_type.attributes_json``  ``stores_attributes=False``, and this is the interesting
                              one: the column is gone, but ``oo_type.primary_key_json``
                              is a real typed column this schema owns, so
@@ -31,6 +36,11 @@ absent                       consequence
                              round-trips through its own column. Beacon finding U3, and
                              the shape ``stores_attributes`` alone could not describe
 ===========================  ===========================================================
+
+*(Row 4b makes it **five** tables where the reference schema has ten: `oo_edge` is the
+tenth, and this backend does not have it. `stores_edges=False` is the honest
+declaration and is what a type-only registry -- including every adapter written against
+the fifteen-primitive protocol -- says.)*
 
 **And the schema belongs to the host** (``owns_schema=False``): ``migrate()`` is
 verify-only, exactly as it is for beacon's Alembic-owned ``work_link_types``.
@@ -49,7 +59,14 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from ..adapter import Capabilities, EventRecord, ProposalQuery, ProposalRecord
+from ..adapter import (
+    Capabilities,
+    EdgeQuery,
+    EdgeRecord,
+    EventRecord,
+    ProposalQuery,
+    ProposalRecord,
+)
 from ..errors import NotSupported
 from .sqlite import SQLiteAdapter
 
@@ -187,6 +204,15 @@ MINIMAL_WHY = {
         "this store has no predicate-membership table, so which types satisfy a "
         "predicate is not a question it can answer"
     ),
+    # EDGES.md 6's first row, verbatim in shape: "this backend is a type registry only;
+    # no table holds relationships". The other three edge flags get no sentence and
+    # need none -- with no edge store they are vacuous rather than declined, and
+    # `Capabilities.missing_why()` says so in one place instead of asking every such
+    # backend to write three sentences nobody reads.
+    "stores_edges": (
+        "this store is a type registry only: no table holds relationships, so there is "
+        "nothing to write an edge to and nothing for a neighbour walk to read"
+    ),
 }
 
 
@@ -235,6 +261,15 @@ class MinimalSQLiteAdapter(SQLiteAdapter):
             counts_usage=True,
             timestamps_usage=True,
             owns_schema=False,
+            # EDGES.md 6. False, and the three that follow it are vacuous rather than
+            # declined -- see MINIMAL_WHY. This is the leg that proves the optional
+            # edge store can be declined HONESTLY rather than only in a wrapper: the
+            # table is absent from the SQL, not hidden behind a Python `if`, which is
+            # beacon finding U2's whole point one row later.
+            stores_edges=False,
+            stores_edge_events=False,
+            indexes_edges_by_family=False,
+            stores_edge_attributes=False,
             why={**MINIMAL_WHY, **self._why()},
             transaction_scope="savepoint" if self._borrowed else "owned",
             # ...and the one key this schema DOES own, as a typed column. U3.
@@ -284,5 +319,19 @@ class MinimalSQLiteAdapter(SQLiteAdapter):
         kind: str | None = None,
         name: str | None = None,
         proposal_id: str | None = None,
+        edge_id: str | None = None,
     ) -> list[EventRecord]:
         raise self._no_events()
+
+    # ------------------------------------------------------------------ 16 to 18
+    def _no_edges(self):
+        return NotSupported(MINIMAL_WHY["stores_edges"])
+
+    def put_edge(self, rec: EdgeRecord, *, expect_absent: bool = False) -> EdgeRecord:
+        raise self._no_edges()
+
+    def get_edge(self, edge_id: str) -> EdgeRecord | None:
+        raise self._no_edges()
+
+    def find_edges(self, q: EdgeQuery):
+        raise self._no_edges()

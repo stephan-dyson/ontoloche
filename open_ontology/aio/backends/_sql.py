@@ -28,6 +28,7 @@ from open_ontology.aio.adapter import (
     AttrObservedRecord,
     AttrSchemaRecord,
     ConsumerRecord,
+    EdgeRecord,
     EventRecord,
     ProposalRecord,
     TypeRecord,
@@ -38,6 +39,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from open_ontology.aio.adapter import (
     Capabilities,
+    EdgePage,
+    EdgeQuery,
     ProposalPage,
     ProposalQuery,
     TypePage,
@@ -60,13 +63,17 @@ __all__ = ["AsyncBaseSqlAdapter"]
 from open_ontology.backends._sql import (
     CONSUMER_COLUMNS,
     Dialect,
+    EDGE_COLUMNS,
     EVENT_COLUMNS,
     PROPOSAL_COLUMNS,
     SqlStore,
     TYPE_COLUMNS,
+    _INCIDENT_CHUNK,
     _SAVEPOINT_STACKS,
     decode_cursor,
+    decode_edge_cursor,
     encode_cursor,
+    encode_edge_cursor,
     load_migrations,
     split_statements,
 )
@@ -161,8 +168,22 @@ class AsyncBaseSqlAdapter:
             counts_usage=True,
             timestamps_usage=True,
             owns_schema=self._owns_schema,
+            # EDGES.md 6, store version 4. All four True on this class: `oo_edge` is a
+            # real table with a family index and a JSON payload column, and `oo_event`
+            # has an `edge_id`. `edge_transaction_scope` is not decided separately --
+            # `oo_edge` lives in the same schema on the same connection as `oo_type`,
+            # so 6.2's binding rule says the two scopes MUST be equal, and deriving it
+            # here rather than declaring it is how the rule cannot be broken by
+            # forgetting. `edge_store_shares_connection` is the premise of that rule and
+            # is stated so a host-owned edge table beside this registry can say False.
+            stores_edges=True,
+            stores_edge_events=True,
+            indexes_edges_by_family=True,
+            stores_edge_attributes=True,
             why=dict(self._why()),
             transaction_scope="savepoint" if self._borrowed else "owned",
+            edge_transaction_scope="savepoint" if self._borrowed else "owned",
+            edge_store_shares_connection=True,
         )
 
     #: Ruling R5: a savepoint scope is DECLARED, never silent. The sentence is the one
@@ -183,10 +204,24 @@ class AsyncBaseSqlAdapter:
         "verifies the columns it needs and issues no DDL (PACKAGE.md 9.3)"
     )
 
+    #: EDGES.md 6.2. The edge store here is the same store, on the same connection, so
+    #: its scope is the type store's -- but it is a SEPARATE declaration and it gets a
+    #: separate sentence, because the sentence is what surfaces on an edge write. A
+    #: caller reading `not_durable_until_host_commits:<why>` off an `add_edge` result
+    #: wants to be told about the edge write it just made, not about a type write it
+    #: did not. C0-12 found this empty on the first pass, which is the same shape as
+    #: row 3d finding `owns_schema` with no sentence.
+    BORROWED_EDGE_WHY = (
+        "the edge store is this adapter's own store on the connection it was lent: "
+        "an edge write is bracketed in a SAVEPOINT and never committed here, so a "
+        "clean return is atomic and becomes durable only when the host commits"
+    )
+
     def _why(self) -> dict[str, str]:
         why: dict[str, str] = {}
         if self._borrowed:
             why["transaction_scope"] = self.BORROWED_WHY
+            why["edge_transaction_scope"] = self.BORROWED_EDGE_WHY
         if not self._owns_schema:
             why["owns_schema"] = self.HOST_SCHEMA_WHY
         return why
@@ -268,6 +303,13 @@ class AsyncBaseSqlAdapter:
         # the fifteen primitives, so the async mirror makes it awaitable, and a subclass
         # override that does not await it breaks the base's ``migrate()``.)
         required["oo_proposal"] = PROPOSAL_COLUMNS
+        # Store version 4. Same unconditional reasoning as `oo_proposal` above: THIS
+        # class's `capabilities()` declares `stores_edges=True` for every adapter built
+        # on it, so a host schema it sits over must have the table. A backend that
+        # declines the edge store has no such table and must not be failed for the
+        # absence -- which it says by overriding this method, exactly as
+        # `sqlite_minimal` already does.
+        required["oo_edge"] = EDGE_COLUMNS
         required["oo_attr_schema"] = tuple(
             c.strip() for c in self._ATTR_SCHEMA_COLS.split(",")
         )
@@ -787,6 +829,7 @@ class AsyncBaseSqlAdapter:
         kind: str | None = None,
         name: str | None = None,
         proposal_id: str | None = None,
+        edge_id: str | None = None,
     ) -> list[EventRecord]:
         ph = self.d.ph
         cols = ", ".join(EVENT_COLUMNS)
@@ -801,12 +844,238 @@ class AsyncBaseSqlAdapter:
         if proposal_id is not None:
             where.append(f"proposal_id = {ph}")
             params.append(proposal_id)
+        # Store version 4, EDGES.md 5.2. Additive and defaulted: a caller that never
+        # passes it sees exactly the pre-4b behaviour, and `read_events(namespace)`
+        # with no filter still returns edge events, because they are events.
+        if edge_id is not None:
+            where.append(f"edge_id = {ph}")
+            params.append(edge_id)
         rows = await self._fetchall(
             f"SELECT {cols} FROM oo_event WHERE {' AND '.join(where)} "
             f"ORDER BY {self.d.event_order}",
             params,
         )
         return [self.m.event_from_row(r) for r in rows]
+
+    # ------------------------------------------------------------- 16 to 18, edges
+    #
+    # EDGES.md 7.1. The whole edge surface of this class is these three methods plus
+    # the frontier clause below. What is NOT here is the point: no depth, no report, no
+    # refusal, no notion of a family being retired -- an adapter that knew any of those
+    # would be the boundary PACKAGE.md 3.1 forbids and C0-04 polices.
+
+    def _edge_incident_clause(
+        self, keys: tuple[tuple[str, str, str, str | None], ...], direction: str
+    ) -> tuple[str, list[Any]]:
+        """``(sql, params)`` matching any of ``keys`` on the end ``direction`` selects.
+
+        ``instance_id IS NULL`` is written out rather than compared with ``=``, because
+        a type-level endpoint stores NULL there and ``NULL = NULL`` is not true in SQL.
+        A type node and an instance of it are two different endpoints, so this is a
+        value to match, not a wildcard -- getting that wrong would have made
+        ``neighbors(<a type>)`` silently return that type's instances' edges too.
+        """
+        ph = self.d.ph
+        ends = {"out": ("src",), "in": ("dst",)}.get(direction, ("src", "dst"))
+        alts: list[str] = []
+        params: list[Any] = []
+        for namespace, kind, name, instance_id in keys:
+            for end in ends:
+                if instance_id is None:
+                    alts.append(
+                        f"({end}_namespace = {ph} AND {end}_kind = {ph} "
+                        f"AND {end}_name = {ph} AND {end}_instance_id IS NULL)"
+                    )
+                    params.extend([namespace, kind, name])
+                else:
+                    alts.append(
+                        f"({end}_namespace = {ph} AND {end}_kind = {ph} "
+                        f"AND {end}_name = {ph} AND {end}_instance_id = {ph})"
+                    )
+                    params.extend([namespace, kind, name, instance_id])
+        return "(" + " OR ".join(alts) + ")", params
+
+    def _edge_base_where(self, q: EdgeQuery) -> tuple[list[str], list[Any]]:
+        ph = self.d.ph
+        where: list[str] = []
+        params: list[Any] = []
+        if q.namespace is not None:
+            where.append(f"namespace = {ph}")
+            params.append(q.namespace)
+        if q.families is not None:
+            if not q.families:
+                # An explicitly empty family list is a query for nothing, and that is a
+                # fact rather than an uncertainty -- the same shape `find_types` gives
+                # `name_in=()`.
+                where.append("1 = 0")
+            else:
+                where.append(f"family IN ({self.m.marks(len(q.families))})")
+                params.extend(q.families)
+        if q.edge_ids is not None:
+            if not q.edge_ids:
+                where.append("1 = 0")
+            else:
+                where.append(f"edge_id IN ({self.m.marks(len(q.edge_ids))})")
+                params.extend(q.edge_ids)
+        if not q.include_retracted:
+            where.append("status <> 'retracted'")
+        return where, params
+
+    # 16
+    async def put_edge(self, rec: EdgeRecord, *, expect_absent: bool = False) -> EdgeRecord:
+        now = datetime.now(UTC)
+        stamped = EdgeRecord(
+            **{
+                **rec.__dict__,
+                "created_at": rec.created_at or now,
+                # Not ``rec.updated_at or now``: an amendment must move this, and a
+                # caller handing back the record it just read would otherwise freeze
+                # ``updated_at`` at the original write forever.
+                "updated_at": now,
+            }
+        )
+        cols = ", ".join(EDGE_COLUMNS)
+        marks = self.m.marks(len(EDGE_COLUMNS))
+        async with self.transaction():
+            if expect_absent:
+                try:
+                    await self._execute(
+                        f"INSERT INTO oo_edge ({cols}) VALUES ({marks})",
+                        self.m.edge_values(stamped),
+                    )
+                except self._integrity_errors as exc:
+                    raise AlreadyExists(f"edge {rec.edge_id!r} is already stored") from exc
+            else:
+                updates = ", ".join(
+                    f"{c} = excluded.{c}" for c in EDGE_COLUMNS if c != "edge_id"
+                )
+                await self._execute(
+                    f"INSERT INTO oo_edge ({cols}) VALUES ({marks}) "
+                    f"ON CONFLICT (edge_id) DO UPDATE SET {updates}",
+                    self.m.edge_values(stamped),
+                )
+            stored = await self.get_edge(rec.edge_id)
+        assert stored is not None
+        return stored
+
+    # 17
+    async def get_edge(self, edge_id: str) -> EdgeRecord | None:
+        ph = self.d.ph
+        cols = ", ".join(EDGE_COLUMNS)
+        row = await self._fetchone(f"SELECT {cols} FROM oo_edge WHERE edge_id = {ph}", (edge_id,))
+        return None if row is None else self.m.edge_from_row(row)
+
+    # 18
+    async def find_edges(self, q: EdgeQuery) -> EdgePage:
+        ph = self.d.ph
+        cols = ", ".join(EDGE_COLUMNS)
+        base, base_params = self._edge_base_where(q)
+
+        cursor_clause = ""
+        cursor_params: list[Any] = []
+        if q.after is not None:
+            at, edge_id = decode_edge_cursor(q.after)
+            cursor_clause = f"(created_at, edge_id) > ({ph}, {ph})"
+            cursor_params = [self.d.enc_ts(at), edge_id]
+
+        if q.incident_to is None:
+            chunks: list[tuple[str, list[Any]]] = [("", [])]
+        elif not q.incident_to:
+            # An empty frontier is a query about nothing, and that is a fact.
+            return EdgePage(records=(), known=0, complete=True)
+        else:
+            keys = tuple(dict.fromkeys(q.incident_to))
+            chunks = [
+                self._edge_incident_clause(keys[i : i + _INCIDENT_CHUNK], q.direction)
+                for i in range(0, len(keys), _INCIDENT_CHUNK)
+            ]
+
+        limit_sql = f" LIMIT {int(q.limit) + 1}" if q.limit is not None else ""
+        collected: dict[str, EdgeRecord] = {}
+        for clause, clause_params in chunks:
+            where = list(base)
+            params = list(base_params)
+            if clause:
+                where.append(clause)
+                params.extend(clause_params)
+            if cursor_clause:
+                where.append(cursor_clause)
+                params.extend(cursor_params)
+            sql = (
+                f"SELECT {cols} FROM oo_edge"
+                + ((" WHERE " + " AND ".join(where)) if where else "")
+                + f" ORDER BY created_at, edge_id{limit_sql}"
+            )
+            for row in await self._fetchall(sql, params):
+                rec = self.m.edge_from_row(row)
+                collected.setdefault(rec.edge_id, rec)
+
+        # The k-way merge. Each chunk returned its own sorted prefix, so the union is
+        # re-sorted before the window is taken; that is what makes the cursor correct
+        # across a split frontier rather than only within one chunk. Deduped first --
+        # one edge can match two frontier keys at once (both of its ends in the
+        # frontier, or a self-loop), and counting it twice would make the report's
+        # `known` a lie about the number of edges.
+        ordered = sorted(collected.values(), key=lambda r: (r.created_at, r.edge_id))
+        more = q.limit is not None and len(ordered) > q.limit
+        if more:
+            ordered = ordered[: q.limit]
+
+        # EDGES.md 4.3: a default that hides things sets complete=False, which is
+        # `list_types(include_retired=)`'s own rule (INTERFACE.md 5.6). The adapter is
+        # the only party that can know whether anything WAS hidden, so the adapter says
+        # so -- a statement about this page, not a decision about policy.
+        suppressed = 0 if q.include_retracted else await self._count_suppressed_edges(q, chunks)
+
+        why: str | None = None
+        if more:
+            why = "a page limit was applied"
+        elif suppressed:
+            why = (
+                f"{suppressed} retracted edge(s) were suppressed by "
+                f"include_retracted=False (EDGES.md 4.3)"
+            )
+        return EdgePage(
+            records=tuple(ordered),
+            known=len(ordered),
+            complete=not more and not suppressed,
+            why_incomplete=why,
+            next_after=(
+                encode_edge_cursor(ordered[-1].created_at, ordered[-1].edge_id)
+                if more and ordered
+                else None
+            ),
+        )
+
+    async def _count_suppressed_edges(self, q: EdgeQuery, chunks) -> int:
+        """How many retracted edges this query would have returned. EDGES.md 4.3.
+
+        Counted over the WHOLE matching set rather than over the current page, because
+        the claim is about the answer and not about the window: a caller told
+        ``complete=True`` on page one and ``complete=False`` on page three has been told
+        two different things about one query.
+        """
+        ph = self.d.ph
+        where_base, params_base = self._edge_base_where(
+            EdgeQuery(
+                namespace=q.namespace,
+                families=q.families,
+                edge_ids=q.edge_ids,
+                include_retracted=True,
+            )
+        )
+        seen: set[str] = set()
+        for clause, clause_params in chunks:
+            where = list(where_base) + [f"status = {ph}"]
+            params = list(params_base) + ["retracted"]
+            if clause:
+                where.append(clause)
+                params.extend(clause_params)
+            rows = await self._fetchall(
+                "SELECT edge_id FROM oo_edge WHERE " + " AND ".join(where), params
+            )
+            seen.update(r[0] for r in rows)
+        return len(seen)
 
     # ------------------------------------------------- optional attribute extension
     #: ``name`` is store version 2 (ruling R10). The empty string is the per-kind

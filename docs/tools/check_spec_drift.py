@@ -113,6 +113,12 @@ PACKAGE_SHAPES = {
     "TypeQuery": (adapter_module, "TypeQuery"),
     "TypePage": (adapter_module, "TypePage"),
     "ProposalQuery": (adapter_module, "ProposalQuery"),
+    # Row 4b, EDGES.md 7.1 -- the three shapes a third-party EDGE backend builds from.
+    # Listed the day they landed, for beacon finding U4's reason: the drift moves into
+    # the half nobody is checking, so there is no half nobody is checking.
+    "EdgeRecord": (adapter_module, "EdgeRecord"),
+    "EdgeQuery": (adapter_module, "EdgeQuery"),
+    "EdgePage": (adapter_module, "EdgePage"),
     "FieldSpec": (attributes_module, "FieldSpec"),
     "AttributeSchema": (attributes_module, "AttributeSchema"),
     # 6.4 prints the two harness shapes a third-party author builds. They were

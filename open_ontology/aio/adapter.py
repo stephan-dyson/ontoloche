@@ -39,11 +39,15 @@ from typing import Any, Literal, Protocol, runtime_checkable
 # One definition, two protocols over it.
 from open_ontology.adapter import (
     CAPABILITY_FLAGS,
+    EDGE_CAPABILITY_FLAGS,
     REQUIRED_CAPABILITIES,
     AttrObservedRecord,
     AttrSchemaRecord,
     Capabilities,
     ConsumerRecord,
+    EdgePage,
+    EdgeQuery,
+    EdgeRecord,
     EventRecord,
     ProposalPage,
     ProposalQuery,
@@ -69,7 +73,11 @@ __all__ = [
     "ProposalPage",
     "AttrSchemaRecord",
     "AttrObservedRecord",
+    "EdgeRecord",
+    "EdgeQuery",
+    "EdgePage",
     "CAPABILITY_FLAGS",
+    "EDGE_CAPABILITY_FLAGS",
     "REQUIRED_CAPABILITIES",
 ]
 
@@ -147,7 +155,29 @@ class AsyncStorageAdapter(Protocol):
         kind: str | None = None,
         name: str | None = None,
         proposal_id: str | None = None,
+        edge_id: str | None = None,
     ) -> list[EventRecord]: ...
+
+    # ------------------------------------------------------------------ 16 to 18
+    # EDGES.md 7.1. Three, not eight -- and the count is the evidence that making a
+    # family an ordinary row of the vocabulary was the right decision, because families
+    # need no primitive at all: put_type/get_type/find_types already serve them.
+    #
+    # These are on the protocol rather than in a separate optional extension, because
+    # EDGES.md 6 puts the four flags on `Capabilities` and 7.1 gives them the
+    # `stores_proposals=False` treatment: the methods exist, `stores_edges=False`
+    # raises `NotSupported`, and the registry checks the capability first and never
+    # calls them. An adapter written before this row declares `stores_edges=False` by
+    # default and every edge call returns `edge_store_absent`.
+
+    # 16
+    async def put_edge(self, rec: EdgeRecord, *, expect_absent: bool = False) -> EdgeRecord: ...
+
+    # 17
+    async def get_edge(self, edge_id: str) -> EdgeRecord | None: ...
+
+    # 18
+    async def find_edges(self, q: EdgeQuery) -> EdgePage: ...
 
 
 @runtime_checkable

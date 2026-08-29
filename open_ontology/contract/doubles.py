@@ -22,6 +22,9 @@ from ..adapter import (
     CAPABILITY_FLAGS,
     Capabilities,
     ConsumerRecord,
+    EdgePage,
+    EdgeQuery,
+    EdgeRecord,
     EventRecord,
     ProposalPage,
     ProposalQuery,
@@ -63,8 +66,14 @@ class _DegradedBase:
         page_cap: int | None = None,
         page_cursor: bool = False,
         transaction_scope: str | None = None,
+        edge_transaction_scope: str | None = None,
+        edge_store_shares_connection: bool | None = None,
         read_only_consumers: bool = False,
         attribute_projections: frozenset[str] | tuple[str, ...] | None = None,
+        edge_attribute_projections: frozenset[str] | tuple[str, ...] | None = None,
+        edge_page_cap: int | None = None,
+        drops_edge_limit: bool = False,
+        stale_edge_cursor: bool = False,
         **flags: bool,
     ):
         unknown = set(flags) - set(CAPABILITY_FLAGS)
@@ -91,6 +100,27 @@ class _DegradedBase:
         #: round found `reinstate` unchecked for it: a mutation dropping ``_written``
         #: from the fourteenth call ran the whole suite green.
         self._transaction_scope = transaction_scope
+        #: EDGES.md 6.2's own declaration, carried separately so a double can be
+        #: built with the two scopes DISAGREEING on one connection -- the shape 6.2
+        #: calls non-conformant, which nothing could construct while the wrapper
+        #: only ever copied one scope through.
+        self._edge_transaction_scope = edge_transaction_scope
+        self._edge_store_shares_connection = edge_store_shares_connection
+        #: EDGES.md 6.3 -- U3's shape, for edge payloads.
+        self._edge_attribute_projections = (
+            None
+            if edge_attribute_projections is None
+            else frozenset(edge_attribute_projections)
+        )
+        #: The three BROKEN-edge-backend shapes, in the style of C0-10/C0-11: a
+        #: store that silently drops `limit`, one that hands back a cursor pointing
+        #: at rows it has already returned, and one that pages so small the registry
+        #: must loop to assemble a level. They exist so the suite can answer *can a
+        #: broken edge backend PASS?* -- the question that found C0-10 in the first
+        #: place, asked of the surface this row adds.
+        self._edge_page_cap = edge_page_cap
+        self._drops_edge_limit = drops_edge_limit
+        self._stale_edge_cursor = stale_edge_cursor
         self._read_only_consumers = read_only_consumers
         # U3: not a flag -- a declared set of keys this backend owns as typed columns.
         self._attribute_projections = (
@@ -118,6 +148,26 @@ class _DegradedBase:
                 base.attribute_projections
                 if self._attribute_projections is None
                 else self._attribute_projections
+            ),
+            # Defaults to whatever the TYPE scope was forced to, because EDGES.md
+            # 6.2 binds them on one connection -- a double that forced
+            # `transaction_scope` and left the edge scope at `owned` would be
+            # non-conformant by construction, and every existing caller of this
+            # wrapper forces exactly one of the two.
+            edge_transaction_scope=(
+                self._edge_transaction_scope
+                or self._transaction_scope
+                or base.edge_transaction_scope
+            ),
+            edge_attribute_projections=(
+                base.edge_attribute_projections
+                if self._edge_attribute_projections is None
+                else self._edge_attribute_projections
+            ),
+            edge_store_shares_connection=(
+                base.edge_store_shares_connection
+                if self._edge_store_shares_connection is None
+                else self._edge_store_shares_connection
             ),
         )
 
@@ -283,10 +333,88 @@ class _DegradedBase:
             raise NotSupported(self.capabilities().reason("stores_events"))
         return self.inner.append_event(rec)
 
-    def read_events(self, namespace: str, *, kind=None, name=None, proposal_id=None):
+    def read_events(
+        self, namespace: str, *, kind=None, name=None, proposal_id=None, edge_id=None
+    ):
         if not self.capabilities().stores_events:
             raise NotSupported(self.capabilities().reason("stores_events"))
-        return self.inner.read_events(namespace, kind=kind, name=name, proposal_id=proposal_id)
+        return self.inner.read_events(
+            namespace, kind=kind, name=name, proposal_id=proposal_id, edge_id=edge_id
+        )
+
+    # ------------------------------------------------------------------ 16 to 18
+    def _need_edges(self) -> None:
+        if not self.capabilities().stores_edges:
+            raise NotSupported(self.capabilities().reason("stores_edges"))
+
+    def _degrade_edge(self, rec: EdgeRecord | None) -> EdgeRecord | None:
+        if rec is None:
+            return None
+        caps = self.capabilities()
+        if caps.stores_edge_attributes:
+            return rec
+        # EDGES.md 6: an edge payload comes back reduced to `edge_attribute_projections`
+        # and no warning value is minted for the loss -- PACKAGE.md 3.4 primitive 4's
+        # mechanism is that the RETURNED RECORD is the signal, and the type side has no
+        # warning for it either. Reporting one fact two ways is what 6 declined.
+        return dataclasses.replace(
+            rec, attributes=caps.surviving_edge_attributes(rec.attributes or {})
+        )
+
+    def put_edge(self, rec: EdgeRecord, *, expect_absent: bool = False) -> EdgeRecord:
+        self._need_edges()
+        return self._degrade_edge(
+            self.inner.put_edge(self._degrade_edge(rec), expect_absent=expect_absent)
+        )
+
+    def get_edge(self, edge_id: str) -> EdgeRecord | None:
+        self._need_edges()
+        return self._degrade_edge(self.inner.get_edge(edge_id))
+
+    def find_edges(self, q: EdgeQuery) -> EdgePage:
+        self._need_edges()
+        caps = self.capabilities()
+        inner = q
+        if not caps.indexes_edges_by_family and q.families is not None:
+            # EDGES.md 7.1's DELIBERATE deviation from `find_types`' rule: this query is
+            # already bounded by `incident_to`, so the store returns the frontier's
+            # edges UNFILTERED and COMPLETE for what it was asked, and the registry
+            # narrows above. `find_types`' answer -- an empty page with a why -- would
+            # be wrong here, because the backend genuinely can answer the wider
+            # question.
+            inner = dataclasses.replace(inner, families=None)
+        if self._drops_edge_limit:
+            # The broken backend C0-10 found on the type side, transposed: `limit` and
+            # `after` silently ignored, which is a duplicate-forever loop in any keyset
+            # consumer.
+            inner = dataclasses.replace(inner, limit=None, after=None)
+        elif self._edge_page_cap is not None:
+            inner = dataclasses.replace(
+                inner, limit=min(self._edge_page_cap, q.limit or self._edge_page_cap)
+            )
+        page = self.inner.find_edges(inner)
+        records = tuple(self._degrade_edge(r) for r in page.records)
+        next_after = page.next_after
+        if self._stale_edge_cursor and next_after is not None and q.after is not None:
+            # A backend whose cursor points at rows it has ALREADY returned. Honest
+            # pagination is not something a caller may infer from `next_after` being
+            # non-None, and a loop that trusts it never terminates.
+            next_after = q.after
+        if not self._pages_countable:
+            return EdgePage(
+                records=records,
+                known=None,
+                complete=False,
+                why_incomplete="this backend cannot count a result set",
+                next_after=next_after,
+            )
+        return EdgePage(
+            records=records,
+            known=page.known,
+            complete=page.complete,
+            why_incomplete=page.why_incomplete,
+            next_after=next_after,
+        )
 
 
 class _DegradedWithAttributes(_DegradedBase):
