@@ -605,7 +605,8 @@ class Registry:
             known=len(gates_on) + len(would_drop) + len(would_error),
             complete=False,
             why_incomplete=CONSUMERS_WHY_INCOMPLETE,
-            warnings=self._gate_warnings(rec.namespace, rows),
+            warnings=self._gate_warnings(rec.namespace, rows)
+            + self._edge_gate_warnings(rec, rows),
         )
 
     def _gate_warnings(
@@ -656,6 +657,54 @@ class Registry:
         # it unregistered would be a different and wrong claim.
         registered = {r.name for r in page.records}
         return tuple(f"gate_unregistered:{g}" for g in sorted(gates - registered))
+
+    def _edge_gate_warnings(
+        self, rec: TypeRecord, rows: Sequence[ConsumerRecord]
+    ) -> tuple[str, ...]:
+        """``no_edge_gate_registered`` -- EDGES.md 8, by ruling R8's own reasoning.
+
+        When ``consumers()`` is called on a ``kind="edge"`` entry and **no predicate's
+        extent contains any edge family at all**, ``would_drop: []`` reads as *"nothing
+        will drop this"* and the truth is *"nobody has told us what traverses edges"*.
+
+        The case is not hypothetical. `deadline_cluster_service` -- live for every user
+        since 2026-07-06 -- walks `work_links[blocks]` with the family name in its code,
+        while `work_link_types` *"is extended by the AI classifier when it is confident
+        none of the existing types fit"*. A classifier proposes `waiting_on`, it is
+        auto-approved, edges start being written with it, and the one shipped producer
+        that consumes edges keeps walking `blocks`. **Nothing errors.** That is finding
+        0.1's Cause C with a classifier as the producer and a scheduled job as the
+        consumer, on a live system.
+
+        **Rule U applies to the warning itself**, exactly as it does to
+        ``gate_unregistered`` (`C11-05`'s rule): the claim *"nobody has registered an
+        edge gate"* is a positive one, and a lookup that came back incomplete does not
+        support it. On a backend with ``indexes_membership=False`` every ``predicates``
+        list is empty, so the question cannot be asked at all and nothing is said.
+        """
+        if rec.kind != "edge":
+            return ()
+        if not self.caps.indexes_membership:
+            # Every membership list is empty here, so "no predicate's extent contains an
+            # edge family" is indistinguishable from "we cannot see any extent". Silence
+            # is the honest answer; the alternative is a warning that fires on every
+            # family on a backend that simply cannot answer.
+            return ()
+        # The condition EDGES.md 8 states is about EXTENTS, not about consumers: *no
+        # predicate's extent contains any edge family at all*. A registry with no
+        # consumers registered satisfies it, and so does one with ten consumers none of
+        # whose gates any family claims -- both are the same fact, which is that nothing
+        # has been declared to traverse edges. Keying it on the consumer rows instead
+        # would silence the warning in the emptiest case, which is the case it is for.
+        page = self.adapter.find_types(
+            TypeQuery(namespace=rec.namespace, kind="edge", status=None, include_retired=True)
+        )
+        if not page.complete:
+            return ()
+        for family in page.records:
+            if family.predicates:
+                return ()
+        return ("no_edge_gate_registered",)
 
     def _usage_report(self, rec: TypeRecord) -> UsageReport:
         policy = self.policy(rec.namespace)
@@ -3255,6 +3304,10 @@ class Registry:
             searched = tuple(sorted({f.name for f in known}))
             symmetric = {(f.namespace, f.name) for f in known if f.symmetric}
             registered = {(f.namespace, f.name) for f in known}
+            # `None` means EVERY family the store can answer, so there is no
+            # searched set to narrow against -- including the families of edges
+            # nobody registered, which is why this is `None` and not `registered`.
+            searched_keys: set[tuple[str, str]] | None = None
             query_namespace: str | None = None
             query_families: tuple[str, ...] | None = None
             if not families_complete:
@@ -3284,6 +3337,7 @@ class Registry:
             searched = tuple(edge_families)
             symmetric = {(f.namespace, f.name) for f in resolved if f.symmetric}
             registered = {(f.namespace, f.name) for f in resolved}
+            searched_keys = set(registered)
             query_namespace = namespace
             query_families = tuple(sorted({f.name for f in resolved}))
             for fam in resolved:
@@ -3357,7 +3411,7 @@ class Registry:
                         # field 4.2 promises will tell the truth.
                         continue
                     keep, note = self._edge_passes(
-                        rec, frontier_keys, direction, registered, symmetric
+                        rec, frontier_keys, direction, searched_keys, registered, symmetric
                     )
                     if note is not None and note not in warnings:
                         warnings.append(note)
@@ -3449,6 +3503,7 @@ class Registry:
         rec,
         frontier_keys: tuple[tuple[str, str, str, str | None], ...],
         direction: str,
+        searched_keys: set[tuple[str, str]] | None,
         registered: set[tuple[str, str]],
         symmetric: set[tuple[str, str]],
     ) -> tuple[bool, str | None]:
@@ -3462,24 +3517,36 @@ class Registry:
         store-side filter is then an efficiency claim, and `C17-06` binds it directly at
         the primitive rather than through the report, which is where an efficiency claim
         belongs.
+
+        **Two different questions live here and the first version conflated them**,
+        which `C17-06` caught on its first run: *is this family one the caller asked
+        for?* and *is this family registered at all?* An edge of a registered family the
+        caller did not name is simply outside the query and is dropped; an edge of a
+        family NOBODY registered is a fact about the store, and dropping it is the
+        silent per-consumer drop EDGES.md is designed against.
         """
         key = (rec.namespace, rec.family)
-        note: str | None = None
+        if searched_keys is not None and key not in searched_keys:
+            # A named query. The caller asked for these families and no others, and an
+            # edge outside them is outside the query -- there is nothing to report about
+            # it, because `families_searched` already says what was consulted.
+            return False, None
         if key not in registered:
-            # EDGES.md 2.7's argument, one level along: there is no foreign key from an
-            # edge to its family, deliberately, and beacon's `work_links` has none to
+            # `searched_keys is None` -- the caller asked for EVERYTHING. EDGES.md 2.7's
+            # argument applies one level along: there is deliberately no foreign key from
+            # an edge to its family, and beacon's `work_links` has none to
             # `work_link_types` either -- its own documentation calls the registry
             # "advisory rather than enforced". So an edge whose family nobody registered
-            # is REACHABLE, and dropping it here would be the silent per-consumer drop
-            # this whole document is designed against, committed by the read seam on
-            # exactly the host EDGES.md 7.2 maps.
+            # is reachable, and dropping it from a query that asked for everything would
+            # be the silent per-consumer drop this whole document is designed against,
+            # committed by the read seam on exactly the host EDGES.md 7.2 maps.
             #
-            # It is kept, and the caller is told. Twenty-first value of INTERFACE.md
-            # 5.4, added in this change per ruling R3.
-            note = f"edge_family_unregistered:{rec.namespace}:{rec.family}"
-            # Its symmetry is unknown, so `direction` cannot be applied to it -- Rule U,
-            # and the warning above is what says the filter could not be honoured.
-            return True, note
+            # It is kept, and the caller is told. Twenty-first value of INTERFACE.md 5.4,
+            # added in the change that introduces it, per ruling R3.
+            #
+            # Its `symmetric` is unknown too, so `direction` cannot be applied to it --
+            # Rule U -- and that is the second thing the warning says.
+            return True, f"edge_family_unregistered:{rec.namespace}:{rec.family}"
         if key in symmetric or direction == "both":
             return True, None
         src_k = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
