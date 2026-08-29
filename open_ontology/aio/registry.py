@@ -3285,10 +3285,19 @@ class AsyncRegistry:
             # Its `symmetric` is unknown too, so `direction` cannot be applied to it --
             # Rule U -- and that is the second thing the warning says.
             return True, f"edge_family_unregistered:{rec.namespace}:{rec.family}"
-        if key in symmetric or direction == "both":
-            return True, None
         src_k = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
         dst_k = (rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id)
+        incident = src_k in frontier_keys or dst_k in frontier_keys
+        if key in symmetric or direction == "both":
+            # **Incidence is re-checked here too**, and the first version of this
+            # returned `True` unconditionally on this branch. That made the
+            # docstring's "the registry narrows, always" false for the DEFAULT
+            # direction: an adapter that ignored `incident_to` and returned every
+            # edge of the family was narrowed on `out` and on `in` and not on
+            # `both`. It was still caught -- by four tests whose subject is
+            # something else -- and "caught incidentally" is not the same claim as
+            # "narrowed". Row 4b, adversarial round 1.
+            return incident, None
         if direction == "out":
             return src_k in frontier_keys, None
         return dst_k in frontier_keys, None
