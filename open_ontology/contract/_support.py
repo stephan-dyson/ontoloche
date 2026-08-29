@@ -180,6 +180,43 @@ def seed(
     return entry
 
 
+def edge_family(
+    registry,
+    name: str,
+    *,
+    level: str = "instance",
+    symmetric: bool = False,
+    inverse_label: str | None = None,
+    src_kinds: Sequence[str] = ("entity",),
+    dst_kinds: Sequence[str] = ("entity",),
+    payload_schema: str | None = None,
+    definition: str | None = None,
+    namespace: str = "default",
+):
+    """A ``kind="edge"`` TypeEntry with EDGES.md 2.4's five keys, for tests whose
+    subject is something else.
+
+    There is no separate call to create one, and that absence is EDGES.md 2.3's whole
+    argument -- so this helper goes through ``propose_type``/``approve`` exactly as a
+    caller would, rather than reaching past them into ``put_type``. A helper that wrote
+    the row directly would be a helper that never exercised the declaration rules.
+    """
+    return seed(
+        registry,
+        name,
+        kind="edge",
+        namespace=namespace,
+        definition=definition or f"the {name} relationship, for the purposes of this test",
+        attributes={
+            "level": level,
+            "symmetric": symmetric,
+            "inverse_label": inverse_label,
+            "endpoint_kinds": {"src": list(src_kinds), "dst": list(dst_kinds)},
+            "payload_schema": payload_schema,
+        },
+    )
+
+
 DOC_EVIDENCE_URL = "https://www.cms.gov/files/document/qso-23-01-nh-revised-2026-01-28.pdf"
 
 
