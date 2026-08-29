@@ -137,3 +137,100 @@ Four predicted failures and three predicted gaps, before running anything:
 7. **§1.1** — catalogue names and API field names disagree, so the candidate word depends on which surface was read.
 
 **If the walk-through changes none of this, that is a finding about UC3's diversity and it is recorded as one, not papered over.**
+
+---
+
+## 3. The walk-through — expected vs observed
+
+**Method.** Not prose. The three vocabularies were driven through the **reference implementation** (`open_ontology.Registry` on the SQLite backend, one namespace per agency, `approval_policy="auto"`, `min_auto_approve_tier="sonnet"`), so every row below is **[Observed]** output rather than a reading of the spec. The three `status` value sets and the three `borough` value sets are the ones in §2.
+
+| # | Predicted | Observed | Verdict |
+|---|---|---|---|
+| **W1.1** | three scoped `status` types coexist | `[('dot','status','value_set'), ('dpr','status','value_set'), ('oti_311','status','value_set')]`; each `active`, `approved_by="auto:uc3_walk"` | ✅ **as predicted** |
+| **W1.2** | `cross_namespace_merge`, non-overridable | `Refusal(reason="cross_namespace_merge")`; **still refused** with `acknowledge=["cross_namespace_merge","definitions_diverge"]` | ✅ **as predicted** |
+| **W1.3** | the second publisher is not told the word is taken | `resolve_type("status", ns="oti_311")` → `outcome="proposal"`, `confidence=None`, **`alternatives=()`**. The *same context* asked in `ns="dpr"` → `outcome="existing"`, `confidence=1.0` | ❌ **failure, as predicted — and sharper.** The answer is decided by which namespace the caller picked *before* asking |
+| **W1.4** | `kind="value_set"` accepted | accepted, round-trips on both backends | ✅ |
+| **W1.5** | C's `Active`/`active`/null split invisible | `attributes` stored verbatim as `{"values": ["Active","Inactive",null,"active"], …}`, `warnings=()` | ⚠️ **gap, as predicted** |
+| **W2.1** | `borough` re-proposed in each namespace | with two **byte-identical** `borough` definitions already active elsewhere: `outcome="proposal"`, `alternatives=(("status", 0.1538),)` — one same-namespace word at a noise score, the two exact matches unmentioned | ❌ **failure, as predicted** |
+| **W2.2** | no way to say *equivalent, kept apart* | 17 public façade methods, 14 `TypeEntry` fields; the four cross-type relations (`merge_types`, `aliases`, `predicates`, `retire(successor=)`) each assert something **stronger** than equivalence | ❌ **gap, as predicted** |
+| **W2.3** | three scoped `value_set`s for the encodings | accepted | ✅ |
+| **W2.5** | `borocode` → `not_a_type`/`redundant_projection` | `outcome="proposal"` — the deterministic resolver does not catch it | ❌ **prediction wrong**; see W4.1, same cause |
+| **W3.1** | a property column has no honest `not_a_type` reason | `resolve_type("latitude")` → `outcome="proposal"`, `confidence=0.4286` | ❌ **gap, as predicted** — a bare property becomes a proposal |
+| **W4.1** | `location` → `not_a_type`/`redundant_projection` | **`outcome="proposal"`** in both B and C. The *same call* with CMS's sibling set (`Provider Address`, `City/Town`, `State`, `ZIP Code`) → `not_a_type`/`redundant_projection` | ❌ **prediction wrong, and this is the most consequential single result in the pass** — see §3.1 |
+| **W5.1** | source `data_updated_at` has no home | ten `Provenance` fields, none of them it; `imported_from=None` | ⚠️ **gap, as predicted** |
+| **W5.2** | a value-gating consumer is inexpressible | registered fine, then `consumers("status","oti_311")` → `gates_on=[]`, **`would_drop=["ops_dashboard.open_requests"]`** — the registry reports the consumer would drop the type it gates on | ❌ **failure, worse than predicted** |
+| **W5.3** | `complete: False` with the right `why` | `known=1`, `complete=False`, `why_incomplete="consumers are registered, not discovered; unregistered code paths are invisible"` | ✅ |
+| **W5.4** | out of scope | out of scope | — |
+
+**Five of seven predictions confirmed. Two were wrong, both in the same direction and from the same cause** (W2.5, W4.1): the deterministic resolver's `not_a_type` rules did not fire on NYC data. That is §3.1.
+
+### 3.1 The result that was not predicted: `not_a_type` is fitted to CMS
+
+The single sharpest [Observed] pair in this pass:
+
+```python
+resolve_type("location", ctx(sibling_columns=("Provider Address","City/Town","State","ZIP Code")))
+# -> not_a_type / redundant_projection        <- CMS. Contract test C3-08 asserts exactly this.
+
+resolve_type("location", ctx(sibling_columns=("latitude","longitude")))
+# -> proposal, "nothing in the vocabulary fits 'location'"      <- NYC. Nothing catches it.
+```
+
+**The pathology is identical.** [Observed] in B and C, `location` is a GeoJSON `Point` whose coordinates equal `(longitude, latitude)` in **50 of 50 sampled rows each, in two agencies independently** — the same finding as CMS's `Location` (T3: exactly rebuilt from four columns in 419,428 of 419,479 rows). `_resolve._PROJECTION_FAMILIES["location"]` enumerates postal-address parts (`address`, `city`, `state`, `zip`, …) and contains no coordinate name, so the geographic flavour of the same pathology walks straight past. `borocode` — 1:1 onto `boroname` — likewise comes back a `proposal`.
+
+**Two true things, and the second is the finding.**
+
+1. `PACKAGE.md` §2.6 says the deterministic resolver is *"not good enough for production and is not meant to be"*. On that reading this is not a defect, and widening the lookup table to fit NYC would be fitting it to the second dataset the way it was already fitted to the first.
+2. **But `PACKAGE.md` §2.6 also says, in the same section, that *"no contract test may pass or fail because of resolver quality"* — and `C3-08` and `C3-09` do exactly that.** They assert a specific `not_a_type` outcome that only the shipped `DeterministicResolver` produces. So a deployment that swaps in its own resolver — §2.6's *production path* — fails the suite that defines conformance, for a reason that has nothing to do with storage.
+
+That contradiction was invisible with one data source. It took a second government body publishing the same pathology in a different shape to surface it. **Ruling wanted — §6, item 4.**
+
+---
+
+## 4. What changed in each spec
+
+### 4.1 `INTERFACE.md`
+
+**New section §10b — the NYC Open Data design test.** Five contortions recorded, numbered 8–12 to continue §9's Tenshen series, none designed away:
+
+| # | Contortion |
+|---|---|
+| **8** | `resolve_type` cannot see across namespaces, so the second publisher is never told the word is taken — mechanism **2** reintroduced by §2.6's answer to mechanism **4** |
+| **9** | Nothing says *equivalent, kept apart*; every cross-type relation v0 has asserts something stronger |
+| **10** | `not_a_type` has four reasons and a property column matches none of them |
+| **11** | `Consumer.gate` is a predicate name, so a value-level consumer is inexpressible — and the nearest expressible thing reports backwards |
+| **12** | `Provenance` has no home for the source dataset's own version |
+
+**§11 gained a row-3c block** listing the four of those five that v0's next revision must answer, with the smallest honest fix named for each. **§5.12 went from fourteen values to fifteen** (that is R4, §5 below, not UC3).
+
+**No call signature, data shape or refusal changed.** Every UC3 finding is an *absence*, and the ordering rule does not let a design test amend the design.
+
+### 4.2 `PACKAGE.md`
+
+**New section §8b — the NYC Open Data design test for #2.** Two contortions (B7, B8, continuing §7's Tenshen series) and **two new contract tests**.
+
+**The protocol needed no change.** Scoping was already in G1's key `(namespace, kind, name)`; `AttributeSchema` was already keyed on `(namespace, kind)`. The strongest UC3 result in the package is that the attribute mechanism §5 justifies on the CMS severity ordering does the UC3 job unmodified: [Observed] a schema for `("oti_311","value_set")` requiring `unknown_encodings` refuses B's row with `Refusal("attributes_schema_violation")` while a schema for `("dpr","value_set")` requiring only `values` accepts A's — same store, same process. B has two spellings of unknown and A has none, and the deployment can require a declaration from the publisher who needs one without imposing it on the one who does not.
+
+**The suite gained the two tests UC3 showed were missing — 109 → 111:**
+
+| id | asserts | why it was missing |
+|---|---|---|
+| **`C0-07`** | one word under three namespaces is three rows, each written `expect_absent=True`, each retrievable with its own definition and attributes; the collision still raises **within** a namespace; `TypeQuery(namespace=None)` returns all three | Across all 109 tests, **two namespaces appeared in exactly one place — `C10-04`, the *refusal*.** Nothing asserted the coexistence that refusal presupposes. A backend could have passed everything while letting the second publisher's `put_type` collide with the first's |
+| **`C6-07`** | `list_types(namespace=None)` returns the three scoped entries with three definitions and `complete=True`; `list_types(namespace="dot")` returns one with **`complete=False`** and a `why_incomplete` naming the namespace | `list_types` is the only call in `INTERFACE.md` §5 whose namespace may be `None`, so it is the only cross-namespace visibility the interface has — and a scoped listing reporting `complete=True` would say a word is used once when it is used three times |
+
+`test_manifest.py`, §6.2's group counts (C0: 6→7, C6: 6→7), the §10 exit-criteria row and `docs/README.md` all updated in the same change.
+
+**Both suites green after the change: `233 passed` sync, `271 passed` async** (Postgres 16.14 on 55432 in both legs; +4 each = two new tests × two backends).
+
+---
+
+## 5. Ruling R4 — the fifteenth `Refusal.reason`
+
+Landed as its own commit before the walk-through, per the brief. Deviation **D-1** (2A, inherited by 3b) recorded that `register_consumer` against a read-only consumer source raised `NotSupported` because none of R3's fourteen reasons said it honestly. R4 applies R3's own amendment rule rather than making an exception to it:
+
+- `INTERFACE.md` §5.12 now enumerates **fifteen**, with `consumer_source_read_only` named as a **capability** refusal — the third of that shape after `proposals_not_stored` and `cannot_record_override`;
+- `Registry.register_consumer` returns `Consumer | Refusal`, and the adapter's `NotSupported` becomes a `Refusal` carrying **the adapter's own sentence** in `detail["why"]`, never an invented one;
+- `C11-04` asserts the reason, that the vocabulary stayed closed, and that nothing was written — in both suites, the async one by generation rather than by a second copy;
+- D-1 is marked resolved in [`../runs/2A-RUN.md`](../runs/2A-RUN.md) §4.1 and [`../runs/3B-ASYNC.md`](../runs/3B-ASYNC.md) §5, with the reasoning that produced the ruling left intact.
+
+---

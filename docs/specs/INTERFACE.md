@@ -751,6 +751,127 @@ Evidence(
 
 ---
 
+## 10b. The NYC Open Data design test — three agencies, one word
+
+*Added by roadmap row 3c, 2026-08-28 — the third use-case fixture (`docs/USE-CASES.md` UC3), run against v0 retroactively per standing constraint 7. Nothing in §§0–10 was rewritten to make this section come out better; every finding below is recorded, not designed away.*
+
+**The subject [Observed 2026-08-28].** Three datasets from three publishing agencies on `data.cityofnewyork.us`, chosen because they share four column words. Full evidence, counts and reproduction commands: [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md).
+
+| | dataset | agency | rows | `status` means |
+|---|---|---|---|---|
+| **A** | `uvpi-gqnh` | Department of Parks and Recreation (DPR) | 683,788 | `Alive` · `Stump` · `Dead` — the physical condition of an organism |
+| **B** | `erm2-nwe9` | Office of Technology and Innovation (OTI), attributed `311` | 22,283,935 | `Closed` · `In Progress` · `Open` · `Pending` · `Assigned` · `Started` · `Unspecified` · `Cancel` — a workflow state |
+| **C** | `693u-uax6` | Department of Transportation (DOT) | 15,598 | `Active` · `Inactive` · null · `active` — the service state of a fixed asset |
+
+**No value appears in more than one of the three sets.** This is mechanism **4** — the `ROADMAP.md` kill row, the one **A1 assumes non-dominant** — exercised on real data for the first time.
+
+**What v0 got right, and it is the load-bearing half.**
+
+| | Behaviour | Result |
+|---|---|---|
+| §2.1, §2.6 | Three `status` entries coexist, scoped by `namespace`, unique per `(namespace, kind)` | **Pass.** Not one of the three had to give up its word |
+| §5.10 #4 | `merge_types(namespace="dpr", into_namespace="oti_311")` | **Pass** — `Refusal(reason="cross_namespace_merge")`, and still refused with `acknowledge=["cross_namespace_merge", "definitions_diverge"]`. Non-overridable means non-overridable |
+| §5.1 | `consumers(...)` reports `complete: False` with the registered-not-discovered `why` | **Pass** |
+| §5.6 | `list_types(namespace=None, include_retired=True, status=None)` spans namespaces, `complete: True` | **Pass** — and it is the **only** call in §5 that can |
+| §2.2 | `value_set` carries a per-agency value list | **Pass** — the kind CMS forced is what UC3 needs |
+
+**The mechanism-4 answer §2.6 promised — *scope, do not merge* — holds.** The kill row does not trip. What UC3 found is one level in from there.
+
+### 10b.1 CONTORTION 8 — `resolve_type` cannot see across namespaces, so the second publisher is never told the word is taken
+
+**[Observed]**, against the reference implementation. With `dpr:status` already active:
+
+```python
+resolve_type("status", ctx_311, namespace="oti_311", tier="opus")
+# -> outcome="proposal", confidence=None, alternatives=()
+#    reason="nothing in the vocabulary fits 'status'"
+
+resolve_type("status", ctx_311, namespace="dpr", tier="opus")     # same context
+# -> outcome="existing", confidence=1.0
+```
+
+**The same question, the same evidence, two opposite answers — and the caller chose which one by picking a namespace before asking.** `resolve_type` takes `namespace: str` and scores against `find_types(namespace=<that one>)`. `alternatives` is drawn from the same scoped set, so the second publisher does not even get a near miss.
+
+The `borough` case makes it sharper. With `dpr:borough` and `oti_311:borough` both active and **byte-identical in definition**:
+
+```python
+resolve_type("borough", ctx_dot, namespace="dot", tier="opus")
+# -> outcome="proposal", alternatives=(("status", 0.1538),)
+```
+
+The one alternative offered is a same-namespace word at a 0.15 score — noise — while two exact matches sit one namespace away, unmentioned.
+
+**This is mechanism 2 (nobody could find the existing types), reintroduced by the answer to mechanism 4.** §2.6 says the answer to collision is scoping. Scoping without a cross-namespace *lookup* means every publisher re-proposes every word, and the registry cannot say so. **Not fixed in v0**, because the fix is a signature change to §5.3 — the smallest honest form is a `search_namespaces: Sequence[str] | None` argument whose results land in `alternatives` as `("<namespace>:<name>", score)` — and v0 is not amended on a design test's say-so. **Recorded as the first thing INTERFACE v1 must answer.**
+
+### 10b.2 CONTORTION 9 — nothing can say *these two mean the same thing, kept apart*
+
+`borough` denotes the same five county-level divisions in all three datasets. The encodings differ (`Queens` / `QUEENS` / `Queens`, and B carries **two** spellings of unknown: the literal `Unspecified` and an absent field). The correct model is one concept, three scoped value sets.
+
+v0 cannot express it. **[Observed]** the façade has seventeen public methods and `TypeEntry` fourteen fields; the relations available between two entries are:
+
+- `merge_types` — destructive, and refused across namespaces by design (§5.10 #4);
+- `aliases` — prior names **of the same entry**, not a pointer to another;
+- `predicates` — capability membership, and §2.3 forbids reading it as a supertype;
+- `retire(successor=…)` — one entry replacing another, which asserts the first is dead.
+
+**Every cross-type relation v0 has asserts something stronger than equivalence.** So three identical `borough` definitions sit in three namespaces with nothing recording that a reader may join them, and the only enumerable trace is that `list_types(namespace=None)` returns three rows with the same word.
+
+**Not fixed here, and the shape of the fix is not obvious**, which is why it is recorded rather than invented: an `equivalent_to` edge between scoped types is a *relationship between types*, and relationships between types are deliverable **#4** (`EDGES.md`). **UC3 is therefore evidence that #4 must carry type-to-type edges and not only instance-level ones** — a finding for #4's brief, delivered by a design test on #1.
+
+### 10b.3 CONTORTION 10 — `not_a_type` has four reasons and a property column matches none of them
+
+`latitude` is a column in all three datasets. It is not an entity, not a predicate, not an edge, and not an enumerated set.
+
+```python
+resolve_type("latitude", ctx, namespace="dot", tier="opus")
+# -> outcome="proposal", confidence=0.4286
+```
+
+**[Observed]** a bare property becomes a proposal, and an approver who is not paying attention gets `latitude` in the vocabulary. §5.3's four `not_a_type` reasons — `redundant_projection`, `derived_value`, `export_artefact`, `instance_not_type` — describe **things derived from other columns**; none of them says *this is a property of a type, not a type*. `property_not_type` is the missing fifth value, and adding one would be a change to §5.3's closed reason set, so it is **recorded, not taken**.
+
+Note what this is not: it is not the resolver being weak. A perfect resolver still has nowhere honest to put the answer.
+
+### 10b.4 CONTORTION 11 — a consumer that gates on *values* has no representation, and the nearest expressible thing reports backwards
+
+The UC3-shaped consumer is an operations dashboard that accepts only `Closed` and `In Progress` from B's `status`. §2.9's `Consumer.gate` is **a predicate name**, and a predicate's extent (§2.3) is a set of **types**. There is no value-level gate.
+
+**[Observed]** what happens when a caller does the obvious thing and names the type:
+
+```python
+register_consumer(Consumer(id="ops_dashboard.open_requests", gate="status",
+                           on_unknown="drop"), namespace="oti_311")
+consumers("status", namespace="oti_311")
+# -> known=1, complete=False, gates_on=[], would_drop=["ops_dashboard.open_requests"]
+```
+
+The registry reports that the consumer **would silently drop the very type it was registered to gate on**. That is internally correct — `status` names a predicate whose extent is empty, so the type is excluded and `on_unknown="drop"` puts it in `would_drop` — and it is exactly backwards to the reader. `C11-02` blesses gating on a predicate that does not exist *because that is mechanism C made visible*; here the same behaviour produces a confident wrong-looking answer.
+
+**Recorded, not fixed.** The honest options are a value-level gate on `Consumer` (a change to §2.9, and it starts to make the registry know what a value is) or a documented rule that `gate` must name a registered `kind="predicate"` entry — which would break `C11-02`. **Neither is taken on a design test's authority. Ruling wanted; the recommendation is in [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.**
+
+### 10b.5 CONTORTION 12 — the source's own version has no home in `Provenance`
+
+`Provenance` (§2.4) records when **we** wrote the entry. A UC3 type is derived from a dataset that has its own `data_updated_at` — 2017-10-04 for A, 2026-08-28 for B, 2026-08-24 for C — and a type proposed from a 2017 snapshot of a "Historical data" dataset is a different claim from one proposed off a daily feed.
+
+**[Observed]** the ten `Provenance` fields have nowhere for it. `Evidence.locator` takes the resource URL and `Citation.retrieved_at` takes *our* fetch time, which is close but is a fact about us. `imported_from` is documented as foreign *system* identifiers (Foundry `apiName`/`rid`). Using it for a dataset version is a stretch, and it was left `None`.
+
+**Recorded.** The one-line fix — a `source_version: str | None` on `Provenance` — is additive and cheap, and is **not** taken here for the same reason as the rest: §11 collects it for v1.
+
+### 10b.6 The two findings that are not contortions
+
+**A. Value-level pollution inside one publisher is invisible, by design, and UC3 shows what that costs.** C's own `status` holds `Active`, `Inactive`, `active` and null — a case collision and an unencoded unknown, **inside one agency**. §2.1 says `attributes` is opaque and the registry never reads it, so **[Observed]** the value list round-trips verbatim with zero warnings. This is not a defect of §2.1; it is `PACKAGE.md` §5's job, and §5's `enforce` mode does catch the *shape* (a `value_set` with no declared values). It cannot catch `Active` vs `active`, and nothing in v0 claims to.
+
+**B. Mechanism 2 arrives before the registry does.** **[Observed]** the catalogue's `columns_name` and the SODA API's field names disagree for all three datasets — A publishes `borough` in the catalogue and `boroname` in the API; C publishes `latitude` and serves `lat`. **The candidate word a proposer brings to `resolve_type` depends on which surface it read.** No registry call can fix that, and it is the strongest available argument that Phase 3's ingestion layer must record *which surface* a column name came from. Recorded here so #1 is not blamed for it later.
+
+### 10b.7 NYC verdict
+
+> **Expressible, with five recorded contortions (8–12), none designed away, and the mechanism-4 answer intact.** Scoping holds; the non-overridable `cross_namespace_merge` refusal holds; three publishers keep their word. **What UC3 broke is not collision handling — it is everything around it:** finding a scoped type (contortion 8), relating two of them (9), refusing a property (10), gating on a value (11), and dating a source (12).
+>
+> **The kill-criterion row does not trip.** §12's test — *would deleting `merge_types` leave the rest coherent?* — is if anything more true after UC3: the merge was refused three times out of three and nothing needed it.
+>
+> **UC3 conflicts with neither UC1 nor UC2.** Nothing recorded here contradicts the Tenshen or CMS design tests; every finding is an *absence* rather than a disagreement. Per `USE-CASES.md`'s conflict rule there is therefore nothing for the supervisor to resolve between fixtures — the four items wanting a ruling are all "amend v0 now, or collect for v1", and they are listed in [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
+
+---
+
 ## 11. What would change this
 
 The office visits that A1–A3 stand in for. Each row names what arrives and what it re-opens.
@@ -776,6 +897,14 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 - **§2.5 states the Foundry status mapping but no §5 call performs it**, while `PACKAGE.md`'s C12 group tests it. Landed as `Registry.import_types`, a method beyond the twelve (D-8).
 - **`propose_type` and `reject` can return a `Refusal`** — required by `PACKAGE.md` §3.6 and §5.3, absent from §5.4 and §5.5's signatures (D-10).
 - **The call count** is unchanged and still wrong somewhere: §0, §5.10 and §13 say *twelve*; enumerating §5.1–§5.11 gives thirteen.
+
+**Recorded by roadmap row 3c (the UC3 validation pass), 2026-08-28.** §10b runs the NYC Open Data fixture — three agencies, one word, three meanings — against this document and records **five contortions (8–12), none designed away.** Those that this document must answer in v1, in the order they cost the most:
+
+- **`resolve_type` cannot see across namespaces** (§10b.1). It takes `namespace: str` and scores against that namespace alone, so the second publisher of a word is never told the first exists — mechanism **2**, reintroduced by §2.6's answer to mechanism **4**. The smallest honest fix is an additive `search_namespaces: Sequence[str] | None` on §5.3 whose hits land in `alternatives` as `("<namespace>:<name>", score)`. **This is the first thing v1 must answer.**
+- **Nothing says *equivalent, kept apart*** (§10b.2). Every cross-type relation v0 has — `merge_types`, `aliases`, `predicates`, `retire(successor=)` — asserts something stronger than equivalence. The fix is a type-to-type edge, which is **#4**, so UC3 is evidence that `EDGES.md` must carry edges *between types* and not only between instances.
+- **`not_a_type` has no reason for a property** (§10b.3). `latitude` returns `outcome="proposal"`. `property_not_type` is the missing fifth value of §5.3's reason set.
+- **`Consumer.gate` is a predicate name, so a consumer that gates on *values* cannot be expressed** (§10b.4) — and the nearest expressible thing reports that the consumer would drop the type it gates on. **Ruling wanted**; see [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
+- **`Provenance` has no `source_version`** (§10b.5). A type derived from a 2017 snapshot and one derived from a daily feed are different claims and record identically.
 
 **Also open, independent of the office:**
 

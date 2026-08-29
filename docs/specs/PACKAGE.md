@@ -676,9 +676,9 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 
 ### 6.2 The suite, enumerated
 
-**109 tests in seventeen groups.** Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**111 tests in seventeen groups.** *(109 at #3; `C0-07` and `C6-07` added by row 3c — see §8b.2.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
-**C0 — adapter conformance (6).** No interface call; this is the protocol itself.
+**C0 — adapter conformance (7).** No interface call; this is the protocol itself.
 
 | id | asserts | mech |
 |---|---|---|
@@ -688,6 +688,7 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 | C0-04 | **§3.1, by source inspection**: `Refusal`, `Rejection`, `Resolution`, `Proposal`, `TypeEntry` appear nowhere in `adapter.py` or `backends/` | — |
 | C0-05 | `migrate()` is idempotent; the version row is written in the same transaction as the DDL | — |
 | C0-06 | every `*Record` round-trips; a field the backend cannot store comes back empty, not wrong | — |
+| C0-07 | **G1's key is *scoped*:** one word under three namespaces is three rows, each `expect_absent=True`, each retrievable with its own definition and attributes; the collision is still raised *within* a namespace; `TypeQuery(namespace=None)` returns all three. *(Row 3c, §8b.2 — the half of G1 that `INTERFACE.md` §2.6's answer to mechanism 4 rests on, and that nothing asserted)* | **4** |
 
 **C1 — `consumers` (8).** Mechanism **C**.
 
@@ -756,7 +757,7 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 | C5-10 | `reject(superseded_by=…)` records the successor |
 | C5-11 | **atomicity**: an injected failure between the type write and the event write leaves no type and no decided proposal |
 
-**C6 — `list_types` (6).** Mechanism **2**.
+**C6 — `list_types` (7).** Mechanism **2**.
 
 | id | asserts |
 |---|---|
@@ -766,6 +767,7 @@ Running it: `pytest --pyargs open_ontology.contract`, or against a foreign backe
 | C6-04 | the true census — `include_retired=True, status=None, namespace=None` — reports `complete=True` |
 | C6-05 | `orphaned=True` **excludes** types whose `orphaned` is `None`; the count of excluded-as-unknown is reported |
 | C6-06 | `unverified_semantics=True` enumerates exactly the entries carrying the warning |
+| C6-07 | **the census spans namespaces and a scoped listing says it did not:** `namespace=None` returns one word's three scoped entries with three definitions and `complete=True`; `namespace="dot"` returns one with **`complete=False`** and a `why_incomplete` naming the namespace *(row 3c, §8b.2)* |
 
 **C7 — `usage` (6).** Mechanism **3**.
 
@@ -909,7 +911,7 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 **No §5 refusal is untested.** The three refusals this document adds (§3.6) are tested at C9-02, C10-08, C15-04.
 
-**[Inferred]** the built suite will be larger than 109 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+**[Inferred]** the built suite will be larger than 111 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1095,6 +1097,77 @@ Standing constraint 0 argues *for* fixing this, not against: the data is public 
 
 ---
 
+## 8b. The NYC Open Data design test for #2 — three agencies through the adapter
+
+*Added by roadmap row 3c, 2026-08-28 — the third use-case fixture (`docs/USE-CASES.md` UC3), run against v0 retroactively per standing constraint 7. The interface half is [`INTERFACE.md`](INTERFACE.md) §10b; this half asks only what §3–§6 have to answer.*
+
+**The subject.** Three NYC Open Data datasets, three agencies, one shared word meaning three unrelated things: `uvpi-gqnh` (DPR, 683,788 rows, `status` = a tree is `Alive`/`Stump`/`Dead`), `erm2-nwe9` (OTI/311, 22,283,935 rows, `status` = a request's workflow state, eight values), `693u-uax6` (DOT, 15,598 rows, `status` = a meter is `Active`/`Inactive`/null/`active`). Evidence and counts: [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md).
+
+**The question §3 has to answer:** does a protocol designed around one flat CMS export and one single-namespace Tenshen table carry *many* namespaces without contortion?
+
+### 8b.1 The protocol carries it, and this is the least surprising section in the document
+
+**[Observed]** against both reference backends:
+
+| Concern | Where it lands | Verdict |
+|---|---|---|
+| Three `status` rows, one word | `oo_type` PRIMARY KEY `(namespace, kind, name)` — **G1 is already scoped** (§3.5, §4.1) | ✅ no change |
+| Registering the second and third without collision | `put_type(expect_absent=True)` raises only within a namespace | ✅ **now tested — C0-07** |
+| A city-wide census | `TypeQuery.namespace: str \| None = None`, the one nullable scope in the protocol | ✅ **now tested — C6-07** |
+| Per-agency value sets | `TypeRecord.attributes` + `attr_schema_version`, one row each | ✅ no change |
+| Per-agency *validation* of those value sets | `AttributeSchema(namespace, kind, version)` — §5.2 keys the schema on the namespace | ✅ **and this is the strongest UC3 result in the package** |
+
+**The attribute mechanism was designed for CMS and it is what UC3 needs.** §5.1 justifies §5 on the A–L severity ordering — a CMS argument. UC3 exercises the same mechanism on a different axis: **[Observed]** a schema registered for `("oti_311", "value_set")` requiring both `values` and `unknown_encodings` refuses `Refusal(reason="attributes_schema_violation", detail={"violations": ["unknown_encodings:required field missing"], …})`, while `("dpr", "value_set")` requiring only `values` accepts DPR's row unchanged — in the same store, in the same process.
+
+That matters because B's `status` and `borough` each carry **two** spellings of unknown (`Unspecified` and an absent field) and A's carry none. A deployment can therefore *require the publisher who has unknowns to declare them* without imposing it on the publisher who does not. **Per-namespace schema versioning was not designed for this; it falls out of keying on `(namespace, kind)`, and UC3 is the first thing to use it.**
+
+### 8b.2 The gap UC3 found in the suite, and it is closed here
+
+**[Observed]** before this row, across all 109 contract tests, **two namespaces appeared in exactly one test** — `C10-04`, which asserts the `cross_namespace_merge` **refusal**. Nothing asserted the coexistence that refusal presupposes: that the store will hold two same-named rows, keep them apart, and hand each back. A backend could have passed the whole suite while silently letting the second publisher's `put_type` collide with the first's, and only `C10-04` — which never writes a second row it then reads back — would have been in the area.
+
+**Two tests, added under §6.2's enumeration rules with `test_manifest.py` updated (109 → 111):**
+
+- **`C0-07`** — *G1's key is scoped.* Three `status` rows in three namespaces, all `expect_absent=True`, all retrievable with their own definitions and attributes intact; a fourth write of the first row still raises `AlreadyExists`; `find_types(TypeQuery(namespace=None))` returns all three. **This is the storage guarantee `INTERFACE.md` §2.6's answer to mechanism 4 actually rests on**, and it was the one half of G1 nothing checked.
+- **`C6-07`** — *the census spans namespaces and a scoped listing says it did not.* `list_types(namespace=None)` returns three `status` rows with three different definitions and `complete=True`; `list_types(namespace="dot")` returns one and **`complete=False` with a `why_incomplete` naming the namespace**. A scoped listing that reported `complete=True` would tell a reader the word is used once when it is used three times.
+
+Both are capability-honest in §6.1's sense — they assert shapes and honest incompleteness, never a value a backend might legitimately not have — and both pass on SQLite and Postgres in one run.
+
+### 8b.3 The two contortions
+
+**B7 — `find_consumers` and `attribute_census` are single-namespace, so the ingestion-shaped reader must ask N times.**
+**[Observed]** `find_consumers(namespace: str, …)` (§3.4 primitive 11) and `Registry.attribute_census(namespace: str = "default", …)` (§5.5) both take a required scalar namespace; only `TypeQuery.namespace` is nullable. UC3's actual consumer — a Phase 3 ingestion job landing three agencies — is one code path reading three namespaces, and it must register itself three times and read three censuses to see itself.
+
+**Not fixed.** The change is one nullable parameter on each, and it is not free: `find_consumers` returning rows from every namespace makes `ConsumerReport` ambiguous about which scope it answered for, and §5.1's `complete: False` already carries all the honesty the report has. **Recorded so the cost is legible when #4 or Phase 3 asks for it.** The accumulation worry §5.5 exists to answer is *per-namespace* accumulation, which the census does answer; what it cannot answer is *"is `values` declared inconsistently across the city?"*
+
+**B8 — the deterministic resolver's `not_a_type` rules are a CMS lookup table, and `C3-08` pins them.**
+This is the sharp one. §2.6 states the rule that **"no contract test may pass or fail because of resolver quality"** — the suite asserts outcomes and shapes, never scores. `C3-08` and `C3-09` do not keep that promise: they assert a specific `not_a_type` **outcome** for two specific candidates, which only the shipped `DeterministicResolver` produces.
+
+**[Observed]**, and it is the same pathology in both cases — a `location` column exactly rebuilt from the columns beside it:
+
+```python
+resolve_type("location", ctx(sibling_columns=("Provider Address","City/Town","State","ZIP Code")))
+# -> not_a_type / redundant_projection          <- CMS. C3-08 passes.
+
+resolve_type("location", ctx(sibling_columns=("latitude","longitude")))
+# -> proposal, "nothing in the vocabulary fits 'location'"    <- NYC. Nothing catches it.
+```
+
+**[Observed]** in B and C, `location` is a GeoJSON `Point` whose coordinates equal `(longitude, latitude)` in **50 of 50 sampled rows each, in two agencies independently** — the CMS `Location` finding (T3, 419,428 of 419,479 rows) reproduced in a different government body's data. `_resolve._PROJECTION_FAMILIES["location"]` enumerates postal-address parts and contains no coordinate name, so the geographic flavour walks straight past. `borocode` — 1:1 onto `boroname` over the sample — is likewise returned as a `proposal`.
+
+**Two things are true and both are recorded.** (1) Per §2.6 this is resolver quality, the deterministic resolver is explicitly *not good enough for production*, and adding `latitude`/`longitude`/`lat`/`long` to a lookup table would be fitting the table to the second dataset the way it was already fitted to the first. (2) `C3-08` and `C3-09` are nevertheless **conformance tests that a backend cannot fail and a resolver can** — so a deployment that ships its own resolver, which §2.6 says is the production path, fails the suite that defines conformance for reasons that have nothing to do with storage.
+
+**Recommendation, not taken here:** `C3-08`/`C3-09` should be marked non-binding for third-party adapters the way `C15-02` already is (§5.5), or moved out of the conformance definition into a resolver-quality suite of their own. **That is a change to what "conformant" means, so it wants a ruling** — [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
+
+### 8b.4 NYC verdict
+
+> **The protocol carries three agencies with no change to the fifteen primitives, no change to the table shapes, and no change to `Capabilities`.** Scoping was already in the primary key; per-namespace attribute schemas already worked and are the mechanism UC3 most needs. **Two contortions (B7, B8), neither designed away.**
+>
+> **The suite gained two tests it should have had since #2** — `C0-07` and `C6-07`, 109 → 111 — because UC3 found that the coexistence half of G1 and the cross-namespace half of `list_types` were both unasserted. Per `ROADMAP.md`'s rule of the ordering, a use case that finds a missing test rather than a missing feature is the good outcome.
+>
+> **Kill-criterion check (§7.5), re-run against a third fixture: still not tripped.** Nothing about NYC's shape is in the schema. The columns UC3 leans on hardest — `namespace` in the primary key, `attr_schema_version`, `oo_attr_schema` keyed on `(namespace, kind)` — were all put there by CMS and Tenshen, before this dataset existed.
+
+---
+
 ## 9. Versioning of the store
 
 ### 9.1 The mechanism
@@ -1141,7 +1214,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (109 tests, seventeen groups) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (111 tests, seventeen groups — 109 at #3, two added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |
@@ -1163,6 +1236,13 @@ The first is forward-only and may be dropped. The second is never applied backwa
 - **The call count.** `INTERFACE.md` says *twelve calls* in §0, §5.10 and §13; enumerating §5.1–§5.11 gives **thirteen** functions (§2.2). Nothing depends on it; it should be corrected so it is not quoted onward.
 - **`INTERFACE.md` §2.1 says the registry never reads `attributes`.** §5 of this document makes reading them possible but off by default, so an untouched deployment matches §2.1 exactly. If #1 adopts the mechanism, that sentence needs a clause.
 - **`INTERFACE.md` §9 does not name the `kind` of a `work_link_types` row.** This document determines `kind="edge"` (§7.1) from §2.2's definition.
+
+### 11.2b Recorded by roadmap row 3c (the UC3 validation pass), 2026-08-28
+
+§8b runs the NYC Open Data fixture against this document. The protocol needed **no change** — scoping was already in G1's key and attribute schemas were already keyed on `(namespace, kind)` — and the suite gained the two tests §8b.2 describes (109 → 111). Two contortions are open:
+
+- **B7 — `find_consumers` and `attribute_census` are single-namespace** (§8b.3). Only `TypeQuery.namespace` is nullable, so the ingestion-shaped reader that UC3 describes must register itself once per agency and read one census per agency. The fix is one nullable parameter on each and it is not free — a cross-namespace `find_consumers` makes `ConsumerReport` ambiguous about which scope it answered for.
+- **B8 — `C3-08` and `C3-09` assert resolver behaviour, which §2.6 says no contract test may do** (§8b.3). The same `location`-rebuilt-from-its-parts pathology returns `not_a_type/redundant_projection` on CMS's postal-address sibling set and `proposal` on NYC's `latitude`/`longitude` one, because `_PROJECTION_FAMILIES` is a lookup table fitted to the first dataset. A deployment shipping its own resolver — which §2.6 calls the production path — therefore fails the suite that defines conformance for a non-storage reason. **Ruling wanted:** mark the two non-binding the way `C15-02` is, or move them out of the conformance definition. See [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 
 ### 11.3 Weaknesses of this design, named now so they are not discovered later
 

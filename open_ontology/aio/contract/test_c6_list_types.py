@@ -115,3 +115,30 @@ async def test_c6_06_unverified_semantics_enumerates_exactly_the_carriers(regist
     clean = await registry.list_types(unverified_semantics=False)
     assert [t.name for t in clean.types] == ["facility"]
     assert flagged.complete is False and clean.complete is False
+
+async def test_c6_07_the_census_spans_namespaces_and_a_scoped_listing_says_it_did_not(registry):
+    """``list_types`` is the only call in INTERFACE.md 5 whose ``namespace`` may be
+    ``None``, so it is the only way a reader sees a word that two publishers scoped
+    apart. Added by row 3c after UC3; see docs/findings/3C-VALIDATION.md.
+
+    Mechanism 2, across namespaces: if the city-wide census does not span them, nobody
+    can find out that ``status`` is already taken three times over -- and a scoped
+    listing that reported ``complete=True`` would say the opposite of the truth.
+    """
+    await seed(registry, "status", kind="value_set", namespace="dpr",
+         definition="whether a street tree is alive, dead, or a stump")
+    await seed(registry, "status", kind="value_set", namespace="oti_311",
+         definition="where a 311 service request is in its workflow")
+    await seed(registry, "status", kind="value_set", namespace="dot",
+         definition="whether a parking meter is in service")
+
+    census = await registry.list_types(include_retired=True, status=None, namespace=None)
+    assert census.complete is True and census.why_incomplete is None
+    assert sorted(t.namespace for t in census.types) == ["dot", "dpr", "oti_311"]
+    assert census.known == 3
+    assert len({t.definition for t in census.types}) == 3, "three words, three meanings"
+
+    scoped = await registry.list_types(include_retired=True, status=None, namespace="dot")
+    assert [t.namespace for t in scoped.types] == ["dot"]
+    assert scoped.complete is False, "a scoped listing hid two rows and must say so"
+    assert scoped.why_incomplete and "namespace" in scoped.why_incomplete
