@@ -102,7 +102,19 @@ def test_c0_03_g2_an_exception_inside_a_transaction_leaves_the_store_unchanged(a
     assert adapter.get_type("default", "survey") is None
 
 
-FORBIDDEN = ("Refusal", "Rejection", "Resolution", "Proposal", "TypeEntry")
+#: PACKAGE.md 3.1 names seven. The first draft of this test checked five -- so the
+#: test the document calls "the rule the whole protocol is built on" enforced less
+#: than the rule it is named after. Corrected by row 3c after an adversarial review
+#: round; there was no live violation, which is exactly why it went unnoticed.
+FORBIDDEN = (
+    "Refusal",
+    "Rejection",
+    "Resolution",
+    "Proposal",
+    "TypeEntry",
+    "ConsumerReport",
+    "UsageReport",
+)
 
 
 def test_c0_04_the_adapter_does_not_know_what_a_decision_is():

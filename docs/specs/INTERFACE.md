@@ -366,7 +366,7 @@ Proposal:
 
 **Designed against: mechanism 1** (no review). This is the call that makes an addition a *request* rather than a fact — and it is precisely why 0.3 says **do not copy `foundry-ontology-open`'s `register_object_type`**: a declaration API cannot return a proposal, because it has already decided.
 
-**Returns `TypeEntry` instead of `Proposal`** only when the namespace policy is `approval_policy="auto"` — in which case `provenance.approved_by == "auto:<policy>"`, never blank. See §9 contortion 4.
+**Returns `TypeEntry` instead of `Proposal`** only when the namespace policy is `approval_policy="auto"` **and the tier gate passes** — in which case `provenance.approved_by == "auto:<policy>"`, never blank. See §9 contortion 4, and the tier-gate bullet above for what happens when it does not.
 
 **Behaviour when uncertain:**
 - Empty `definition` → **reject**, `ValueError`. A type without a definition is how collision starts.
@@ -374,6 +374,11 @@ Proposal:
 - `near_matches` above a threshold → still returns a `Proposal`, with `warnings: ["near_duplicate:<name>"]`. **v0 does not refuse on near-duplicate** — refusing is how you flatten a capability predicate (§2.3).
 - `evidence == []` → `warnings: ["no_evidence"]`, proposal still created. An honest empty is better than a fabricated citation.
 - `proposed_by` starts with `"ai:"` and `tier` is `None` → **reject**, `ValueError`. Per §2.7 an unattributed machine proposal is not acceptable.
+- **`approval_policy="auto"` and the tier is below `min_auto_approve_tier` → the proposal stays `pending` and comes back as a `Proposal` carrying `warnings: ["auto_approval_refused:tier_below_auto_approve_policy"]`.** Not a `TypeEntry` — the auto path did not complete. Not a `Refusal` — a valid proposal would be discarded. It **falls back to review**, which is the outcome §2.7's gate exists to produce. On a backend with `stores_proposals=False` there is nowhere to hold it, so that case alone is `Refusal(reason="tier_below_auto_approve_policy")`.
+
+> **Added by row 3c, 2026-08-28, after a third adversarial review round — this was a hole in §13's own exit criterion.** Two sentences in this document were false for exactly this case: the paragraph below says a `TypeEntry` comes back *"only when the namespace policy is `approval_policy=\"auto\"`"*, and §2.7 point 3 says the tier gate shows up as `Refusal(reason="tier_below_auto_approve_policy")` — which is true of `approve()` and **not** of `propose_type`'s internal auto-approval attempt. `2A-RUN.md` §4 deviation **D-11** recorded the gap in the words *"Neither document says what happens when the auto path meets the tier gate"*, and §11's list of deviations touching this document then failed to carry it forward. **It is UC1's own scenario:** Tenshen auto-approves and its classifier's tier is named as Haiku (§9, contortion 4), so this is the first thing a beacon migration hits.
+
+**`warnings` vocabulary, complete:** `"unverified_semantics"` · `"no_evidence"` · `"near_duplicate:<name>"` · `"name_previously_retired"` · `"auto_approval_refused:tier_below_auto_approve_policy"` · `"attributes_invalid:<field>:<why>"` (the last from `PACKAGE.md` §5.3, `warn` mode). *(Enumerated by row 3c; §5.4 previously listed three of the six inline and the rest arrived scattered.)*
 
 ---
 
@@ -934,6 +939,7 @@ The office visits that A1–A3 stand in for. Each row names what arrives and wha
 - **§2.5 states the Foundry status mapping but no §5 call performs it**, while `PACKAGE.md`'s C12 group tests it. Landed as `Registry.import_types`, a method beyond the twelve (D-8).
 - **`propose_type` and `reject` can return a `Refusal`** — required by `PACKAGE.md` §3.6 and §5.3, absent from §5.4 and §5.5's signatures (D-10).
 - **The call count** is unchanged and still wrong somewhere: §0, §5.10 and §13 say *twelve*; enumerating §5.1–§5.11 gives thirteen.
+- **D-11 — `propose_type` under `approval_policy="auto"` meeting the tier gate** returns a still-`pending` `Proposal` warning `auto_approval_refused:tier_below_auto_approve_policy`, which is neither of the two outcomes §5.4 and §2.7 describe. **Now documented in §5.4** *(added by row 3c after a third adversarial review round; it was recorded in `2A-RUN.md` and this list had failed to carry it forward, leaving §13's "a stated behaviour when uncertain" false for this call)*.
 
 **Recorded by roadmap row 3c (the UC3 validation pass), 2026-08-28.** §10b runs the NYC Open Data fixture — three agencies, one word, three meanings — against this document and records **five contortions (8–12), none designed away.** Those that this document must answer in v1, in the order they cost the most:
 

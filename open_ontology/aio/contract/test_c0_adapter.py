@@ -105,7 +105,15 @@ async def test_c0_03_g2_an_exception_inside_a_transaction_leaves_the_store_uncha
     assert await snapshot(adapter) == before
     assert await adapter.get_type("default", "survey") is None
 
-FORBIDDEN = ("Refusal", "Rejection", "Resolution", "Proposal", "TypeEntry")
+FORBIDDEN = (
+    "Refusal",
+    "Rejection",
+    "Resolution",
+    "Proposal",
+    "TypeEntry",
+    "ConsumerReport",
+    "UsageReport",
+)
 
 def test_c0_04_the_adapter_does_not_know_what_a_decision_is():
     """The rule the whole protocol is built on, checked by source inspection."""

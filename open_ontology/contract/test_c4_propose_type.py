@@ -70,6 +70,7 @@ def test_c4_05_no_evidence_warns_and_the_proposal_is_still_created(registry):
     assert proposal.evidence == ()
 
 
+@pytest.mark.resolver_dependent
 def test_c4_06_a_domain_semantic_without_an_external_doc_is_unverified(registry):
     asserting = registry.propose_type(
         "scope_severity_code",
