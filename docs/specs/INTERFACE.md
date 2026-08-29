@@ -171,7 +171,7 @@ Consumer:
 
 **Rule U — uncertainty is a value, never a default.** No call returns a confident answer in place of an unknown one. Unknown is `None` plus a `why: str`. Never `False`, never `0`, never an empty list standing in for "we did not look".
 
-**Rule K — every list result carries `complete: bool` and a `known: int`.** Per `WALKTHROUGH.md`'s risk row: *"Only claim consumers the registry can enumerate mechanically. Never infer one. Show '3 known, may be others' rather than '3'."* In v0, `ConsumerReport.complete` is **always `false`** — see §5.1.
+**Rule K — every list result carries `complete: bool` and a `known: int | None`.** Per `WALKTHROUGH.md`'s risk row: *"Only claim consumers the registry can enumerate mechanically. Never infer one. Show '3 known, may be others' rather than '3'."* In v0, `ConsumerReport.complete` is **always `false`** — see §5.1.
 
 **Every** means every. *(Amended by roadmap row 3c, 2026-08-28, after an adversarial review round found the rule stated globally and applied selectively.)* Rule K binds four shapes, and two of them acquired it in this amendment:
 
@@ -181,6 +181,8 @@ Consumer:
 | `TypeListing.types` | §5.6 | `false` whenever a filter suppressed rows |
 | **`Resolution.alternatives`** | §5.3 | **always `false`** — new |
 | **`predicates()`'s return** | §5.2 | `false` whenever a filter suppressed rows — new |
+
+**`known` is `int | None`, and Rule U is why** *(corrected by row 3c, 2026-08-28, after a second adversarial review round; the rule read `known: int` from the first draft and two of the four shapes never matched it)*. A backend that cannot count is entitled to say so: `TypeListing.known` and `PredicateListing.known` are `int | None`, and `None` means *we did not count*, which is the honest answer Rule U requires and which `0` would falsify. `ConsumerReport.known` and `Resolution.known` are plain `int` because both are lengths of lists this document has already materialised — there is nothing there to fail to count. **Where the two rules meet, Rule U wins**, and a caller must treat `known` as nullable on any listing.
 
 **Why `Resolution` needed it, and why it is the sharpest case in the document.** §10b.1 records that `resolve_type` scores only inside the namespace it was asked in. Before this amendment, the second publisher of a word got `alternatives: []` — **an empty list standing in for "we did not look", which is the one thing Rule U forbids by name.** The caller had no field with which to even ask whether the search had been scoped. It now carries `complete: false` unconditionally and a `why_incomplete` naming the namespace searched. That does not fix contortion 8; it stops contortion 8 being *silent*, which is the difference between a gap and a wrong answer.
 
@@ -511,8 +513,14 @@ def retire(
 **Behaviour when uncertain — retirement is guarded by `consumers`, not by usage.**
 
 - If `consumers(type).gates_on` is non-empty → **`Refusal(reason="live_consumers", detail={"gates_on": [...]})`**. `force=True` overrides and records the override in `history`.
-- If `usage(type).orphaned is None` — i.e. we cannot tell whether it is dead → retirement **still proceeds**, because retiring is reversible-ish and reason is recorded. But the returned entry carries `warnings: ["retired_without_usage_evidence"]`.
-- **A retired name is not reusable.** `propose_type` with a retired name returns the retired entry with `warnings: ["name_previously_retired"]` and requires an explicit `reinstate` decision by the approver. Silently reusing a retired word is mechanism 4 with a time delay.
+- If `usage(type).orphaned is None` — i.e. we cannot tell whether it is dead → retirement **still proceeds**, and the returned entry carries `warnings: ["retired_without_usage_evidence"]`.
+- **A retired name is not reusable, and in v0 that is permanent.** `propose_type` with a retired name returns the retired entry with `warnings: ["name_previously_retired"]` and creates nothing. Silently reusing a retired word is mechanism 4 with a time delay.
+
+> **Correction, row 3c, 2026-08-28, after a second adversarial review round.** The first draft justified the bullet above with *"because retiring is reversible-ish"*, and said reuse *"requires an explicit `reinstate` decision by the approver"*. **There is no `reinstate` call.** It appears nowhere in §5, nowhere in the reference implementation, and in no deviation record — it was a call this document invented in a subordinate clause and never specified. `propose_type` on a retired name returns the retired entry and stops (`C4-08`), so **there is nothing for an approver to act on and a retired name is dead for good.**
+>
+> **The justification is corrected rather than deleted, because the behaviour is still right.** Retirement may proceed under an unknown orphan state not because it is cheap to undo — it is not — but because (a) it is *guarded by `consumers`*, so nothing that anything known still gates on can be retired without an explicit `force` (which is itself refused when it cannot be recorded), (b) the reason and the actor are recorded permanently, and (c) **retirement destroys no instances and no history: the cost of a wrong retirement is that the vocabulary needs a new word, not that anything is lost.** That is a real argument for proceeding; "reversible-ish" was not, and it was load-bearing for the wrong reason.
+>
+> **This bites in UC1 and UC3.** A Tenshen relationship type retired by a classifier-drift correction and later wanted back, or one agency's admin retiring a shared word in a registry dozens of agencies publish into, both end with a permanently burned name. **Specifying `reinstate` is a v1 surface addition, so it is not taken here — it is ruling R10** in [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 
 ---
 
@@ -556,10 +564,12 @@ def merge_types(
 `usage` and `consumers` cannot answer anything unless something writes to them. Naming these is not scope creep — omitting them would make §5.1 and §5.7 unimplementable.
 
 ```python
-def register_consumer(consumer: Consumer, *, namespace: str = "default") -> Consumer: ...
+def register_consumer(consumer: Consumer, *, namespace: str = "default") -> Consumer | Refusal: ...
 def record_use(type: str, *, by: str | None = None, at: datetime | None = None,
                namespace: str = "default") -> None: ...
 ```
+
+*(Signature corrected by row 3c, 2026-08-28: `register_consumer` returns `Consumer | Refusal` — ruling R4 (§5.12) added `consumer_source_read_only` and changed the return everywhere except here, which is the one place the signature is actually declared. An implementer working from this section alone would have built the exact silent no-op R4 exists to forbid.)*
 
 `record_use` is explicitly allowed to be a no-op in a backend that does not count — in which case `usage()` returns `count: None`, per Rule U. **v0 does not specify how a consumer gets registered** (decorator, config, lint, manual). That is #2's problem, and beacon's Q7a lint (assumption A4) is one candidate mechanism.
 

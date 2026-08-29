@@ -237,6 +237,8 @@ Landed as its own commit before the walk-through, per the brief. Deviation **D-1
 
 ## 6. Wanted from the supervisor or the founder
 
+**Six items, R5–R10.** R5–R9 come from the UC3 walk-through; **R10 came from the adversarial review loop** and is recorded here rather than in §7 because it amends a v0 surface and belongs with the others a ruling has to cover.
+
 **Nothing here is a conflict between the three use cases.** Per `USE-CASES.md`'s rule, a UC3 finding that contradicted UC1 or UC2 would be recorded for the supervisor to resolve; none does. Every UC3 finding is an *absence*, and the CMS and Tenshen design tests stand unchanged. What follows is the other kind of item: **five decisions that would amend a v0 surface, which a design test and a review loop are not allowed to take on their own authority.**
 
 Each names the recommendation, so a ruling is a yes/no rather than a research task.
@@ -284,6 +286,18 @@ Each names the recommendation, so a ruling is a yes/no rather than a research ta
 **The finding.** `PACKAGE.md` §5.6, asserted by `C15-07`. A schema is keyed `(namespace, kind, version)`, and CMS has two `kind="value_set"` entries with different shapes. Requiring `ordering` refuses `deficiency_corrected_status` for lacking an order it has no business having; making it optional lets `scope_severity_code` be created claiming an order and declaring none — **the exact pollution §5.1 justifies the whole mechanism on.** There is no third option.
 
 **Recommendation: allow a name-level override — `(namespace, kind, name)` schemas that shadow the per-kind one — in PACKAGE v1.** Not v0: it changes `oo_attr_schema`'s key, which is a store-schema change, and §9.4 already says a v0 store may be dropped rather than migrated, so the cost is low but the decision is not this row's. **Recorded and pinned meanwhile**, which is the part a use-case pass is allowed to do.
+
+### R10 (wanted) — `reinstate`, or an honest end to the retirement story
+
+**The finding.** Raised by the second adversarial review round on `INTERFACE.md`, not by UC3 — recorded here because §6 is where this row collects items that amend a v0 surface.
+
+§5.9 justified proceeding with a retirement under an unknown orphan state on the grounds that *"retiring is reversible-ish"*, and said that reusing a retired name *"requires an explicit `reinstate` decision by the approver"*. **`reinstate` does not exist.** It appeared exactly once in the whole repository — in that subordinate clause. There is no call, no test, no implementation, and no deviation record. `propose_type` on a retired name returns the retired entry and creates nothing (`C4-08`), so there is nothing for an approver to decide and **a retired name is burned permanently.**
+
+**Taken now:** the false justification is corrected in §5.9 and replaced with the true one — retirement may proceed under uncertainty because it is guarded by `consumers`, recorded permanently, and **destroys no instances and no history**; the cost of a wrong retirement is that the vocabulary needs a new word.
+
+**Recommendation: specify `reinstate` in INTERFACE v1**, as a real §5 call with a signature, a data shape and a behaviour-when-uncertain like every other — most plausibly `reinstate(type, reason, *, reinstated_by, namespace) -> TypeEntry | Refusal`, refusing when the retirement's `successor` is itself active, because reinstating a word whose replacement is in use is mechanism 4 arriving through the lifecycle. **Not taken in v0**: a new call is a surface addition, and this row is a validation pass.
+
+**Why it matters beyond tidiness:** UC1 has a classifier that proposes types at runtime, and UC3 has dozens of agencies publishing into one registry. In both, a wrong retirement by one actor permanently removes a word from everyone, with no recorded path back. That is a governance property this document otherwise takes seriously.
 
 ### What is NOT wanted
 
