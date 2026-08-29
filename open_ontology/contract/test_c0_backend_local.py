@@ -83,12 +83,28 @@ def _shared_store_pair(backend, tmp_path):
         first.migrate()
         return first, PostgresAdapter(dsn, schema=schema)
 
+    if backend == "sqlite_minimal":
+        # The natively-degraded leg races the SAME G1 constraint -- its oo_type has the
+        # same composite PRIMARY KEY -- so the G1 half is real here and the G2 half runs
+        # over a registry with no proposal store. Both are worth having: nothing about
+        # this store makes concurrent writers less likely.
+        from ..backends.sqlite_minimal import MinimalSQLiteAdapter
+
+        path = str(tmp_path / "race_minimal.sqlite")
+        MinimalSQLiteAdapter.create_host_schema(path)
+        first = MinimalSQLiteAdapter(path)
+        first.migrate()
+        return first, MinimalSQLiteAdapter(path)
+
     # A third-party backend under `python -m open_ontology.contract --adapter ...`.
     # Two calls to the factory may or may not reach the same store; if they do not,
     # the race is unobservable here and the test says so rather than passing hollowly.
     factory = _support.EXTERNAL_FACTORY
     if factory is None:  # pragma: no cover - defensive
-        pytest.skip("no adapter factory")
+        pytest.skip(
+            f"PENDING -- no adapter factory for leg {backend!r}, so two handles on one "
+            "store cannot be obtained and G1/G2 cannot be raced here."
+        )
     first, second = factory(), factory()
     first.migrate()
     second.migrate()
@@ -166,6 +182,17 @@ def test_c0_08_g1_and_g2_hold_against_two_real_concurrent_writers(backend, tmp_p
     assert len(page.records) == 1, "and the store holds one row, not two"
 
     # --- G2: two approvals, one proposal. Exactly one may decide it.
+    if not first.capabilities().stores_proposals:
+        # There is no proposal to race for: PACKAGE.md 7.3 B4 says `propose_type` on
+        # such a backend returns a TypeEntry, so there is no two-step decision and
+        # `already_decided` has no subject. G1 was raced above and held. Skipped with a
+        # reason rather than returned from, so the coverage report (R12) can see it.
+        pytest.skip(
+            "PACKAGE.md 7.3 B4 -- this backend declares stores_proposals=False, so "
+            "propose_type returns a TypeEntry and there is no proposal for two "
+            "approvals to race. The G1 half above ran and held on this store."
+        )
+
     left = Registry(first, clock=FixedClock())
     right = Registry(second, clock=FixedClock())
     proposal = left.propose_type(
@@ -201,6 +228,31 @@ def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_path):
     path its own flagship worked example takes. Added by row 3c after an adversarial
     review round; see docs/findings/3C-VALIDATION.md.
     """
+    if backend == "sqlite_minimal":
+        # This leg IS the owns_schema=False case, so it is the one leg where skipping
+        # C0-09 would have been absurd -- and the first version of this test skipped it,
+        # with the reason "owns_schema is a property of the reference backends". Caught
+        # by the coverage report (ruling R12) on its first run. Row 3d.
+        from ..backends.sqlite_minimal import MinimalSQLiteAdapter
+
+        path = str(tmp_path / "host_owned_minimal.sqlite")
+        guest = MinimalSQLiteAdapter(path)
+
+        assert guest.capabilities().owns_schema is False
+        assert guest.capabilities().why.get("owns_schema", "").strip()
+        with pytest.raises(SchemaMismatch) as raised:
+            guest.migrate()
+        assert "oo_type" in str(raised.value)
+        with pytest.raises(SchemaMismatch):
+            guest.migrate()  # nothing was created behind our back
+
+        MinimalSQLiteAdapter.create_host_schema(path)
+        version = MinimalSQLiteAdapter(path).migrate()
+        assert isinstance(version, int) and version >= 1
+        guest.put_type(_type(name="facility"), expect_absent=True)
+        assert guest.get_type("default", "facility", kind="entity") is not None
+        return
+
     if backend == "sqlite":
         from ..backends.sqlite import SQLiteAdapter
 

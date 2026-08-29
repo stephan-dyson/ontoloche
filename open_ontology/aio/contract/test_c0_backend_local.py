@@ -52,6 +52,19 @@ async def _sqlite_pair(tmp_path):
     return first, second
 
 
+async def _minimal_pair(tmp_path):
+    """Two adapters over one natively-degraded store. Its ``oo_type`` has the same
+    composite PRIMARY KEY, so the G1 half of the race is real here."""
+    from open_ontology.aio.backends.sqlite_minimal import AsyncMinimalSQLiteAdapter
+
+    path = str(tmp_path / "race_minimal.sqlite")
+    AsyncMinimalSQLiteAdapter.create_host_schema(path)
+    first = await AsyncMinimalSQLiteAdapter.open(path)
+    await first.migrate()
+    second = await AsyncMinimalSQLiteAdapter.open(path)
+    return first, second
+
+
 async def _postgres_pair():
     from open_ontology.aio.backends.postgres import AsyncPostgresAdapter
 
@@ -91,6 +104,16 @@ async def _run_the_race(first, second):
     assert len(page.records) == 1, "and the store holds one row, not two"
 
     # --- G2: two approvals, one proposal. Exactly one may decide it.
+    if not (await first.capabilities()).stores_proposals:
+        # PACKAGE.md 7.3 B4: propose_type returns a TypeEntry on such a backend, so
+        # there is no two-step decision and `already_decided` has no subject. G1 was
+        # raced above and held. Skipped with a reason so the R12 coverage report sees it.
+        pytest.skip(
+            "PACKAGE.md 7.3 B4 -- this backend declares stores_proposals=False, so "
+            "propose_type returns a TypeEntry and there is no proposal for two "
+            "approvals to race. The G1 half above ran and held on this store."
+        )
+
     clock = FixedClock()
     left = await AsyncRegistry.open(first, clock=clock)
     right = await AsyncRegistry.open(second, clock=clock)
@@ -127,6 +150,8 @@ async def test_c0_08_g1_and_g2_hold_against_two_real_concurrent_writers(backend,
     """One id, two stacks. The sync twin is ``contract/test_c0_concurrency.py``."""
     if backend == "sqlite":
         first, second = await _sqlite_pair(tmp_path)
+    elif backend == "sqlite_minimal":
+        first, second = await _minimal_pair(tmp_path)
     elif backend == "postgres":
         if not POSTGRES_DSN:
             pytest.skip(
@@ -163,6 +188,34 @@ async def test_c0_09_owns_schema_false_makes_migrate_verify_only(backend, tmp_pa
     verify-only. It raises ``SchemaMismatch`` naming what is missing and never issues
     DDL against a schema it does not own.
     """
+    if backend == "sqlite_minimal":
+        # This leg IS the owns_schema=False case. Skipping C0-09 here would have been
+        # absurd, and the first version of this test did exactly that; the R12 coverage
+        # report said so on its first run. Row 3d.
+        from open_ontology.aio.backends.sqlite_minimal import AsyncMinimalSQLiteAdapter
+
+        path = str(tmp_path / "host_owned_minimal.sqlite")
+        guest = await AsyncMinimalSQLiteAdapter.open(path)
+        caps = await guest.capabilities()
+        assert caps.owns_schema is False
+        assert caps.why.get("owns_schema", "").strip()
+
+        with pytest.raises(SchemaMismatch) as raised:
+            await guest.migrate()
+        assert "oo_type" in str(raised.value)
+        with pytest.raises(SchemaMismatch):
+            await guest.migrate()  # nothing was created behind our back
+
+        AsyncMinimalSQLiteAdapter.create_host_schema(path)
+        owner = await AsyncMinimalSQLiteAdapter.open(path)
+        version = await guest.migrate()
+        assert isinstance(version, int) and version >= 1
+        await guest.put_type(_type("facility"), expect_absent=True)
+        assert await guest.get_type("default", "facility", kind="entity") is not None
+        await guest.close()
+        await owner.close()
+        return
+
     if backend == "sqlite":
         from open_ontology.aio.backends.sqlite import AsyncSQLiteAdapter
 
