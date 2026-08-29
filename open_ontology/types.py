@@ -285,9 +285,19 @@ class Rejection:
 class Refusal:
     """INTERFACE.md 5.5 and 5.12.
 
-    ``reason`` is drawn from a closed vocabulary of fifteen. Constructing a Refusal
-    with anything else raises -- the contract suite asserts this (INTERFACE.md 5.12:
-    "a Refusal whose reason is not in this list is a conformance failure").
+    ``reason`` is drawn from a CLOSED vocabulary -- ``REFUSAL_REASONS`` above is
+    the single authority, and INTERFACE.md 5.12 is its prose. Constructing a
+    Refusal with anything else raises; the contract suite asserts it
+    (INTERFACE.md 5.12: "a Refusal whose reason is not in this list is a
+    conformance failure").
+
+    The count is deliberately NOT written here. It was ("fifteen"), and the
+    tuple grew to eighteen in the change that added EDGES.md v0's three values
+    while this sentence and the error message below both still said fifteen --
+    found by an adversarial reviewer, not by check_spec_drift.py, which diffed
+    field NAMES and never enum CONTENTS. The checker now compares this tuple
+    against INTERFACE.md 5.12's enumerated list, and a number in prose that the
+    code does not derive is exactly the thing that goes stale.
     """
 
     reason: str
@@ -298,7 +308,7 @@ class Refusal:
         if self.reason not in REFUSAL_REASONS:
             raise ValueError(
                 f"Refusal.reason is a closed vocabulary (INTERFACE.md 5.12); "
-                f"{self.reason!r} is not one of the fifteen"
+                f"{self.reason!r} is not one of the {len(REFUSAL_REASONS)}"
             )
         if self.refused is not True:
             raise ValueError("Refusal.refused is always True")

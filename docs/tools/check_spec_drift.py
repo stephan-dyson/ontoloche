@@ -188,6 +188,54 @@ def call_params(blocks: list[str], name: str) -> set[str] | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Closed vocabularies -- added by row #4's adversarial round 2.
+#
+# This checker diffed field NAMES and parameter NAMES and never enum CONTENTS,
+# so INTERFACE.md 5.12's enumerated list and ``types.REFUSAL_REASONS`` could
+# disagree and the gate would stay green. They did: row #4 added three values to
+# both and left ``Refusal``'s own docstring and error message saying "fifteen".
+# A reviewer found that by reading two files side by side, which is precisely
+# what this file exists to make unnecessary.
+
+
+def _check_closed_vocabularies(spec_text: str) -> list[str]:
+    """INTERFACE.md 5.12's enumerated values must equal ``types.REFUSAL_REASONS``."""
+    problems: list[str] = []
+    m = re.search(
+        r"takes exactly these \*\*(\w+)\*\* values.*?:\n\n(.+?)\n",
+        spec_text,
+        re.S,
+    )
+    if m is None:
+        return ["INTERFACE 5.12: could not find the enumerated Refusal.reason list"]
+    printed = set(re.findall(r"`([a-z_]+)`", m.group(2)))
+    actual = set(types_module.REFUSAL_REASONS)
+    for name in sorted(printed - actual):
+        problems.append(
+            f"INTERFACE 5.12: {name!r} is enumerated in the document and absent "
+            f"from types.REFUSAL_REASONS"
+        )
+    for name in sorted(actual - printed):
+        problems.append(
+            f"INTERFACE 5.12: {name!r} is in types.REFUSAL_REASONS and is not "
+            f"enumerated in the document -- ruling R3 requires both in one change"
+        )
+    # The count word in the prose has to match too: a number a reader trusts and
+    # the code does not derive is exactly the half that went stale.
+    words = {
+        "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+        "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    }
+    said = words.get(m.group(1).lower())
+    if said is not None and said != len(actual):
+        problems.append(
+            f"INTERFACE 5.12 says {m.group(1)!r} values; types.REFUSAL_REASONS "
+            f"has {len(actual)}"
+        )
+    return problems
+
+
 def main() -> int:
     text = SPEC.read_text(encoding="utf-8")
     blocks = spec_blocks(text)
@@ -268,6 +316,8 @@ def main() -> int:
                 f"PACKAGE {printed}.{name}: printed by PACKAGE.md, absent from the code"
             )
 
+    problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
+
     if problems:
         print("the specifications have drifted from the implementation:\n")
         for p in problems:
@@ -283,7 +333,10 @@ def main() -> int:
         f"{SPEC.relative_to(ROOT)}: every printed shape and signature matches the "
         f"implementation ({len(SHAPES)} shapes, {len(CALLS)} calls).\n"
         f"{PACKAGE.relative_to(ROOT)}: every printed dataclass matches the "
-        f"implementation ({len(PACKAGE_SHAPES)} shapes)."
+        f"implementation ({len(PACKAGE_SHAPES)} shapes).\n"
+        f"INTERFACE.md 5.12: the closed Refusal.reason vocabulary matches "
+        f"types.REFUSAL_REASONS ({len(types_module.REFUSAL_REASONS)} values), "
+        f"contents and count."
     )
     return 0
 
