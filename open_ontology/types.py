@@ -64,10 +64,10 @@ NOT_A_TYPE_REASONS = (
     "instance_not_type",
 )
 
-# INTERFACE.md 5.12, ruling R3 -- CLOSED. Fourteen values, no more. A project whose
-# thesis is that governed vocabularies resist rot does not ship an open-ended reason
-# string in its own contract. Adding a value requires amending INTERFACE.md 5.12 in
-# the same change.
+# INTERFACE.md 5.12, rulings R3 and R4 -- CLOSED. Fifteen values, no more. A project
+# whose thesis is that governed vocabularies resist rot does not ship an open-ended
+# reason string in its own contract. Adding a value requires amending INTERFACE.md 5.12
+# in the same change -- which is how the fifteenth got here (R4, row 3c).
 REFUSAL_REASONS = (
     "different_consumer_sets",
     "predicate_merge",
@@ -83,6 +83,10 @@ REFUSAL_REASONS = (
     "proposals_not_stored",
     "cannot_record_override",
     "attributes_schema_violation",
+    # R4, 2026-08-28 -- the fifteenth. register_consumer against a read-only consumer
+    # source. Deviation D-1 wanted a reason that says this honestly; none of the
+    # fourteen did, and reusing one would be the confident wrong answer Rule U forbids.
+    "consumer_source_read_only",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
@@ -255,7 +259,7 @@ class Rejection:
 class Refusal:
     """INTERFACE.md 5.5 and 5.12.
 
-    ``reason`` is drawn from a closed vocabulary of fourteen. Constructing a Refusal
+    ``reason`` is drawn from a closed vocabulary of fifteen. Constructing a Refusal
     with anything else raises -- the contract suite asserts this (INTERFACE.md 5.12:
     "a Refusal whose reason is not in this list is a conformance failure").
     """
@@ -268,7 +272,7 @@ class Refusal:
         if self.reason not in REFUSAL_REASONS:
             raise ValueError(
                 f"Refusal.reason is a closed vocabulary (INTERFACE.md 5.12); "
-                f"{self.reason!r} is not one of the fourteen"
+                f"{self.reason!r} is not one of the fifteen"
             )
         if self.refused is not True:
             raise ValueError("Refusal.refused is always True")

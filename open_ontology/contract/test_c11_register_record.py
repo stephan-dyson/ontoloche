@@ -7,10 +7,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-import pytest
-
-from ..errors import NotSupported
-from ..types import Consumer
+from ..types import REFUSAL_REASONS, Consumer, Refusal
 from ._support import seed
 from .doubles import DegradedAdapter
 
@@ -72,16 +69,20 @@ def test_c11_04_a_read_only_consumer_source_fails_loudly_not_silently(
     """A config-backed consumer source is a legitimate adapter (PACKAGE.md 7.3) and it
     cannot be written to.
 
-    PACKAGE.md 3.4 primitive 10 asks for a ``Refusal`` here. The closed fourteen of
-    INTERFACE.md 5.12 (ruling R3) has no value that says this honestly, and
-    INTERFACE.md wins where the two documents disagree -- so the registry raises
-    ``NotSupported`` instead. What C11-04 is actually about is that this is **never a
-    silent no-op**, and a raised exception is the loudest available answer. Recorded as
-    deviation D-1 in docs/runs/2A-RUN.md; a founder ruling is wanted.
+    PACKAGE.md 3.4 primitive 10 asks for a ``Refusal``, never a silent no-op. Ruling
+    **R4** (2026-08-28, row 3c) supplied the reason that says it honestly:
+    ``consumer_source_read_only``, the fifteenth value of INTERFACE.md 5.12's closed
+    vocabulary, amended into that section in the same change per R3's own rule. Before
+    R4 this test asserted a raised ``NotSupported`` and carried deviation D-1; the
+    deviation is now resolved.
     """
     read_only = make_registry(DegradedAdapter(adapter, read_only_consumers=True))
-    with pytest.raises(NotSupported):
-        read_only.register_consumer(
-            Consumer(id="comment_service.can_comment", gate="commentable", on_unknown="drop")
-        )
+    refusal = read_only.register_consumer(
+        Consumer(id="comment_service.can_comment", gate="commentable", on_unknown="drop")
+    )
+    assert isinstance(refusal, Refusal), "a refusal, not an exception and not a no-op"
+    assert refusal.reason == "consumer_source_read_only"
+    assert refusal.reason in REFUSAL_REASONS, "and the vocabulary stayed closed"
+    assert refusal.detail["consumer_id"] == "comment_service.can_comment"
+    assert refusal.detail["why"], "the adapter's own sentence, not an invented one"
     assert read_only.adapter.find_consumers("default") == [], "and nothing was written"
