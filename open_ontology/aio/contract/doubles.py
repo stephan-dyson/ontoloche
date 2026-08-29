@@ -82,6 +82,20 @@ class _DegradedBase:
         unknown = set(flags) - set(CAPABILITY_FLAGS)
         if unknown:
             raise ValueError(f"not capability flags: {sorted(unknown)}")
+        # **A non-bool is refused, and row 4c paid for this line.** The natural mistake
+        # is `AsyncDegradedAdapter(a, stores_edge_events="this host owns the table")` --
+        # putting the REASON where the flag goes, because `why=` is the second thing you
+        # reach for. A non-empty string is truthy, so the capability stayed ON, the test
+        # exercised a fully capable backend, and it passed for the wrong reason. A test
+        # DOUBLE that silently ignores a mistyped argument is the "checker nobody has
+        # watched fail" class, one layer down.
+        mistyped = {f: v for f, v in flags.items() if not isinstance(v, bool)}
+        if mistyped:
+            raise TypeError(
+                f"capability flags are bools; got {mistyped!r}. A reason goes in "
+                f"why={{'<flag>': '<sentence>'}} -- passing it as the flag leaves the "
+                f"capability ON, because a non-empty string is truthy"
+            )
         self.inner = inner
         self._flags = flags
         self._pages_countable = pages_countable

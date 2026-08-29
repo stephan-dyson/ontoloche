@@ -60,6 +60,7 @@ from open_ontology.edges import (
     DIRECTIONS,
     EDGE_LEVELS,
     EDGE_PAYLOAD_KIND,
+    UNCHANGED,
     EQUIVALENT_TO,
     EQUIVALENT_TO_ATTRIBUTES,
     EQUIVALENT_TO_DEFINITION,
@@ -3240,6 +3241,245 @@ class AsyncRegistry:
             await self._append_event(
                 rec.namespace, "edge_retracted", retracted_by, edge_id=edge_id,
                 detail={"reason": reason, "family": rec.family},
+            )
+        return _edge_from_record(stored)
+
+    async def amend_edge(
+        self,
+        edge_id: str,
+        reason: str,
+        *,
+        amended_by: str,
+        confidence: Any = UNCHANGED,
+        attributes: Any = UNCHANGED,
+        model_tier: Any = UNCHANGED,
+        source_version: Any = UNCHANGED,
+        evidence: Any = UNCHANGED,
+    ) -> Edge | Refusal:
+        """EDGES.md 5.2 -- **a correction is a new event, never an edit of the first.**
+
+        Ruling **R37**, row 4c. 5.2 narrated `edge_amended` with a worked example --
+        *"changing an edge's `confidence` after a re-classification is a new
+        `edge_amended` event carrying the old and new values"* -- and v0 had **no amend
+        call at all**; only `edge_added` and `edge_retracted` were ever appended. Row 4b
+        recorded that as deviation **D-4b-13** and asked **Q32**: give edges an amend
+        path, or delete the example. R34 settled which, because *"an edge whose payload
+        is validated is an edge somebody will want to correct."*
+
+        **The question this call had to answer before it could be written: is an amend
+        path a second WRITE path in disguise?** That is the shape of the kill row's
+        third trip -- `retire(successor=)` reaching `merge_types`' outcome with none of
+        `merge_types`' guards -- so the question is not rhetorical. Three answers, and
+        all three are structural rather than promised:
+
+        1. **`family`, `src` and `dst` are not parameters.** An amend cannot move an
+           endpoint, change a family or reify anything, so EDGES.md 2.4.1's declaration
+           and write-time checks have nothing to be talked around. Re-pointing an edge
+           is `retract_edge` plus `add_edge`, which 3.2 already names as the shape of
+           re-assertion: *a retracted edge is no claim; re-asserting it is a new edge
+           whose provenance cites the retracted one.*
+        2. **`attributes` goes back through R34's payload validation, on the same terms
+           as `add_edge`.** An amend that skipped it would be exactly the defect the
+           kill row's third trip is: a guard written for one call over a fact that more
+           than one call can change. `attr_schema_version` is re-stamped with the
+           version in force at the amendment, so the row still says which generation of
+           the payload it holds.
+        3. **`status` is not a parameter either**, and a retracted edge is refused
+           `already_decided`. A retracted edge is no claim (3.2); amending one asserts
+           something about a claim that was withdrawn, and un-retracting through the
+           back door is `retract_edge`'s guard being talked around.
+
+        **It is REFUSED when the event cannot be recorded, and that is the one place it
+        does NOT follow `retract_edge`.** 2.6 argues retraction past PACKAGE.md 3.6
+        because *"the record IS the row"* -- `status`, `retracted_by`, `retracted_at`
+        and the reason are columns on the edge itself. **That argument does not
+        transpose**: there is no column holding an edge's PRIOR confidence, so on
+        `stores_edge_events=False` an amendment erases the old value with no record
+        anywhere that it ever held one. That is PACKAGE.md 3.6's rule verbatim -- *a
+        destructive override that cannot be recorded is refused* -- and it is
+        `reinstate`'s shape exactly (3.6's own box: it clears fields off the live row,
+        which makes its event the only record). So `cannot_record_override` is the
+        answer and **no new `Refusal.reason` is minted**: the fourth caller of an
+        existing, argued rule rather than an exemption from it.
+
+        Both flags are checked, per the lesson `edge_provenance` paid for: `stores_events`
+        gates the same `append_event` primitive `stores_edge_events` describes, and
+        nothing ties the two declarations together.
+        """
+        if not reason or not reason.strip():
+            # INTERFACE.md 5.5's reason, as `retract_edge` takes it: the cheapest record
+            # of why a decision was made. A caller error, not a policy refusal.
+            raise ValueError("amend_edge requires a non-empty reason (EDGES.md 5.2)")
+        fields = {
+            "confidence": confidence,
+            "attributes": attributes,
+            "model_tier": model_tier,
+            "source_version": source_version,
+            "evidence": evidence,
+        }
+        changing = {k: v for k, v in fields.items() if v is not UNCHANGED}
+        if not changing:
+            # A call that quietly did nothing is the shape ruling R4 forbade for
+            # `register_consumer`, and an `edge_amended` event recording no amendment is
+            # a trail entry asserting a correction nobody made.
+            raise ValueError(
+                "amend_edge changes at least one of confidence, attributes, model_tier, "
+                "source_version, evidence -- passing none of them would append an "
+                "`edge_amended` event recording no amendment (EDGES.md 5.2)"
+            )
+        refusal = self._edges_absent({"edge_id": edge_id})
+        if refusal is not None:
+            return refusal
+        for flag in ("stores_edge_events", "stores_events"):
+            if not getattr(self.caps, flag):
+                return Refusal(
+                    "cannot_record_override",
+                    {
+                        "why": self.caps.reason(flag),
+                        "edge_id": edge_id,
+                        "flag": flag,
+                        "amending": sorted(changing),
+                        "note": (
+                            "an amendment overwrites a provenance value on the row and "
+                            "the event is the only record of what it was -- EDGES.md "
+                            "2.6's 'the record IS the row' argument covers RETRACTION, "
+                            "where status, retracted_by, retracted_at and the reason are "
+                            "columns, and there is no column for a prior confidence. "
+                            "Retract and re-assert instead (EDGES.md 3.2)"
+                        ),
+                        "overridable": False,
+                    },
+                )
+
+        async with self.adapter.transaction():
+            rec = await self.adapter.get_edge(edge_id)
+            if rec is None:
+                return Refusal("unknown_edge", {"edge_id": edge_id})
+            if rec.status != "active":
+                # Read inside the transaction, exactly as `approve`'s `already_decided`
+                # is, and for the same reason: it is what turns a race into an
+                # idempotent refusal.
+                return Refusal(
+                    "already_decided",
+                    {
+                        "edge_id": edge_id,
+                        "status": rec.status,
+                        "retracted_by": rec.retracted_by,
+                        "retracted_at": _iso(rec.retracted_at),
+                        "why": (
+                            "a retracted edge is no claim (EDGES.md 3.2), so amending "
+                            "one asserts something about a claim that was withdrawn; "
+                            "re-assertion is a new edge whose provenance cites this one"
+                        ),
+                    },
+                )
+
+            fam = await self._edge_family(rec.family, rec.namespace)
+            before = _edge_from_record(rec)
+            payload_before = dict(before.attributes)
+            payload_after = (
+                dict(attributes or {}) if "attributes" in changing else payload_before
+            )
+            schema_version = rec.attr_schema_version
+            warnings = [
+                w
+                for w in rec.warnings
+                if not w.startswith("not_durable_until_host_commits:")
+                and not w.startswith("attributes_invalid:")
+                and not w.startswith("payload_schema_unregistered:")
+            ]
+            if "attributes" in changing:
+                if fam is None:
+                    # The family was there when the edge was written and is not now.
+                    # 2.7's argument is about ENDPOINTS, not about the family whose
+                    # rules this call has to apply, and validating a payload against a
+                    # schema we cannot find is a claim we cannot make.
+                    return Refusal(
+                        "edge_family_unknown",
+                        {
+                            "families": [rec.family],
+                            "namespace": rec.namespace,
+                            "edge_id": edge_id,
+                            "why": (
+                                "this edge's family is no longer a registered "
+                                "kind='edge' entry, so its payload cannot be validated "
+                                "against what the family declares (EDGES.md 2.5)"
+                            ),
+                        },
+                    )
+                schema, violations, unregistered = await self._edge_payload_schema(
+                    rec.namespace, fam, payload_after
+                )
+                if violations and schema is not None and schema.mode == "enforce":
+                    # R34's guard, on the second door. An amend that skipped it would be
+                    # the kill row's third trip in miniature: a guard written for one
+                    # call over a fact more than one call can change.
+                    return Refusal(
+                        "attributes_schema_violation",
+                        {
+                            "kind": EDGE_PAYLOAD_KIND,
+                            "family": rec.family,
+                            "namespace": rec.namespace,
+                            "edge_id": edge_id,
+                            "violations": violations,
+                            "schema_version": schema.version,
+                            "schema_name": schema.name,
+                            "why": (
+                                "an amendment's payload is validated on exactly the "
+                                "terms add_edge's is (EDGES.md 2.5, ruling R34)"
+                            ),
+                        },
+                    )
+                if unregistered:
+                    warnings.append(f"payload_schema_unregistered:{fam.payload_schema}")
+                if violations and schema is not None and schema.mode == "warn":
+                    warnings.extend(f"attributes_invalid:{v}" for v in violations)
+                schema_version = schema.version if schema else None
+
+            provenance = dict(rec.provenance or {})
+            recorded: dict[str, Any] = {}
+            for key in ("confidence", "model_tier", "source_version"):
+                if key in changing:
+                    recorded[key] = {"before": provenance.get(key), "after": changing[key]}
+                    provenance[key] = changing[key]
+            if "evidence" in changing:
+                after_evidence = [_evidence_to_dict(e) for e in (evidence or ())]
+                recorded["evidence"] = {
+                    "before": list(provenance.get("evidence") or []),
+                    "after": after_evidence,
+                }
+                provenance["evidence"] = after_evidence
+            if "attributes" in changing:
+                recorded["attributes"] = {
+                    "before": payload_before,
+                    "after": payload_after,
+                }
+
+            payload = self.caps.surviving_edge_attributes(payload_after)
+            warnings.extend(
+                w for w in self._edge_write_warnings() if w not in warnings
+            )
+            stored = await self.adapter.put_edge(
+                replace(
+                    rec,
+                    attributes=payload,
+                    attr_schema_version=schema_version,
+                    provenance=provenance,
+                    warnings=tuple(warnings),
+                    updated_at=self._now(),
+                )
+            )
+            if "attributes" in changing:
+                await self._observe_edge_payload(rec.namespace, payload_after, schema_version)
+            # 5.2's own example, as a record: the event carries the OLD and NEW values.
+            # The first event's `created_by_actor` stays whatever it was, because this is
+            # an append and not an edit -- INTERFACE.md 5.8, unchanged for edges.
+            await self._append_event(
+                rec.namespace,
+                "edge_amended",
+                amended_by,
+                edge_id=edge_id,
+                detail={"reason": reason, "family": rec.family, "changed": recorded},
             )
         return _edge_from_record(stored)
 

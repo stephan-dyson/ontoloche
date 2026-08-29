@@ -46,6 +46,7 @@ __all__ = [
     "DIRECTIONS",
     "FAMILY_ATTRIBUTE_KEYS",
     "EDGE_PAYLOAD_KIND",
+    "UNCHANGED",
     "DEFAULT_MAX_EDGES",
     "DEPTH_CAP",
     "EQUIVALENT_TO",
@@ -64,6 +65,27 @@ EDGE_STATUSES = ("active", "retracted")
 EDGE_LEVELS = ("type", "instance")
 
 DIRECTIONS = ("both", "out", "in")
+
+
+class _Unchanged:
+    """The sentinel ``amend_edge`` needs because ``None`` is a MEANINGFUL value.
+
+    EDGES.md 5.1 makes the point for the field that matters most: ``confidence`` is
+    ``float | None`` and ``None`` is *"nothing scored it"*, not ``0.0``. So a default of
+    ``None`` on an amend parameter could not distinguish *"leave the confidence alone"*
+    from *"a re-classification decided nothing scores this any more"*, and the second is
+    a correction a caller must be able to make -- beacon's `interview_service` selects
+    on exactly that state.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - a debugging aid
+        return "UNCHANGED"
+
+
+#: EDGES.md 5.2, ruling **R34**/**R37**, row 4c. Pass nothing to leave a field alone.
+UNCHANGED = _Unchanged()
 
 #: EDGES.md 4.2. ``depth`` may be 1 or 2; 3 or more raises ``ValueError``. The cap and
 #: ruling R13's no-paging rule are ONE decision -- if R13 is revisited the cap is
