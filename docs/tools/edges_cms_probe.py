@@ -191,10 +191,26 @@ def main() -> int:
                 f"(nodes: {reached})")
 
     # ---- T2.5 the value_set-as-endpoint decision --------------------------
-    print("\nT2.5 -- value_set as an INSTANCE-level endpoint")
+    print("\nT2.5 -- value_set as an INSTANCE-level endpoint, checked at BOTH layers")
+    # (a) The obvious move -- declare a permissive family -- is refused at
+    #     DECLARATION time. The rule is not a family author's to opt out of.
+    try:
+        Family(
+            name="has_severity", namespace=NS, level="instance",
+            endpoint_kinds={"src": ("entity",), "dst": ("entity", "value_set")},
+            definition="A citation's scope-and-severity letter.",
+            inverse_label="severity_of",
+        )
+        ok &= check("a permissive instance family is refused", False, True)
+    except ValueError as exc:
+        ok &= check("a permissive instance family raises at declaration", True, True,
+                    f"-- {exc}")
+
+    # (b) And with a correctly-declared family, the WRITE is refused too -- on
+    #     the level, before the kind is even consulted.
     fam_sev = Family(
         name="has_severity", namespace=NS, level="instance",
-        endpoint_kinds={"src": ("entity",), "dst": ("entity", "value_set")},
+        endpoint_kinds={"src": ("entity",), "dst": ("entity",)},
         definition="A citation's scope-and-severity letter.",
         inverse_label="severity_of",
     )
@@ -207,7 +223,7 @@ def main() -> int:
         prov("import:cms", "user"), namespace=NS,
     )
     refused = getattr(out, "refused", False)
-    ok &= check("refused", refused, True)
+    ok &= check("the write is refused", refused, True)
     if refused:
         print(f"    reason={out.reason} detail={out.detail}")
         ok &= check("reason", out.reason, "endpoint_kind_mismatch")

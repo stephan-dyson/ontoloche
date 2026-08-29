@@ -26,7 +26,7 @@ It offers exactly **one read call** — `neighbors(node, edge_families, depth)` 
 - **No materialisation.** The registry does not maintain a mirror of the host's relationships. The edge store is *asked*, never *synchronised* — beacon's own reading of the same choice (beacon spec §5.3(a), §9) is on-demand for the same reason: a copy drifts from the truth.
 - **No paging, in the façade.** **R13** applies unchanged: `neighbors` takes no `limit` and no `after`, and the reason is the same one — Rule K has no answer yet for what `known` means on a page. The depth cap in §4.2 is what stands in for it, and §4.2 says so.
 - **No instance store.** EDGES stores *edges*. It does not store nodes, node properties, or node existence. `src`/`dst` are **references**, and a reference to something that does not exist is a dangling edge, not an error — §2.7.
-- **No reification.** An edge is not a node. There is no edge-about-an-edge in v0, and `endpoint_kinds` cannot name `edge`.
+- **No reification.** An edge *instance* is never a node. There is no edge-about-an-edge in v0, and the rule that makes it structurally impossible is §2.4.1's — an `InstanceRef` may only name a `kind="entity"` type, so there is no way to construct a reference to an edge. **A `kind="edge"` TypeEntry is a different thing and IS a legal type-level endpoint** (§2.4.1): it is a *row of the vocabulary*, exactly like an `entity` or `value_set` row, and two publishers' relationship vocabularies colliding is UC3's own shape one level up. *(An earlier draft banned `edge` from `endpoint_kinds` outright, which contradicted §3.1's own `equivalent_to` declaration three sections later and was never exercised by any design test. Both round-1 reviewers found it independently — §17.)*
 - **No approval loop for individual edges.** Families are approved; instances are written. §2.6 argues it.
 - **No entity resolution.** Same gap `INTERFACE.md` §1 names: this document does not decide whether `"BURNS NURSING HOME, INC."` and `"Burns Nursing Home"` are one facility. It records an edge between two *references* the caller supplies.
 - **No traversal ordering, ranking or aggregation.** `neighbors` returns a set, not a ranked list. `entity_touchpoint_service`'s *"open work first, because that is the decision input"* is a consumer's ordering, and it stays there.
@@ -68,7 +68,7 @@ Edge:
     provenance:   EdgeProvenance    # §5
     attributes:   dict              # the family's payload, opaque unless a schema is in force. §2.5
     status:       "active" | "retracted"    # §2.6
-    warnings:     list[str]         # INTERFACE §5.4's vocabulary. Same values, same carriers rule
+    warnings:     list[str]         # INTERFACE §5.4's vocabulary - which this change AMENDS. §2.8
     attr_schema_version: int | None # the payload schema in force when this was written. §2.5
 ```
 
@@ -119,14 +119,17 @@ Five fields, all in `TypeEntry.attributes`, all governed by one `AttributeSchema
 
 #### 2.4.1 `endpoint_kinds`, and the rule that decides what a value set may be
 
-> **A `level="instance"` family accepts only `kind="entity"` endpoints. A `level="type"` family accepts any registered kind except `edge`.**
+> **A `level="instance"` family accepts only `kind="entity"` endpoints. A `level="type"` family accepts any registered kind except `predicate`. No family, at either level, may name `predicate`.**
 
-Both halves earn their keep on real fixtures, in opposite directions:
+The three clauses earn their keep on real fixtures, and the first two pull in opposite directions:
 
 - **Instance level, entities only.** Only an entity has instances. A `predicate`'s extent is a set of *types*; a `value_set`'s members are *values*; an `edge` family's instances are edges, and §1 rules out reification. So `citation:42 --has_severity--> scope_severity_code:J` is **refused** (`endpoint_kind_mismatch`) — and that refusal is the right answer for UC2, because it stops the registry from turning a column of 419,479 property values into 419,479 edges, and stops it from having to know what a *value* is, which `INTERFACE.md` §2.1 refuses on purpose and ruling **R8** deferred to Phase 3. **Severity is a property of a citation, and this document does not store node properties (§1).**
-- **Type level, any kind.** `dpr:value_set:borough equivalent_to dot:value_set:borough` is exactly UC3's W2 case, and the endpoints are `value_set` entries. Forbidding `value_set` here would make the one relation R7 exists to provide unexpressible on the data that forced it.
+- **Type level, any kind but one.** `dpr:value_set:borough equivalent_to dot:value_set:borough` is exactly UC3's W2 case, and the endpoints are `value_set` entries. Forbidding `value_set` here would make the one relation R7 exists to provide unexpressible on the data that forced it. **`kind="edge"` is legal here too**, and it is not reification: `dpr:edge:concerns equivalent_to oti_311:edge:relates_to` relates two *rows of the vocabulary*, which is what a type-level edge does. Reification would be an edge pointing at an edge **instance**, and the instance-level clause makes that unconstructible.
+- **`predicate` is excluded at BOTH levels, and it is a general rule rather than a family's opt-in.** Two predicates being "equivalent" is a claim about **extents**, and `INTERFACE.md` §5.10's refusal #2 (`predicate_merge`) is non-overridable precisely because that claim must be made from byte-identical extents or not at all. A type-level edge asserting equivalence between two predicates is **the `ROADMAP.md` kill row one indirection away** — *a capability predicate treated as a duplicate* — and §15 claims it is structurally blocked. It is only structurally blocked if the rule is general. *(It was not, in the first draft: a round-1 reviewer declared a permissive family of their own and wrote a predicate-to-predicate edge with no refusal. §17.)*
 
 **So a `value_set` IS a legal edge endpoint — as a type, never as an instance.** Two fixtures pulling opposite ways, one rule, no exception clause. The decision the brief asks for in §10 is this sentence.
+
+> **All three clauses bind at family-DECLARATION time, not only at write time, and that distinction is the one round 1 was spent on.** A rule checked only when an edge is written is a rule a family author can opt out of by declaring a permissive `endpoint_kinds` — and both halves of this section were exactly that in the first draft. A reviewer declared a family with `predicate` endpoints and wrote a predicate-to-predicate edge with no refusal (the kill row, §15); writing the test for that then exposed the same hole in the instance clause, where a family declaring `("entity", "edge")` at instance level would have reified an edge. **A family whose `endpoint_kinds` breach this section is refused when it is declared**, so the write-time check has nothing left to be talked around — and the write-time check still runs, because an endpoint of the wrong *level* is a caller's mistake rather than the family's. Both layers are exercised in [`edges_capability_probe.py`](../tools/edges_capability_probe.py); §17.
 
 **`equivalent_to` additionally requires `src.kind == dst.kind`** — a family-level constraint beyond `endpoint_kinds`, stated in §3.1 rather than here, because it is that family's semantics and not a general mechanism.
 
@@ -177,6 +180,26 @@ Two consequences, both stated:
 - **`endpoint_kind_mismatch` can only fire when the endpoint's type IS registered.** On an unregistered endpoint the registry cannot know the kind, so it does not guess: the edge is written and carries `warnings: ["endpoint_type_unregistered:<namespace>:<kind>:<name>"]`. Rule U — a positive claim about a mismatch requires having looked. This is the same shape as `gate_unregistered:<gate>` (ruling R8) and deliberately so.
 - **Orphan sweeping is not this document's job.** Beacon's `purge_orphan_links` **deletes** rows whose endpoint it does not recognise, and **[Observed, beacon spec §10.4]** its `else` branch judges every non-`task` endpoint against the project id set, so live `report` edges written by `decisions/actions.py` are purged daily. That is recorded as contortion **E5** in §9. This document's position: an orphan is `retract_edge`'s subject, never a `DELETE`.
 
+
+### 2.8 The warnings vocabulary is closed too, and this change amends it
+
+`INTERFACE.md` §5.4 enumerates the `warnings` vocabulary — *"complete — eleven values across three carriers"* — and §5.12 does the same for `Refusal.reason`, with **ruling R3**'s rule attached: *a value is added by amending the enumerating section in the same change that introduces it.*
+
+**R3's rule is written for `Refusal.reason`. It applies with equal force here, and the first draft of this document broke it.** Three refusal values were added to §5.12 correctly and carefully; five *warning* values were minted in the prose of §§2.6–8 and §4.3 and enumerated nowhere, while `Edge.warnings` claimed to carry *"INTERFACE §5.4's vocabulary. Same values."* **A closed vocabulary that opens by prose is not closed**, and doing it in the same document that gets the sibling case right is worse than doing it by oversight. Found by a round-1 reviewer; see §17.
+
+**So §5.4 is amended in this change, to sixteen values across four carriers.** The five, with their carrier:
+
+| value | carrier | from |
+|---|---|---|
+| `endpoint_type_unregistered:<namespace>:<kind>:<name>` | **`Edge`** | §2.7 — the endpoint's type is not registered, so no kind claim is made in either direction. Rule U, and the same `<name>:<subject>` shape as `gate_unregistered` (ruling R8) |
+| `retracted_without_event_trail:<why>` | **`Edge`** | §2.6 — the retraction stands (the row *is* the record) but its sequence is unrecoverable. `<why>` is the backend's own sentence |
+| `edge_family_retired:<name>` | **`NeighborReport`** | §4.3 — a named family is retired; its edges were not deleted, so it is searched, and the caller is told |
+| `origin_type_unregistered:<ref>` | **`NeighborReport`** | §4.3 — the walk's origin names a type nobody registered |
+| `no_edge_gate_registered` | **`ConsumerReport`** | §8 — no predicate's extent contains any edge family, so `would_drop: []` means *nobody told us what traverses edges*, not *nothing will drop this* |
+
+**One value was considered and deliberately NOT minted:** a warning for attributes that did not round-trip. `PACKAGE.md` §3.4 primitive 4's mechanism already reports it — the returned record simply lacks the key, and `Capabilities.why` says why — and the type side has no such warning. Adding one on the edge side would make one fact reportable two ways. §6.
+
+---
 ---
 
 ## 3. Type-to-type edges — ruling R7
@@ -209,7 +232,9 @@ TypeEntry(
 )
 ```
 
-**Family-specific constraint: `src.kind == dst.kind`.** An `entity` is not equivalent to a `value_set`; `facility ≡ deficiency_corrected_status` is a category error, not a claim. A cross-kind attempt is refused `endpoint_kind_mismatch` with `detail={"src_kind":…, "dst_kind":…}`. `predicate` is excluded from `endpoint_kinds` entirely: two predicates being "equivalent" is a claim about extents, and `merge_types`' non-overridable refusal #2 exists precisely because that claim must be made from byte-identical extents or not at all.
+**Family-specific constraint: `src.kind == dst.kind`.** An `entity` is not equivalent to a `value_set`; `facility ≡ deficiency_corrected_status` is a category error, not a claim. A cross-kind attempt is refused `endpoint_kind_mismatch` with `detail={"src_kind":…, "dst_kind":…}`.
+
+**`predicate` is absent from the list above because §2.4.1 forbids it generally, not because this family opted out.** That distinction is the whole point and it was got wrong once (§15, §17): a per-family exclusion is a rule that holds only as long as every future family author remembers it, and the thing on the other side of it is the kill row. `kind="edge"` **is** in the list, and §2.4.1 argues why that is not reification: `dpr:edge:concerns ≡ oti_311:edge:relates_to` relates two rows of the vocabulary, which is precisely what a type-level edge is for, and it is the shape UC3 predicts when two agencies name the same real-world relation differently.
 
 **Explicitly NOT transitive, and not closed.** `A ≡ B` and `B ≡ C` do **not** yield `A ≡ C`. Three publishers wanting a three-way join write three edges. This is not a limitation to be fixed later; transitivity would make the family a silent equivalence-class builder over a registry whose whole answer to mechanism 4 is *scoping*, and one wrong edge would then merge a class. §4.4 is where this becomes a reporting requirement rather than a note.
 
@@ -259,12 +284,15 @@ def neighbors(
 NeighborReport:
     origin:            NodeRef
     depth_requested:   int
-    depth_reached:     int                  # < depth_requested when the walk stopped short
+    depth_reached:     int                  # the deepest level at which an edge was FOUND.
+                                            #   A dead end is depth_reached < depth_requested
+                                            #   with complete=True. Truncation is a SEPARATE
+                                            #   signal - complete=False plus a why. §4.3
     direction:         str
     families_searched: tuple[str, ...]      # what was ACTUALLY consulted. §4.4
     edges:             tuple[NeighborEdge, ...]
     nodes:             tuple[NodeRef, ...]  # distinct endpoints reached; origin excluded
-    known:             int | None           # None = the store cannot count. NOT 0. Rule U
+    known:             int                  # len(edges). A plain int, NOT int | None - see below
     complete:          bool                 # §4.3 — and it CAN be True. §4.4
     why_incomplete:    str | None
     warnings:          tuple[str, ...]
@@ -274,7 +302,11 @@ NeighborEdge:
     at_depth:  int          # 1 = incident on the origin. §4.4 — this field is not decoration
 ```
 
-`namespace` is **required and keyword-only**, and it names the namespace `edge_families` are resolved in — *not* the origin's, which the origin carries itself (§2.1). Making it required rather than defaulting to `"default"` is deliberate: UC3's whole subject is that `"default"` is a wrong answer nobody notices.
+**`known` is a plain `int`, and `INTERFACE.md` §3 is why.** That section already settles the case: *"`ConsumerReport.known` and `Resolution.known` are plain `int` because both are lengths of lists this document has already materialised — there is nothing there to fail to count."* `NeighborReport.edges` is materialised in the report, so `known` is its length and a backend has nothing to decline. **`int | None` here would be a Rule-U field with no reachable `None`** — decoration shaped like honesty. *(It was `int | None` in the first draft; a round-1 reviewer reported being unable to produce the `None`, which is the right way to find a field that cannot happen.)* The adapter's own `EdgePage.known` (§7.1) **is** `int | None`, because a store genuinely may not be able to count without materialising.
+
+`namespace` is **required and keyword-only**, and it names the namespace **the `edge_families` argument is resolved in** — *not* the origin's, which the origin carries itself (§2.1), and *not* a filter on results (§4.5). Making it required rather than defaulting to `"default"` is deliberate: UC3's whole subject is that `"default"` is a wrong answer nobody notices.
+
+> **`edge_families=None` searches every family the store can answer, in EVERY namespace — so `namespace` is a no-op in that call shape, and that is stated rather than left to be discovered.** The alternative, scoping the `None` case to the named namespace, was in the first draft, and **[Observed]** a round-1 reviewer reproduced its consequence in twenty lines: two families in two namespaces, both incident on one node, and each call found only one of them. **That is Cause C — the silent per-consumer drop this whole document is designed against (§12) — inside the one read call it offers, on the exact axis UC3 exists to stress.** It is not merely a scoping choice: it is the same failure the required `namespace` parameter was added to prevent, moved one level down. §4.5's reasoning settles it — `neighbors` reads a stored fact whose endpoints are fully named, so there is nothing to scope — and `families_searched` is what tells the caller what was actually consulted.
 
 ### 4.2 The depth cap is **2**, and it is R13's consequence rather than a separate decision
 
@@ -297,10 +329,12 @@ NeighborEdge:
 | The registry has no edge store | **`Refusal(reason="edge_store_absent")`**. Never an empty report — an empty `NeighborReport` reads as *"this node has no neighbours"*, which is Rule U's forbidden empty list in the one call that would be believed |
 | A named family in `edge_families` is not a registered `kind="edge"` entry | **`Refusal(reason="edge_family_unknown", detail={"families": [...]})`**. The whole call, not a partial answer: a caller that names a family and gets a report back is entitled to believe the family was searched, and a typo'd name returning a clean empty set is mechanism **C** committed by the read seam |
 | A named family exists but is **retired** | Not a refusal. It is searched (its edges were not deleted), and the report carries `warnings: ["edge_family_retired:<name>"]` |
-| `edge_families=None` | Every family the store can answer. `families_searched` echoes exactly which, and `complete` is about *those* — §4.4 |
+| `edge_families=None` | Every family the store can answer, **across every namespace** (§4.1). `families_searched` echoes exactly which, and `complete` is about *those* — §4.4 |
 | The store cannot count | `known=None`, never `0`. `PACKAGE.md` §3.4's uniform uncertainty rule |
-| The walk stopped short of `depth` (a bound, a scan limit, a store that timed out) | `depth_reached < depth_requested`, `complete=False`, and `why_incomplete` names it. **Never a silently shallower answer** |
+| **The walk ran out of graph** — a leaf, a sink, a node with no edges at all | `depth_reached < depth_requested` **with `complete=True`** and no `why_incomplete`. This is the *common* case in real data and it is **not** an incomplete answer: the walk saw everything there was |
+| **The walk was cut short** — a scan bound, a store that timed out, a page it could not exhaust | `depth_reached < depth_requested` **with `complete=False`**, and `why_incomplete` names the bound. **Never a silently shallower answer** |
 | `include_retracted=False` (the default) and a retracted edge was suppressed | `complete=False`, because a default that hides things is `list_types`' rule (`INTERFACE.md` §5.6) |
+| A named family in `edge_families` is registered in a **different** namespace from the one passed | `Refusal(reason="edge_family_unknown")`. Resolving names is `namespace`'s one job (§4.1) |
 | `node` is an `InstanceRef` whose type is not registered | Not an error (§2.7). The walk proceeds and the report carries `warnings: ["origin_type_unregistered:<ref>"]` |
 | The edge store is `transaction_scope="savepoint"` and this is a **read** | **Nothing is added.** `PACKAGE.md` §3.4 primitive 3, note 2: a read says nothing about durability in either direction, because the registry cannot know whether the host has committed |
 
@@ -384,7 +418,7 @@ with three new `event` values — `edge_added`, `edge_retracted`, `edge_amended`
 
 ## 6. Capability flags for the edge store
 
-In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabilities.why`, surfaced verbatim wherever a result would otherwise imply a fact. Five flags and one declaration, added to the existing `Capabilities`.
+In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabilities.why`, surfaced verbatim wherever a result would otherwise imply a fact. **Four flags and two declarations**, added to the existing `Capabilities` — and the distinction is the one §3.2 draws for `transaction_scope` and `attribute_projections`: a flag is something a backend *declines*; a declaration says *how* it does something it can do.
 
 ```python
     stores_edges:              bool     # the store holds edges at all
@@ -400,7 +434,7 @@ In `PACKAGE.md` §3.2's style: every `False` flag carries a sentence in `Capabil
 | `stores_edges` | there is no edge store behind this adapter | *"this backend is a type registry only; no table holds relationships"* | **every** edge call returns `Refusal(reason="edge_store_absent")`. Never an empty report — §4.3 |
 | `stores_edge_events` | an edge event cannot be persisted | *"`work_links` has no event table and beacon owns the schema"* | `retract_edge` **succeeds** and warns `retracted_without_event_trail:<why>` (§2.6); `provenance(edge).history == []` with the `why` |
 | `indexes_edges_by_family` | a family filter costs a scan of the node's edges | *"`work_links.relationship` is free text with no index"* | correctness is unchanged — the registry filters above the store. But a scan may hit a bound, and then `depth_reached < depth_requested`, `complete=False`, `why_incomplete` = this sentence |
-| `stores_edge_attributes` | an arbitrary payload key does not round-trip | *"`work_links` has `description` and `confidence` as columns and no JSON blob"* | `Edge.attributes` returns **only** the keys in `edge_attribute_projections`, with the `why` for the rest. Never a silently lossy write — `PACKAGE.md` §3.4 primitive 4's rule |
+| `stores_edge_attributes` | an arbitrary payload key does not round-trip | *"`work_links` has `description` and `confidence` as columns and no JSON blob"* | `Edge.attributes` returns **only** the keys in `edge_attribute_projections`. **No warning value is minted for this**, deliberately: `PACKAGE.md` §3.4 primitive 4's mechanism is that the *returned record* is the signal — a key that did not round-trip is absent from it, and `Capabilities.why` says why — and the type side has no warning for it either. Adding one here would make the edge path and the type path report the same fact two different ways |
 
 **Two flags are NOT added, deliberately.** There is no `enforces_unique_edge` and no `edges_transactional`. `PACKAGE.md` §3.5's two non-negotiables (**G1** uniqueness, **G2** atomicity) already bind the whole adapter, and an edge store that is not transactional is not a conformant adapter — the guarantee does not fragment by table. What *is* different is **what G1 is over**: the type store's key is `(namespace, kind, name)`; an edge's key is `edge_id`, generated above the store (`PACKAGE.md` §4.2's rule), so uniqueness is trivially satisfied and asserts nothing interesting. **There is deliberately no uniqueness constraint on `(family, src, dst)`** — see §6.1.
 
@@ -486,7 +520,9 @@ Upsert on `edge_id`. Writes `status`, `retract_reason`, `retracted_by`, `retract
 
 **18. `find_edges(q: EdgeQuery) -> EdgePage`**
 The one call behind `neighbors`. **Traversal is not pushed into the adapter**: the registry issues one `find_edges` per depth level, with the whole frontier in `incident_to`. That is a deliberate §3.1 boundary — an adapter that knew about `depth` would know about `NeighborReport`, and `C0-04`'s source-inspection test would have a new identifier to police.
-**Uncertainty:** the same page rule as `find_types`. A filter the backend cannot apply returns `complete=False` with a `why`, **never** a filtered-looking empty page. When `indexes_edges_by_family=False` and `q.families` is set, the backend may return the node's edges unfiltered with `complete=True` and let the registry filter — that is honest, because the page it returned *is* complete for what it was able to ask.
+**Uncertainty:** the general rule is `find_types`': a filter the backend cannot apply returns `complete=False` with a `why`, **never** a filtered-looking empty page. **One case deviates, and the deviation is deliberate rather than an inconsistency.** `PACKAGE.md` §3.4 primitive 6 handles `find_types(predicate=…)` on `indexes_membership=False` by returning an **empty** page with `known=None, complete=False`. Here, `find_edges` with `q.families` set on `indexes_edges_by_family=False` returns the node's edges **unfiltered, with `complete=True`**, and the registry filters above.
+
+**Why the two differ.** The type case has no bound: the alternative to an index is scanning the whole type table, so the honest answer is *"I cannot answer this"*. The edge case is already bounded by `q.incident_to` — the frontier is a handful of nodes — so the backend genuinely **can** return a complete answer to a slightly wider question, and the registry narrows it. The page it returns *is* complete for what it was asked. **A backend that could not even do that returns `complete=False` with the `why`, and the general rule applies again.**
 
 **No fourth primitive for retraction, and no fifth for counting.** Retraction is `put_edge` with a changed `status`; counting is `EdgePage.known`. Both were considered and dropped, because a primitive that only exists to express a policy transition is a policy inside the adapter.
 
@@ -696,7 +732,7 @@ The ground truth fixes the node counts: **10** facilities (distinct CCN), **69**
 
 ### 10.2 The walk-through — expected vs observed
 
-**Method.** [`docs/tools/edges_cms_probe.py`](../tools/edges_cms_probe.py) reads the checked-in 400-row sample, builds the three families and every edge through `edges_probe_kit`, and compares every count against the **frozen** ground truth. `py docs/tools/edges_cms_probe.py` → `ALL CHECKS PASSED`.
+**Method.** [`docs/tools/edges_cms_probe.py`](../tools/edges_cms_probe.py) reads the checked-in 400-row sample, builds the three families and every edge through `edges_probe_kit`, and compares every count against the **frozen** ground truth. `py docs/tools/edges_cms_probe.py` → `ALL CHECKS PASSED`. The machinery that is *not* CMS-specific — retraction, every declined capability, the dead-end walk — is driven separately by [`edges_capability_probe.py`](../tools/edges_capability_probe.py), added in round 1 (§17).
 
 | # | Expected | **Observed** | Verdict |
 |---|---|---|---|
@@ -704,14 +740,14 @@ The ground truth fixes the node counts: **10** facilities (distinct CCN), **69**
 | T2.2 | 400 / 69 / 400, 92 distinct | nodes: facilities **10**, surveys **69**, citations **400**, tags **92**. Edges: `issued_during` **400**, `conducted_at` **69**, `cites` **400**, distinct `cites` destinations **92** | **PASS — every pre-registered number** |
 | T2.3 | sums to 69 and 400 | summed over all ten facilities: **69** surveys at depth 1, **400** citations added at depth 2. One report: `known=47 complete=True depth_reached=2 families_searched=('conducted_at','issued_during')`, `at_depth ∈ {1,2}` | **PASS** |
 | T2.4 | facility in two hops | `neighbors(citation#0, [...], 2, direction="out")` → `["cms:entity:survey#275012|2025-12-16|Health", "cms:entity:facility#275012"]` | **PASS** |
-| T2.5 | REFUSED | `Refusal(reason="endpoint_kind_mismatch", detail={"endpoint": "dst", "problem": **"level"**, "family_level": "instance", "node_level": "type", …})` | **PASS, and sharper than predicted** — see below |
+| T2.5 | REFUSED | Refused at **two** layers. Declaring the permissive family at all raises *"a level='instance' family may only declare `entity` endpoints"*; and with a correctly declared family the write returns `Refusal(reason="endpoint_kind_mismatch", detail={"endpoint": "dst", "problem": **"level"**, "family_level": "instance", "node_level": "type", …})` | **PASS, and sharper than predicted twice over** — see below |
 | T2.6 | fits, refuse anyway | **10 of 10** citation properties are single-valued per `cites` edge | **PASS — the prediction was exact** |
 | T2.7 | value sets absent | neither value set appears in the edge store | **PASS** |
 | T2.8 | not caught; sample does not exercise it | 10 distinct provider names over 10 CCNs; **0** names shared | **PASS — the fixture does not exercise T4** |
 | T2.9 | representable, not caught | **6 of 400** rows carry a correction date before the survey date, matching the pre-registered 1.5% | **PASS** |
 | T2.10 | nothing added | `resolve_type` answers it; EDGES adds nothing | **PASS** |
 
-**T2.5 was refused on `level`, not on `kind`, and that is worth noticing.** The probe deliberately declared `has_severity` with `endpoint_kinds={"dst": ("entity","value_set")}` — i.e. a family that *permits* a value set — to check whether the rule could be talked around by a permissive declaration. It cannot: the `level` check runs first and a `value_set` reached as `scope_severity_code` is a `TypeRef`, while a `level="instance"` family requires an `InstanceRef` on both ends. **`endpoint_kinds` alone would have been a rule a family author could opt out of; `level` is not.** That ordering is now explicit in §2.4.1 because the probe made it visible.
+**T2.5 was refused on `level`, not on `kind`, and that is worth noticing.** The probe deliberately declared `has_severity` with `endpoint_kinds={"dst": ("entity","value_set")}` — a family that *permits* a value set — to check whether the rule could be talked around by a permissive declaration. It cannot, and after round 1 it cannot in two different ways: **the declaration itself is refused**, and even for a correctly declared family the `level` check runs before the kind check, so a `value_set` reached as `scope_severity_code` is a `TypeRef` where the family requires an `InstanceRef`. **In the first draft only the second of those existed, and `endpoint_kinds` was therefore a rule a family author could opt out of.** That ordering and that enforcement point are now explicit in §2.4.1 because the probe made them visible.
 
 **T2.6, and the mechanical test coming out exactly as pre-registered.** *Does every property of the citation row fit on the `cites` edge?* For each of `Deficiency Prefix`, `Deficiency Category`, `Scope Severity Code`, `Deficiency Corrected`, `Correction Date` and the five Y/N flags, the probe grouped values by `(citation, tag)` pair: **every one is single-valued.** All ten fit.
 
@@ -759,7 +795,7 @@ T3.12 failing would be the kill row (`ROADMAP.md`: *the answer to collision must
 ---
 ### 11.3 The walk-through — expected vs observed
 
-**Method.** [`docs/tools/edges_nyc_probe.py`](../tools/edges_nyc_probe.py), live against the SODA API, using **two** engines on purpose: the **shipped** `open_ontology.Registry` on SQLite for everything about types (so T3.12's claim about `merge_types` is a claim about the real implementation), and `edges_probe_kit` for everything about edges. `py docs/tools/edges_nyc_probe.py` → `ALL CHECKS PASSED`.
+**Method.** [`docs/tools/edges_nyc_probe.py`](../tools/edges_nyc_probe.py), live against the SODA API, using **two** engines on purpose: the **shipped** `open_ontology.Registry` on SQLite for everything about types (so T3.12's claim about `merge_types` is a claim about the real implementation), and `edges_probe_kit` for everything about edges. `py docs/tools/edges_nyc_probe.py` → `ALL CHECKS PASSED`. Capability-degradation and lifecycle paths are driven by [`edges_capability_probe.py`](../tools/edges_capability_probe.py) (§17).
 
 **The value sets, re-pulled live 2026-08-29** — W2's data, unchanged:
 
@@ -781,10 +817,19 @@ Same five referents, three encodings, and B carries an extra spelling of *unknow
 | T3.6 | complete, with the caveat | `complete=True`, `families_searched=("equivalent_to",)` | **PASS, and see below** |
 | T3.7 | expressible | 25 complaints over **22** distinct BBLs; **54** census trees on those lots; **102** edges written; **18 of 25** complaints matched a tree; **max 16 trees on one lot** | **PASS, and it found something** |
 | T3.8 | CONTORTION | `created_by='user'`, `created_by_actor='import:socrata_bbl_join'` | **CONTORTION confirmed — Q12** |
-| T3.9 | REFUSED | `Refusal(reason="endpoint_kind_mismatch", detail={"problem": "level", …})` | **PASS** |
+| T3.9 | REFUSED | Refused at **two** layers, as in T2.5: the permissive family raises at declaration, and the write returns `Refusal(reason="endpoint_kind_mismatch", detail={"problem": "level", …})` | **PASS** |
 | T3.10 | visible staleness | `source_version = "erm2-nwe9@2026-08-28 / uvpi-gqnh@2017-10-04"` on every edge | **PASS** |
 | T3.11 | inherited, not created | namespace assignment for B is made before any edge; EDGES adds no ambiguity | **PASS** |
 | T3.12 | **still refused** | `Refusal(reason="cross_namespace_merge")` with the edge present; **and again** with `acknowledge=["cross_namespace_merge","definitions_diverge"]` | **PASS — the load-bearing check** |
+
+**T3.13 — added in round 1, and NOT pre-registered.** The expectations in §11.1 were frozen before the loop, and this case is not among them: **`equivalent_to` between two `kind="edge"` types.** It is recorded here as an addition rather than folded into §11.1, because a prediction written after the fact is not a prediction.
+
+```
+equivalent_to(dpr:edge:concerns, oti_311:edge:relates_to)   -> written, not refused
+neighbors(dpr:edge:concerns, ["equivalent_to"], 1)          -> ["oti_311:edge:relates_to"]
+```
+
+**Why it matters enough to add a case:** two agencies naming the same real-world relation differently is UC3's own collision shape, one level up from `borough`, and the first draft's §1 forbade it while §3.1 declared it legal — a contradiction no design test exercised. Both round-1 reviewers found it by reading; **neither could have found it by running, because nothing ran it.** That is the argument for the case, and for the fourth probe.
 
 Also observed, from the same run: `depth=3` raises `ValueError` (§4.2); a typo'd family (`equivalant_to`) returns `Refusal(reason="edge_family_unknown")` for the **whole call**; and a registry with no edge store returns `Refusal(reason="edge_store_absent")` rather than an empty report.
 
@@ -882,7 +927,9 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 
 **1. Is this document a merge licence?** No, and it was tested rather than asserted. T3.12 wrote the `equivalent_to` edge and then asked the **shipped** registry to merge the two types: refused `cross_namespace_merge`, and refused again under explicit `acknowledge`. §3.2 states the rule; the probe checked it against `open_ontology.Registry`, not against the probe's own model.
 
-**2. Can a predicate be an edge endpoint?** **No.** `equivalent_to`'s `endpoint_kinds` exclude `kind="predicate"` (§3.1), for the reason §5.10 refusal #2 is non-overridable: two predicates being "equivalent" is a claim about extents, and it must be made from byte-identical extents or not at all. **An `equivalent_to` edge between two predicates would be exactly the kill row, one indirection away**, and it is structurally blocked rather than discouraged.
+**2. Can a predicate be an edge endpoint?** **No, and this answer had to be earned.** The rule is **general** — §2.4.1 forbids `kind="predicate"` in any family's `endpoint_kinds`, at either level — for the reason `INTERFACE.md` §5.10's refusal #2 is non-overridable: two predicates being "equivalent" is a claim about **extents**, and it must be made from byte-identical extents or not at all. **A type-level edge asserting equivalence between two predicates is exactly the kill row, one indirection away.**
+
+> **In the first draft it was NOT structurally blocked, and this section said it was.** The exclusion lived only in `equivalent_to`'s own declaration, so it was a family author's opt-in. A round-1 reviewer declared a permissive family of their own (`same_capability`), wrote a predicate-to-predicate edge, and got no refusal — **the kill row, reached through a door this document had left open while claiming it was shut.** The rule is now general and enforced in the probe kit's `Family.__post_init__`, which refuses the family at declaration time rather than the edge at write time. Recorded rather than quietly fixed, because *a guard that depends on every future author remembering* is the class of protection this project refuses elsewhere (§5.10 refusal #2 is non-overridable for the same reason).
 
 **3. Did anything take its shape from Tenshen?** The five family keys, checked one at a time:
 
@@ -909,7 +956,53 @@ Numbering continues from Q11 (ruled as R16). None of these is taken on this docu
 | Type-to-type edges (**R7**) | §3. `equivalent_to`, symmetric, non-transitive, non-merging — and the non-merging half checked against the shipped registry |
 | `v0` and "unstable" in the header | Header, line 3 |
 | A design-test section per use case, expected outcomes stated first | §9, §10, §11. **Thirty-four predictions, committed in a separate commit ahead of the results; eleven contortions recorded, none designed away** |
-| An adversarial review loop | §17 |
+| An adversarial review loop | §17. **Two rounds, four fresh reviewers**, three BLOCKING and four MAJOR findings, every one reproduced by running code |
+| Every new `warnings` value goes through `INTERFACE.md` §5.4 in the same change | §2.8. Five added; §5.4 now enumerates sixteen across four carriers |
 | New `Refusal.reason` values go through `INTERFACE.md` §5.12 in the same change (**R3**) | Three added: `edge_family_unknown`, `endpoint_kind_mismatch`, `edge_store_absent`. §5.12 now enumerates eighteen |
+
+---
+
+## 17. The adversarial review loop
+
+**Protocol** (`USE-CASES.md`, standing constraint 7; the brief's stop rule): fresh reviewers each round, briefed with the three fixtures and told to **drive the design through each fixture's real data rather than read it** — 3c's lesson being that *"every finding of substance came from driving the real registry through a real scenario, none from reading."* Two reviewers per round, distinct lenses. **Stop: two consecutive clean rounds, or three rounds plus an honest convergence note.**
+
+### 17.1 Round log
+
+| Round | Reviewers | Verdicts | BLOCKING | MAJOR | Outcome |
+|---|---|---|---|---|---|
+| **1** | real-data lens · coherence lens | NOT YET · NOT YET | **3** (2 found independently by both) | **4** | Every finding reproduced by running code. Fixes below; a fourth probe added |
+
+### 17.2 Round 1 — what it found
+
+**Three BLOCKING, and the two the reviewers found independently are the same defect from two directions.**
+
+**B1 — `equivalent_to`'s own declaration violated the document's own stated ban, and no design test exercised it.** §1 said *"`endpoint_kinds` cannot name `edge`"* and §2.4.1 said *"any registered kind except `edge`"*; §3.1's `equivalent_to` declared `["entity", "value_set", "edge"]` on both ends, and the probe kit and the NYC probe both carried it verbatim to a green run. **A hard architectural guarantee, asserted twice and contradicted three sections later, in the one family this document ships.**
+
+*Resolved by deciding which rule was right rather than by deleting the mismatch.* The ban was written too broadly: **reification is an edge pointing at an edge *instance*, and that is already impossible** because §2.4.1 restricts an `InstanceRef` to `kind="entity"`. A `kind="edge"` TypeEntry is a *row of the vocabulary*, and two agencies naming the same real relation differently is UC3's collision shape one level up — the case both reviewers named unprompted. §1 and §2.4.1 now say that precisely, and **T3.13** exercises it.
+
+**B2 — `neighbors(node, edge_families=None, namespace=X)` silently dropped every family outside `X` — Cause C inside the read seam.** §4.5 claims `namespace` *"never filters results"*; the first draft's `None` case scoped to it anyway. A reviewer built two families in two namespaces incident on one node and ran the project's own kit: each call found one. **That is the silent per-consumer drop this document names as its primary mechanism (§12), committed by its only read call, on the axis UC3 exists to stress** — and none of the three design tests called `neighbors` with `edge_families=None` at all.
+
+*Resolved by following §4.5's own reasoning to its conclusion:* `None` spans every namespace, and `namespace` is therefore a no-op in that call shape, **stated in §4.1 rather than left to be discovered.** Exercised from three different namespaces in the new probe.
+
+**B3 — §15 claimed a predicate could not be an edge endpoint; it could.** The exclusion lived only in `equivalent_to`'s own declaration, so it was a family author's opt-in. A reviewer declared `same_capability` with permissive `endpoint_kinds` and wrote a predicate-to-predicate edge with **no refusal** — *the `ROADMAP.md` kill row, reached through a door this document had left open while §15 said it was shut.*
+
+*Resolved by making the rule general* (§2.4.1) *and enforcing it at family-declaration time*, so a breaching family cannot be declared at all. **Writing the test for that then exposed the same hole in the instance clause** — a `level="instance"` family declaring `("entity", "edge")` would have reified an edge — which was fixed the same way. Two of the three clauses of §2.4.1 were enforceable-in-principle and unenforced in practice.
+
+**The four MAJOR.**
+
+| # | Finding | Resolution |
+|---|---|---|
+| M1 | **`Edge.warnings` claimed INTERFACE §5.4's vocabulary *"same values"* and then minted five new ones in prose.** The mirror image of the R3 discipline this document applies carefully to `Refusal.reason` two sections later — *a closed vocabulary that opens by prose is not closed* | New **§2.8**; `INTERFACE.md` §5.4 amended in this change to **sixteen values across four carriers**. One further value was considered and **not** minted: attribute loss is reported by the returned record, as on the type side |
+| M2 | **`depth_reached` conflated *"hit a bound"* with *"nothing further to find"*.** A dead end is the common shape in real graphs, and an adapter author reading §4.1's comment literally would have set `complete=False` on nearly every walk | §4.1's field comment and §4.3's table now carry **two separate rows**: ran out of graph (`complete=True`, no `why`) versus cut short (`complete=False`, `why` names the bound). Exercised on a real CMS `deficiency_tag` sink |
+| M3 | **Retraction, every capability flag, `include_retracted`, savepoint scope and `known` were specified in prose and executed by nothing** — and both BLOCKING defects were hiding in exactly that unrun half | **[`edges_capability_probe.py`](../tools/edges_capability_probe.py)** added: **34 executed checks** over `retract_edge`, all four flags declined one at a time, the savepoint stamp on writes and its absence on reads, the dead-end walk, the cross-namespace `None` case, and both enforcement layers of §2.4.1 |
+| M4 | **`NeighborReport.known` was `int \| None` with no reachable `None`** — a reviewer reported being unable to produce one. Rule-U shape with nothing behind it | Corrected to a plain `int`, citing `INTERFACE.md` §3's own resolution of the same case for `ConsumerReport.known`. `EdgePage.known` (the adapter's) stays `int \| None`, because a store genuinely may be unable to count |
+
+**Four MINOR, all taken:** §6 said *"five flags and one declaration"* for four flags and two declarations; the probe kit gave `Family.level` a default the spec forbids; §7.1 claimed `find_edges` follows `find_types`' uncertainty rule and then deviated from it without saying so (the deviation is right — the frontier is bounded, so the backend genuinely can answer a wider question completely — and is now argued); and §16 cited a §17 that did not exist.
+
+### 17.3 What round 1 says about the process
+
+**Two BLOCKING defects and one MAJOR were in the half of the design nothing executed**, and the reviewer who said so said it as a *pattern* rather than a finding: *"the untested `edge_families=None` path is proof that 'asserted, not run' is where this document's actual defects were hiding."* That is 3c's lesson arriving one row later in a new shape — **not "reading finds less than running", but "the parts you did not run are exactly where the defects are"** — and the fourth probe exists because of it.
+
+**The second thing worth recording: two of the three BLOCKING findings were the same mistake.** §2.4.1 stated three clauses; two of them were enforced only by each family's own declaration, which is *a guard that depends on every future author remembering* — the class of protection this project refuses elsewhere by making `merge_types`' refusal #2 non-overridable. The document had written the rule and left the enforcement to good manners.
 
 ---

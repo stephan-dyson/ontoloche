@@ -194,10 +194,22 @@ def main() -> int:
 
     # ---- T3.9 an instance-level family may not point at a value_set -------
     print("\nT3.9 -- dpr:street_tree#X --in_borough--> dpr:value_set:borough")
+    # Declaring the permissive family is refused outright (EDGES 2.4.1).
+    try:
+        Family(
+            name="in_borough", namespace=NS_A, level="instance",
+            definition="The tree stands in this borough.", inverse_label="contains_tree",
+            endpoint_kinds={"src": ("entity",), "dst": ("entity", "value_set")},
+        )
+        ok &= check("a permissive instance family is refused", False, True)
+    except ValueError as exc:
+        ok &= check("a permissive instance family raises at declaration", True, True,
+                    f"-- {exc}")
+
     in_borough = Family(
         name="in_borough", namespace=NS_A, level="instance",
         definition="The tree stands in this borough.", inverse_label="contains_tree",
-        endpoint_kinds={"src": ("entity",), "dst": ("entity", "value_set")},
+        endpoint_kinds={"src": ("entity",), "dst": ("entity",)},
     )
     ereg2 = EdgeRegistry(
         families=[equivalent_to, in_borough], store=EdgeStore(),
@@ -205,10 +217,31 @@ def main() -> int:
     )
     out = ereg2.add_edge("in_borough", InstanceRef(TREE, "434008"), BOROUGH_A,
                          prov("import:socrata", "user"), namespace=NS_A)
-    ok &= check("refused", getattr(out, "refused", False), True)
+    ok &= check("the write is refused", getattr(out, "refused", False), True)
     ok &= check("reason", getattr(out, "reason", None), "endpoint_kind_mismatch")
     if getattr(out, "refused", False):
         print(f"    detail={out.detail}")
+
+    # ---- T3.13 two agencies' RELATIONSHIP vocabularies, declared equivalent
+    print("\nT3.13 -- equivalent_to between two kind='edge' types (added in round 1)")
+    concerns = TypeRef(NS_A, "edge", "concerns")
+    relates = TypeRef(NS_B, "edge", "relates_to")
+    ereg_e = EdgeRegistry(
+        families=[equivalent_to], store=EdgeStore(),
+        registered_types=[concerns, relates],
+    )
+    out_e = ereg_e.add_edge(
+        "equivalent_to", concerns, relates,
+        prov("user:steward", "user", confidence=0.8,
+             evidence=({"kind": "human",
+                        "summary": "both label a service request against a park asset"},)),
+    )
+    ok &= check("two edge FAMILIES may be declared equivalent",
+                getattr(out_e, "refused", False), False,
+                "-- a row of the vocabulary, not a reification")
+    rep_e = ereg_e.neighbors(concerns, ["equivalent_to"], 1, namespace="default")
+    ok &= check("and it reads back", [str(n) for n in rep_e.nodes],
+                ["oti_311:edge:relates_to"])
 
     # ---- T3.7 a real cross-agency instance edge, joined on bbl ------------
     print("\nT3.7 -- a REAL cross-agency instance edge: 311 tree complaints -> DPR trees")

@@ -413,7 +413,7 @@ Proposal:
 
 > **Added by row 3c, 2026-08-28, after a third adversarial review round — this was a hole in §13's own exit criterion.** Two sentences in this document were false for exactly this case: the paragraph below says a `TypeEntry` comes back *"only when the namespace policy is `approval_policy=\"auto\"`"*, and §2.7 point 3 says the tier gate shows up as `Refusal(reason="tier_below_auto_approve_policy")` — which is true of `approve()` and **not** of `propose_type`'s internal auto-approval attempt. `2A-RUN.md` §4 deviation **D-11** recorded the gap in the words *"Neither document says what happens when the auto path meets the tier gate"*, and §11's list of deviations touching this document then failed to carry it forward. **It is UC1's own scenario:** Tenshen auto-approves and its classifier's tier is named as Haiku (§9, contortion 4), so this is the first thing a beacon migration hits.
 
-**`warnings` vocabulary, complete — eleven values across three carriers:**
+**`warnings` vocabulary, complete — sixteen values across four carriers** *(eleven at row 3c/3d; five added by [`EDGES.md`](EDGES.md) v0, row #4, 2026-08-29)*:
 
 | value | lands on | from |
 |---|---|---|
@@ -431,6 +431,16 @@ Proposal:
 | `definitions_threshold:<value>` | **`MergeResult`** — the threshold the comparison was judged against | §5.10 |
 
 *(The three `MergeResult` values were added to this table by row 3d's third adversarial round. They had been produced by `merge_types` since row 3c's round 7 and appeared in neither this list nor §5.10, which still said the field was always empty — the code changed and two paragraphs did not. Found by running a merge, not by reading.)*
+
+> **Five values added by `EDGES.md` v0** *(row #4, 2026-08-29)*. Ruling **R3** closes `Refusal.reason` and requires a value to be added in the change that introduces it; **that discipline belongs to this vocabulary too, and EDGES v0's first draft did not apply it** — five warnings were minted in its prose while its `Edge.warnings` field claimed to carry *"the same values"* as this table. Found by an adversarial reviewer, and corrected here rather than in a later row, because the failure mode is the one this project is named for. **No v0 code path emits any of the five**: row #4 is a spec and ships no edge store. See [`EDGES.md`](EDGES.md) §2.8.
+
+| value | lands on | from |
+|---|---|---|
+| `endpoint_type_unregistered:<namespace>:<kind>:<name>` | **`Edge`** | `EDGES.md` §2.7. A dangling endpoint is written, not refused — the same argument that makes `put_consumer` accept an unregistered `gate`. The registry does **not** claim a kind mismatch it could not check, which is Rule U |
+| `retracted_without_event_trail:<why>` | **`Edge`** | `EDGES.md` §2.6. Retraction is not refused on `stores_edge_events=False` — unlike `retire(force=True)` — because the retraction tombstone is columns on the edge row itself, so the record survives; what is lost is the *sequence*, and that is what this says |
+| `edge_family_retired:<name>` | **`NeighborReport`** | `EDGES.md` §4.3. A retired family's edges were never deleted, so it is still searched |
+| `origin_type_unregistered:<ref>` | **`NeighborReport`** | `EDGES.md` §4.3 |
+| `no_edge_gate_registered` | **`ConsumerReport`** | `EDGES.md` §8. Without it, a system where nobody has registered an edge-traversing consumer returns `would_drop: []` for every new family — which reads as *"nothing will drop this"* when the truth is *"nobody has told us what traverses edges"*. Emitted only when the underlying lookup came back `complete`, exactly as `gate_unregistered` is (`C11-05`'s rule) |
 
 *(Enumerated by row 3c; §5.4 previously listed three inline and the rest arrived scattered across the document. The carrier column was added after a fourth review round pointed out that one flat list invites reading all of them as `Proposal.warnings`.)*
 

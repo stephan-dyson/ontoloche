@@ -13,10 +13,12 @@ What it implements, and nothing more:
 * EDGES 2.1 ``TypeRef`` / ``InstanceRef``
 * EDGES 2.2 ``Edge``
 * EDGES 2.4 the family's declared shape, incl. ``level`` and ``endpoint_kinds``
-* EDGES 2.4.1 the endpoint rule (instance-level takes only ``entity``;
-  type-level takes any kind but ``edge``)
+* EDGES 2.4.1 the endpoint rule, enforced at family-DECLARATION time:
+  instance-level declares only ``entity``; no family at either level may
+  declare ``predicate``
 * EDGES 4 ``neighbors`` with the depth cap, Rule K/U fields and ``at_depth``
-* EDGES 6 the five capability flags, enough of them to make the refusals real
+* EDGES 6 the four capability flags and two declarations, enough of them to
+  make the refusals real (driven by ``edges_capability_probe.py``)
 
 The refusal vocabulary is imported from ``open_ontology.types`` rather than
 re-declared, so a probe that invented a reason would fail here rather than in a
@@ -79,9 +81,9 @@ class Family:
     """
 
     name: str
+    level: Literal["type", "instance"]   # REQUIRED, no default -- EDGES 2.4
     namespace: str = "default"
     definition: str = ""
-    level: Literal["type", "instance"] = "instance"
     symmetric: bool = False
     inverse_label: str | None = None
     endpoint_kinds: dict[str, tuple[str, ...]] = field(
@@ -100,6 +102,27 @@ class Family:
             )
         if self.level not in ("type", "instance"):
             raise ValueError("level must be 'type' or 'instance'")
+        # EDGES 2.4.1, general rule (NOT a per-family opt-in): a predicate is
+        # never an endpoint. Two predicates being "equivalent" is a claim about
+        # extents, and merge_types refusal #2 is non-overridable for that reason.
+        # Leaving it to each family author to remember is the kind of protection
+        # this project refuses to depend on.
+        for end, kinds in self.endpoint_kinds.items():
+            if "predicate" in kinds:
+                raise ValueError(
+                    f"family {self.name!r}: `predicate` may not be an endpoint kind "
+                    f"({end}) -- EDGES 2.4.1, the kill row"
+                )
+            # The instance clause is structural too, for the same reason: a
+            # level="instance" family that DECLARES `edge` as an endpoint kind
+            # would reify an edge instance, and checking only membership let it
+            # through. Found by writing the test for the predicate clause.
+            if self.level == "instance" and set(kinds) - {"entity"}:
+                raise ValueError(
+                    f"family {self.name!r}: a level='instance' family may only "
+                    f"declare `entity` endpoints ({end} declares {sorted(kinds)}) "
+                    "-- EDGES 2.4.1, the reification ban"
+                )
 
 
 @dataclass(frozen=True)
@@ -159,7 +182,7 @@ class NeighborReport:
     families_searched: tuple[str, ...]
     edges: tuple[NeighborEdge, ...]
     nodes: tuple[NodeRef, ...]
-    known: int | None
+    known: int          # plain int, NOT int | None -- INTERFACE 3. See EDGES 4.1
     complete: bool
     why_incomplete: str | None = None
     warnings: tuple[str, ...] = ()
@@ -322,12 +345,12 @@ class EdgeRegistry:
         attrs = dict(attributes or {})
         caps = self.store.caps
         if not caps.stores_edge_attributes:
-            kept = {k: v for k, v in attrs.items() if k in caps.edge_attribute_projections}
-            if len(kept) != len(attrs):
-                warnings.append(
-                    "attributes_not_stored:" + caps.why.get("stores_edge_attributes", "")
-                )
-            attrs = kept
+            # PACKAGE 3.4 primitive 4's mechanism, unchanged: the RETURNED record
+            # is the signal -- a key that did not round-trip is absent from it,
+            # and Capabilities.why says why. No warning value is minted for this;
+            # the type side does not have one either.
+            attrs = {k: v for k, v in attrs.items()
+                     if k in caps.edge_attribute_projections}
         if caps.edge_transaction_scope == "savepoint":
             warnings.append(
                 "not_durable_until_host_commits:"
@@ -398,15 +421,17 @@ class EdgeRegistry:
 
         warnings: list[str] = []
         if edge_families is None:
-            searched = tuple(
-                sorted(f.name for f in self.families.values() if f.namespace == namespace)
-            )
+            # EDGES 4.3/4.5: EVERY family the store can answer, across EVERY
+            # namespace. Scoping this to `namespace` silently dropped families
+            # registered elsewhere -- Cause C inside the read seam, on the axis
+            # UC3 exists to stress. `namespace` resolves NAMED families only.
+            searched = tuple(sorted(f.name for f in self.families.values()))
         else:
             unknown = [
                 f
                 for f in edge_families
                 if f not in self.families or self.families[f].namespace != namespace
-            ]
+            ]  # named families ARE resolved in `namespace` -- that is its only job
             if unknown:
                 # EDGES 4.3: the whole call. A typo'd family returning a clean
                 # empty set is mechanism C committed by the read seam.
@@ -450,6 +475,9 @@ class EdgeRegistry:
             if recs:
                 depth_reached = d
             frontier = next_frontier
+        # EDGES 4.3: a dead end is depth_reached < depth_requested with
+        # complete=True. Truncation is a SEPARATE signal (complete=False plus a
+        # why). Conflating them would make complete=False the common case.
 
         edges = tuple(sorted(seen_edges.values(), key=lambda ne: (ne.at_depth, ne.edge.edge_id)))
         nodes = tuple(
