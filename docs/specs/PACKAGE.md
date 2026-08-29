@@ -699,7 +699,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**115 tests in seventeen groups.** *(109 at #3; six added by row 3c — `C0-07`, `C6-07`, `C0-08`, `C0-09`, `C5-12`, `C15-07`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**117 tests in seventeen groups.** *(109 at #3; eight added by row 3c — `C0-07`, `C0-08`, `C0-09`, `C5-12`, `C6-07`, `C9-07`, `C15-07`, `C15-08`. See §8b.2 and §8b.5.)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (9).** No interface call; this is the protocol itself.
 
@@ -816,7 +816,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C8-04 | an imported row carries `unknown:imported`, never null |
 | C8-05 | `model_tier` is never overwritten by a later approval or amendment |
 
-**C9 — `retire` (6).** Mechanism **3**.
+**C9 — `retire` (7).** Mechanism **3**.
 
 | id | asserts |
 |---|---|
@@ -880,7 +880,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C14-06 | 6 | zero registered consumers ⇒ `known=0, complete=False` — a null result reported as a null result |
 | C14-07 | 7 | **the package ships no default type**: no name `default_type`, no fallback constant, anywhere in the public surface. The `related_to` fallback is caller policy and stays there |
 
-**C15 — the `attributes` mechanism (7).** §5 of this document.
+**C15 — the `attributes` mechanism (8).** §5 of this document.
 
 | id | asserts |
 |---|---|
@@ -892,7 +892,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C15-06 | under `enforce`, a `value_set` without a declared `ordering` when `ordered=True` is refused — the CMS severity case |
 | C15-07 | **one schema per kind cannot serve both CMS `value_set`s:** with `ordering` required, `deficiency_corrected_status` is refused for lacking an order it has no business having; with `ordering` optional, `scope_severity_code` may be created claiming an order and declaring none — the pollution §5.1 says the mechanism exists to prevent. Both horns asserted. *(Row 3c, §5.6 — a limitation of the mechanism, not of any backend)* |
 
-**C16 — whole-store invariants (4).** Run once at suite end, over everything the suite wrote.
+**C16 — whole-store invariants (4).** *(Amended by row 3c: this said "run once at suite end, over everything the suite wrote". The shipped group is **function-scoped** — a fixture drives one store through representative write paths and each test then inspects it. Recorded at 2A as deviation D-9 and never brought inline here. It matters because "everything the suite wrote" would be a stronger claim than the tests make.)*
 
 | id | asserts |
 |---|---|
@@ -947,7 +947,7 @@ Every refusal and every specified uncertainty behaviour in §5, with its test:
 
 > *Corrected by row 3c after an adversarial review round.* This line read *"the three refusals this document adds are tested at C9-02, C10-08, C15-04"* — which names three ids covering **two** of the reasons, and left **`proposals_not_stored` with no test anywhere in either suite**. That is UC1's own path (§7.3 B4: a backend with no proposal table is conformant and `approve`/`reject` must refuse), so the capability the Tenshen design test most depends on was the one the suite never checked. `C5-12` closes it.
 
-**[Inferred]** the built suite will be larger than 115 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
+**[Inferred]** the built suite will be larger than 117 — parametrisation over kinds and over `on_unknown` values will multiply several of these. The enumeration is the coverage floor, not a budget.
 
 ---
 
@@ -1196,6 +1196,8 @@ resolve_type("location", ctx(sibling_columns=("latitude","longitude")))
 
 **And there is a second instance, worse than the first** *(added by row 3c after an adversarial review round)*. `C4-06`'s `unverified_semantics` behaviour is driven by a hardcoded keyword list — `_DOMAIN_SEMANTIC_WORDS` in `registry.py`, holding literals like `"immediate jeopardy"`, `"severity"`, `"higher letters"` — read by a module function that `propose_type` calls **directly**. It is not behind the `Resolver` seam at all. So where `C3-08`/`C3-09` at least fail through a component §2.6 says you may replace, **`C4-06` cannot be satisfied by supplying `Registry(adapter, resolver=MyModelResolver())` — the production path §2.6 itself names — because the heuristic is baked into the façade.** A third-party backend with its own resolver still fails a mandatory conformance test for a reason that is neither storage nor its resolver. This is deviation D-6's keyword rule (`INTERFACE.md` §2.8) meeting §2.6's rule, and the collision was not previously recorded anywhere.
 
+> **`C4-06`'s share of this fix is cosmetic, and saying so is the honest part** *(recorded row 3c, after a fourth review round on this document)*. The `resolver_dependent` marker skips a test when the caller supplies their own `Resolver`. For `C3-08`/`C3-09` that is a real remedy: the outcome comes from `self.resolver.classify()`, so a deployment's resolver genuinely determines it. **`C4-06`'s does not touch the resolver at all** — `_asserts_domain_semantic` is a module function `propose_type` calls directly — so supplying a resolver changes nothing about whether it would pass, and the defect B8 names for it is *relabelled, not addressed*. The exemption is still right (a third-party backend should not fail a test it cannot influence), but **the only real fix is moving the domain-semantic judgement behind the `Resolver` seam**, which is the v1 item below. Recorded here rather than bundled silently with the other two.
+
 **Recommendation, and it was applied** *(row 3c, after the finding recurred in two consecutive review rounds — see [`../findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6, ruling R8, which the supervisor may reverse)*. The three carry a `resolver_dependent` marker: **binding for the two reference backends, skipped with a reason for a foreign adapter** (§2.6, §6.1). That is the narrower of the two options, and it was chosen because it changes nothing about this repository's own gate — §6.1 already requires both reference backends — while removing a promise the suite could not keep to anyone else.
 
 **What was deliberately NOT done:** widening `_PROJECTION_FAMILIES` to include `latitude`/`longitude`. That fits the table to the second dataset the way it was already fitted to the first, and it would make the *next* use case's version of this finding harder to see rather than easier. Moving the domain-semantic judgement behind `Resolver` is the tidier long-run answer and stays a v1 item.
@@ -1216,7 +1218,7 @@ The review loop that follows a design test (standing constraint 7) found two mor
 
 `C0-08` races two adapter instances over one store: one absent name written twice, and one proposal approved twice. **It was verified to bite before it was believed:** a wrapper implementing `expect_absent` as check-then-insert produces **two winners** and fails, while both constraint-backed backends produce one winner and one `AlreadyExists`. The async counterpart was promoted from `nonbinding` to this id and given the G1 half as well, so both stacks assert it.
 
-> **One generation exception, and it is deliberate.** A thread race has no mechanical async form — the async equivalent of two threads is `asyncio.gather` over two coroutines, a *different mechanism* rather than a token substitution. `tools/unasync.py` therefore excludes `contract/test_c0_concurrency.py` by name (`HAND_WRITTEN_ASYNC`), and `aio/contract/test_concurrency.py` is maintained by hand, the way the driver-level `close()` methods are (`3B-ASYNC.md` D-A12). **It is the only contract module in the suite that is not generated**, and the exclusion is a named constant so it cannot grow quietly.
+> **One generation exception, and it is deliberate.** A thread race has no mechanical async form — the async equivalent of two threads is `asyncio.gather` over two coroutines, a *different mechanism* rather than a token substitution. `tools/unasync.py` therefore excludes **`contract/test_c0_backend_local.py`** by name (`HAND_WRITTEN_ASYNC`), and **`aio/contract/test_c0_backend_local.py`** is maintained by hand, the way the driver-level `close()` methods are (`3B-ASYNC.md` D-A12). It holds the two contract tests that **build backends directly** rather than taking the `adapter` fixture — `C0-08`'s thread race and `C0-09`'s `owns_schema=False` construction, whose async form is `await AsyncSQLiteAdapter.open(...)` (D-A1). **It is the only contract module in the suite that is not generated**, and the exclusion is a named constant so it cannot grow quietly. *(Filenames corrected by row 3c: the module was renamed from `test_c0_concurrency.py` when `C0-09` was folded in, and this paragraph did not follow.)*
 
 **`C15-07` — one schema per kind cannot serve both CMS `value_set`s.** §5.6 now records the limitation; `C15-07` asserts both horns of it. It is not a bug report against a backend — every backend behaves this way, because the key is in the schema, not in the storage — and it is pinned so that a later ruling to key schemas per `(namespace, kind, name)` has a test that changes when the answer does.
 
@@ -1281,7 +1283,7 @@ The first is forward-only and may be dropped. The second is never applied backwa
 | *every adapter primitive has a signature, data shape and uncertainty behaviour* | §3.4 — fifteen primitives, each with all three; the uniform uncertainty rule stated once at the head |
 | *both backends have table shapes* | §4.1 (shared logical shape, seven tables; two more in §5), §4.3 (SQLite dialect), §4.4 (Postgres dialect) |
 | *the `attributes` mechanism is decided or explicitly declared a v0 gap* | §5 — **decided**: per-kind versioned schemas, three modes, default `off` to keep #1's contract, plus an unconditional census; §5.4 states the behaviour for entries written under an older schema |
-| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (115 tests, seventeen groups — 109 at #3, six added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
+| *the contract-test list covers every §5 call and every §5 refusal* | §6.2 (117 tests, seventeen groups — 109 at #3, eight added by row 3c) and §6.3 (the refusal-by-refusal coverage table — none untested) |
 | *both design tests are recorded with their contortions* | §7 (Tenshen: six contortions, verdict, kill-criterion check) and §8 (CMS: counts, verdict, and the reproducibility gap) |
 | *header carries `v0` / `unstable` / the assumptions line* | header, lines 3–5 |
 | **Kill criterion** — *the adapter can only be satisfied by reproducing Tenshen's schema* | §7.5 — **not tripped**, on four mechanical grounds |

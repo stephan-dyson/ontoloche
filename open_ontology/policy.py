@@ -76,7 +76,25 @@ class NamespacePolicy:
     # decide which *shape* comes back.
     near_duplicate_threshold: float = 0.72
     existing_threshold: float = 0.90
-    definitions_diverge_threshold: float = 0.55
+
+    # INTERFACE.md 5.10 refusal 6, and Rule U. **None is the v0 default and it means
+    # "this deployment has no resolver that can certify two definitions are
+    # near-synonymous", so merge_types refuses until a human acknowledges.**
+    #
+    # It used to default to 0.55 against the deterministic resolver's character
+    # similarity, and row 3c measured what that actually bought (docs/findings/
+    # 3C-VALIDATION.md 7): the two CMS value_sets score 0.80, two Tenshen relationship
+    # types score 0.93, and the one genuinely synonymous pair in the test -- "a
+    # Medicare-certified nursing home, identified by its CCN" against "a nursing home
+    # certified by Medicare, identified by its CMS Certification Number" -- scores
+    # 0.5507, barely over the line. The check was **anti-correlated with its purpose**:
+    # it passed unrelated types that shared boilerplate and nearly refused a real
+    # synonym that used different words, because character similarity of prose measures
+    # writing style, not meaning.
+    #
+    # A deployment whose resolver CAN make that judgement sets a float and takes
+    # responsibility for it, exactly as 2.7 does for tier ordering.
+    definitions_diverge_threshold: float | None = None
 
     def __post_init__(self) -> None:
         if self.approval_policy not in ("review", "auto"):

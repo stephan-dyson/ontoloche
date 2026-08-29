@@ -79,7 +79,12 @@ async def exercised(adapter, make_registry, clock):
     # correctly, INTERFACE.md 5.10's "the one place we-do-not-know blocks rather than
     # warns". Acknowledged explicitly there rather than skipped, so the merge still
     # happens and the invariants below still have a merge to inspect.
-    acknowledge = () if (await adapter.capabilities()).indexes_membership else ("no_consumer_evidence",)
+    # `definitions_diverge` is acknowledged unconditionally since row 3c: no resolver
+    # here certifies that two definitions are near-synonymous, and 5.10 makes that
+    # "we cannot tell" block rather than warn.
+    acknowledge = ["definitions_diverge"]
+    if not (await adapter.capabilities()).indexes_membership:
+        acknowledge.append("no_consumer_evidence")
     merged = await registry.merge_types(
         "note", "task", "the same unit of work", merged_by="user:sd",
         acknowledge=acknowledge,

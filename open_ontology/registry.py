@@ -1186,6 +1186,27 @@ class Registry:
                 "live_consumers",
                 {"gates_on": [c.id for c in report.gates_on], "type": type},
             )
+        # An EMPTY gates_on means "nothing gates on this" only when we were able to
+        # look. On a backend that cannot index membership, every extent is empty, so
+        # `gates_on` is empty for a reason that means *we could not check* -- and
+        # retiring on that is mechanism C committed by the call built to catch it.
+        # 5.10 already takes this line for merge_types; retire takes it too, and
+        # `force=True` is the override, recorded in history like any other.
+        # Row 3c, after an adversarial review round reproduced the silent retirement.
+        if not report.gates_on and not self.caps.indexes_membership and not force:
+            return Refusal(
+                "no_consumer_evidence",
+                {
+                    "why": (
+                        "this backend cannot compute a predicate's extent, so an empty "
+                        "`gates_on` means we could not look, not that nothing gates on "
+                        "it: " + (self.caps.reason("indexes_membership") or "")
+                    ),
+                    "type": type,
+                    "overridable": True,
+                    "override_with": "force=True",
+                },
+            )
         if report.gates_on and force and not self.caps.stores_events:
             # A destructive override that cannot be recorded is refused. An
             # unrecorded, unattributable change is precisely what this registry
@@ -1335,14 +1356,30 @@ class Registry:
         )
         divergence = score[0][1] if score else 0.0
         policy = self.policy(namespace)
-        if (
-            divergence < policy.definitions_diverge_threshold
-            and "definitions_diverge" not in acknowledge
-        ):
+        threshold = policy.definitions_diverge_threshold
+        # Rule U. `threshold is None` means no resolver here can certify that two
+        # definitions are near-synonymous, so the answer is "we cannot tell" -- and per
+        # 5.10 that blocks rather than warns, exactly like `no_consumer_evidence`. The
+        # score is still reported, so an acknowledging human sees what it was.
+        # Identical definitions are a FACT, not a judgement, so they need no resolver
+        # to certify them. Everything else does.
+        identical = " ".join(left.definition.lower().split()) == " ".join(
+            right.definition.lower().split()
+        )
+        certified = identical or (threshold is not None and divergence >= threshold)
+        if not certified and "definitions_diverge" not in acknowledge:
             return Refusal(
                 "definitions_diverge",
                 {
                     "score": divergence,
+                    "threshold": threshold,
+                    "why": (
+                        "no resolver here certifies that two definitions are "
+                        "near-synonymous; a lexical similarity score is not that "
+                        "judgement (INTERFACE.md 5.10)"
+                        if threshold is None
+                        else "the definitions are not near-synonymous by this resolver"
+                    ),
                     "overridable": True,
                     "acknowledge": "definitions_diverge",
                 },
@@ -1414,6 +1451,19 @@ class Registry:
             entry=self._entry(merged),
             acknowledged=acknowledge,
             aliases_added=(left.name,),
+            # Every merge records what the divergence check actually said, whether it
+            # certified, was acknowledged over, or was never able to judge. An auditor
+            # asking "how close was this to the line?" has an answer, and a merge that
+            # went through on a `None` threshold is visibly one nobody's resolver
+            # vouched for. Row 3c: this field used to be permanently empty.
+            warnings=(
+                f"definitions_similarity:{divergence:.4f}",
+                (
+                    "definitions_uncertified"
+                    if threshold is None
+                    else f"definitions_threshold:{threshold}"
+                ),
+            ),
         )
 
     # ============================ 5.11 register_consumer / record_use

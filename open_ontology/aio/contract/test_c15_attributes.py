@@ -20,6 +20,7 @@ import pytest
 from open_ontology.attributes import AttributeSchema, FieldSpec
 from open_ontology.types import Refusal, TypeEntry
 from open_ontology.aio.contract._support import seed
+from open_ontology.aio.contract.doubles import WithoutAttributeStore
 
 
 SEVERITY_FIELDS = {
@@ -94,6 +95,7 @@ async def test_c15_02_the_census_records_every_key_written_in_off_mode(registry)
     assert census.complete is True
 
 @pytest.mark.requires_capability("stores_proposals")
+@pytest.mark.requires_attribute_store
 async def test_c15_03_warn_mode_warns_and_does_not_refuse(registry):
     await registry.register_attribute_schema(_schema("warn"))
     proposal = await registry.propose_type(
@@ -113,6 +115,7 @@ async def test_c15_03_warn_mode_warns_and_does_not_refuse(registry):
         "and the entry is thereafter enumerable"
     )
 
+@pytest.mark.requires_attribute_store
 async def test_c15_04_enforce_mode_refuses_with_the_offending_field(registry):
     await registry.register_attribute_schema(_schema("enforce"))
     refusal = await registry.propose_type(
@@ -128,6 +131,7 @@ async def test_c15_04_enforce_mode_refuses_with_the_offending_field(registry):
     assert any(v.startswith("ordering:") for v in refusal.detail["violations"])
     assert refusal.detail["schema_version"] == 1
 
+@pytest.mark.requires_attribute_store
 async def test_c15_05_a_new_required_field_does_not_invalidate_older_rows(registry):
     await registry.register_attribute_schema(
         _schema(
@@ -171,6 +175,7 @@ async def test_c15_05_a_new_required_field_does_not_invalidate_older_rows(regist
     assert isinstance(refusal, Refusal) and refusal.reason == "attributes_schema_violation"
 
 @pytest.mark.requires_capability("stores_proposals")
+@pytest.mark.requires_attribute_store
 async def test_c15_06_the_cms_severity_case_an_ordered_set_with_no_written_ordering(registry):
     """The reason the attribute-schema mechanism exists at all.
 
@@ -209,6 +214,7 @@ async def test_c15_06_the_cms_severity_case_an_ordered_set_with_no_written_order
     assert entry.attributes["ordering"][-3:] == ["J", "K", "L"]
     assert entry.attr_schema_version == 1
 
+@pytest.mark.requires_attribute_store
 async def test_c15_07_one_schema_per_kind_cannot_serve_two_value_sets_of_one_dataset(registry):
     """**The limitation in the mechanism's own flagship justification, pinned.**
 
@@ -277,3 +283,38 @@ async def test_c15_07_one_schema_per_kind_cannot_serve_two_value_sets_of_one_dat
         "severity scale back inside somebody's transform, unversioned. One schema per "
         "kind cannot hold both CMS value_sets correctly"
     )
+
+async def test_c15_08_declining_the_attribute_store_leaves_a_backend_conformant(
+    adapter, make_registry
+):
+    """**§5.5 and `2A-RUN.md` D-2 both say so; until row 3c it was false.**
+
+    `AsyncAttributeStore` is optional -- outside the fifteen primitives and outside
+    conformance (ruling R2). A backend that does not implement it is *"still fully
+    conformant"*, and `attribute_census` *"then reports `complete=False` with a `why`
+    rather than an empty census"*. **[Observed] a real backend that declined it crashed
+    five C15 tests with `NotSupported`**, because they called
+    `register_attribute_schema` with no guard -- and the defect had gone unnoticed
+    because `AsyncDegradedAdapter` unconditionally re-declared the four extension methods, so
+    the tool built to construct degraded backends could not construct **the one optional
+    capability that is a protocol rather than a `Capabilities` flag**.
+
+    Added by an adversarial review round; see docs/findings/3C-VALIDATION.md.
+    """
+    declining = await make_registry(WithoutAttributeStore(adapter))
+
+    census = await declining.attribute_census()
+    assert census.entries == (), "nothing is recorded, because nothing can be"
+    assert census.known is None, "None, not 0 -- 0 would claim we counted and found none"
+    assert census.complete is False
+    assert census.why_incomplete, "and it says why, in the backend's own words"
+
+    # The vocabulary itself is untouched: attributes still round-trip, they are simply
+    # never validated and never censused. That is INTERFACE.md 2.1's default behaviour.
+    entry = await seed(
+        declining,
+        "scope_severity_code",
+        kind="value_set",
+        attributes={"ordered": True, "ordering": list("ABC")},
+    )
+    assert entry.attributes == {"ordered": True, "ordering": list("ABC")}
