@@ -794,7 +794,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 ### 6.2 The suite, enumerated
 
-**129 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
+**130 tests in seventeen groups.** *(109 at #3; **fifteen** added by row 3c — `C0-07` … `C0-11`, `C1-09`, `C3-10`, `C3-11`, `C5-12`, `C6-07`, `C7-07`, `C9-07`, `C9-08`, `C15-07`, `C15-08`. See §8b.2 and §8b.5. **Five** added by row 3d — `C0-12` (ruling R5 / beacon finding U1), `C0-13` (its precondition) and `C0-14` (its nesting rule, both from the adversarial loop), `C15-09` (beacon finding U3) and `C11-05` (ruling R8). **One** added by row 3e — `C3-12` (ruling **R6**, cross-namespace lookup).)* Mechanism labels are `INTERFACE.md` §4's: **1** no review · **2** could not find · **3** never retired · **4** collision · **C** silent per-consumer drop.
 
 **C0 — adapter conformance (14).** No interface call; this is the protocol itself.
 
@@ -839,7 +839,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C2-04 | `include_retired` |
 | C2-05 | a predicate is not a supertype: membership of `commentable` implies nothing about `searchable` |
 
-**C3 — `resolve_type` (11).** Mechanisms **2**, and **1** as the gate.
+**C3 — `resolve_type` (12).** Mechanisms **2**, and **1** as the gate.
 
 | id | asserts | note |
 |---|---|---|
@@ -854,6 +854,7 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 | C3-09 | **[CMS]** `resolve_type("processing_date", …)` on a single-valued column ⇒ `not_a_type` / `export_artefact`. **`resolver_dependent`** (§2.6, Q4) | §10.2, T7 |
 | C3-11 | **a retired name with a live successor resolves to the successor** — registry-guaranteed, down both lifecycle paths and whatever resolver is supplied. *(Row 3c: §5.10's "the old word still resolves" was kept only by accident — a merge writes an alias and the shipped resolver happens to score it 1.0. `retire(successor=)` writes no alias, and §2.6's production path is a caller's own resolver, so one fact had four answers and three were wrong)* |
 | C3-10 | **a retired name is named in the resolution**, with its `retire_reason` and `successor`, and listed in `alternatives` with a `None` score — never a bare *"nothing fits"*. *(Row 3c: `resolve_type` read the tombstone and discarded it, answering with a confident negative about a word it knew was burned — Rule U, in the call designed against mechanism 2)* |
+| C3-12 | **a word taken in another namespace is found when the caller asks** (`INTERFACE.md` §5.3.1, ruling **R6**): the default `search_namespaces=None` reads nothing and still reports `complete=False`; naming a namespace lands the taken name in `alternatives` as `"<namespace>:<name>"` and in `reason`, **without** changing the outcome; and `complete` is `True` only once every namespace that has a type in it was named, with the omitted ones named by name when it is not. *(Row 3e. This is UC3's W1.3 verbatim — `status` registered in `dpr`, asked for in `oti_311`, answered *"nothing in the vocabulary fits"* with an empty `alternatives` while the same context in `dpr` returned `existing` at 1.0. Mechanism **2** reintroduced by §2.6's answer to mechanism **4**, in the call designed against mechanism 2.)* |
 
 **C4 — `propose_type` (9).** Mechanism **1**.
 

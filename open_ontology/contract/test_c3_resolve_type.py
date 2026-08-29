@@ -211,3 +211,62 @@ def test_c3_11_a_retired_name_with_a_live_successor_resolves_to_the_successor(re
     # ...and it is still not reusable. Resolving through a name is not reusing it.
     answer = registry.propose_type("capture", "something else", [], "user:pm")
     assert answer.status == "retired" and "name_previously_retired" in answer.warnings
+
+
+def test_c3_12_a_word_taken_in_another_namespace_is_found_when_the_caller_asks(registry):
+    """**Ruling R6, row 3e -- UC3's W1.3, the finding the kill-criterion row rests on.**
+
+    docs/findings/3C-VALIDATION.md W1.3, reproduced verbatim: the Department of Parks
+    registers ``status``; the 311 team asks for ``status`` in its own namespace and is
+    told *"nothing in the vocabulary fits 'status'"* with an **empty** ``alternatives``.
+    The same context asked in ``dpr`` returns ``existing`` at confidence 1.0. **The
+    answer was decided by which namespace the caller picked before asking**, and
+    scoping -- INTERFACE.md 2.6's answer to mechanism 4 -- had reintroduced mechanism 2.
+
+    ``search_namespaces`` is the additive fix. Three things are asserted here and they
+    are the whole ruling:
+
+    1. **The default is unchanged.** ``None`` reads nothing, finds nothing, and still
+       says ``complete=False``. No v0 caller changes.
+    2. **A hit elsewhere is reported, and never resolved through.** The outcome stays
+       ``proposal`` -- resolving across namespaces would be 2.6's answer to mechanism 4
+       deleting itself -- and the taken name lands in ``alternatives`` prefixed with the
+       namespace it was found in.
+    3. **``complete`` is True only when the caller named every namespace that exists**,
+       and when it is False the namespaces left out are named. *"We searched four of
+       the six"* without saying which two is the confident partial answer Rule U
+       forbids, which is the failure the empty ``alternatives`` above already was.
+    """
+    seed(registry, "status", namespace="dpr", definition="the state of a parks work order")
+    seed(registry, "borough", namespace="default", definition="one of the five NYC boroughs")
+
+    # 1. The default: exactly the v0 behaviour, and it still says it is partial.
+    blind = registry.resolve_type("status", ResolveContext(), namespace="oti_311", tier="opus")
+    assert blind.outcome == "proposal"
+    assert blind.alternatives == (), "the finding, reproduced: the word looks free"
+    assert blind.complete is False and blind.searched_namespaces == ()
+    assert "oti_311" in blind.why_incomplete
+
+    # 2. Naming one namespace finds the word -- and does not resolve to it.
+    partial = registry.resolve_type(
+        "status", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert partial.outcome == "proposal", "a hit elsewhere never resolves across namespaces"
+    assert "dpr:status" in [name for name, _ in partial.alternatives]
+    assert "TAKEN" in partial.reason and "dpr" in partial.reason
+    assert partial.searched_namespaces == ("oti_311", "dpr")
+
+    # 3. ...and the search is honest about what it did not cover.
+    assert partial.complete is False, "'default' has types and was not named"
+    assert "default" in partial.why_incomplete
+
+    whole = registry.resolve_type(
+        "status", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr", "default"],
+    )
+    assert whole.complete is True, "every namespace that exists was named"
+    assert whole.why_incomplete == ""
+    assert set(whole.searched_namespaces) == {"oti_311", "dpr", "default"}
+    assert "dpr:status" in [name for name, _ in whole.alternatives]
+    assert whole.known == len(whole.alternatives), "Rule K"

@@ -49,7 +49,7 @@ from open_ontology.attributes import (
     FieldSpec,
     validate_attributes,
 )
-from open_ontology.errors import NotSupported, UnknownType
+from open_ontology.errors import AmbiguousKind, NotSupported, UnknownType
 from open_ontology.policy import NamespacePolicy
 from open_ontology.types import (
     Alternative,
@@ -561,13 +561,40 @@ class AsyncRegistry:
         namespace: str = "default",
         tier: str,
         min_confidence: float = 0.0,
+        search_namespaces: Sequence[str] | None = None,
     ) -> Resolution:
         """existing / proposal / not_a_type / none. **Persists nothing.**
 
         ``tier`` is required, not defaulted (INTERFACE.md 2.7): omitting it is a
         TypeError, so an unattributed machine call cannot be made by accident.
+
+        ``search_namespaces`` is ruling **R6**, row 3e. ``None`` -- the default -- is
+        exactly the v0 behaviour and costs exactly what it used to: one namespace
+        scored, nothing else read. Naming namespaces scores each of them too and lands
+        their hits in ``alternatives`` as ``("<namespace>:<name>", score)``.
+
+        **The outcome is still decided inside ``namespace`` alone.** A hit in another
+        namespace never makes the outcome ``existing``: 2.6 makes scoping the answer to
+        mechanism 4, and resolving *across* namespaces would be that answer deleting
+        itself. What a hit does is tell the second publisher that the word is taken
+        elsewhere -- which is the whole of UC3's W1.3, and mechanism **2** arriving
+        through the answer to mechanism 4.
         """
         policy = self.policy(namespace)
+        (
+            cross_alts,
+            searched,
+            cross_complete,
+            cross_why,
+            cross_note,
+        ) = await self._search_namespaces(
+            candidate,
+            context,
+            kind=kind,
+            namespace=namespace,
+            tier=tier,
+            search_namespaces=search_namespaces,
+        )
 
         exact = await self.adapter.get_type(namespace, candidate, kind=kind)
         # A retired exact match is NOT an `existing` outcome -- 5.9 makes the name
@@ -593,18 +620,24 @@ class AsyncRegistry:
             if successor:
                 live = await self.adapter.get_type(namespace, successor)
                 if live is not None and live.status != "retired":
+                    succession = (
+                        f"{candidate!r} was retired with {successor!r} as its "
+                        f"successor; the old word resolves to the successor and is "
+                        f"itself not reusable (INTERFACE.md 5.9, 5.10)"
+                    )
                     return Resolution(
                         outcome="existing",
-                        reason=(
-                            f"{candidate!r} was retired with {successor!r} as its "
-                            f"successor; the old word resolves to the successor and is "
-                            f"itself not reusable (INTERFACE.md 5.9, 5.10)"
+                        reason="; ".join(
+                            [succession] + ([cross_note] if cross_note else [])
                         ),
                         tier=tier,
                         scoped_to=namespace,
                         type=await self._entry(live),
                         confidence=1.0,
-                        alternatives=((exact.name, None),),
+                        alternatives=((exact.name, None),) + cross_alts,
+                        searched_namespaces=searched,
+                        complete=cross_complete,
+                        why_incomplete=cross_why,
                     )
             retired_alt = ((exact.name, None),)
             retired_note = (
@@ -621,11 +654,18 @@ class AsyncRegistry:
         if exact is not None and exact.status != "retired":
             return Resolution(
                 outcome="existing",
-                reason=f"{candidate!r} is already in the vocabulary",
+                reason="; ".join(
+                    [f"{candidate!r} is already in the vocabulary"]
+                    + ([cross_note] if cross_note else [])
+                ),
                 tier=tier,
                 scoped_to=namespace,
                 type=await self._entry(exact),
                 confidence=1.0,
+                alternatives=cross_alts,
+                searched_namespaces=searched,
+                complete=cross_complete,
+                why_incomplete=cross_why,
             )
 
         not_a_type = self.resolver.classify(candidate, context, tier=tier)
@@ -636,7 +676,12 @@ class AsyncRegistry:
                 tier=tier,
                 scoped_to=namespace,
                 confidence=None,
-                alternatives=(await self._prior_rejections(namespace, candidate))[0] + retired_alt,
+                alternatives=(await self._prior_rejections(namespace, candidate))[0]
+                + retired_alt
+                + cross_alts,
+                searched_namespaces=searched,
+                complete=cross_complete,
+                why_incomplete=cross_why,
             )
 
         page = await self.adapter.find_types(TypeQuery(namespace=namespace, kind=kind, status="active"))
@@ -646,6 +691,7 @@ class AsyncRegistry:
         rejections, rejection_note = await self._prior_rejections(namespace, candidate)
         alternatives.extend(rejections)
         alternatives.extend(retired_alt)
+        alternatives.extend(cross_alts)
 
         best_name, best_score = (scored[0] if scored else (None, None))
         reason_bits: list[str] = []
@@ -653,6 +699,8 @@ class AsyncRegistry:
             reason_bits.append(retired_note)
         if rejection_note:
             reason_bits.append(rejection_note)
+        if cross_note:
+            reason_bits.append(cross_note)
 
         if best_score is not None and best_score >= policy.existing_threshold and best_score >= min_confidence:
             entry = await self.adapter.get_type(namespace, best_name, kind=kind)
@@ -665,6 +713,9 @@ class AsyncRegistry:
                 type=await self._entry(entry) if entry else None,
                 confidence=best_score,
                 alternatives=tuple(alternatives),
+                searched_namespaces=searched,
+                complete=cross_complete,
+                why_incomplete=cross_why,
             )
 
         if best_score is not None and best_score < min_confidence:
@@ -682,6 +733,9 @@ class AsyncRegistry:
                 scoped_to=namespace,
                 confidence=best_score,
                 alternatives=tuple(alternatives),
+                searched_namespaces=searched,
+                complete=cross_complete,
+                why_incomplete=cross_why,
             )
 
         if not NAME_RE.match(candidate):
@@ -693,6 +747,9 @@ class AsyncRegistry:
                 scoped_to=namespace,
                 confidence=best_score,
                 alternatives=tuple(alternatives),
+                searched_namespaces=searched,
+                complete=cross_complete,
+                why_incomplete=cross_why,
             )
 
         # Nothing fits and the candidate looks like a real type. An un-persisted
@@ -727,7 +784,133 @@ class AsyncRegistry:
             proposal=proposal,
             confidence=best_score,
             alternatives=tuple(alternatives),
+            searched_namespaces=searched,
+            complete=cross_complete,
+            why_incomplete=cross_why,
         )
+
+    async def _search_namespaces(
+        self,
+        candidate: str,
+        context: ResolveContext,
+        *,
+        kind: str | None,
+        namespace: str,
+        tier: str,
+        search_namespaces: Sequence[str] | None,
+    ) -> tuple[tuple[Alternative, ...], tuple[str, ...], bool, str, str | None]:
+        """Ruling **R6** -- the cross-namespace half of ``resolve_type`` (INTERFACE.md 5.3).
+
+        Returns ``(alternatives, searched, complete, why_incomplete, note)``.
+
+        ``search_namespaces=None`` returns the v0 answer verbatim: no alternatives, no
+        namespaces searched, ``complete=False`` with 5.3's standing sentence, and no
+        note. **It reads nothing** -- the census below is the only new query this row
+        adds and it runs only when a caller asks for it, so no v0 caller pays for R6.
+
+        The completeness rule is the whole point and it is deliberately strict:
+        ``complete`` is True only when the caller named **every namespace that has a
+        type in it**. Anything less and ``why_incomplete`` names the ones left out by
+        name, because *"we searched four of the six"* with the two unnamed is the
+        confident partial answer Rule U forbids -- the same failure the empty
+        ``alternatives`` of contortion 8 was.
+        """
+        if search_namespaces is None:
+            return (), (), False, "", None
+
+        # ``namespace`` is always searched -- the caller is standing in it. Order is the
+        # caller's, deduplicated, with the home namespace first so a reader of
+        # ``searched_namespaces`` can see where the outcome came from.
+        wanted: list[str] = [namespace]
+        for name in search_namespaces:
+            if name not in wanted:
+                wanted.append(name)
+
+        # What namespaces exist at all? Retired types count: a namespace whose every
+        # type is retired is still a namespace somebody published into, and calling the
+        # search complete without it would be a claim about a place we did not look.
+        census = await self.adapter.find_types(TypeQuery(namespace=None, include_retired=True))
+        existing = sorted({rec.namespace for rec in census.records})
+        omitted = [name for name in existing if name not in wanted]
+
+        alternatives: list[Alternative] = []
+        exact_elsewhere: list[str] = []
+        for other in wanted:
+            if other == namespace:
+                continue
+            # **An exact name match in another namespace is the registry's answer, not
+            # the resolver's.** C3-11 made the same move for a retired name with a live
+            # successor, and for the same reason: the promise held only because the
+            # shipped scorer happens to rate an exact name 1.0, and PACKAGE.md 2.6 calls
+            # a caller-supplied resolver the production path. R6 exists to tell the
+            # second publisher the word is taken; a deployment whose resolver scores
+            # differently must not get a different answer to *that*.
+            try:
+                twin = await self.adapter.get_type(other, candidate, kind=kind)
+            except AmbiguousKind:
+                # The name is in that namespace under two kinds. Which one is a question
+                # the caller has to disambiguate with `kind=`; that it is taken is the
+                # fact R6 owes them, and it is not lost because we could not narrow it.
+                twin = None
+                exact_elsewhere.append(other)
+            else:
+                if twin is not None:
+                    exact_elsewhere.append(other)
+
+            page = await self.adapter.find_types(
+                TypeQuery(namespace=other, kind=kind, status="active")
+            )
+            scored = (
+                self.resolver.score(candidate, context, page.records, tier=tier)
+                if page.records
+                else []
+            )
+            listed = {name for name, _ in scored[:5]}
+            if other in exact_elsewhere and candidate not in listed:
+                # Score is None, not 0.0: nothing scored it, and Rule U forbids a zero
+                # standing in for "we did not score this".
+                alternatives.append((f"{other}:{candidate}", None))
+            for name, score in scored[:5]:
+                alternatives.append((f"{other}:{name}", score))
+
+        note: str | None = None
+        if exact_elsewhere:
+            note = (
+                f"the name {candidate!r} is ALREADY TAKEN in "
+                + ", ".join(repr(name) for name in sorted(exact_elsewhere))
+                + " -- scoping keeps those apart (INTERFACE.md 2.6) and this call does "
+                "not resolve across namespaces, so the outcome above is about "
+                f"{namespace!r} alone"
+            )
+        elif alternatives:
+            note = (
+                "near misses in other namespaces are listed in alternatives: "
+                + ", ".join(sorted(name for name, _ in alternatives))
+            )
+
+        # Rule U twice over. A page the backend could not fully answer cannot support a
+        # completeness claim any more than an unnamed namespace can, and the two
+        # failures are reported separately because they are different facts.
+        complete = not omitted and census.complete
+        why = ""
+        if omitted:
+            why = (
+                "the search is incomplete: "
+                + ", ".join(repr(name) for name in omitted)
+                + " "
+                + ("has" if len(omitted) == 1 else "have")
+                + " types in the store and "
+                + ("was" if len(omitted) == 1 else "were")
+                + " not named in search_namespaces (INTERFACE.md 5.3, ruling R6)"
+            )
+        elif not census.complete:
+            why = (
+                "every namespace the caller named was searched, and the backend could "
+                "not enumerate the namespaces that exist, so whether that is all of "
+                "them is unknown: "
+                + (census.why_incomplete or "no reason given by the backend")
+            )
+        return tuple(alternatives), tuple(wanted), complete, why, note
 
     async def _prior_rejections(
         self, namespace: str, candidate: str
