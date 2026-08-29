@@ -85,11 +85,17 @@ async def test_c2_04_include_retired(registry):
     await seed(registry, "shareable", kind="predicate", definition="can be shared")
     await registry.retire("shareable", "nothing gates on it any more", retired_by="user:sd")
 
-    assert {p.name for p in await registry.predicates()} == {"commentable"}
-    assert {p.name for p in await registry.predicates(include_retired=True)} == {
-        "commentable",
-        "shareable",
-    }
+    default = await registry.predicates()
+    assert {p.name for p in default} == {"commentable"}
+    # Rule K (INTERFACE.md 3, 5.2): the default hides a row, so the listing says so.
+    # A bare list here would read as "there is one predicate", which is not true.
+    assert default.complete is False
+    assert default.known == 1
+    assert default.why_incomplete and "include_retired" in default.why_incomplete
+
+    everything = await registry.predicates(include_retired=True)
+    assert {p.name for p in everything} == {"commentable", "shareable"}
+    assert everything.complete is True and everything.why_incomplete is None
 
 async def test_c2_05_a_predicate_is_not_a_supertype(registry):
     """Membership of `commentable` implies nothing about `searchable`. A registry that

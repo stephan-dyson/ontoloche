@@ -52,6 +52,15 @@ async def test_c3_03_below_min_confidence_is_none_with_alternatives(registry):
     assert resolution.alternatives, "the near misses go to the caller so a human can overrule"
     assert "facility" in [name for name, _ in resolution.alternatives]
 
+    # Rule K (INTERFACE.md 3, 5.3): alternatives is a list result, and it is scored in
+    # ONE namespace. complete is therefore always False, so an empty alternatives can
+    # never be read as "there is nothing like this anywhere" -- contortion 8 reported
+    # rather than implied.
+    assert resolution.complete is False
+    assert resolution.known == len(resolution.alternatives)
+    assert resolution.scoped_to == "default"
+    assert "default" in resolution.why_incomplete
+
 async def test_c3_04_confidence_is_none_when_no_scorer_ran_and_none_is_not_zero(registry):
     resolution = await registry.resolve_type("facility", ResolveContext(), tier="opus")
     assert resolution.outcome == "proposal"

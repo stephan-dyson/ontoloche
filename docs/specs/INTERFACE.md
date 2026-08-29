@@ -149,7 +149,7 @@ Citation:
 
 **v0 does not attempt to detect automatically whether a definition asserts a domain semantic.** That is a model judgement and belongs to the proposer. **[Assumed]** that proposers will flag it honestly; §11 lists what would change this.
 
-> **Recorded by deliverable #3, 2026-08-28 — this sentence and §10's worked example disagree.** §10 shows `propose_type(...)` producing `p.warnings == ["no_evidence", "unverified_semantics"]` from a call that carries no such flag, and `PACKAGE.md` test `C4-06` asserts the same. A flag-only design cannot satisfy §10; a detection-only design contradicts this sentence. Phase 2A implements a **conservative keyword rule** that deliberately over-warns — a spurious `unverified_semantics` costs one enumerable entry, a missed one is the 0.5 severity inversion going unlabelled. If this sentence is meant literally, the fix is an explicit proposer-supplied flag on `propose_type`, which is a change to §5.4. See [`2A-RUN.md`](../runs/2A-RUN.md) §4.5, deviation D-6.
+> **Recorded by deliverable #3, 2026-08-28 — this sentence and §10's worked example disagree.** §10 shows `propose_type(...)` producing `p.warnings == ["no_evidence", "unverified_semantics"]` from a call that carries no such flag, and `PACKAGE.md` test `C4-06` asserts the detection half of it. *(Corrected by row 3c, 2026-08-28: `C4-06` passes **non-empty** evidence and asserts `unverified_semantics` present with `no_evidence` **absent** — "there IS evidence; it is just not a citation". The combination §10 prints comes from `C4-05` plus `C4-06`, not from `C4-06` alone. The tension this box records is unaffected; the citation was wrong and would have misled anyone checking it against the suite.)* A flag-only design cannot satisfy §10; a detection-only design contradicts this sentence. Phase 2A implements a **conservative keyword rule** that deliberately over-warns — a spurious `unverified_semantics` costs one enumerable entry, a missed one is the 0.5 severity inversion going unlabelled. If this sentence is meant literally, the fix is an explicit proposer-supplied flag on `propose_type`, which is a change to §5.4. See [`2A-RUN.md`](../runs/2A-RUN.md) §4.5, deviation D-6.
 
 ### 2.9 `Consumer` — a registered code path that gates on a predicate
 
@@ -172,6 +172,17 @@ Consumer:
 **Rule U — uncertainty is a value, never a default.** No call returns a confident answer in place of an unknown one. Unknown is `None` plus a `why: str`. Never `False`, never `0`, never an empty list standing in for "we did not look".
 
 **Rule K — every list result carries `complete: bool` and a `known: int`.** Per `WALKTHROUGH.md`'s risk row: *"Only claim consumers the registry can enumerate mechanically. Never infer one. Show '3 known, may be others' rather than '3'."* In v0, `ConsumerReport.complete` is **always `false`** — see §5.1.
+
+**Every** means every. *(Amended by roadmap row 3c, 2026-08-28, after an adversarial review round found the rule stated globally and applied selectively.)* Rule K binds four shapes, and two of them acquired it in this amendment:
+
+| List result | Carrier | `complete` |
+|---|---|---|
+| `ConsumerReport.gates_on`/`would_drop`/`would_error` | §5.1 | **always `false`** |
+| `TypeListing.types` | §5.6 | `false` whenever a filter suppressed rows |
+| **`Resolution.alternatives`** | §5.3 | **always `false`** — new |
+| **`predicates()`'s return** | §5.2 | `false` whenever a filter suppressed rows — new |
+
+**Why `Resolution` needed it, and why it is the sharpest case in the document.** §10b.1 records that `resolve_type` scores only inside the namespace it was asked in. Before this amendment, the second publisher of a word got `alternatives: []` — **an empty list standing in for "we did not look", which is the one thing Rule U forbids by name.** The caller had no field with which to even ask whether the search had been scoped. It now carries `complete: false` unconditionally and a `why_incomplete` naming the namespace searched. That does not fix contortion 8; it stops contortion 8 being *silent*, which is the difference between a gap and a wrong answer.
 
 ---
 
@@ -233,8 +244,18 @@ def predicates(
     of: str | None = None,          # if given, only predicates this type satisfies
     namespace: str = "default",
     include_retired: bool = False,
-) -> list[PredicateEntry]: ...
+) -> PredicateListing: ...
 ```
+
+```
+PredicateListing:                # Rule K. Added by row 3c, 2026-08-28
+    predicates:     list[PredicateEntry]
+    known:          int | None   # None = the backend cannot count. NOT 0
+    complete:       bool         # false whenever a filter suppressed rows
+    why_incomplete: str | None
+```
+
+**Why it is not a bare list.** `include_retired=False` is the default *and hides things*, and a backend that could not fully answer the underlying page had that swallowed. A bare list of one predicate reads as *"there is one predicate"*; it may mean *"there is one we are willing to show you"*. That is §5.2's own `extent_size` failure — an empty answer reading as a confident zero — one level up, and Rule K already had the answer.
 
 ```
 PredicateEntry:
@@ -283,7 +304,13 @@ Resolution:
     reason:      str
     alternatives: list[tuple[str, float]]   # near misses, so a human can overrule
     tier:        str                  # echoed back; goes into provenance
+    scoped_to:     str                # the namespace the near misses were scored in
+    known:         int                # len(alternatives). Rule K
+    complete:      bool               # ALWAYS False in v0. Rule K
+    why_incomplete: str               # names the namespace that was searched
 ```
+
+**`complete` is always `false`, for the same reason §5.1's is** *(added by row 3c, 2026-08-28)*. The near misses are scored inside one namespace and nothing searched the others (§10b.1). So an empty `alternatives` **never** means *"there is nothing like this anywhere"* — it means *"nothing like this in the namespace you asked in, and we did not look outside it"*, and the caller can read that off the result instead of having to know it.
 
 **Designed against: mechanism 2** (nobody could find the existing types), and **mechanism 1** as the gate in front of `propose_type`.
 
@@ -294,7 +321,7 @@ Resolution:
 - **`not_a_type`** — the candidate is real but is **not a type**: a redundant projection of an existing one, a derived value, an export artefact. `reason` names which. **This outcome was forced by the CMS data; see §10.1.**
 - **`none`** — cannot tell. Not "no match" — *cannot tell*.
 
-**Behaviour when uncertain — the rule this call exists for.** Below `min_confidence`, return `none` with `alternatives` populated. **Never** return the best of a bad set as `existing`. Tenshen's classifier already does the caller-side version of this — a low `fit_score` on an existing type means the classifier was shoehorning, so it falls back rather than mislabel — and that policy is **[Observed]** to be correct. v0 puts the *detection* in the registry and leaves the *fallback* to the caller (§9, contortion 7).
+**Behaviour when uncertain — the rule this call exists for.** Below `min_confidence`, return `none` with `alternatives` populated. **Never** return the best of a bad set as `existing`. Tenshen's classifier already does the caller-side version of this — a low `fit_score` on an existing type means the classifier was shoehorning, so it falls back rather than mislabel — and that policy is **[Inferred]** to be correct — the fallback behaviour is [Observed] in the code; that it is the *right* policy is a judgement. *(Retagged by row 3c, 2026-08-28.)* v0 puts the *detection* in the registry and leaves the *fallback* to the caller (§9, contortion 7).
 
 **`confidence: None` ≠ `confidence: 0.0`.** `None` means no scorer ran. Rule U.
 

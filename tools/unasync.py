@@ -215,8 +215,21 @@ SQL_EXTRA_HEADER = '''
 __all__ = ["AsyncBaseSqlAdapter"]
 '''
 
+#: Contract-test modules that are GENERATED into the async tree. One is excluded:
+#: ``test_c0_concurrency.py`` races two writers on two threads, and a thread race has
+#: no mechanical async form -- the async equivalent is ``asyncio.gather`` over two
+#: coroutines, a different mechanism rather than a token substitution. Its async
+#: counterpart, ``aio/contract/test_concurrency.py``, is hand-written and claims the
+#: same contract id (C0-08). Both are binding. Same reasoning as the hand-written
+#: driver ``close()`` methods -- 3B-ASYNC.md D-A12.
+HAND_WRITTEN_ASYNC = frozenset({"test_c0_concurrency.py"})
+
 CONTRACT_TESTS = tuple(
-    sorted(p.name for p in (ROOT / "open_ontology" / "contract").glob("test_c*.py"))
+    sorted(
+        p.name
+        for p in (ROOT / "open_ontology" / "contract").glob("test_c*.py")
+        if p.name not in HAND_WRITTEN_ASYNC
+    )
 )
 
 SPECS: tuple[FileSpec, ...] = (

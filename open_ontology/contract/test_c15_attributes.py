@@ -204,3 +204,73 @@ def test_c15_06_the_cms_severity_case_an_ordered_set_with_no_written_ordering(re
     entry = registry.approve(accepted.id, "user:sd")
     assert entry.attributes["ordering"][-3:] == ["J", "K", "L"]
     assert entry.attr_schema_version == 1
+
+
+def test_c15_07_one_schema_per_kind_cannot_serve_two_value_sets_of_one_dataset(registry):
+    """**The limitation in the mechanism's own flagship justification, pinned.**
+
+    PACKAGE.md 5.1 justifies this whole section on the CMS scope-and-severity ordering:
+    a ``value_set`` claiming an order must be made to declare it. But a schema is keyed
+    ``(namespace, kind, version)`` -- **one schema per kind, not per type name** -- and
+    the CMS file has *two* ``kind="value_set"`` entries with different shapes:
+    ``scope_severity_code`` must be made to declare an ``ordering``, and
+    ``deficiency_corrected_status`` (six status strings, no yes/no, no order) has none
+    to declare.
+
+    So a deployment gets one of two wrong answers and there is no third:
+
+    * ``ordering`` required -> the unordered set is refused for lacking a field it has
+      no business having;
+    * ``ordering`` optional -> the ordered set can be created with no ordering, which
+      is precisely the pollution 5.1 says the mechanism exists to prevent.
+
+    This test asserts that both horns are real. It is **not** a bug report against a
+    backend: every backend behaves this way because the key is in the schema, not in
+    the storage. Recorded in PACKAGE.md 5.6 and 11.3; a ruling on whether to key
+    schemas per ``(namespace, kind, name)`` is wanted. Added by row 3c after an
+    adversarial review round; see docs/findings/3C-VALIDATION.md.
+    """
+    unordered = {
+        "values": ["Deficient, Provider Has Date Of Correction", "Deficient, No Plan Of Correction"],
+    }
+
+    # Horn 1 -- `ordering` required. The set that has no order is refused.
+    registry.register_attribute_schema(_schema("enforce"))
+    refused = registry.propose_type(
+        "deficiency_corrected_status",
+        "The six status strings CMS uses for whether a deficiency was corrected.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": False, **unordered},
+    )
+    assert isinstance(refused, Refusal), "an unordered value_set refused for lacking an order"
+    assert refused.reason == "attributes_schema_violation"
+    assert "ordering" in str(refused.detail)
+
+    # Horn 2 -- `ordering` optional. The set that HAS an order may now omit it, and
+    # the mechanism's whole reason for existing is gone.
+    relaxed = dict(SEVERITY_FIELDS)
+    relaxed["ordering"] = FieldSpec(
+        type="list", item_type="str", required=False,
+        description=relaxed["ordering"].description,
+    )
+    registry.register_attribute_schema(_schema("enforce", version=2, fields=relaxed))
+
+    now_allowed = registry.propose_type(
+        "deficiency_corrected_status",
+        "The six status strings CMS uses for whether a deficiency was corrected.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": False, **unordered},
+    )
+    assert not isinstance(now_allowed, Refusal), "horn 2 lets the unordered set through"
+
+    undeclared = registry.propose_type(
+        "scope_severity_code",
+        "Ordered severity scale A-L, where J, K and L are Immediate Jeopardy.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"ordered": True},          # claims an order, declares none
+    )
+    assert not isinstance(undeclared, Refusal), (
+        "and it lets the ORDERED set through with no ordering -- which is the CMS "
+        "severity scale back inside somebody's transform, unversioned. One schema per "
+        "kind cannot hold both CMS value_sets correctly"
+    )
