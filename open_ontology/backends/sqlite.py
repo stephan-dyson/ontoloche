@@ -81,6 +81,9 @@ class SQLiteAdapter(BaseSqlAdapter):
     def _fetchone(self, sql: str, params: tuple | list = ()) -> tuple | None:
         return self.conn.execute(sql, tuple(params)).fetchone()
 
+    def _host_transaction_open(self) -> bool | None:
+        return bool(self.conn.in_transaction)
+
     def _begin(self) -> None:
         self.conn.execute("BEGIN IMMEDIATE")
 

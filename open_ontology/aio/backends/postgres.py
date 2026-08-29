@@ -101,6 +101,13 @@ class AsyncPostgresAdapter(AsyncBaseSqlAdapter):
             await cur.execute(sql, tuple(params) or None)
             return await cur.fetchone()
 
+    def _host_transaction_open(self) -> bool | None:
+        status = self.conn.info.transaction_status
+        return status in (
+            self._psycopg.pq.TransactionStatus.INTRANS,
+            self._psycopg.pq.TransactionStatus.INERROR,
+        )
+
     async def _begin(self) -> None:
         await self._execute("BEGIN")
 

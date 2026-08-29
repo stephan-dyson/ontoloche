@@ -173,7 +173,7 @@ def adapter_factory(backend, tmp_path_factory):
 
 
 @pytest.fixture
-def adapter(adapter_factory, request):
+def adapter(adapter_factory, request, backend):
     """PACKAGE.md 3.2: *"Every other flag may be `False` and the backend can still be
     conformant"*, and 7.4 calls a ``stores_proposals=False`` backend conformant *"as a
     third backend"*. The suite falsified both -- **26 tests failed against such a
@@ -187,6 +187,9 @@ def adapter(adapter_factory, request):
     an adversarial review round found the C13 instance; see 3C-VALIDATION.md.
     """
     made = adapter_factory()
+    # Ruling R12 / row 3d: the report says what each leg DECLARED, so a declaration
+    # nothing checked cannot be printed as part of a clean CONFORMANT verdict.
+    _COVERAGE.declare(backend, made.capabilities())
     if request.node.get_closest_marker("requires_attribute_store") is not None:
         from ..adapter import AttributeStore
 

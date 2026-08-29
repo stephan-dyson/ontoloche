@@ -15,6 +15,7 @@ __all__ = [
     "SchemaMismatch",
     "StoreVersionUnknown",
     "NotSupported",
+    "HostTransactionRequired",
 ]
 
 
@@ -66,6 +67,25 @@ class StoreVersionUnknown(OpenOntologyError):
     """The store's schema version is higher than this package knows.
 
     PACKAGE.md 9.2: refused, never silently downgraded.
+    """
+
+
+class HostTransactionRequired(OpenOntologyError):
+    """A borrowed connection was handed over with no transaction on it.
+
+    PACKAGE.md 3 item 3, consequence 1: an adapter over a connection it does not own
+    opens no transaction of its own -- ``transaction()`` is a ``SAVEPOINT``, and a
+    savepoint needs a transaction to sit inside.
+
+    **Raised because the two engines disagree, and one of them disagrees silently**
+    *(row 3d, second adversarial round)*. Postgres refuses an out-of-transaction
+    ``SAVEPOINT`` with a raw ``psycopg.errors.NoActiveSqlTransaction`` -- loud, but a
+    driver exception this package never documented. SQLite **starts** a transaction on
+    an outermost ``SAVEPOINT`` and **commits** it on ``RELEASE``, so the same mistake
+    silently grants a durability the host never asked for -- on the backend 4.3 calls
+    the zero-config default, which is where the mistake is likeliest to be made and
+    least likely to be noticed. Both backends now check the precondition first and
+    raise this, so the two fail the same documented way.
     """
 
 
