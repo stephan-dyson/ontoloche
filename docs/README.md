@@ -27,6 +27,7 @@ Every document, organised by what it is for. Links are GitHub links to `main`. N
 | [0.3-prior-art.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/0.3-prior-art.md) | 0.3 | No existing interface worth matching call-for-call; Foundry's `status` vocabulary worth matching field-for-field. Migration off Foundry is possible today, onto it is not. |
 | [0.5-ground-truth-PREREGISTERED.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/0.5-ground-truth-PREREGISTERED.md) | 0.5 | Ground truth for the proposal-quality test, committed **before** any proposal was generated. |
 | [0.5-RESULTS.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/0.5-RESULTS.md) | 0.5 | Four blind agents, four model tiers, public CMS data: structure right 4/4; Opus 0 errors in 12 claims; **Haiku silently inverted the CMS severity scale.** Model tier is a product parameter. |
+| [3C-VALIDATION.md](https://github.com/stephan-dyson/open-ontology/blob/main/docs/findings/3C-VALIDATION.md) | 3c | **UC3 (NYC Open Data) run against INTERFACE v0 and PACKAGE v0.** Three agencies, one word, three unrelated meanings (`uvpi-gqnh`, `erm2-nwe9`, `693u-uax6`). Scoping and the `cross_namespace_merge` refusal hold; **five INTERFACE contortions (8–12) and two PACKAGE ones (B7–B8)** recorded, and two contract tests added (109 → 111) for a cross-namespace gap the suite never asserted. |
 
 ## Run records — what the code actually does
 
