@@ -73,6 +73,14 @@ class AsyncBaseSqlAdapter:
 
     backend_name = "generic"
     _owns_schema = True
+    #: The ``oo_type`` columns THIS backend has, and the attribute keys any extra column
+    #: carries. A backend over a schema it does not own may have fewer -- PACKAGE.md 5.7
+    #: and 9.3, beacon findings U2 and U3.
+    type_columns: tuple[str, ...] = TYPE_COLUMNS
+    type_projections: dict[str, str] = {}
+    #: False when there is no ``oo_type_predicate`` table: membership is then unindexed
+    #: and ``find_types(predicate=...)`` answers with an honest empty page, never known=0.
+    has_predicate_table: bool = True
     #: Ruling R5 / PACKAGE.md 3.5. True when this adapter was handed a connection it
     #: does not own. It then never touches autocommit and never commits: ``transaction()``
     #: brackets its writes in a SAVEPOINT and the outer commit belongs to the host.
@@ -80,7 +88,7 @@ class AsyncBaseSqlAdapter:
 
     def __init__(self, dialect: Dialect):
         self.d = dialect
-        self.m = SqlStore(dialect)
+        self.m = SqlStore(dialect, self.type_columns, self.type_projections)
         self._depth = 0
         self._failed = False
         self._savepoint_n = 0
@@ -314,8 +322,8 @@ class AsyncBaseSqlAdapter:
             }
         )
         values = self.m.type_values(stamped)
-        cols = ", ".join(TYPE_COLUMNS)
-        marks = self.m.marks(len(TYPE_COLUMNS))
+        cols = ", ".join(self.type_columns)
+        marks = self.m.marks(len(self.type_columns))
         ph = self.d.ph
         async with self.transaction():
             if expect_absent:
@@ -326,30 +334,40 @@ class AsyncBaseSqlAdapter:
                         f"({rec.namespace}, {rec.kind}, {rec.name}) is already taken"
                     ) from exc
             else:
-                updates = ", ".join(f"{c} = excluded.{c}" for c in TYPE_COLUMNS[3:])
+                updates = ", ".join(
+                    f"{c} = excluded.{c}"
+                    for c in self.type_columns
+                    if c not in ("namespace", "kind", "name")
+                )
                 await self._execute(
                     f"INSERT INTO oo_type ({cols}) VALUES ({marks}) "
                     f"ON CONFLICT (namespace, kind, name) DO UPDATE SET {updates}",
                     values,
                 )
-            await self._execute(
-                f"DELETE FROM oo_type_predicate WHERE namespace = {ph} "
-                f"AND member_kind = {ph} AND member_name = {ph}",
-                (rec.namespace, rec.kind, rec.name),
-            )
-            for predicate in dict.fromkeys(rec.predicates):
+            if self.has_predicate_table:
                 await self._execute(
-                    f"INSERT INTO oo_type_predicate "
-                    f"(namespace, member_kind, member_name, predicate_name) "
-                    f"VALUES ({ph}, {ph}, {ph}, {ph})",
-                    (rec.namespace, rec.kind, rec.name, predicate),
+                    f"DELETE FROM oo_type_predicate WHERE namespace = {ph} "
+                    f"AND member_kind = {ph} AND member_name = {ph}",
+                    (rec.namespace, rec.kind, rec.name),
                 )
+                for predicate in dict.fromkeys(rec.predicates):
+                    await self._execute(
+                        f"INSERT INTO oo_type_predicate "
+                        f"(namespace, member_kind, member_name, predicate_name) "
+                        f"VALUES ({ph}, {ph}, {ph}, {ph})",
+                        (rec.namespace, rec.kind, rec.name, predicate),
+                    )
             stored = await self.get_type(rec.namespace, rec.name, kind=rec.kind)
         assert stored is not None
         return stored
 
     # ------------------------------------------------------------------- 5 get_type
     async def _predicates_for(self, namespace: str, kind: str, name: str) -> tuple[str, ...]:
+        if not self.has_predicate_table:
+            # There is no membership table, so membership was never stored. Empty is the
+            # honest answer for the RECORD; find_types() is where the uncertainty of the
+            # QUERY is reported, with known=None and a why (PACKAGE.md 3.4 primitive 6).
+            return ()
         ph = self.d.ph
         rows = await self._fetchall(
             f"SELECT predicate_name FROM oo_type_predicate WHERE namespace = {ph} "
@@ -362,7 +380,7 @@ class AsyncBaseSqlAdapter:
         self, namespace: str, name: str, *, kind: str | None = None
     ) -> TypeRecord | None:
         ph = self.d.ph
-        cols = ", ".join(TYPE_COLUMNS)
+        cols = ", ".join(self.type_columns)
         if kind is None:
             rows = await self._fetchall(
                 f"SELECT {cols} FROM oo_type WHERE namespace = {ph} AND name = {ph}",
@@ -385,7 +403,16 @@ class AsyncBaseSqlAdapter:
     # ----------------------------------------------------------------- 6 find_types
     async def find_types(self, q: TypeQuery) -> TypePage:
         ph = self.d.ph
-        cols = ", ".join(f"t.{c}" for c in TYPE_COLUMNS)
+        cols = ", ".join(f"t.{c}" for c in self.type_columns)
+        if q.predicate is not None and not self.has_predicate_table:
+            # Never known=0 -- that reads as "nothing is commentable", which is
+            # INTERFACE.md 5.2's named failure. PACKAGE.md 3.4 primitive 6.
+            return TypePage(
+                records=(),
+                known=None,
+                complete=False,
+                why_incomplete=(await self.capabilities()).reason("indexes_membership"),
+            )
         where: list[str] = []
         params: list[Any] = []
         joins = ""

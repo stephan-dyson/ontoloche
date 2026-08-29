@@ -24,7 +24,13 @@ from ..registry import Registry
 from . import _support
 
 POSTGRES_DSN = os.environ.get("OO_POSTGRES_DSN")
-BACKENDS = ("sqlite", "postgres")
+
+#: PACKAGE.md 6.1, amended by row 3d: **three** reference legs, in one process, in one
+#: run. ``sqlite_minimal`` is a real SQLite store with four of the nine reference tables
+#: absent (``open_ontology/backends/sqlite_minimal.py``) -- five capability flags
+#: declined at once, natively rather than through ``DegradedAdapter``. beacon finding U2:
+#: a test double reporting on itself is not evidence that a degraded backend conforms.
+BACKENDS = ("sqlite", "postgres", "sqlite_minimal")
 
 
 def pytest_configure(config):
@@ -93,7 +99,7 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.fixture
-def adapter_factory(backend):
+def adapter_factory(backend, tmp_path_factory):
     """A callable returning a fresh, migrated, empty store."""
     made = []
 
@@ -111,6 +117,21 @@ def adapter_factory(backend):
         def build():
             adapter = SQLiteAdapter(":memory:")
             adapter.migrate()
+            made.append(adapter)
+            return adapter
+
+    elif backend == "sqlite_minimal":
+        from ..backends.sqlite_minimal import MinimalSQLiteAdapter
+
+        def build():
+            # A file, not ``:memory:``: the HOST creates the schema on its own
+            # connection and only then is the store handed over, which is the whole
+            # point of ``owns_schema=False``. Two connections to ``:memory:`` are two
+            # different databases.
+            path = str(tmp_path_factory.mktemp("oo_minimal") / "store.sqlite")
+            MinimalSQLiteAdapter.create_host_schema(path)
+            adapter = MinimalSQLiteAdapter(path)
+            adapter.migrate()  # verify-only: it checks, it does not create
             made.append(adapter)
             return adapter
 

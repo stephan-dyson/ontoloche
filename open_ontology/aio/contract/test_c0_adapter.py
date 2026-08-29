@@ -136,6 +136,18 @@ async def test_c0_05_migrate_is_idempotent_and_atomic(adapter):
     assert await adapter.migrate() == version
     assert await adapter.migrate() == version
 
+    if not (await adapter.capabilities()).owns_schema:
+        # Idempotence is asserted above and holds on every backend. The ATOMICITY half
+        # below drives a failing migration, and a verify-only backend issues no DDL at
+        # all (PACKAGE.md 9.3) -- there is no half-applied migration for it to have.
+        # C0-09 is the subject there. Skipped with a reason rather than returned from,
+        # so the coverage report (ruling R12) can see it. Row 3d.
+        pytest.skip(
+            "PACKAGE.md 9.3 -- this backend declares owns_schema=False, so migrate() "
+            "issues no DDL and the atomic-migration half of C0-05 has nothing to drive. "
+            "Idempotence was asserted; C0-09 is the subject for verify-only migrate()."
+        )
+
     migrations = getattr(adapter, "_migration_sql", None)
     if migrations is None:
         pytest.skip("this backend does not expose numbered migrations to inspect")

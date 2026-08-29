@@ -177,10 +177,26 @@ EVENT_COLUMNS = (
 
 
 class SqlStore:
-    """Mapping helpers bound to one dialect. Pure functions over rows and records."""
+    """Mapping helpers bound to one dialect. Pure functions over rows and records.
 
-    def __init__(self, dialect: Dialect):
+    ``type_columns`` is a parameter rather than the module constant because a backend
+    sitting on a schema it does not own (PACKAGE.md 9.3) may have **fewer** columns --
+    the natively-degraded third reference leg (PACKAGE.md 6.1, beacon finding U2) has no
+    ``attributes_json`` at all. ``projections`` maps such a backend's own typed columns
+    to the attribute keys they carry (PACKAGE.md 5.7, beacon finding U3): the value goes
+    into the column, not into a JSON blob that does not exist.
+    """
+
+    def __init__(
+        self,
+        dialect: Dialect,
+        type_columns: tuple[str, ...] = TYPE_COLUMNS,
+        projections: dict[str, str] | None = None,
+    ):
         self.d = dialect
+        self.type_columns = tuple(type_columns)
+        #: ``{column_name: attribute_key}``
+        self.projections = dict(projections or {})
 
     # ------------------------------------------------------------------ placeholders
     def marks(self, n: int) -> str:
@@ -188,6 +204,20 @@ class SqlStore:
 
     # ------------------------------------------------------------------- type record
     def type_values(self, rec: TypeRecord) -> list[Any]:
+        """Values in ``self.type_columns`` order -- the columns this backend has."""
+        full = dict(zip(TYPE_COLUMNS, self._full_type_values(rec)))
+        attributes = dict(rec.attributes or {})
+        out: list[Any] = []
+        for column in self.type_columns:
+            if column in full:
+                out.append(full[column])
+            elif column in self.projections:
+                out.append(self.d.enc_json(attributes.get(self.projections[column])))
+            else:  # pragma: no cover - a column the mapper was never told about
+                raise KeyError(f"no value for oo_type column {column!r}")
+        return out
+
+    def _full_type_values(self, rec: TypeRecord) -> list[Any]:
         d = self.d
         return [
             rec.namespace,
@@ -211,7 +241,16 @@ class SqlStore:
 
     def type_from_row(self, row: Iterable[Any], predicates: tuple[str, ...]) -> TypeRecord:
         d = self.d
-        r = dict(zip(TYPE_COLUMNS, row))
+        r = dict(zip(self.type_columns, row))
+        attributes = d.dec_json(r["attributes_json"]) or {} if "attributes_json" in r else {}
+        for column, key in self.projections.items():
+            if column not in r:
+                continue
+            value = d.dec_json(r[column])
+            # A projected column that is NULL means the key was never written -- absent,
+            # not present-and-null. PACKAGE.md 5.7.
+            if value is not None:
+                attributes[key] = value
         return TypeRecord(
             namespace=r["namespace"],
             kind=r["kind"],
@@ -220,17 +259,17 @@ class SqlStore:
             created_by=r["created_by"],
             status=r["status"],
             predicates=predicates,
-            aliases=tuple(d.dec_json(r["aliases_json"]) or ()),
-            attributes=d.dec_json(r["attributes_json"]) or {},
-            attr_schema_version=r["attr_schema_version"],
-            provenance=d.dec_json(r["provenance_json"]) or {},
-            warnings=tuple(d.dec_json(r["warnings_json"]) or ()),
-            retire_reason=r["retire_reason"],
-            retired_by=r["retired_by"],
-            retired_at=d.dec_ts(r["retired_at"]),
-            successor=r["successor"],
-            created_at=d.dec_ts(r["created_at"]),
-            updated_at=d.dec_ts(r["updated_at"]),
+            aliases=tuple(d.dec_json(r.get("aliases_json")) or ()),
+            attributes=attributes,
+            attr_schema_version=r.get("attr_schema_version"),
+            provenance=d.dec_json(r.get("provenance_json")) or {},
+            warnings=tuple(d.dec_json(r.get("warnings_json")) or ()),
+            retire_reason=r.get("retire_reason"),
+            retired_by=r.get("retired_by"),
+            retired_at=d.dec_ts(r.get("retired_at")),
+            successor=r.get("successor"),
+            created_at=d.dec_ts(r.get("created_at")),
+            updated_at=d.dec_ts(r.get("updated_at")),
         )
 
     # --------------------------------------------------------------- proposal record
@@ -451,6 +490,14 @@ class BaseSqlAdapter:
 
     backend_name = "generic"
     _owns_schema = True
+    #: The ``oo_type`` columns THIS backend has, and the attribute keys any extra column
+    #: carries. A backend over a schema it does not own may have fewer -- PACKAGE.md 5.7
+    #: and 9.3, beacon findings U2 and U3.
+    type_columns: tuple[str, ...] = TYPE_COLUMNS
+    type_projections: dict[str, str] = {}
+    #: False when there is no ``oo_type_predicate`` table: membership is then unindexed
+    #: and ``find_types(predicate=...)`` answers with an honest empty page, never known=0.
+    has_predicate_table: bool = True
     #: Ruling R5 / PACKAGE.md 3.5. True when this adapter was handed a connection it
     #: does not own. It then never touches autocommit and never commits: ``transaction()``
     #: brackets its writes in a SAVEPOINT and the outer commit belongs to the host.
@@ -458,7 +505,7 @@ class BaseSqlAdapter:
 
     def __init__(self, dialect: Dialect):
         self.d = dialect
-        self.m = SqlStore(dialect)
+        self.m = SqlStore(dialect, self.type_columns, self.type_projections)
         self._depth = 0
         self._failed = False
         self._savepoint_n = 0
@@ -692,8 +739,8 @@ class BaseSqlAdapter:
             }
         )
         values = self.m.type_values(stamped)
-        cols = ", ".join(TYPE_COLUMNS)
-        marks = self.m.marks(len(TYPE_COLUMNS))
+        cols = ", ".join(self.type_columns)
+        marks = self.m.marks(len(self.type_columns))
         ph = self.d.ph
         with self.transaction():
             if expect_absent:
@@ -704,30 +751,40 @@ class BaseSqlAdapter:
                         f"({rec.namespace}, {rec.kind}, {rec.name}) is already taken"
                     ) from exc
             else:
-                updates = ", ".join(f"{c} = excluded.{c}" for c in TYPE_COLUMNS[3:])
+                updates = ", ".join(
+                    f"{c} = excluded.{c}"
+                    for c in self.type_columns
+                    if c not in ("namespace", "kind", "name")
+                )
                 self._execute(
                     f"INSERT INTO oo_type ({cols}) VALUES ({marks}) "
                     f"ON CONFLICT (namespace, kind, name) DO UPDATE SET {updates}",
                     values,
                 )
-            self._execute(
-                f"DELETE FROM oo_type_predicate WHERE namespace = {ph} "
-                f"AND member_kind = {ph} AND member_name = {ph}",
-                (rec.namespace, rec.kind, rec.name),
-            )
-            for predicate in dict.fromkeys(rec.predicates):
+            if self.has_predicate_table:
                 self._execute(
-                    f"INSERT INTO oo_type_predicate "
-                    f"(namespace, member_kind, member_name, predicate_name) "
-                    f"VALUES ({ph}, {ph}, {ph}, {ph})",
-                    (rec.namespace, rec.kind, rec.name, predicate),
+                    f"DELETE FROM oo_type_predicate WHERE namespace = {ph} "
+                    f"AND member_kind = {ph} AND member_name = {ph}",
+                    (rec.namespace, rec.kind, rec.name),
                 )
+                for predicate in dict.fromkeys(rec.predicates):
+                    self._execute(
+                        f"INSERT INTO oo_type_predicate "
+                        f"(namespace, member_kind, member_name, predicate_name) "
+                        f"VALUES ({ph}, {ph}, {ph}, {ph})",
+                        (rec.namespace, rec.kind, rec.name, predicate),
+                    )
             stored = self.get_type(rec.namespace, rec.name, kind=rec.kind)
         assert stored is not None
         return stored
 
     # ------------------------------------------------------------------- 5 get_type
     def _predicates_for(self, namespace: str, kind: str, name: str) -> tuple[str, ...]:
+        if not self.has_predicate_table:
+            # There is no membership table, so membership was never stored. Empty is the
+            # honest answer for the RECORD; find_types() is where the uncertainty of the
+            # QUERY is reported, with known=None and a why (PACKAGE.md 3.4 primitive 6).
+            return ()
         ph = self.d.ph
         rows = self._fetchall(
             f"SELECT predicate_name FROM oo_type_predicate WHERE namespace = {ph} "
@@ -740,7 +797,7 @@ class BaseSqlAdapter:
         self, namespace: str, name: str, *, kind: str | None = None
     ) -> TypeRecord | None:
         ph = self.d.ph
-        cols = ", ".join(TYPE_COLUMNS)
+        cols = ", ".join(self.type_columns)
         if kind is None:
             rows = self._fetchall(
                 f"SELECT {cols} FROM oo_type WHERE namespace = {ph} AND name = {ph}",
@@ -763,7 +820,16 @@ class BaseSqlAdapter:
     # ----------------------------------------------------------------- 6 find_types
     def find_types(self, q: TypeQuery) -> TypePage:
         ph = self.d.ph
-        cols = ", ".join(f"t.{c}" for c in TYPE_COLUMNS)
+        cols = ", ".join(f"t.{c}" for c in self.type_columns)
+        if q.predicate is not None and not self.has_predicate_table:
+            # Never known=0 -- that reads as "nothing is commentable", which is
+            # INTERFACE.md 5.2's named failure. PACKAGE.md 3.4 primitive 6.
+            return TypePage(
+                records=(),
+                known=None,
+                complete=False,
+                why_incomplete=self.capabilities().reason("indexes_membership"),
+            )
         where: list[str] = []
         params: list[Any] = []
         joins = ""
