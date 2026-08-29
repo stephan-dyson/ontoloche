@@ -116,8 +116,10 @@ def main() -> int:
     print(
         "Every optional capability can be declined alone and the backend still "
         "conforms. 3.2's claim holds, measured rather than asserted.\n"
-        "Note what this does NOT cover: several capabilities declined AT ONCE. That is "
-        "question Q7 in docs/findings/3C-VALIDATION.md 6, and it is open."
+        "Note what this does NOT cover: several capabilities declined AT ONCE. Ruling "
+        "R12 (2026-08-29) keeps the two-flag rule and requires a COVERAGE REPORT "
+        "instead -- a conformance claim without its coverage line is not a claim. "
+        "Row 3d carries it, with a natively-degraded reference leg (U2)."
     )
     return 0
 
