@@ -117,7 +117,7 @@ def is_person(actor: str | None) -> bool:
     `user:` prefix INTERFACE 2.4 spells out -- and everything the registry does not
     recognise is refused. Rule U: unknown is not a person.
     """
-    return bool(actor) and actor.startswith("user:") and len(actor) > len("user:")
+    return bool(actor) and actor.startswith("user:") and bool(actor[len("user:"):].strip())
 
 
 # --------------------------------------------------------------------------
@@ -416,6 +416,7 @@ class Preflight:
     family: str
     namespace: str
     family_version: int          # ACTIONS 3.1 -- bumped on every re-declaration
+    reversibility: str           # the family's, at gate time -- 3.1's copy needs it
     verdict: str
     declared_effects: tuple[Effect, ...]
     preconditions: tuple[PreconditionResult, ...]
@@ -561,6 +562,14 @@ class ActionRegistry:
             if eff.op == "host_state" and not eff.why.strip():
                 return ("effect_not_permitted",
                         {"op": eff.op, "why": "host_state needs a why -- ACTIONS 2.5"})
+            if eff.op == "propose_type" and not eff.namespace:
+                # Round 3: `namespace=None` is a DECLARATION for the edge ops
+                # (rule 2.5-10) and was simply legal-and-unsatisfiable here --
+                # the "warns on everything" escape 2.5 names and refuses there.
+                return ("effect_not_permitted",
+                        {"op": eff.op,
+                         "why": "a `propose_type` effect must name the namespace it "
+                                "may propose into -- ACTIONS 2.5"})
             if eff.op == "propose_type" and eff.kind not in PROPOSABLE_KINDS:
                 # Round 1's THIRD predicate door: an action that may propose a
                 # predicate, on a namespace whose policy auto-approves, mints a
@@ -743,6 +752,7 @@ class ActionRegistry:
             family=family,
             namespace=namespace,
             family_version=self.versions.get((namespace, family), 1),
+            reversibility=fam.reversibility,
             declared_effects=fam.effects,
             preconditions=tuple(results),
             approval_mode=fam.approval_mode,
@@ -926,22 +936,11 @@ class ActionRegistry:
             raise ValueError("outcome='refused' requires a refusal (ACTIONS 3.4)")
 
         warnings: list[str] = []
-        # ACTIONS 5.2 at the SECOND layer. Round 2: `preflight` refused
-        # `approved_by="ai:reaper"` on a human-mode family and `record_invocation`
-        # then wrote it with no warning at all -- the one-layer defect 2.3 is
-        # named for, inside the fix that closed 2.3's own version of it.
-        if fam.approval_mode == "human" and outcome == "applied" and not is_person(approved_by):
-            approved_by = None
-            warnings.append("approval_unrecorded")
-        # ACTIONS 3.2 -- NEVER FABRICATED. The never-null rule binds where the
-        # gate decided; everywhere else a null plus this warning is the honest
-        # form. Round 1 found `auto:<policy>` being written for an
-        # irreversible/human family invoked by `ai:reaper`.
-        if outcome == "applied" and not approved_by:
-            warnings.append("approval_unrecorded")
-        # ACTIONS 3.1 -- when the host passes back what the gate judged, THAT is
-        # what is recorded, and a declaration amended in between is named rather
-        # than laundered.
+        # ACTIONS 3.1 -- what the GATE judged is what is recorded, and it is
+        # resolved FIRST, because every rule below reads a policy. Round 3: the
+        # `judged` block ran AFTER the approval logic, so an approval the gate had
+        # already granted was nulled by a family amended since -- rule 3-3's own
+        # field, telling round 1's lie inverted.
         version = self.versions.get((namespace, family), 1)
         effects_of_record = tuple(fam.effects)
         policy_of_record = {
@@ -959,11 +958,22 @@ class ActionRegistry:
             policy_of_record = {
                 "approval_mode": judged.approval_mode,
                 "min_auto_tier": judged.tier_floor,
-                "reversibility": policy_of_record["reversibility"],
+                # Round 3: this key was the CURRENT family's while the other three
+                # were the gate's -- one dict, two moments, and no marker.
+                "reversibility": judged.reversibility,
                 "preconditions": tuple(r.condition.kind for r in judged.preconditions),
                 "tier_order": self.tier_order,
             }
             version = judged.family_version
+
+        # ACTIONS 3.2/5.2 -- never FABRICATED and never DISCARDED, at both layers,
+        # judged against the POLICY OF RECORD so an approval the gate granted
+        # survives a later amendment. Emitted ONCE: round 3 found it twice.
+        if (outcome == "applied" and policy_of_record["approval_mode"] == "human"
+                and not is_person(approved_by)):
+            approved_by = None
+        if outcome == "applied" and not approved_by:
+            warnings.append("approval_unrecorded")
 
         declared = {e.identity() for e in effects_of_record}
         # An input-determined declaration is satisfied only by an observed effect
@@ -1211,7 +1221,7 @@ class ActionRegistry:
 
 
 def assert_vocabularies_closed() -> None:
-    """The seven refusal values and the two warning values this spec adds are in
+    """The seven refusal values and the THREE warning values this spec adds are in
     the package's closed tuples, not in this file's head."""
     for r in (
         "action_family_unknown", "precondition_unmet", "human_approval_required",
@@ -1219,5 +1229,5 @@ def assert_vocabularies_closed() -> None:
         "input_kind_mismatch",
     ):
         assert r in REFUSAL_REASONS, f"{r} missing from types.REFUSAL_REASONS"
-    for w in ("effect_undeclared", "approval_unrecorded"):
+    for w in ("effect_undeclared", "approval_unrecorded", "declaration_amended"):
         assert w in WARNING_VALUES, f"{w} missing from types.WARNING_VALUES"

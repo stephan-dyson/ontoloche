@@ -265,12 +265,34 @@ def main() -> int:
           and any(w_.startswith("declaration_amended:") for w_ in honest.warnings)
           and any(w_.startswith("effect_undeclared:") for w_ in honest.warnings),
           str(honest.warnings))
-    check("W3  ...and the policy travels with it -- the auditor's question",
+    check("W3  ...and the WHOLE policy travels with it -- the auditor's question",
           honest.declared_policy["approval_mode"] == "human"
           and honest.declared_policy["min_auto_tier"] == "opus"
+          # Round 3: this key was the CURRENT family's while the other three were
+          # the gate's -- one dict, two moments, and no marker.
+          and honest.declared_policy["reversibility"] == judged.reversibility
           and w.families[("default", "flag")].approval_mode == "auto",
-          f"recorded={honest.declared_policy['approval_mode']} "
+          f"recorded={honest.declared_policy['approval_mode']}/"
+          f"{honest.declared_policy['reversibility']} "
           f"family now={w.families[('default', 'flag')].approval_mode}")
+    # Round 3 B2: an approval the GATE granted must survive a later amendment.
+    kept = w.record_invocation(
+        "flag", {}, actor="user:sd", outcome="applied",
+        approved_by=judged.approved_by, gate_verdict="allowed", judged=judged)
+    check("W4  an approval the gate granted is not nulled by a later amendment",
+          kept.provenance.approved_by == judged.approved_by
+          and "approval_unrecorded" not in kept.warnings,
+          f"approved_by={kept.provenance.approved_by!r} warnings={kept.warnings}")
+    check("W5  ...and `approval_unrecorded` is emitted ONCE, not twice",
+          list(honest.warnings).count("approval_unrecorded") <= 1,
+          str(honest.warnings))
+    for spoof in ("user: ", "user:"):
+        r2 = g.preflight("reap", {}, actor="user:sd", approved_by=spoof)
+        if getattr(r2, "verdict", None) != "refused":
+            check(f"W6  a whitespace-only approver {spoof!r} is refused", False, "ALLOWED")
+            break
+    else:
+        check("W6  a whitespace-only `user:` approver is refused", True, "'user: ' and 'user:'")
 
     print("\nA duplicated group in `order` (round 2 MAJOR 6):")
     d2 = fresh()
