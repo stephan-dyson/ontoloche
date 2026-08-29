@@ -239,6 +239,49 @@ def main() -> int:
           isinstance(conflict.scope_conflict(), str)
           and "two transaction scopes" in conflict.scope_conflict())
 
+    print("\nThe gate-to-record window (round 2 MAJOR 5):")
+    w = fresh()
+    w.declare(ActionFamily(
+        name="flag", reversibility="reversible", approval_mode="human",
+        min_auto_tier="opus", effects=(Effect(op="add_edge", family="published_by"),)))
+    judged = w.preflight("flag", {}, actor="user:sd", approved_by="user:sd")
+    # the family is widened between the gate and the record
+    w.declare(ActionFamily(
+        name="flag", reversibility="reversible", approval_mode="auto",
+        effects=(Effect(op="add_edge", family="published_by"),
+                 Effect(op="retract_edge", family="person_links"))))
+    laundered = w.record_invocation(
+        "flag", {}, actor="user:sd", outcome="applied", approved_by="user:sd",
+        observed_effects=(Effect(op="retract_edge", family="person_links"),))
+    honest = w.record_invocation(
+        "flag", {}, actor="user:sd", outcome="applied", approved_by="user:sd",
+        observed_effects=(Effect(op="retract_edge", family="person_links"),),
+        judged=judged)
+    check("W1  without `judged` the CURRENT declaration is recorded, and it is wider",
+          len(laundered.declared_effects) == 2 and laundered.warnings == (),
+          f"{len(laundered.declared_effects)} effects, warnings={laundered.warnings}")
+    check("W2  with `judged` the GATE's declaration is recorded, the amendment is named,",
+          len(honest.declared_effects) == 1
+          and any(w_.startswith("declaration_amended:") for w_ in honest.warnings)
+          and any(w_.startswith("effect_undeclared:") for w_ in honest.warnings),
+          str(honest.warnings))
+    check("W3  ...and the policy travels with it -- the auditor's question",
+          honest.declared_policy["approval_mode"] == "human"
+          and honest.declared_policy["min_auto_tier"] == "opus"
+          and w.families[("default", "flag")].approval_mode == "auto",
+          f"recorded={honest.declared_policy['approval_mode']} "
+          f"family now={w.families[('default', 'flag')].approval_mode}")
+
+    print("\nA duplicated group in `order` (round 2 MAJOR 6):")
+    d2 = fresh()
+    for i in range(3):
+        d2.declare(ActionFamily(name=f"f{i}", reversibility="reversible",
+                                approval_mode="auto", reachability=("alpha",)))
+    dup = d2.projection("s", budget=4, order=("alpha", "alpha"))
+    check("G1  a repeated group is charged once and cannot both fit and be evicted",
+          dup.admitted == {"alpha": 3} and not (set(dup.fits) & set(dup.would_evict)),
+          f"admitted={dup.admitted} fits={dup.fits} evict={dup.would_evict}")
+
     print()
     failed = [c for c in CHECKS if not c[1]]
     if failed:

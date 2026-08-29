@@ -101,12 +101,16 @@ def main() -> int:
     )
     reg.declare(fam)
     check("T3.1   two value_set TypeRef inputs are legal", len(reg.families) == 1)
+    # Round 2: through the DOOR, so the refusal carries a reason and a door.
     try:
-        InputSpec("p", "type", kinds=("predicate",))
+        reg.declare(ActionFamily(
+            name="merge_two_predicates", reversibility="reversible", approval_mode="auto",
+            inputs=(InputSpec("p", "type", kinds=("predicate",)),)))
         check("T3.1b  a predicate input is refused", False, "accepted")
-    except ValueError as exc:
-        check("T3.1b  a predicate input is refused", "kill row" in str(exc) or
-              "predicate" in str(exc), str(exc).split("--")[-1].strip())
+    except DeclarationRefused as exc:
+        check("T3.1b  a predicate input is refused at the declaration door",
+              exc.reason == "input_kind_mismatch",
+              f"{exc.reason} at door={exc.detail['door']}")
 
     pf = reg.preflight("reconcile_borough",
                        {"a": boroughs["dpr"], "b": boroughs["oti_311"]},

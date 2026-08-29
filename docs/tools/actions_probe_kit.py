@@ -163,16 +163,27 @@ class InputSpec:
     kinds: tuple[str, ...] | None = None
     families: tuple[str, ...] | None = None
 
-    def __post_init__(self) -> None:
+    def problem(self) -> tuple[str, dict] | None:
+        """ACTIONS 2.3, checked at the DOOR rather than at construction.
+
+        Round 2: this rule and two of 2.4's raised a bare `ValueError` in
+        `__post_init__`, so they fired before any door was reached -- carrying no
+        `door`, returning no `Refusal`, and unable to produce `import_refused` on
+        the `import_types` path. Rule 2.2-4 says every declaration rule binds at
+        all three doors; three of them bound at none.
+        """
         if self.ref not in ("type", "instance", "edge"):
-            raise ValueError(f"input {self.name!r}: ref must be type|instance|edge")
-        # ACTIONS 2.3, inherited from EDGES 2.4.1 as a GENERAL rule: an action
-        # taking two predicates is the kill row with a verb in front of it.
+            return ("attributes_schema_violation",
+                    {"field": "inputs", "input": self.name, "got": self.ref,
+                     "why": "ref must be type|instance|edge -- ACTIONS 2.3"})
+        # A GENERAL rule: an action taking two predicates is the kill row with a
+        # verb in front of it.
         if self.kinds and "predicate" in self.kinds:
-            raise ValueError(
-                f"input {self.name!r}: `predicate` may not be an input kind "
-                "-- ACTIONS 2.3, EDGES 2.4.1's rule inherited"
-            )
+            return ("input_kind_mismatch",
+                    {"field": "inputs", "input": self.name,
+                     "why": "`predicate` may not be an input kind -- ACTIONS 2.3, "
+                            "EDGES 2.4.1's rule inherited"})
+        return None
 
 
 @dataclass(frozen=True)
@@ -190,18 +201,19 @@ class Precondition:
     #: silently added it -- the "fixed only in the probe" failure, exactly.
     namespace: str = "default"
 
-    def __post_init__(self) -> None:
+    def problem(self) -> tuple[str, dict] | None:
+        """ACTIONS 2.4, checked at the DOOR. See `InputSpec.problem`."""
         if self.kind not in PRECONDITION_KINDS:
-            raise ValueError(
-                f"precondition kind {self.kind!r} is not one of {PRECONDITION_KINDS} "
-                "-- ACTIONS 2.4, the vocabulary is closed at four"
-            )
+            return ("attributes_schema_violation",
+                    {"field": "preconditions", "got": self.kind,
+                     "why": f"not one of {PRECONDITION_KINDS} -- ACTIONS 2.4, the "
+                            "vocabulary is closed at four"})
         # ACTIONS 2.4-3, on PACKAGE 5.2's reasoning for FieldSpec.description.
         if not self.why.strip():
-            raise ValueError(
-                f"precondition {self.kind}/{self.subject}: `why` is required and "
-                "non-empty -- ACTIONS 2.4"
-            )
+            return ("attributes_schema_violation",
+                    {"field": "preconditions", "kind": self.kind,
+                     "why": "`why` is required and non-empty -- ACTIONS 2.4"})
+        return None
 
 
 @dataclass(frozen=True)
@@ -379,6 +391,7 @@ class Invocation:
     #: to run this unattended in March?" had no field to read, because the copy was
     #: taken for one of the five things that decide a verdict.
     declared_policy: dict
+    family_version: int          # the declaration generation this was judged against
     outcome: str
     gate_verdict: str
     provenance: InvocationProvenance
@@ -402,6 +415,7 @@ class PreconditionResult:
 class Preflight:
     family: str
     namespace: str
+    family_version: int          # ACTIONS 3.1 -- bumped on every re-declaration
     verdict: str
     declared_effects: tuple[Effect, ...]
     preconditions: tuple[PreconditionResult, ...]
@@ -477,6 +491,11 @@ class ActionRegistry:
         self.consumers = dict(consumers or {})
         self.family_predicates = dict(family_predicates or {})
         self.families: dict[tuple[str, str], ActionFamily] = {}
+        #: ACTIONS 3.1 -- the declaration generation, bumped at every door. Round 2:
+        #: `record_invocation` copied the CURRENT declaration, so a family amended
+        #: between the gate and the record re-described a blast radius already
+        #: judged -- and laundered an undeclared effect while doing it.
+        self.versions: dict[tuple[str, str], int] = {}
         self._log: list[Invocation] = []
         self._seq = 0
 
@@ -502,7 +521,7 @@ class ActionRegistry:
             # alone, so an entry declaring `merge_types` as an effect and nothing
             # else was WRITTEN at all three doors -- rule 2.5-5's "the exclusion
             # binds at declaration" bypassed by declaring LESS.
-            self.families[(family.namespace, family.name)] = family
+            self._store(family)
             return family
         problem = self.declaration_problem(family)
         if problem is not None:
@@ -513,11 +532,24 @@ class ActionRegistry:
                 # edge path warns instead. Nothing is written either way.
                 extra["warning"] = f"import_refused:{reason}"
             raise DeclarationRefused(reason, {**detail, **extra})
-        self.families[(family.namespace, family.name)] = family
+        self._store(family)
         return family
+
+    def _store(self, family: ActionFamily) -> None:
+        key = (family.namespace, family.name)
+        self.versions[key] = self.versions.get(key, 0) + 1
+        self.families[key] = family
 
     def declaration_problem(self, family: ActionFamily) -> tuple[str, dict] | None:
         """Every declaration-time rule, in one place, so all three doors share it."""
+        for spec in family.inputs:
+            bad = spec.problem()
+            if bad is not None:
+                return bad
+        for cond in family.preconditions:
+            bad = cond.problem()
+            if bad is not None:
+                return bad
         for eff in family.effects:
             if eff.op in GOVERNANCE_CALLS:
                 return ("effect_not_permitted",
@@ -710,6 +742,7 @@ class ActionRegistry:
         base = dict(
             family=family,
             namespace=namespace,
+            family_version=self.versions.get((namespace, family), 1),
             declared_effects=fam.effects,
             preconditions=tuple(results),
             approval_mode=fam.approval_mode,
@@ -873,6 +906,7 @@ class ActionRegistry:
         source_version: str | None = None,
         refusal: Refusal | None = None,
         compensates: str | None = None,
+        judged: "Preflight | None" = None,
     ) -> Invocation | Refusal:
         if not self.caps.stores_invocations:
             return Refusal("action_store_absent",
@@ -905,11 +939,37 @@ class ActionRegistry:
         # irreversible/human family invoked by `ai:reaper`.
         if outcome == "applied" and not approved_by:
             warnings.append("approval_unrecorded")
-        declared = {e.identity() for e in fam.effects}
+        # ACTIONS 3.1 -- when the host passes back what the gate judged, THAT is
+        # what is recorded, and a declaration amended in between is named rather
+        # than laundered.
+        version = self.versions.get((namespace, family), 1)
+        effects_of_record = tuple(fam.effects)
+        policy_of_record = {
+            "approval_mode": fam.approval_mode,
+            "min_auto_tier": fam.min_auto_tier,
+            "reversibility": fam.reversibility,
+            "preconditions": tuple(c.kind for c in fam.preconditions),
+            "tier_order": self.tier_order,
+        }
+        if judged is not None:
+            if judged.family_version != version:
+                warnings.append(
+                    f"declaration_amended:{judged.family_version}:{version}")
+            effects_of_record = tuple(judged.declared_effects)
+            policy_of_record = {
+                "approval_mode": judged.approval_mode,
+                "min_auto_tier": judged.tier_floor,
+                "reversibility": policy_of_record["reversibility"],
+                "preconditions": tuple(r.condition.kind for r in judged.preconditions),
+                "tier_order": self.tier_order,
+            }
+            version = judged.family_version
+
+        declared = {e.identity() for e in effects_of_record}
         # An input-determined declaration is satisfied only by an observed effect
         # whose namespace is one the invocation's OWN INPUTS carry -- so an action
         # invoked for the wrong publisher still warns, which is the whole point.
-        open_ns = {e.identity() for e in fam.effects
+        open_ns = {e.identity() for e in effects_of_record
                    if e.op in ("add_edge", "retract_edge") and e.namespace is None}
         input_ns = {getattr(r, "namespace", None) for r in inputs.values()}
         input_ns |= {getattr(getattr(r, "type", None), "namespace", None)
@@ -926,24 +986,15 @@ class ActionRegistry:
             warnings.append(
                 "not_durable_until_host_commits:"
                 + self.caps.why.get("action_transaction_scope", "host owns the commit"))
-        for w in warnings:
-            if w.split(":", 1)[0] not in WARNING_VALUES:
-                raise ValueError(f"{w!r} is not in the closed warnings vocabulary")
-
         self._seq += 1
         inv = Invocation(
             invocation_id=f"inv{self._seq:04d}",
             family=family,
             namespace=namespace,
             inputs=dict(inputs),
-            declared_effects=tuple(fam.effects),      # ACTIONS 3.1 -- COPIED
-            declared_policy={
-                "approval_mode": fam.approval_mode,
-                "min_auto_tier": fam.min_auto_tier,
-                "reversibility": fam.reversibility,
-                "preconditions": tuple(c.kind for c in fam.preconditions),
-                "tier_order": self.tier_order,
-            },
+            declared_effects=effects_of_record,       # ACTIONS 3.1 -- COPIED
+            declared_policy=policy_of_record,
+            family_version=version,
             observed_effects=tuple(observed_effects),
             outcome=outcome,
             gate_verdict=gate_verdict,
@@ -965,6 +1016,9 @@ class ActionRegistry:
             ),
             warnings=tuple(warnings),
         )
+        for w in inv.warnings:
+            if w.split(":", 1)[0] not in WARNING_VALUES:
+                raise ValueError(f"{w!r} is not in the closed warnings vocabulary")
         self._log.append(inv)
         # ACTIONS 3.4 -- a compensation makes the original `compensated`, and the
         # facade derives the backward pointer (9). Round 1 found neither half.
@@ -1085,7 +1139,11 @@ class ActionRegistry:
                 why_incomplete="no order supplied; the registry does not choose "
                                "which families reach a surface")
 
-        order = tuple(order)
+        # Round 2: `order` is a Sequence with no uniqueness rule, and a duplicated
+        # group was charged twice and appeared in BOTH `fits` and `would_evict` --
+        # a set rule 10-4 defines as disjoint. De-duplicated, first occurrence
+        # winning, because that is the position the caller's own order gives it.
+        order = tuple(dict.fromkeys(order))
         counts = {g: counts.get(g, 0) for g in order}
         # `admitted` is the RULE's charge: a family occupies ONE slot, in the
         # first group of `order` it declares. `counts` and `admitted` differ

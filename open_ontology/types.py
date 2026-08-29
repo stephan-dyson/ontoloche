@@ -222,6 +222,15 @@ WARNING_VALUES = (
     # plus this warning is the honest form; the never-null rule binds only where the
     # gate actually decided.
     "approval_unrecorded",
+    # ACTIONS.md v0, row #6, adversarial round 2 -- the twenty-fifth. `Invocation`,
+    # when the host passes back the `Preflight` it acted on and the family has been
+    # re-declared since. 3.1 copies the declaration onto the record so that amending
+    # a family does not re-describe an invocation already judged -- and the copy was
+    # being taken at RECORD time, from the CURRENT family, which does exactly what
+    # the rule says it prevents: a reviewer widened a family between the two calls
+    # and an undeclared `retract_edge` was laundered into the ledger with no warning.
+    # The fix is to record what the gate judged; this says when the two differ.
+    "declaration_amended",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
