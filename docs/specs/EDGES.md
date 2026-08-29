@@ -213,6 +213,7 @@ Two consequences, both stated:
 | `retracted_without_event_trail:<why>` | **`Edge`** | §2.6 — the retraction stands (the row *is* the record) but its sequence is unrecoverable. `<why>` is the backend's own sentence |
 | `edge_family_retired:<name>` | **`NeighborReport`** and **`Edge`** | §4.3 on the READ — a named family is retired; its edges were not deleted, so it is searched, and the caller is told. **And on the WRITE**: `add_edge` onto a retired family is not refused (retirement is a statement about the vocabulary; an edge is a fact about two things) and the returned `Edge` carries this, because a caller who has just written under a word somebody withdrew is entitled to know. *(The second carrier was added by row 4b, which found its own code emitting the value there while this table listed one carrier — **a closed vocabulary opening by CODE rather than by prose**, which is a worse version of this section's original finding, not a better one. `C17-15` binds both carriers.)* |
 | `origin_type_unregistered:<ref>` | **`NeighborReport`** | §4.3 — the walk's origin names a type nobody registered |
+| `endpoint_type_merged:<ref>` | **`NeighborReport`** | §4.3 rule 14 — the origin's type is joined to another by a merge or a retirement-with-successor, and edges under the other name were not searched. Minted by row 4b's third adversarial round, in the change that introduces it, per ruling R3 |
 | `no_edge_gate_registered` | **`ConsumerReport`** | §8 — no predicate's extent contains any edge family, so `would_drop: []` means *nobody told us what traverses edges*, not *nothing will drop this* |
 
 **One value was considered and deliberately NOT minted:** a warning for attributes that did not round-trip. `PACKAGE.md` §3.4 primitive 4's mechanism already reports it — the returned record simply lacks the key, and `Capabilities.why` says why — and the type side has no such warning. Adding one on the edge side would make one fact reportable two ways. §6.
@@ -319,9 +320,12 @@ NeighborReport:
 NeighborEdge:
     edge:      Edge
     at_depth:  int          # 1 = incident on the origin. §4.4 — this field is not decoration
+    reached:   NodeRef | None   # the node THIS edge newly reached. Below
 ```
 
 **`depth_reached` counts levels that found something NEW, and the word is load-bearing.** Under the default `direction="both"`, the frontier at level 2 contains the node reached at level 1 — and that node is incident on the very edge the walk arrived on. A `depth_reached` computed from *"did the scan return any records"* therefore reports `depth_reached == depth_requested` on a genuine dead end, because the walk re-found its own arriving edge and counted that as progress. **[Observed]** in round 2 (§17): a one-edge graph walked to depth 2 reported `depth_reached=2`, and the probe written to test dead ends missed it because it hard-coded `direction="out"`, which structurally cannot re-find an incoming edge. **The dead-end rule of §4.3 was therefore true only for the one direction nobody defaults to.** Both directions are now exercised.
+
+> **`edges` is ordered by `(at_depth, edge_id)`, and `reached` names the node each edge newly reached** — `None` for a self-loop and for a triangle's closing edge, which reaches nobody new. *(Both added by row 4b's third adversarial round, and §9.3's worked example is why. That example fills the Tenshen grounding bundle's `relations` slot from a depth-2 report — **the worked example for the reason the edge row exists** — and a reviewer implemented it the obvious way: compare each edge's endpoints against the ORIGIN. At depth 2 that is silently wrong, because the far end of a second-hop edge was never incident on the origin: `person#7` never appears, `task#77` appears twice, and there is no error, no warning and no `complete=False`. **Mechanism C, inside the example written to show a consumer how to avoid it.** Computing it correctly needs `edges` walked in discovery order against a growing visited set — an inference the walk can make once, exactly, and a consumer can only re-derive. The order is therefore a guarantee rather than an accident: a deterministic traversal order, **not a ranking** — §1's *"a set, not a ranked list"* is about relevance and stands. `C17-34`.)*
 
 **Two corner cases, stated because they are reachable and were not** *(round 3)*. **A self-loop** (`src == dst`) counts in `known` and contributes **nothing** to `nodes`, because both its endpoints are the origin and `nodes` excludes the origin — so `known=1, nodes=()` is a correct report of one real edge, not an inconsistency. **`at_depth` is a property of the edge's discovery, not of a newly-reached node**: in a triangle `A→B, A→C, B→C` walked from `A`, the `B→C` edge is `at_depth=2` although both of its endpoints were reached at depth 1. Both are exercised in `edges_capability_probe.py`.
 
@@ -377,6 +381,7 @@ NeighborEdge:
 | 4.3-11 | The edge store is `transaction_scope="savepoint"` and this is a **read** | **Nothing is added.** `PACKAGE.md` §3.4 primitive 3, note 2: a read says nothing about durability in either direction, because the registry cannot know whether the host has committed | `C17-21` |
 | 4.3-12 | **No `UnknownNode` exception**, and the paragraph below argues why `UnknownType`'s reasoning does not transpose | The honest form is a report with `edges: ()`, `known: 0` and a warning when the origin's type is unregistered | `C17-11` |
 | 4.3-13 | An edge whose family is registered **nowhere** is returned by an `edge_families=None` walk, with `edge_family_unregistered:<namespace>:<name>` | *Added by row 4b, which implemented this section. There is deliberately no foreign key from an edge to its family (§2.7's argument, and §7.2 observes beacon's `work_links` has none either), so the case is reachable — and the spec did not say what the READ does with it. Dropping it is mechanism **C** in the read seam* | `C17-13` |
+| 4.3-14 | The origin's type is joined to another by a **merge**, or by a retirement with a `successor` | The walk searches the name it was given and **not the other one** — an edge's endpoints are references by identity triple (§2.1) and `merge_types` rewrites none of them. So the report carries `endpoint_type_merged:<ref>`, `complete=False`, and a `why` naming the other name. *(Added by row 4b's third adversarial round. `merge_types` is the sanctioned answer to mechanism **4**, which §12 calls co-dominant for this row — and a caller who did the CORRECT thing after one, resolving to the canonical type before walking, got `known=0`, **`complete=True`** and an empty `warnings`. That contradicts §4.4's own argument for why `complete` may ever be `True`: there is no edge that exists in the store and is invisible to a query over it. Across a merge there is. The walk still does not FOLLOW the chain — whether an edge written under a merged word is an edge of its survivor is a decision above the row that found this — and that is deviation **D-4b-15** and question **Q33**.)* | `C17-33` |
 
 **No `UnknownNode` exception.** `INTERFACE.md` §5.1 raises `UnknownType` rather than returning an empty `ConsumerReport`, and the reasoning was that an empty report is false reassurance. It does not transpose: the registry **has no node store** (§1), so it cannot distinguish *a node with no edges* from *a node that does not exist*, and raising would require inventing a fact. The honest form is a report with `edges: ()`, `known: 0` and a `warnings` entry when the origin's type is unregistered. **This is a place where two rules of this project point opposite ways and the tie is broken by which one requires the registry to know something it does not.**
 
@@ -735,9 +740,18 @@ Beacon's `architecture/grounding-contract.md` specifies `"relations": list[Refer
 The probe fills it from the T1.7 report:
 
 ```python
+# `reached` is what makes this correct, and it was added because this very
+# example was implemented the obvious way and came out silently wrong at hop 2.
+[
+    {"type": ne.reached.type.name, "id": ne.reached.id,
+     "note": f"{ne.edge.family} (hop {ne.at_depth})"}
+    for ne in report.edges if ne.reached is not None
+]
 {"type": "task",   "id": "77", "note": "blocks (hop 1, confidence 0.82)"}
 {"type": "person", "id": "7",  "note": "task_stakeholder (hop 2)"}
 ```
+
+> **Do not compute the far end by comparing an edge's endpoints against the origin.** At hop 2 the far end was never incident on the origin, so that reading returns the intermediate node twice and never mentions the one actually reached — with no error and no `complete=False`. `NeighborEdge.reached` exists because a reviewer wrote exactly that loop against the shipped registry (§4.1, row 4b's third round).
 
 **It works, and the projection is lossy in a specific and reportable way.** Nine things a `NeighborReport` carries have no slot in a `Reference`: `family`, `at_depth`, `confidence`, `created_by`, `source_version`, `status`, `warnings`, and the report-level `complete` and `families_searched`.
 

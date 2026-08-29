@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (31). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (34). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -1428,3 +1428,181 @@ def test_c17_31_find_edges_returns_only_records_incident_to_the_frontier(
                 f"direction={direction}: the registry narrows an unfiltered store, "
                 "and `both` is the direction every caller defaults to"
             )
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+def test_c17_32_a_callers_mistake_arrives_as_the_documented_error(registry):
+    """EDGES.md 4.2 promises a `ValueError` for a caller's mistake. It has to keep it.
+
+    `neighbors` is the one call this document is built around, and it had **no input
+    validation at all** until row 4b's third adversarial round, whose reviewer was told
+    to be the engineer integrating against it next week. Three of the four things they
+    tried in the first hour blew up three frames down:
+
+    * `depth=1.5` sailed past the range guard and died inside `range()` with a
+      `TypeError` naming neither the parameter nor the rule. Not exotic: `n / 1` is a
+      float in Python, and JSON round-trips ints as floats.
+    * a `node` that is a plain string died on `.namespace` deep in the walk.
+    * `edge_families="blocks"` -- **a bare `str` satisfies `Sequence[str]`**, which is
+      the most natural mistake in Python -- was iterated character by character and
+      refused with `detail={"families": ["b","l","o","c","k","s"]}`, which does not
+      merely fail, it actively misleads the caller about what they got wrong.
+
+    A raw `TypeError` from three frames down is not the promise 4.2 makes.
+    """
+    blocks(registry)
+    origin = task(1)
+
+    for bad_depth in (1.5, "2", True, None):
+        with pytest.raises(ValueError, match="depth"):
+            registry.neighbors(origin, ["blocks"], bad_depth, namespace="default")
+
+    with pytest.raises(TypeError, match="TypeRef or an InstanceRef"):
+        registry.neighbors("tenshen:entity:task#1", ["blocks"], 1, namespace="default")
+
+    with pytest.raises(TypeError, match="sequence of family names"):
+        registry.neighbors(origin, "blocks", 1, namespace="default")
+
+    with pytest.raises(ValueError, match="direction"):
+        registry.neighbors(origin, ["blocks"], 1, namespace="default", direction="outbound")
+
+    # And the legal shapes still work, so the guards are guards and not a wall.
+    assert registry.neighbors(origin, ["blocks"], 1, namespace="default").known == 0
+    assert registry.neighbors(origin, None, 2, namespace="default").known == 0
+    assert registry.neighbors(origin, (), 1, namespace="default").families_searched == ()
+
+
+@pytest.mark.requires_capability(
+    "stores_edges", "stores_attributes", "stores_events", "indexes_membership"
+)
+def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registry):
+    """EDGES.md 4.3, rule `4.3-14` -- and it was a **confident, complete, false
+    negative** until row 4b's third adversarial round.
+
+    `merge_types` is the registry's sanctioned answer to mechanism **4**, which
+    `EDGES.md` 12 calls **co-dominant** for this row: it retires one word with the other
+    as its `successor` and adds the retired name to the survivor's aliases. **It rewrites
+    no edge** -- `src`/`dst` are references by identity triple (2.1) and nothing in this
+    package edits a stored reference.
+
+    So a caller who does the CORRECT thing after a merge -- resolve to the canonical
+    type, exactly as `resolve_type` teaches, and then walk -- got `known=0`,
+    **`complete=True`** and an empty `warnings`, about edges sitting in the store under
+    the other name. That is the shape 2.2's `direction` finding calls unacceptable, and
+    it contradicts 4.4's own argument for why `complete` may ever be `True`: *"there is
+    no edge that exists in the store and is invisible to a query over it."* Across a
+    merge there is.
+
+    **The walk still does not follow the chain**, and that is deliberate: whether an edge
+    written under a merged word is an edge of its survivor is a decision above this row.
+    Deviation **D-4b-15**, question **Q33**. What it does is stop claiming otherwise.
+    """
+    blocks(registry)
+    seed(registry, "facility_old", definition="a nursing home, as we first called it")
+    seed(registry, "facility_new", definition="a nursing home, as we first called it")
+    seed(registry, "citation", definition="a deficiency cited at a survey")
+    old = TypeRef("default", "entity", "facility_old")
+    new = TypeRef("default", "entity", "facility_new")
+    cit = TypeRef("default", "entity", "citation")
+
+    written = registry.add_edge(
+        "blocks", InstanceRef(cit, "C1"), InstanceRef(old, "F1"), "user:sd"
+    )
+    assert not isinstance(written, Refusal), written
+
+    clean = registry.neighbors(InstanceRef(old, "F1"), ["blocks"], 1, namespace="default")
+    assert clean.known == 1 and clean.complete is True, "before the merge, nothing is hidden"
+
+    merged = registry.merge_types(
+        "facility_old", "facility_new", "one word for one facility", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    # The survivor: the edge is in the store, under the other name, and invisible here.
+    survivor = registry.neighbors(InstanceRef(new, "F1"), ["blocks"], 1, namespace="default")
+    assert survivor.known == 0
+    assert survivor.complete is False, (
+        "an empty answer about a node whose edges are in the store under a word this "
+        "one absorbed is not a complete answer"
+    )
+    assert f"endpoint_type_merged:{new}" in survivor.warnings
+    assert "facility_old" in survivor.why_incomplete
+
+    # And the predecessor, walked directly: the edges are there, and the report still
+    # says the identity is split, because a caller reading it needs to know either way.
+    predecessor = registry.neighbors(
+        InstanceRef(old, "F1"), ["blocks"], 1, namespace="default"
+    )
+    assert predecessor.known == 1
+    assert predecessor.complete is False
+    assert f"endpoint_type_merged:{old}" in predecessor.warnings
+
+    # A type nobody merged says nothing of the kind.
+    ordinary = registry.neighbors(InstanceRef(cit, "C1"), ["blocks"], 1, namespace="default")
+    assert ordinary.complete is True
+    assert not any(w.startswith("endpoint_type_merged") for w in ordinary.warnings)
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+def test_c17_34_the_report_says_which_node_each_edge_reached(registry):
+    """EDGES.md 4.1's `reached`, and 9.3's worked example is why it exists.
+
+    9.3 fills the Tenshen grounding bundle's `relations` slot from a depth-2 report --
+    **the worked example for the reason this row exists** -- and row 4b's third
+    adversarial round implemented it the obvious way, comparing each edge's endpoints
+    against the ORIGIN. At depth 2 that is silently wrong: the far end of a second-hop
+    edge was never incident on the origin, so `person#7` never appears and `task#77`
+    appears twice, with no error, no warning and no `complete=False`. **Mechanism C,
+    inside the example written to show a consumer how to avoid it.**
+
+    Computing it correctly needs `edges` walked in discovery order against a growing
+    visited set -- an inference the report can make once, exactly, and a consumer can
+    only re-derive. So the walk fills it, and the order it is filled in is **guaranteed**
+    rather than incidental: `(at_depth, edge_id)`. That is a deterministic traversal
+    order and not a ranking; 1's *"a set, not a ranked list"* is about relevance.
+    """
+    blocks(registry)
+    edge_family(registry, "stakeholder", inverse_label="stakes")
+    person = TypeRef("tenshen", "entity", "person")
+    t41, t77, p7 = task(41), task(77), InstanceRef(person, "7")
+    registry.add_edge("blocks", t41, t77, "user:sd", confidence=0.82)
+    registry.add_edge("stakeholder", t77, p7, "user:sd")
+
+    report = registry.neighbors(
+        t41, ["blocks", "stakeholder"], 2, namespace="default", direction="out"
+    )
+    assert [ne.at_depth for ne in report.edges] == [1, 2], "ordered by (at_depth, edge_id)"
+
+    # 9.3's projection, written the way a consumer would now write it.
+    relations = [
+        {
+            "type": ne.reached.type.name,
+            "id": ne.reached.id,
+            "note": f"{ne.edge.family} (hop {ne.at_depth})",
+        }
+        for ne in report.edges
+        if ne.reached is not None
+    ]
+    assert relations == [
+        {"type": "task", "id": "77", "note": "blocks (hop 1)"},
+        {"type": "person", "id": "7", "note": "stakeholder (hop 2)"},
+    ], "the hop that turns 'what is blocking this' into 'who is blocking this'"
+
+    # `None` where nothing new was reached, which is Rule U rather than picking an end.
+    loop_registry_edge = registry.add_edge("blocks", task(9), task(9), "user:sd")
+    assert not isinstance(loop_registry_edge, Refusal)
+    loop = registry.neighbors(task(9), ["blocks"], 1, namespace="default")
+    assert [ne.reached for ne in loop.edges] == [None], "a self-loop reaches nobody new"
+
+    a, b, c = task("a"), task("b"), task("c")
+    registry.add_edge("blocks", a, b, "user:sd")
+    registry.add_edge("blocks", a, c, "user:sd")
+    registry.add_edge("blocks", b, c, "user:sd")
+    triangle = registry.neighbors(a, ["blocks"], 2, namespace="default")
+    closing = [ne for ne in triangle.edges if ne.at_depth == 2]
+    assert len(closing) == 1 and closing[0].reached is None, (
+        "a triangle's closing edge reaches nobody new, and saying so is Rule U rather "
+        "than naming one of its two already-reached ends"
+    )
+    assert {str(ne.reached) for ne in triangle.edges if ne.reached} == {str(b), str(c)}

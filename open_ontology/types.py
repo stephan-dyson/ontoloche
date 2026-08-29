@@ -169,6 +169,19 @@ WARNING_VALUES = (
     # `direction` filter could not be applied to it, because an unregistered family's
     # `symmetric` is unknown and Rule U forbids guessing.
     "edge_family_unregistered",
+    # Row 4b, adversarial round 3 -- the twenty-second, and the second value this
+    # project has minted because running the code found a case a specification had
+    # not. `merge_types` is the registry's sanctioned answer to mechanism 4, which
+    # EDGES.md 12 calls co-dominant for the edge row; it retires one word with the
+    # other as its successor and rewrites no edge, because an edge's endpoints are
+    # references by identity triple. So a caller who does the CORRECT thing after a
+    # merge -- resolve to the canonical type, then walk -- got `known=0`,
+    # **`complete=True`** and an empty `warnings` about edges sitting in the store
+    # under the other name. That contradicts EDGES.md 4.4's own argument for why
+    # `complete` may ever be True: *there is no edge that exists in the store and is
+    # invisible to a query over it*. Across a merge there is, and now the report says
+    # so and stops claiming completeness.
+    "endpoint_type_merged",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

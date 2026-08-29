@@ -29,6 +29,7 @@ from .edges import (
     InstanceRef,
     NeighborEdge,
     NeighborReport,
+    NodeRef,
     TypeRef,
 )
 from .errors import (
@@ -107,6 +108,7 @@ __all__ = [
     "InstanceRef",
     "NeighborEdge",
     "NeighborReport",
+    "NodeRef",
     "TypeRef",
     "AlreadyExists",
     "AmbiguousKind",

@@ -436,6 +436,70 @@ def _check_rule_coverage(implemented: set[str]) -> list[str]:
     return problems
 
 
+# ---------------------------------------------------------------------------
+# PACKAGE.md 3.4's printed PRIMITIVE signatures, against the Protocol.
+#
+# Added by row 4b's third adversarial round, and the defect that produced it is the
+# reason this whole file exists, arriving in the one half of PACKAGE.md nothing reached.
+#
+# Row 4b added `edge_id` to primitive 15 and its own deviation D-4b-2 said the signature
+# had been "amended in the same change". **It had not been.** The Protocol took the
+# argument, the registry passed it, and 3.4's printed block still showed the old
+# signature -- so a third-party author implementing `read_events` literally from the
+# document (which 3.1 calls the whole point: *"conformance must be checkable by people
+# who did not write this package"*) got a `TypeError` on the first `edge_provenance`
+# call. Two adversarial rounds read past it, because this checker diffed `Registry`
+# facade signatures and printed dataclasses and never the eighteen primitive blocks.
+#
+# Names only, and defaults only where the document prints them -- the same rule the rest
+# of this file follows. A primitive the document does not print at all is a finding too:
+# 3.4 is what an adapter author builds from.
+_PRIMITIVE = re.compile(r"^\*\*\d+\. `(\w+)\((.*?)\)( -> .*?)?`\*\*", re.M)
+
+
+def _params(text: str) -> set[str]:
+    found = set()
+    for part in re.split(r",(?![^\[\]]*\])", text):
+        part = part.strip()
+        if not part or part == "*":
+            continue
+        found.add(part.split(":")[0].split("=")[0].strip().lstrip("*"))
+    return found - {""}
+
+
+def _check_primitive_signatures(package_text: str) -> list[str]:
+    """Every primitive PACKAGE.md 3.4 prints takes what the Protocol takes."""
+    problems: list[str] = []
+    printed = {name: _params(args) for name, args in
+               ((m.group(1), m.group(2)) for m in _PRIMITIVE.finditer(package_text))}
+    protocol = adapter_module.StorageAdapter
+    import inspect
+
+    expected = {n for n in vars(protocol) if not n.startswith("_")}
+    for name in sorted(expected - set(printed)):
+        problems.append(
+            f"PACKAGE 3.4: the protocol has primitive {name!r} and 3.4 prints no "
+            f"signature for it -- an adapter author has nothing to build from"
+        )
+    for name in sorted(set(printed) - expected):
+        problems.append(
+            f"PACKAGE 3.4: prints a primitive {name!r} the protocol does not have"
+        )
+    for name in sorted(set(printed) & expected):
+        actual = set(inspect.signature(getattr(protocol, name)).parameters) - {"self"}
+        for missing in sorted(actual - printed[name]):
+            problems.append(
+                f"PACKAGE 3.4 {name}(): the protocol takes {missing!r} and the printed "
+                f"signature does not -- a backend built from the document is wrong"
+            )
+        for extra in sorted(printed[name] - actual):
+            problems.append(
+                f"PACKAGE 3.4 {name}(): the document prints {extra!r}; the protocol "
+                f"does not take it"
+            )
+    return problems
+
+
 def main() -> int:
     text = SPEC.read_text(encoding="utf-8")
     blocks = spec_blocks(text)
@@ -543,6 +607,7 @@ def main() -> int:
                     f"EDGES {printed}.{name}: printed by EDGES.md, absent from the code"
                 )
 
+    problems.extend(_check_primitive_signatures(PACKAGE.read_text(encoding="utf-8")))
     problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
     problems.extend(_check_warning_vocabulary(SPEC.read_text(encoding="utf-8")))
 
@@ -574,6 +639,8 @@ def main() -> int:
         f"contents and count.\n"
         f"INTERFACE.md 5.4: the closed warnings vocabulary matches "
         f"types.WARNING_VALUES ({len(types_module.WARNING_VALUES)} values).\n"
+        f"docs/specs/PACKAGE.md 3.4: every printed primitive signature matches "
+        f"StorageAdapter.\n"
         f"docs/specs/EDGES.md: every printed shape matches open_ontology/edges.py "
         f"({len(EDGES_SHAPES)} shapes).\n"
         f"EDGES.md: every numbered rule in "
