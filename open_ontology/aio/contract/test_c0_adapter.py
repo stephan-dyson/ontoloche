@@ -314,3 +314,55 @@ async def test_c0_07_g1s_key_is_scoped_so_one_word_in_two_namespaces_is_two_rows
 
     everywhere = await adapter.find_types(TypeQuery(namespace=None, kind="value_set"))
     assert sorted(r.namespace for r in everywhere.records) == ["dot", "dpr", "oti_311"]
+
+async def test_c0_10_keyset_pagination_actually_pages(adapter):
+    """**The first defect found by asking the other question.** Eleven review rounds
+    asked *"can a legitimate backend FAIL the suite?"* and found five. This one came
+    from asking the mirror: **can a broken backend PASS it?**
+
+    §3.3 gives `TypeQuery` a `limit` and an opaque `after` cursor and `TypePage` a
+    `next_after`, ordered by `(namespace, kind, name)`, and spends real design ink
+    justifying query objects over kwargs. **Nothing exercised any of it.** [Observed]: an
+    adapter identical to the reference one except that it silently drops `limit` and
+    `after` -- so every page is the whole set, which in a real keyset consumer is an
+    infinite loop or a duplicate-forever bug -- ran the whole suite to
+    `119 passed, exit 0` and printed the CONFORMANCE banner with no caveat.
+
+    That matters at UC3's stated scale (2,399 datasets; "hundreds to low thousands of
+    types") and for the Phase 3 ingestion loop, which is the shape this pagination
+    exists for. Added by row 3c after an adversarial review round.
+
+    **What this does NOT fix, recorded as question Q8:** `AsyncRegistry` never *asks* for a
+    bounded page -- every façade call site builds an unbounded query -- so a correct
+    implementation is still never exercised in production. That is a design decision
+    (what should `complete`/`known` mean on a paged listing?) and it wants a ruling.
+    """
+    await adapter.migrate()
+    names = [f"type_{i:02d}" for i in range(7)]
+    for name in names:
+        await adapter.put_type(_type(name=name), expect_absent=True)
+
+    everything = await adapter.find_types(TypeQuery(namespace="default"))
+    assert sorted(r.name for r in everything.records) == names, "the fixture itself"
+
+    seen: list[str] = []
+    cursor, pages = None, 0
+    while True:
+        page = await adapter.find_types(TypeQuery(namespace="default", limit=3, after=cursor))
+        pages += 1
+        assert len(page.records) <= 3, (
+            "a page must honour `limit` -- an adapter that returns everything makes "
+            "`next_after` meaningless and loops a keyset consumer forever"
+        )
+        batch = [r.name for r in page.records]
+        assert not (set(batch) & set(seen)), (
+            f"page {pages} repeats rows from an earlier page: `after` was not honoured"
+        )
+        seen.extend(batch)
+        cursor = page.next_after
+        if cursor is None:
+            break
+        assert pages < 10, "next_after never went None -- this would not terminate"
+
+    assert seen == names, "the pages must partition the result set, in key order"
+    assert pages == 3, "7 rows at limit=3 is three pages, the last one short"

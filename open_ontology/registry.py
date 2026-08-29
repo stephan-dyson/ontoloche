@@ -606,6 +606,31 @@ class Registry:
         retired_note: str | None = None
         retired_alt: tuple[Alternative, ...] = ()
         if exact is not None and exact.status == "retired":
+            # A retired name with a LIVE SUCCESSOR resolves to the successor, and the
+            # registry says so itself. 5.10 promises "the old word still resolves" after
+            # a merge, and [Observed] that promise was kept only by accident: the
+            # shipped resolver happened to score the alias a merge writes at 1.0. The
+            # same situation reached by `retire(successor=)` -- which writes no alias --
+            # answered `proposal`, and a deployment supplying its own resolver (2.6's
+            # production path) got `proposal` down both paths. Four different answers to
+            # one fact. Row 3c, after an adversarial review round drove all four.
+            successor = getattr(exact, "successor", None)
+            if successor:
+                live = self.adapter.get_type(namespace, successor)
+                if live is not None and live.status != "retired":
+                    return Resolution(
+                        outcome="existing",
+                        reason=(
+                            f"{candidate!r} was retired with {successor!r} as its "
+                            f"successor; the old word resolves to the successor and is "
+                            f"itself not reusable (INTERFACE.md 5.9, 5.10)"
+                        ),
+                        tier=tier,
+                        scoped_to=namespace,
+                        type=self._entry(live),
+                        confidence=1.0,
+                        alternatives=((exact.name, None),),
+                    )
             retired_alt = ((exact.name, None),)
             retired_note = (
                 f"{candidate!r} was retired and the name is not reusable "
