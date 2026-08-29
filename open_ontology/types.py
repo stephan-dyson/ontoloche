@@ -114,6 +114,15 @@ REFUSAL_REASONS = (
     # `reinstate` on a retirement whose successor is itself active: reinstating a word
     # whose replacement is in use is mechanism 4 arriving through the lifecycle.
     "successor_active",
+    # R11 again, after row 3e's first adversarial round -- the twenty-first, and the
+    # SEVENTEENTH any v0 code path returns. `reinstate` on a name that a LIVE type holds
+    # as an alias, or on a type holding a live name as one of its own aliases. Two active
+    # entries with one word between them is mechanism 4, and it was reachable in three
+    # ordinary calls: merge A into B, retire B, reinstate A, reinstate B. `merge_types`
+    # refuses by default and `propose_type` on a live type's alias returns the tombstone;
+    # `reinstate` was the one door left open, in the registry whose thesis is detecting
+    # exactly this.
+    "alias_collision",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

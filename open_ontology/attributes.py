@@ -11,9 +11,14 @@ enumerable -- the same move as ``ConsumerReport.complete = False``.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+
+#: INTERFACE.md 2.1's type-name grammar. Duplicated rather than imported because
+#: PACKAGE.md 2.2 keeps this module free of registry imports.
+_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
 __all__ = [
     "FieldSpec",
@@ -21,12 +26,23 @@ __all__ = [
     "AttributeCensus",
     "CensusEntry",
     "validate_attributes",
+    "strictest",
     "MODES",
     "ADDITIONAL",
 ]
 
+#: Weakest first. The order is load-bearing: ruling R10's name-level schemas shadow the
+#: per-kind one's FIELDS, and a shadow that also carried the mode would make an override
+#: an exemption -- a one-line, unreviewed opt-out of a kind's governance, which in UC3
+#: is one agency turning off a rule dozens publish under. So the fields are replaced and
+#: the STRICTNESS is a floor: PACKAGE.md 5.2b rule 3.
 MODES = ("off", "warn", "enforce")
 ADDITIONAL = ("allow", "warn", "forbid")
+
+
+def strictest(*values: str, order: tuple[str, ...]) -> str:
+    """The strongest of several ``MODES`` / ``ADDITIONAL`` values."""
+    return max(values, key=order.index)
 
 _PY_TYPES: dict[str, tuple[type, ...]] = {
     "str": (str,),
@@ -102,13 +118,19 @@ class AttributeSchema:
             raise ValueError(f"AttributeSchema.additional must be one of {ADDITIONAL}")
         if self.version < 1:
             raise ValueError("AttributeSchema.version is monotonic from 1")
-        if self.name is not None and not self.name.strip():
+        if self.name is not None:
             # An empty string is the STORE's sentinel for "no name" (PACKAGE.md 5.2b);
-            # letting a caller pass one would make two different things one value.
-            raise ValueError(
-                "AttributeSchema.name is either None (the per-kind schema) or a real "
-                "type name; the empty string is the store's own sentinel"
-            )
+            # letting a caller pass one would make two different things one value. And a
+            # name that cannot match any type is dead configuration stored silently --
+            # in UC3, a typo in one agency's deployment config that governs nothing and
+            # says nothing. Both are refused loudly here rather than found later.
+            if not _NAME_RE.match(self.name):
+                raise ValueError(
+                    f"AttributeSchema.name is either None (the per-kind schema) or a "
+                    f"type name matching {_NAME_RE.pattern} (INTERFACE.md 2.1); "
+                    f"{self.name!r} can never match a type, so the schema would govern "
+                    f"nothing"
+                )
 
 
 def _type_ok(value: Any, spec_type: str) -> bool:
@@ -152,14 +174,30 @@ def validate_attributes(schema: AttributeSchema, attributes: dict[str, Any]) -> 
 
 @dataclass(frozen=True)
 class CensusEntry:
+    """``declared`` is ``bool | None`` -- Rule U, after ruling R10 made the answer
+    depend on which type.
+
+    A census row is ``(kind, key)`` over every type of that kind, and since R10 a key
+    can be declared by a name-level schema for one name and by nothing for the rest. A
+    flat ``False`` there is a confident negative about a key that is *required*
+    somewhere -- in the CMS fixture R10 exists for, on the call whose whole job is
+    making the escape hatch enumerable.
+
+    * ``True``  -- the per-kind schema declares it, so it is declared for every name.
+    * ``False`` -- neither the per-kind schema nor any name-level schema declares it.
+    * ``None``  -- the per-kind schema does not and at least one name-level schema
+      does, so the answer depends on which type. ``declared_why`` names them.
+    """
+
     kind: str
     key: str
     n: int
     first_seen: datetime
     last_seen: datetime
     example: Any
-    declared: bool
+    declared: bool | None
     schema_versions: tuple[int | None, ...]
+    declared_why: str | None = None
 
 
 @dataclass(frozen=True)

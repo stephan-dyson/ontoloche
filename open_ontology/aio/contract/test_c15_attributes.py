@@ -520,3 +520,96 @@ async def test_c15_11_the_per_kind_schema_still_governs_every_name_without_an_ov
     assert third.reason == "attributes_schema_violation"
     assert third.detail["schema_name"] is None
     assert "ordering" in str(third.detail)
+
+@pytest.mark.requires_capability("stores_attributes")
+@pytest.mark.requires_attribute_store
+async def test_c15_12_an_override_may_not_weaken_the_kind_and_the_census_says_so(registry):
+    """**Both halves of R10 that the first cut got wrong.** Row 3e, first adversarial
+    round, both reproduced on the CMS fixture this mechanism is justified on.
+
+    *Half one -- the enforcement floor.* PACKAGE.md 5.2b rule 3 says *"an override is a
+    schema, not an exemption"*. The first cut shadowed `mode` and `additional` along
+    with `fields`, so a name-level schema with `fields={}`, `additional="allow"`,
+    `mode="off"` turned a strictly enforced kind **completely off for one name**, with
+    no warning and nothing in the census to show it. In UC3 that is one agency's
+    one-line, unreviewed opt-out of a rule dozens publish under. The fields are replaced;
+    the strictness is a **floor**, applied at validation time rather than at
+    registration -- a floor enforced when a schema is registered is bypassed by
+    registering the weak override first, and a rule whose ordering you can pick is not a
+    rule.
+
+    *Half two -- `declared` is tri-state.* A census row is `(kind, key)` over every type
+    of that kind, so after R10 a key can be declared by a name-level schema for one name
+    and by nothing for the rest. `True` would claim it for types the override never
+    covered; `False` is a confident negative about a key that is **required** somewhere
+    -- Rule U, on the call whose whole job is making the escape hatch enumerable. So the
+    third state exists and `declared_why` names the schemas it depends on.
+    """
+    strict = AttributeSchema(
+        namespace="default", kind="value_set", version=1, mode="enforce",
+        additional="forbid", registered_by="deployment",
+        fields={
+            "ordered": FieldSpec(type="bool", description="whether the set has an order"),
+            "ordering": FieldSpec(
+                type="list", item_type="str", required=True,
+                description="the values least-serious first",
+            ),
+        },
+    )
+    await registry.register_attribute_schema(strict)
+
+    # An override that tries to switch the kind's governance off for one name.
+    await registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default", kind="value_set", version=1, mode="off",
+            additional="allow", fields={}, registered_by="deployment",
+            name="deficiency_corrected_status",
+        )
+    )
+    escaped = await registry.propose_type(
+        "deficiency_corrected_status",
+        "The six status strings CMS uses for whether a deficiency was corrected.",
+        [], "ai:proposer", kind="value_set", tier="opus",
+        attributes={"an_entire_nested_world": {"a": {"b": 2}}, "junk": 1},
+    )
+    assert isinstance(escaped, Refusal), (
+        "an override replaces the FIELDS and may not weaken the STRICTNESS"
+    )
+    assert escaped.reason == "attributes_schema_violation"
+    assert escaped.detail["schema_name"] == "deficiency_corrected_status"
+
+    # A real override -- its own fields, and the kind's strictness -- works.
+    await registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default", kind="value_set", version=2, mode="enforce",
+            additional="forbid", registered_by="deployment",
+            name="deficiency_corrected_status",
+            fields={
+                "ordered": FieldSpec(type="bool", description="whether it has an order"),
+                "values": FieldSpec(
+                    type="list", item_type="str", required=True,
+                    description="the status strings, which have no order to declare",
+                ),
+            },
+        )
+    )
+    ok = await seed(
+        registry, "deficiency_corrected_status", kind="value_set",
+        definition="The six status strings CMS uses.",
+        attributes={"ordered": False, "values": ["Past Non-Compliance", "No revisit needed"]},
+    )
+    assert ok.status == "active"
+    await seed(
+        registry, "scope_severity_code", kind="value_set",
+        definition="Ordered severity scale A-L, where J, K and L are Immediate Jeopardy.",
+        attributes={"ordered": True, "ordering": list("ABCDEFGHIJKL")},
+    )
+
+    census = {e.key: e for e in (await registry.attribute_census()).entries}
+    assert census["ordered"].declared is True, "the per-kind schema declares it for all"
+    assert census["ordering"].declared is True
+    assert census["values"].declared is None, (
+        "Rule U: declared for one name of this kind and for no other, so the answer "
+        "depends on which type -- neither True nor False is honest"
+    )
+    assert "deficiency_corrected_status" in (census["values"].declared_why or "")

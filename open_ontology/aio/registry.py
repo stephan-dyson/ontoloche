@@ -43,13 +43,16 @@ from open_ontology.aio.adapter import (
     TypeRecord,
 )
 from open_ontology.attributes import (
+    ADDITIONAL,
+    MODES,
     AttributeCensus,
     AttributeSchema,
     CensusEntry,
     FieldSpec,
+    strictest,
     validate_attributes,
 )
-from open_ontology.errors import AmbiguousKind, NotSupported, UnknownType
+from open_ontology.errors import NotSupported, UnknownType
 from open_ontology.policy import NamespacePolicy
 from open_ontology.types import (
     Alternative,
@@ -829,15 +832,32 @@ class AsyncRegistry:
             if name not in wanted:
                 wanted.append(name)
 
-        # What namespaces exist at all? Retired types count: a namespace whose every
+        # **One fetch, reused.** What namespaces exist at all, and what is in the ones
+        # the caller named, are the same question asked twice, so they are asked once.
+        # The first cut issued this census PLUS one ``find_types`` per named namespace;
+        # an adversarial round measured 6,062 SQL round-trips for a single call over
+        # 3,000 types in 30 namespaces, of which ~3,000 existed only to learn 30
+        # namespace names. Reusing the page removes the per-namespace queries outright.
+        # The residual cost is stated in INTERFACE.md 5.3.1 rule 9 rather than hidden:
+        # asking for a completeness verdict costs what ``list_types(namespace=None)``
+        # costs, and that is the unbounded fetch ruling R13 declined to page in v0.
+        #
+        # Retired types count towards *which namespaces exist*: a namespace whose every
         # type is retired is still a namespace somebody published into, and calling the
         # search complete without it would be a claim about a place we did not look.
         census = await self.adapter.find_types(TypeQuery(namespace=None, include_retired=True))
         existing = sorted({rec.namespace for rec in census.records})
         omitted = [name for name in existing if name not in wanted]
 
+        by_namespace: dict[str, list] = {}
+        for rec in census.records:
+            if rec.namespace != namespace and rec.status == "active":
+                by_namespace.setdefault(rec.namespace, []).append(rec)
+
         alternatives: list[Alternative] = []
+        seen_labels: set[str] = set()
         exact_elsewhere: list[str] = []
+        ambiguous_elsewhere: list[str] = []
         for other in wanted:
             if other == namespace:
                 continue
@@ -848,52 +868,67 @@ class AsyncRegistry:
             # a caller-supplied resolver the production path. R6 exists to tell the
             # second publisher the word is taken; a deployment whose resolver scores
             # differently must not get a different answer to *that*.
-            try:
-                twin = await self.adapter.get_type(other, candidate, kind=kind)
-            except AmbiguousKind:
-                # The name is in that namespace under two kinds. Which one is a question
-                # the caller has to disambiguate with `kind=`; that it is taken is the
-                # fact R6 owes them, and it is not lost because we could not narrow it.
-                twin = None
+            #
+            # **The probe is KIND-BLIND, and that is the whole point** *(fixed after
+            # round 1 of this row's adversarial loop)*. It used to pass the caller's
+            # ``kind=`` through, so DPR publishing ``status`` as a ``value_set`` was
+            # invisible to the 311 team asking for ``status`` as an ``entity`` -- which
+            # is UC3's collision shape exactly, answered with contortion 8's own
+            # sentence under a ``complete=True`` seal. Uniqueness is per
+            # ``(namespace, kind)`` (2.1), so a name taken under another kind is not the
+            # same entry; it is still the same WORD, and R6 owes the caller that word.
+            candidates = [
+                rec for rec in by_namespace.get(other, ()) if rec.name == candidate
+            ]
+            if candidates:
                 exact_elsewhere.append(other)
-            else:
-                if twin is not None:
-                    exact_elsewhere.append(other)
+                if len({rec.kind for rec in candidates}) > 1:
+                    ambiguous_elsewhere.append(other)
 
-            page = await self.adapter.find_types(
-                TypeQuery(namespace=other, kind=kind, status="active")
-            )
+            pool = by_namespace.get(other, ())
+            if kind is not None:
+                pool = [rec for rec in pool if rec.kind == kind]
             scored = (
-                self.resolver.score(candidate, context, page.records, tier=tier)
-                if page.records
-                else []
+                self.resolver.score(candidate, context, pool, tier=tier) if pool else []
             )
-            listed = {name for name, _ in scored[:5]}
-            if other in exact_elsewhere and candidate not in listed:
+            # Deduped by label: one name under two kinds in one namespace is one taken
+            # word, and listing it twice double-counts Rule K's `known`.
+            for name, score in scored[:5]:
+                label = f"{other}:{name}"
+                if label not in seen_labels:
+                    seen_labels.add(label)
+                    alternatives.append((label, score))
+            label = f"{other}:{candidate}"
+            if other in exact_elsewhere and label not in seen_labels:
                 # Score is None, not 0.0: nothing scored it, and Rule U forbids a zero
                 # standing in for "we did not score this".
-                alternatives.append((f"{other}:{candidate}", None))
-            for name, score in scored[:5]:
-                alternatives.append((f"{other}:{name}", score))
+                seen_labels.add(label)
+                alternatives.append((label, None))
 
         note: str | None = None
         if exact_elsewhere:
             note = (
                 f"the name {candidate!r} is ALREADY TAKEN in "
-                + ", ".join(repr(name) for name in sorted(exact_elsewhere))
+                + ", ".join(repr(name) for name in sorted(set(exact_elsewhere)))
                 + " -- scoping keeps those apart (INTERFACE.md 2.6) and this call does "
                 "not resolve across namespaces, so the outcome above is about "
                 f"{namespace!r} alone"
             )
+            if ambiguous_elsewhere:
+                note += (
+                    " (and under more than one kind in "
+                    + ", ".join(repr(name) for name in sorted(set(ambiguous_elsewhere)))
+                    + ", so `kind=` is how a caller narrows it)"
+                )
         elif alternatives:
             note = (
                 "near misses in other namespaces are listed in alternatives: "
                 + ", ".join(sorted(name for name, _ in alternatives))
             )
 
-        # Rule U twice over. A page the backend could not fully answer cannot support a
-        # completeness claim any more than an unnamed namespace can, and the two
-        # failures are reported separately because they are different facts.
+        # Rule U, three ways. A namespace nobody named, a page the backend could not
+        # fully answer, and a backend that could not enumerate the namespaces at all are
+        # three different reasons the search was partial, and the caller is told which.
         complete = not omitted and census.complete
         why = ""
         if omitted:
@@ -904,13 +939,13 @@ class AsyncRegistry:
                 + ("has" if len(omitted) == 1 else "have")
                 + " types in the store and "
                 + ("was" if len(omitted) == 1 else "were")
-                + " not named in search_namespaces (INTERFACE.md 5.3, ruling R6)"
+                + " not named in search_namespaces (INTERFACE.md 5.3.1, ruling R6)"
             )
         elif not census.complete:
             why = (
                 "every namespace the caller named was searched, and the backend could "
-                "not enumerate the namespaces that exist, so whether that is all of "
-                "them is unknown: "
+                "not return the whole store in one page, so both which namespaces "
+                "exist and what is in them are partial: "
                 + (census.why_incomplete or "no reason given by the backend")
             )
         return tuple(alternatives), tuple(wanted), complete, why, note
@@ -1560,6 +1595,60 @@ class AsyncRegistry:
                     },
                 )
 
+        # **Two live words with one meaning between them is mechanism 4, and this call
+        # was the one door left open to it** *(row 3e, first adversarial round)*.
+        # `merge_types` refuses by default and `propose_type` on a name a live type
+        # holds as an alias returns the tombstone -- but `merge A into B; retire B;
+        # reinstate A; reinstate B` are four ordinary calls that end with A and B both
+        # active and B still holding A's name as an alias. `successor_active` catches
+        # the one-step version and is walked around by retiring the successor first.
+        # Reproduced end to end on the UC3 fixture before it was believed.
+        #
+        # Refused rather than warned: this is not an uncertainty, it is a collision the
+        # registry can see, inside ONE namespace -- which is the case 2.6 says scoping
+        # exists to prevent rather than preserve. The path back is named in the detail,
+        # and it is a real one: retire the other word, which is an ordinary recorded
+        # call.
+        holder, held = await self._alias_collisions(namespace, rec)
+        if holder is not None or held is not None:
+            return Refusal(
+                "alias_collision",
+                {
+                    "type": type,
+                    "namespace": namespace,
+                    "held_as_alias_by": holder,
+                    "holds_the_live_name": held,
+                    "why": (
+                        f"reinstating {type!r} would leave two ACTIVE entries with one "
+                        f"word between them: "
+                        + (
+                            f"{holder!r} is active and carries {type!r} as an alias"
+                            if holder is not None
+                            else f"{type!r} carries the alias {held!r}, which is an "
+                            f"active type"
+                        )
+                        + " (INTERFACE.md 5.9b; mechanism 4)"
+                    ),
+                    "overridable": False,
+                    "path_back": (
+                        f"retire {(holder or held)!r} first, or leave this word retired"
+                    ),
+                },
+            )
+
+        # Rule U on the check above. On a backend that cannot store aliases every alias
+        # list is empty, so finding no collision means *we could not look* -- the same
+        # shape as `retire` reading an unknowable `gates_on` as "nothing gates on this"
+        # (5.9). It warns rather than refuses: unlike the event record below, nothing is
+        # destroyed by proceeding, and refusing would make the call unreachable on a
+        # backend whose only failing is that it does not keep prior names.
+        alias_warnings: tuple[str, ...] = ()
+        if not self.caps.stores_aliases:
+            alias_warnings = (
+                "reinstate_alias_check_unavailable:"
+                + (self.caps.reason("stores_aliases") or "this backend stores no aliases"),
+            )
+
         # **A lifecycle fact that is REMOVED and cannot be recorded is refused**, on the
         # rule PACKAGE.md 3.6 states for `cannot_record_override`. Every other call in
         # this surface only ever appends: `retire` adds a tombstone, `merge_types` adds
@@ -1625,7 +1714,30 @@ class AsyncRegistry:
                     "successor": successor,
                 },
             )
-        return self._written(await self._entry(stored))
+        return self._written(await self._entry(stored, extra_warnings=alias_warnings))
+
+    async def _alias_collisions(
+        self, namespace: str, rec: TypeRecord
+    ) -> tuple[str | None, str | None]:
+        """``(the active type holding this name as an alias, the live name this type holds)``.
+
+        Both directions of one collision, because a merge writes the alias onto the
+        survivor and either side can be the one being reinstated. Read over the whole
+        namespace: this is a governance call, not a hot path, and the alternative is a
+        collision the registry could see and did not look for.
+        """
+        page = await self.adapter.find_types(TypeQuery(namespace=namespace, status="active"))
+        mine = {a for a in (rec.aliases or ())}
+        holder: str | None = None
+        held: str | None = None
+        for other in page.records:
+            if other.name == rec.name and other.kind == rec.kind:
+                continue
+            if holder is None and rec.name in (other.aliases or ()):
+                holder = other.name
+            if held is None and other.name in mine:
+                held = other.name
+        return holder, held
 
     # =========================================================== 5.10 merge_types
     async def merge_types(
@@ -2072,11 +2184,32 @@ class AsyncRegistry:
         rows: list[AttrObservedRecord] = await store.read_attr_observed(namespace, kind=kind)
         entries = []
         for row in rows:
-            # `declared` is asked of the PER-KIND schema deliberately: a census row is
-            # (kind, key) over every type of that kind, so a name-level schema (R10)
-            # declares the key for one type and not for the rest, and answering `True`
-            # off one override would be a claim about types it never covered.
-            schema = await self._schema_for(namespace, row.kind)
+            # A census row is (kind, key) over EVERY type of that kind, and since
+            # ruling R10 a key can be declared by a name-level schema for one name and
+            # by nothing for the rest. `True` off one override would claim it for types
+            # the override never covered; `False` is a confident negative about a key
+            # that is *required* somewhere -- Rule U, on the call whose whole job is
+            # making the escape hatch enumerable. So the answer is tri-state and the
+            # third state names the schemas it depends on. Row 3e, first adversarial
+            # round.
+            per_kind = await self._schema_for(namespace, row.kind)
+            declared: bool | None = bool(per_kind and row.key in per_kind.fields)
+            declared_why: str | None = None
+            if not declared:
+                by_name = sorted([
+                    rec.name
+                    for rec in await self._name_level_schemas(namespace, row.kind)
+                    if row.key in (rec.fields or {}) and rec.name
+                ])
+                if by_name:
+                    declared = None
+                    declared_why = (
+                        "the per-kind schema does not declare this key and the "
+                        "name-level schema(s) for "
+                        + ", ".join(repr(n) for n in by_name)
+                        + " do, so whether it is declared depends on which type "
+                        "(PACKAGE.md 5.2b, ruling R10)"
+                    )
             entries.append(
                 CensusEntry(
                     kind=row.kind,
@@ -2085,8 +2218,9 @@ class AsyncRegistry:
                     first_seen=row.first_seen,
                     last_seen=row.last_seen,
                     example=row.example,
-                    declared=bool(schema and row.key in schema.fields),
+                    declared=declared,
                     schema_versions=tuple(row.schema_versions),
+                    declared_why=declared_why,
                 )
             )
         if not self.caps.stores_attributes:
@@ -2136,6 +2270,29 @@ class AsyncRegistry:
             registered_by=rec.registered_by,
         )
 
+    async def _name_level_schemas(self, namespace: str, kind: str) -> list[AttributeSchema]:
+        """Every name-level schema of one kind -- ruling R10, for the census.
+
+        Read through the type store rather than through a schema listing: the optional
+        ``AsyncAttributeStore`` extension has no "list schemas" primitive and adding one to
+        answer a census question would put a new method on the protocol for a report.
+        A schema whose name matches no type governs nothing anyway.
+        """
+        store = self._attribute_store()
+        if store is None:
+            return []
+        page = await self.adapter.find_types(
+            TypeQuery(namespace=namespace, kind=kind, include_retired=True)
+        )
+        out: list[AttributeSchema] = []
+        for rec in page.records:
+            found = await store.get_attr_schema(namespace, kind, name=rec.name)
+            if found is not None:
+                schema = self._schema_from_record(found)
+                if schema is not None:
+                    out.append(schema)
+        return out
+
     async def _schema_for(
         self, namespace: str, kind: str, name: str | None = None
     ) -> AttributeSchema | None:
@@ -2163,8 +2320,36 @@ class AsyncRegistry:
     async def _check_attributes(
         self, namespace: str, kind: str, name: str | None, attributes: dict
     ) -> tuple[AttributeSchema | None, list[str]]:
+        """The schema that governs one write, with R10's **enforcement floor** applied.
+
+        **An override replaces the FIELDS and may not weaken the STRICTNESS.**
+        PACKAGE.md 5.2b rule 3 says *"an override is a schema, not an exemption"*, and
+        the first cut shadowed ``mode`` and ``additional`` along with ``fields`` -- so a
+        name-level schema with ``fields={}``, ``additional="allow"``, ``mode="off"``
+        turned a strictly enforced kind completely off for one name, with no warning and
+        nothing in the census to show it. Reproduced in row 3e's first adversarial round.
+        In UC3 that is one agency's one-line, unreviewed opt-out of a rule dozens publish
+        under.
+
+        The floor is applied **here and not at registration** on purpose: enforcing it
+        when a schema is registered is bypassed by registering the weak override first
+        and the strict per-kind schema second, and a rule whose ordering you can pick is
+        not a rule.
+        """
         schema = await self._schema_for(namespace, kind, name)
-        if schema is None or schema.mode == "off":
+        if schema is None:
+            return None, []
+        if schema.name is not None:
+            per_kind = await self._schema_for(namespace, kind)
+            if per_kind is not None:
+                schema = replace(
+                    schema,
+                    mode=strictest(schema.mode, per_kind.mode, order=MODES),
+                    additional=strictest(
+                        schema.additional, per_kind.additional, order=ADDITIONAL
+                    ),
+                )
+        if schema.mode == "off":
             return schema, []
         return schema, validate_attributes(schema, attributes)
 

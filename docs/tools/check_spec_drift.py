@@ -204,7 +204,7 @@ def _check_closed_vocabularies(spec_text: str) -> list[str]:
     """INTERFACE.md 5.12's enumerated values must equal ``types.REFUSAL_REASONS``."""
     problems: list[str] = []
     m = re.search(
-        r"takes exactly these \*\*(\w+)\*\* values.*?:\n\n(.+?)\n",
+        r"takes exactly these \*\*([\w-]+)\*\* values.*?:\n\n(.+?)\n",
         spec_text,
         re.S,
     )
@@ -227,6 +227,15 @@ def _check_closed_vocabularies(spec_text: str) -> list[str]:
     words = {
         "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
         "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+        # Hyphenated from here on. Row 3e: the vocabulary reached twenty-one and this
+        # check silently stopped working -- ``\w+`` does not cross a hyphen, so the
+        # whole 5.12 block failed to parse and the checker reported "could not find the
+        # enumerated list" instead of a wrong number. A checker that degrades into a
+        # different error the moment the thing it checks grows has a shelf life, so the
+        # words run to thirty and the pattern crosses a hyphen.
+        "twenty-one": 21, "twenty-two": 22, "twenty-three": 23, "twenty-four": 24,
+        "twenty-five": 25, "twenty-six": 26, "twenty-seven": 27, "twenty-eight": 28,
+        "twenty-nine": 29, "thirty": 30,
     }
     said = words.get(m.group(1).lower())
     if said is not None and said != len(actual):
