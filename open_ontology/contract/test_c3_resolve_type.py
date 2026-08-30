@@ -1,4 +1,4 @@
-"""C3 -- ``resolve_type`` (9). Mechanism 2, with mechanism 1 as the gate.
+"""C3 -- ``resolve_type`` (14). Mechanism 2, with mechanism 1 as the gate.
 
 No test here may pass or fail because of resolver *quality*: the assertions are about
 outcomes and shapes, never about a score's value.
@@ -430,3 +430,85 @@ def test_c3_13_a_truncated_page_cannot_support_a_completeness_claim(adapter, mak
     # **§5.3.1 rule 7: a completeness claim without its scope line is not a claim.**
     with pytest.raises(ValueError):
         Resolution(outcome="none", reason="", tier="opus", complete=True)
+
+
+def test_c3_14_a_redirect_whose_identity_claim_went_stale_says_so(registry):
+    """**The Q56 default, row 4d -- an identity claim is re-verified where it is MADE.**
+
+    Every identity guard in this registry compares predicate extents at the moment an
+    identity is **written** -- `merge_types`, `retire(successor=)`, `import_types`,
+    `reinstate`, `propose_type`. This call grants confidence **1.0** at the moment it is
+    **read**, and `INTERFACE.md` 5.3 calls that a guarantee. Between the two, the
+    vocabulary moves: a row is created under the aliased word, a `status` flips, an
+    extent grows, an alias is transferred by a later merge.
+
+    That is `ROADMAP.md`'s kill row's **sixth trip**, and it is the first that is
+    *different in kind*. Trips 1-5 were all *the guard did not look properly* -- at an
+    unknowable extent, at an empty one, at all, through a different field, at a partial
+    page. This one is **the guard looked correctly, and then the fact changed**; the
+    claim was TRUE WHEN IT WAS MADE. **Rule U's fourth operand: unknowable is not equal,
+    empty is not equal, partial is not equal, and STALE is not equal.**
+
+    **Both halves are asserted, and the second is the one a careless fix breaks.** A
+    still-agreeing pair carries **no** warning: a signal that never turns off is noise,
+    which is exactly what row 4c's first adversarial round found `predicate_requires_
+    review` had become when it rode onto every approved predicate and stayed.
+
+    **The confidence is untouched at 1.0 on purpose.** Refusing to answer, or answering
+    below 1.0, changes what this registry declines to serve under 5.3's shipped
+    guarantee -- that half of **Q56** is the founder's and is open.
+    """
+    if not registry.caps.indexes_membership:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend cannot compute an extent, so it cannot tell "
+            "an agreeing pair from a stale one. `C9-08` and `C10-11` hold the Rule U "
+            "reading -- an extent that could not be computed is not an identical extent "
+            "-- and `check_merge_guard.py`'s stale axis asserts the same thing at the "
+            "read on three degraded doubles"
+        )
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+
+    retired = registry.retire(
+        "commentable", "superseded", retired_by="user:sd", successor="searchable"
+    )
+    assert isinstance(retired, TypeEntry), (
+        f"the extents are non-empty and identical, so this retirement is LEGAL and must "
+        f"stay legal -- the identity guards are narrowed, not banned (C10-09): {retired}"
+    )
+
+    # The claim, while it is still true.
+    agreeing = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert agreeing.outcome == "existing"
+    assert agreeing.type is not None and agreeing.type.name == "searchable"
+    assert agreeing.confidence == 1.0
+    assert "identity_stale" not in agreeing.type.warnings, (
+        "the two extents still agree; a warning here is a signal that never turns off"
+    )
+
+    # **And then the fact changes -- with no governance act at all.** Somebody adds a
+    # type. `searchable` now has a member `commentable` does not, and the identity
+    # claim written above is no longer one this registry would write today.
+    seed(registry, "doc", predicates=["searchable"])
+
+    stale = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert stale.outcome == "existing", "5.10 promises the old word still resolves"
+    assert stale.type is not None and stale.type.name == "searchable"
+    assert stale.confidence == 1.0, (
+        "the redirect is a GUARANTEE (5.3). Lowering it is the founder's half of Q56"
+    )
+    assert "identity_stale" in stale.type.warnings, (
+        "the two predicate extents this 1.0 stands on no longer agree, and the answer "
+        "said nothing about it -- the kill row's sixth trip, at the read"
+    )
+    assert "STALE" in stale.reason, "Rule U wants the reason, not only the flag"
+
+    # **A non-predicate redirect pays nothing** -- no extent is read and no claim about
+    # members was ever made, so there is nothing that can have gone stale.
+    for name in ("capture", "archive_link"):
+        seed(registry, name, definition=f"a {name}")
+    registry.retire("capture", "superseded", retired_by="user:sd", successor="archive_link")
+    plain = registry.resolve_type("capture", ResolveContext(), tier="opus")
+    assert plain.outcome == "existing" and plain.type is not None
+    assert "identity_stale" not in plain.type.warnings

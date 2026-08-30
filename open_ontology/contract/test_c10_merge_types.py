@@ -1,4 +1,4 @@
-"""C10 -- ``merge_types``, and the doors its operands come through (13). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the doors its operands come through (14). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -608,3 +608,82 @@ def test_c10_13_the_sixth_trip_four_doors_into_one_stale_claim(adapter, make_reg
         "the collapse the registry refuses when asked directly must not be reachable by "
         "asking twice"
     )
+
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+def test_c10_14_door_1s_store_read_the_q56_default_at_the_alias_door(
+    adapter, make_registry
+):
+    """**`C10-13` closes Door 1's WRITE; this closes the READ the write left behind.**
+
+    Row 4c gave `merge_types` a guard over the aliases it transfers, so Door 1's *second*
+    merge is now refused. What it did not do -- deliberately, at the loop's cap, and
+    recorded as **Q56** -- is re-verify the claim the *first* merge wrote, which is still
+    answered at confidence 1.0 long after the vocabulary moved underneath it.
+
+    **The alias door is where this arrives, and it is a different branch from `C3-14`'s.**
+    `get_type` matches `name` and never `aliases`, so a word another entry answers to
+    never reaches `resolve_type`'s exact-match branch at all: it is *scored*, and the
+    shipped resolver rates an exact alias 1.0 (which is the accident `C3-11` turned into
+    a registry guarantee). So the identity claim a merge writes is cashed through the
+    scorer, and this is the row that says so.
+
+    Three assertions, and the last two are the ones a careless fix breaks: the warning
+    fires when the extents diverge, is **absent** while they still agree, and is absent
+    for an alias between two non-predicates, which reads no extent at all.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.indexes_membership or not registry.caps.stores_aliases:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend cannot compute an extent or cannot store "
+            "aliases, so Door 1's store is unreachable here. C9-08 and C10-11 hold the "
+            "unknowable half of Rule U"
+        )
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+
+    merged = registry.merge_types(
+        "commentable", "searchable", "identical non-empty extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), (
+        "this merge is legal and must stay legal -- the guard is narrowed, not banned"
+    )
+    assert "commentable" in merged.aliases_added
+
+    agreeing = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert agreeing.outcome == "existing"
+    assert agreeing.type is not None and agreeing.type.name == "searchable"
+    assert "identity_stale" not in agreeing.type.warnings, (
+        "the claim is still true; warning here would make the value noise"
+    )
+
+    # Door 1, step 3: ordinary vocabulary growth. No acknowledgement, no override, no
+    # governance act -- somebody declared a type against a live predicate.
+    seed(registry, "doc", predicates=["searchable"])
+
+    stale = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert stale.outcome == "existing"
+    assert stale.type is not None and stale.type.name == "searchable"
+    assert stale.confidence == 1.0, (
+        "row 4d ships the CHEAP half of Q56: the fact is reported, never suppressed"
+    )
+    assert "identity_stale" in stale.type.warnings, (
+        "`commentable` is {note} and `searchable` is {doc, note} -- the pair "
+        "`merge_types` now refuses non-overridably, answered at 1.0 with no signal"
+    )
+
+    # **Two non-predicates joined by a merge cost this call nothing**, and the row is
+    # here so a later change cannot quietly make every alias hit read two extents.
+    for name in ("capture", "archive_link"):
+        seed(registry, name, definition=f"a {name}")
+    joined = registry.merge_types(
+        "capture", "archive_link", "same thing", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(joined, Refusal), joined
+    seed(registry, "unrelated", predicates=[])
+    plain = registry.resolve_type("capture", ResolveContext(), tier="opus")
+    assert plain.outcome == "existing" and plain.type is not None
+    assert "identity_stale" not in plain.type.warnings

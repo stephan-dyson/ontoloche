@@ -270,6 +270,28 @@ WARNING_VALUES = (
     # word"* -- had no carrier at all, so the one act the vocabulary performs to
     # discourage a word was invisible in the call a consumer runs against it.
     "origin_type_retired",
+    # INTERFACE.md 5.3, the **Q56 default**, row 4d -- the thirtieth, and the first
+    # value this project has minted for a fact that was TRUE WHEN IT WAS WRITTEN.
+    # `Resolution.type`, when an exact hit is answered through an alias or a successor,
+    # both sides are predicates, and the two extents that identity claim stands on no
+    # longer demonstrably agree.
+    #
+    # Every identity guard in this registry compares predicate extents at WRITE time --
+    # `merge_types`, `retire(successor=)`, `import_types`, `reinstate`, `propose_type`
+    # -- and `resolve_type` grants confidence 1.0 at READ time, which INTERFACE.md 5.3
+    # calls a guarantee. Four things move in between: a row is created under the
+    # aliased word, a `status` flips, an extent grows, an alias is transferred by a
+    # later merge. Row 4c closed all four doors (`C10-13`); the sixth kill-row trip is
+    # the record that closing doors does not close the GAP. **Rule U's fourth operand:
+    # unknowable is not equal, empty is not equal, partial is not equal, and STALE is
+    # not equal.**
+    #
+    # It is a warning and not a refusal, and the confidence is untouched at 1.0, ON
+    # PURPOSE: refusing to answer -- or answering below 1.0 -- changes what this
+    # registry declines to serve under 5.3's shipped guarantee, and that half of Q56 is
+    # the founder's. This half is Rule U applied at the read and costs one extent read
+    # per alias hit on predicates only.
+    "identity_stale",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
