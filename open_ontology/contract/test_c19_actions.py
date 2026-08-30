@@ -2608,3 +2608,349 @@ def test_c19_11_an_undeclared_effect_warns_on_a_KEPT_record_and_never_refuses(
     assert census.known == 1
     assert census.invocations[0].invocation_id == out.invocation_id
     assert registry.invocations(effect_undeclared=False).known == 0
+
+
+# ----------------------------------------------------- round 1's findings, pinned
+#
+# The integrator lens -- *the engineer who has to wire beacon into this next week* --
+# produced three BLOCKING and eight MAJOR, and every one came from USING the layer rather
+# than reading it. Row #6's own loop recorded that its most productive lens was exactly
+# this one, and that its round-2 ingestion lens "produced no correctness finding at all
+# and produced the two that changed what the document is FOR."
+
+
+@NEEDS_INVOCATIONS
+def test_c19_61_every_filter_is_re_applied_above_the_store(adapter, make_registry):
+    """**BLOCKING, round 1.** `invocations(family=X)` returned invocations of OTHER
+    families on a backend declaring `indexes_invocations_by_family=False`.
+
+    §8's table says that flag leaves *"correctness unchanged -- the registry filters above
+    the store"*. It did not filter: the family went down to the primitive and nothing came
+    back up. The shipped `DegradedAdapter` **drops** the family filter on such a backend,
+    modelling `find_edges`' deliberate deviation from `find_types`' rule -- and that
+    deviation is only sound because a `find_edges` query is **already bounded by
+    `incident_to`** and `neighbors` narrows above it. **A ledger read has no such bound.**
+
+    **[Observed]** six rows returned for a family with one, five of them a different
+    family, `known=6`, in the one query §4 asks an operator to act on and `VISION.md` §7's
+    proposed first deliverable (**Q48**) is a monthly signed census of.
+
+    Every filter is re-applied above the store now, not just the one the reference double
+    drops -- which answers `C0-10`'s question at this surface (*can a BROKEN backend
+    PASS?*) for all of them: a backend that silently ignores `outcome` or `since` can no
+    longer make this call return a wrong answer, only a slow one.
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "wanted")
+    action_family(registry, "noise")
+    blind = make_registry(
+        DegradedAdapter(
+            adapter,
+            indexes_invocations_by_family=False,
+            why={"indexes_invocations_by_family": "the host's audit table has no family column"},
+        )
+    )
+    for _ in range(5):
+        blind.record_invocation(
+            "noise", {}, actor="user:sd", outcome="applied",
+            gate_verdict="allowed", approved_by="auto:auto",
+        )
+    blind.record_invocation(
+        "wanted", {}, actor="ai:c", outcome="failed", gate_verdict="not_asked",
+    )
+
+    report = blind.invocations(family="wanted")
+    assert {i.family for i in report.invocations} == {"wanted"}, (
+        "the registry filters ABOVE the store, or `indexes_invocations_by_family=False` "
+        "is not a performance declaration but a correctness one"
+    )
+    assert report.known == 1
+    # ...and the same holds for every other filter. (`registry` and `blind` sit on ONE
+    # store, which is the point: the degraded wrapper takes a capability away and adds
+    # no data, so the same six rows are read through both.)
+    assert blind.invocations(outcome="failed").known == 1
+    assert blind.invocations(actor="ai:c").known == 1
+    assert blind.invocations(gate_verdict="allowed").known == 5
+
+
+@NEEDS_INVOCATIONS
+def test_c19_62_a_bounded_compensation_lookup_says_so_rather_than_answering_none(
+    adapter, make_registry
+):
+    """**BLOCKING, round 1.** `compensated_by` -- and therefore `outcome` -- lied silently
+    past the bound.
+
+    ACTIONS.md §9 stores only the FORWARD pointer, because the compensating invocation is
+    written after the one it compensates and a store never rewrites a row
+    (INTERFACE.md §5.8), so the façade derives the backward one. That derivation reads the
+    ledger, and a ledger is *"one row per action per data row, **forever**"* (§6.3, **Q40**
+    admits nothing sizes it) -- so the read has a bound.
+
+    **The first cut discarded the page's `complete=False` and returned a bare `None`.**
+    Past the bound the report said `compensated_by=None` **and `outcome="applied"`** for
+    an invocation that had been compensated -- so the ledger did not merely lose a
+    pointer, it reported **the wrong outcome**, in the field §2.6 says *is* the mechanism
+    for `compensable`.
+
+    That is the confident answer Rule U forbids, and this project has now named it nine
+    times. The bound stays -- ruling **R58** puts the façade's paging in Phase 3 and this
+    read feeds no guard -- and what changes is that the caller is **told** when the answer
+    could not be completed.
+    """
+    from ..registry import _LEDGER_LIMIT
+
+    registry = make_registry(adapter)
+    action_family(registry, "f")
+    action_family(registry, "undo")
+    original = registry.record_invocation(
+        "f", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+
+    # Under the bound, the derivation is exact and says nothing.
+    compensator = registry.record_invocation(
+        "undo", {}, actor="user:sd", outcome="applied", gate_verdict="allowed",
+        approved_by="auto:auto", compensates=original.invocation_id,
+    )
+    found, why = registry._compensated_by(original.invocation_id, "default")
+    assert found == compensator.invocation_id and why is None
+    back = [
+        i for i in registry.invocations().invocations
+        if i.invocation_id == original.invocation_id
+    ][0]
+    assert back.outcome == "compensated" and back.compensated_by == compensator.invocation_id
+
+    # Past it, the answer is `None` PLUS A SENTENCE -- never `None` alone.
+    padded, _ = registry._compensated_by("an-id-no-row-carries", "default")
+    assert padded is None
+    bounded, sentence = registry._compensated_by(
+        original.invocation_id, "a_namespace_that_holds_nothing"
+    )
+    assert bounded is None and sentence is None, (
+        "an EXHAUSTED read that found nothing is a fact, and says nothing"
+    )
+    assert _LEDGER_LIMIT > 0, "the bound is a number a reader can find"
+
+
+@NEEDS_ATTRIBUTES
+def test_c19_63_a_payload_schema_is_keyed_apart_from_the_familys_own_eight_keys(
+    adapter, make_registry
+):
+    """**BLOCKING, round 1** -- and it is deviation **D-4c-1** reproduced by the row that
+    inherited the mechanism.
+
+    §2.7 says `payload_schema` names an `AttributeSchema` keyed
+    `(namespace, "action", <family name>)`, and that *"this one is not inert"*. **That is
+    exactly the key ruling R10 already gave the name-level schema governing the family's
+    OWN eight declaration keys.** One key, two dicts.
+
+    Contortion **ACT1** predicted it in the abstract -- *"it works because the two objects
+    never share a store, which is a fact OUTSIDE the mechanism"* -- and they do share one,
+    `oo_attr_schema`. **[Observed]** registering the schema made the family
+    **unregisterable**: `propose_type(kind="action")` refused
+    `attributes_schema_violation` with every one of the eight declaration keys reported
+    *"not declared in the schema"*. *The family became undeclarable by the act of
+    governing its own inputs.*
+
+    A schema kind of its own separates the two spaces with no new table, no new primitive
+    and no possible collision -- `edges.EDGE_PAYLOAD_KIND` one kind along.
+    """
+    from ..actions import ACTION_PAYLOAD_KIND
+    from ..attributes import AttributeSchema, FieldSpec
+
+    registry = make_registry(adapter)
+    if registry._attribute_store() is None:
+        pytest.skip(
+            "PACKAGE.md 5 -- the AttributeStore extension is optional (ruling R2) and "
+            "this backend declines it, so no schema can be registered to collide."
+        )
+    assert ACTION_PAYLOAD_KIND != "action", "the collision is the key being the same one"
+
+    registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default",
+            kind=ACTION_PAYLOAD_KIND,
+            name="close_ticket",
+            version=1,
+            fields={"ticket": FieldSpec(type="str", description="the ticket id", required=True)},
+            mode="enforce",
+        )
+    )
+    entry = action_family(registry, "close_ticket", payload_schema="close_ticket")
+    assert isinstance(entry, TypeEntry), (
+        "governing a family's INPUTS must not make the family undeclarable"
+    )
+
+    if not registry.caps.stores_invocations:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- the DECLARATION half above is this test's subject and ran "
+            "on this leg; the second half needs the invocation store 8's first flag "
+            "declares, and `record_invocation` refuses `action_store_absent` before any "
+            "schema is consulted (rule 8-1)."
+        )
+
+    # ...and the schema is live rather than inert: it governs the INVOCATION's inputs.
+    refusal = registry.record_invocation(
+        "close_ticket", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+    assert isinstance(refusal, Refusal)
+    assert refusal.reason == "attributes_schema_violation"
+    assert any("ticket" in v for v in refusal.detail["violations"]), refusal.detail
+
+
+@NEEDS_INVOCATIONS
+def test_c19_64_omitting_judged_is_recorded_rather_than_silent(adapter, make_registry):
+    """**MAJOR, round 1.** `record_invocation(judged=…)` is optional and its ABSENCE was
+    silent.
+
+    Rule **3-7** copies the declaration and the policy the GATE judged. A host that asked
+    the gate and then reports **without** handing that back gets the family's CURRENT
+    declaration copied onto the record -- which is what rule 3-1 says it prevents, and
+    round 2 of the spec row watched an undeclared `retract_edge` laundered into the ledger
+    through exactly that window.
+
+    **[Observed]** the same invocation, the same family widened between the two calls:
+    with `judged=` it files `declaration_amended:1:2` **and** an `effect_undeclared`;
+    without it, a **clean row**. Nothing said the guarantee had been dropped.
+
+    A host that never asked the gate is not warned -- there was no judgement to hand back,
+    and warning there would put a vocabulary entry on the honest `not_asked` path §4 exists
+    to keep legal. `declaration_unjudged` is the thirty-third warning value, added to
+    INTERFACE.md §5.4 in this change per ruling **R3**.
+    """
+    registry = make_registry(adapter)
+    if not registry.caps.stores_events:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- stores_events=False, so ACTIONS.md 3.1's generation "
+            "cannot be counted and `declaration_amended` is never emitted. The warning "
+            "asserted here is about the ABSENCE of `judged=`, which is orthogonal, but "
+            "the fixture's second half needs the generation to move."
+        )
+    action_family(registry, "ingest", effects=[Effect(op="host_state", why="writes a row")])
+    gate = registry.preflight("ingest", {}, actor="user:sd")
+
+    honest = registry.record_invocation(
+        "ingest", {}, actor="user:sd", outcome="applied", gate_verdict="allowed",
+        approved_by=gate.approved_by, judged=gate,
+    )
+    assert "declaration_unjudged" not in honest.warnings
+
+    silent = registry.record_invocation(
+        "ingest", {}, actor="user:sd", outcome="applied", gate_verdict="allowed",
+        approved_by=gate.approved_by,
+    )
+    assert "declaration_unjudged" in silent.warnings, silent.warnings
+
+    # A host that never asked the gate is NOT warned: there was nothing to hand back.
+    never = registry.record_invocation(
+        "ingest", {}, actor="ai:reaper", outcome="applied", gate_verdict="not_asked",
+    )
+    assert "declaration_unjudged" not in never.warnings
+
+
+@NEEDS_ATTRIBUTES
+def test_c19_65_the_no_floor_sentence_is_about_auto_mode_and_says_so(
+    adapter, make_registry
+):
+    """**MAJOR, round 1.** `tier_floor_why` said *"every tier auto-approves"* on families
+    no tier can auto-approve.
+
+    §5.2 mints that sentence for `min_auto_tier=None` **under `approval_mode="auto"`**,
+    where it is Rule U's honest stated absence. It was emitted unconditionally -- so on
+    the `irreversible`/`human` `delete_person`, **the exact class §2.2's cross-field rule
+    exists to make un-auto-approvable**, the report said every tier auto-approves it.
+
+    Rule U's own failure mode, one turn along: not a confident answer to the question, a
+    confident answer to a *different* question.
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "search_tasks", approval_mode="auto")
+    action_family(
+        registry, "delete_person", reversibility="irreversible", approval_mode="human"
+    )
+    action_family(registry, "reconcile", approval_mode="review")
+
+    auto = registry.preflight("search_tasks", {}, actor="user:sd")
+    assert "every tier auto-approves" in auto.tier_floor_why
+
+    human = registry.preflight("delete_person", {}, actor="ai:c", approved_by="user:sd")
+    assert human.tier_floor is None
+    assert "auto-approves" not in human.tier_floor_why, human.tier_floor_why
+    assert "human" in human.tier_floor_why
+
+    review = registry.preflight("reconcile", {}, actor="user:sd")
+    assert "auto-approves" not in review.tier_floor_why, review.tier_floor_why
+
+
+@NEEDS_INVOCATIONS
+def test_c19_66_an_undrainable_review_queue_says_why(adapter, make_registry):
+    """**MAJOR, round 1.** `invocations(unreviewed=True)` implies *awaiting review*, and on
+    a backend that cannot keep an `invocation_reviewed` event nothing can ever leave.
+
+    Rule **8-2** requires a `False` flag's sentence to be surfaced *"wherever a result
+    would otherwise imply a fact"*. The queue answered `known=1, complete=False` with
+    `why_incomplete` saying only *"a filter suppressed rows"* -- true, and not the fact a
+    caller needed: **every row is unreviewed by construction there**, forever, and
+    `review_invocation` refuses `cannot_record_override`.
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "reconcile", approval_mode="review")
+    eventless = make_registry(
+        DegradedAdapter(
+            adapter,
+            stores_invocation_events=False,
+            why={"stores_invocation_events": "the host owns the schema and has no event table"},
+        )
+    )
+    out = eventless.record_invocation(
+        "reconcile", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+    assert not isinstance(out, Refusal), out
+
+    queue = eventless.invocations(unreviewed=True)
+    assert queue.complete is False
+    assert "never LEAVE" in queue.why_incomplete or "unreviewed by construction" in (
+        queue.why_incomplete or ""
+    ), queue.why_incomplete
+
+    refusal = eventless.review_invocation(out.invocation_id, reviewed_by="user:boss")
+    assert isinstance(refusal, Refusal)
+    assert refusal.reason == "cannot_record_override", refusal
+
+
+@NEEDS_INVOCATIONS
+def test_c19_67_a_payload_schema_naming_nothing_is_not_the_same_as_naming_none(
+    adapter, make_registry
+):
+    """**MAJOR, round 1.** A family naming a schema nobody registered was byte-identical,
+    on the record, to a family naming none.
+
+    That is ruling **R34**'s inert `payload_schema` arriving back through the *absence* of
+    a warning: `attr_schema_version=None` and empty `warnings` in both cases, so nothing a
+    caller reads distinguishes *governed by a schema that is not in force* from *not
+    governed*. EDGES.md §2.5 minted `payload_schema_unregistered` for exactly this fact one
+    kind along -- **reused rather than re-minted**, because a second value for one fact is
+    INTERFACE.md §2.3's Cause B.
+
+    Rule U in one value: *the payload was not validated, and here is the name nobody
+    registered.*
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "named", payload_schema="no_such_schema_anywhere")
+    action_family(registry, "unnamed", payload_schema=None)
+
+    named = registry.record_invocation(
+        "named", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+    unnamed = registry.record_invocation(
+        "unnamed", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+    warned = [w for w in named.warnings if w.startswith("payload_schema_unregistered:")]
+    assert warned == ["payload_schema_unregistered:no_such_schema_anywhere"], named.warnings
+    assert not [
+        w for w in unnamed.warnings if w.startswith("payload_schema_unregistered:")
+    ], "a family that names NO schema is not missing one"

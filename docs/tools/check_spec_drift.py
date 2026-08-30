@@ -758,6 +758,40 @@ def _check_action_vocabularies(blocks: list[str], actions_text: str) -> list[str
     return problems
 
 
+def _check_printed_primitives(text: str, names: tuple[str, ...], label: str) -> list[str]:
+    """Every primitive a document prints as a bare ``def`` takes what the Protocol takes."""
+    import inspect
+
+    problems: list[str] = []
+    protocol = adapter_module.StorageAdapter
+    blocks = spec_blocks(text)
+    for name in names:
+        printed = call_params(blocks, name)
+        if printed is None:
+            problems.append(
+                f"{label}: prints no signature for primitive {name!r} -- an adapter "
+                f"author has nothing to build from"
+            )
+            continue
+        printed -= {"self"}
+        method = getattr(protocol, name, None)
+        if method is None:
+            problems.append(f"{label}: prints a primitive {name!r} the protocol lacks")
+            continue
+        actual = set(inspect.signature(method).parameters) - {"self"}
+        for missing in sorted(actual - printed):
+            problems.append(
+                f"{label} {name}(): the protocol takes {missing!r} and the printed "
+                f"signature does not -- a backend built from the document is wrong"
+            )
+        for extra in sorted(printed - actual):
+            problems.append(
+                f"{label} {name}(): the document prints {extra!r}; the protocol does not "
+                f"take it"
+            )
+    return problems
+
+
 def main() -> int:
     text = SPEC.read_text(encoding="utf-8")
     blocks = spec_blocks(text)
@@ -967,6 +1001,19 @@ def main() -> int:
                     f"code"
                 )
         problems.extend(_check_action_vocabularies(actions_blocks, actions_text))
+        # ACTIONS.md 9's three printed PRIMITIVE signatures, against the Protocol.
+        # **Row 6b's first adversarial round found three drifts here and this checker
+        # reported the document clean**, because the shape half reads dataclasses and the
+        # call half reads `Registry` -- and 9's primitives are neither. PACKAGE.md 3.4's
+        # twenty-one are held by `_check_primitive_signatures`; these three are the same
+        # objects printed a second time in a second document, and a shape held against
+        # only one of the documents that print it is a shape that can drift in the other.
+        problems.extend(
+            _check_printed_primitives(
+                actions_text, ("put_invocation", "get_invocation", "find_invocations"),
+                "ACTIONS 9",
+            )
+        )
 
     problems.extend(_check_primitive_signatures(PACKAGE.read_text(encoding="utf-8")))
     problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
