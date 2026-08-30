@@ -16,7 +16,7 @@ Palantir Foundry already ships a governed ontology layer. **In the field, it rot
 
 ## 2. What was actually observed
 
-All of this comes from one day inside an HHS office that licenses Foundry. **[Observed]** unless marked otherwise.
+All of this comes from first-hand observation inside a public-sector organisation that licenses Foundry (details withheld under standing constraint 0). **[Observed]** unless marked otherwise.
 
 **They are not fully adopting Foundry, for three stated reasons:**
 
@@ -26,21 +26,21 @@ All of this comes from one day inside an HHS office that licenses Foundry. **[Ob
 
 **What they use instead:** PowerBI, PowerAutomate, Smartsheets, Excel. Chosen because *they know how to use them and the job gets done* — a friction and familiarity win, not a capability one.
 
-**And the part that inverts the picture:** at least two people spend **at least an hour a day** doing manual uploads of Excel files and CSV dumps — **into Foundry**. So the spreadsheets are not only a destination that routes around the platform; they are also the **on-ramp into it**. Humans are the pipeline.
+**And the part that inverts the picture:** a small number of staff spend **on the order of an hour a day each** doing manual uploads of Excel files and CSV dumps — **into Foundry**. So the spreadsheets are not only a destination that routes around the platform; they are also the **on-ramp into it**. Humans are the pipeline.
 
-That is roughly **500 person-hours a year**, discovered from a sample of two conversations on day one. **[Inferred]** that the true figure across the organisation is materially larger; two people is not a base rate and this number must not be extrapolated without asking more people.
+That is roughly **500 person-hours a year**, discovered from a small sample of conversations on the first day of observation. **[Inferred]** that the true figure across the organisation is materially larger; a sample this small is not a base rate and this number must not be extrapolated without asking more people.
 
-**The lock-in is a services dependency, not a technical one.** **[Observed]** Not enough people internally can build the data ingest, pipelines and transforms, so the organisation relies on **contractors sourced directly from Palantir** to do it.
+**The lock-in is a services dependency, not a technical one.** **[Observed]** Not enough people internally can build the data ingest, pipelines and transforms, so the organisation relies on **vendor-sourced contractors** to do it.
 
 This single fact explains the other two observations rather than sitting beside them:
 
 - **It explains the pollution.** Contractors rotate through engagements; each adds the entities their scope needs; none owns the vocabulary long-term. That is mechanisms 1 and 3 (no review + never retired) with a named cause. **[Inferred]**
-- **It explains the manual uploads.** If getting a pipeline built means a contractor engagement, then two people spending an hour a day is *rational avoidance of a procurement*, not a skills gap. **[Inferred]**
+- **It explains the manual uploads.** If getting a pipeline built means a contractor engagement, then staff spending an hour a day each is *rational avoidance of a procurement*, not a skills gap. **[Inferred]**
 - **It makes the commercial model easier than §7 assumes.** The agency already pays for outside expertise. A paid arm substitutes for an existing contractor line item rather than asking for new budget. **[Inferred]**
 
 Data portability would not fix this. The data could be perfectly extractable and the dependency would remain, because what is locked in is the *capability*, not the bytes.
 
-**Second data point:** the same ontology-pollution pattern was visible in consulting engagements at Deloitte. **[Observed]**, but by the same observer — so it is two readings by one person, not two independent sources. It is still the strongest available evidence that the pattern generalises beyond one office.
+**Second data point:** the same ontology-pollution pattern was visible in a second, unrelated consulting context. **[Observed]**, but by the same observer — so it is two readings by one person, not two independent sources. It is still the strongest available evidence that the pattern generalises beyond one organisation.
 
 ---
 
@@ -157,14 +157,14 @@ Written plainly, because the surrounding conviction makes it easy to skip.
 
 | Claim | Status |
 |---|---|
-| Foundry's ontology rots under multi-writer pressure | **[Observed]** in one office; **[Observed]** in a second context by the same observer |
-| Manual CSV ingestion is a real, costly pain | **[Observed]**, two people, one day, unextrapolated |
+| Foundry's ontology rots under multi-writer pressure | **[Observed]** in one organisation; **[Observed]** in a second context by the same observer |
+| Manual CSV ingestion is a real, costly pain | **[Observed]**, a small sample, one day, unextrapolated |
 | Anyone would *adopt* a different ontology layer | **Not validated.** Nobody has said this |
 | A self-curating ontology solves rot | **[Assumed]** — the core technical bet |
 | Agencies would pay a compliance arm | **[Assumed]** — the core commercial bet |
 | The pattern generalises beyond public-sector health | **[Inferred]** from N=2, same observer |
 | Open-source distribution beats commercial for this buyer | **[Assumed]** |
-| Internal staff cannot build pipelines; Palantir contractors do it | **[Observed]** |
+| Internal staff cannot build pipelines; vendor-sourced contractors do it | **[Observed]** |
 | Contractor rotation is what polluted the ontology | **[Inferred]** — plausible, unconfirmed |
 | Contractor hours go mostly to raw-data-to-ontology mapping | **[Inferred]** — **the highest-value thing to confirm in Phase 0** |
 | A paid arm can substitute for an existing contractor line item | **[Inferred]** — easier sale than net-new spend, untested |
@@ -175,7 +175,7 @@ Written plainly, because the surrounding conviction makes it easy to skip.
 
 ## 10. Sequencing, and what it protects
 
-**Do not quit to build this.** The current job is simultaneously the research lab, the customer-discovery channel, and the funding source — and that configuration is rare and temporary. What burns savings is building for eighteen months before contact with a user; what preserves them is shipping something small into a real workflow fast. The decision to spend capital should arrive with evidence attached, not conviction.
+**Sequence the work so that contact with a real user comes before any large capital commitment; ship something small into a real workflow first.**
 
 **Phase 0 — this week, no code.** Answer §5's two questions. Find out *why* the ontology got polluted; the reasons are the design constraints.
 
@@ -198,8 +198,6 @@ Written plainly, because the surrounding conviction makes it easy to skip.
 5. Would portable ontology + actions over a retained Foundry compute layer solve it? *(replacement vs escape hatch — the escape hatch is a far smaller build)*
 6. What would have to be true to run something self-hosted? *(the real shape of the compliance arm)*
 7. Who else has this problem? *(warm intros inside government are worth more than GitHub traffic)*
-
-**A boundary to settle before asking any of these of colleagues:** employment terms, conflict-of-interest rules, and procurement ethics if that office could ever be a customer. Worth being clear on before the conversations, not after.
 
 ---
 

@@ -20,7 +20,7 @@ The three are chosen so that **no two share a failure mode**. Each column is som
 | Data access | read-only from the beacon repo; never edited | public CMS file, reproducible by any reader | public Socrata catalog + per-dataset API, reproducible by any reader |
 | Employer-data risk | none | none | none |
 
-**What UC3 adds that the other two cannot:** multi-writer semantic collision, cross-dataset namespacing, and an ingestion-shaped consumer. Until now the kill-criterion mechanism (collision across teams) has been *assumed non-dominant* (A1) and never exercised. UC3 exercises it on public data that structurally resembles the HHS target (many government units publishing into one catalogue) without touching the office.
+**What UC3 adds that the other two cannot:** multi-writer semantic collision, cross-dataset namespacing, and an ingestion-shaped consumer. Until now the kill-criterion mechanism (collision across teams) has been *assumed non-dominant* (A1) and never exercised. UC3 exercises it on public data that structurally resembles the partner-agency target (many government units publishing into one catalogue) without touching any non-public source.
 
 ---
 
@@ -48,7 +48,7 @@ The three are chosen so that **no two share a failure mode**. Each column is som
 
 **What it is [Observed 2026-08-28].** The City of New York's open-data portal, `data.cityofnewyork.us`: **2,399 datasets** in the Socrata catalog (`https://api.us.socrata.com/api/catalog/v1?domains=data.cityofnewyork.us&only=datasets`), each attributed to a publishing agency (e.g. "Taxi and Limousine Commission (TLC)", category "Transportation"), each with its own column names and value vocabularies, all queryable through one API pattern.
 
-**Why it is the right third fixture [Inferred].** It is the public analogue of the HHS situation VISION §2 describes — many organisational units, rotating authors, no shared curation — with the multi-team collision mechanism visibly present: the same column word (`status`, `type`, `district`, `borough`, `agency`) carries different value sets and different meanings across publishers. It is also **ingestion-shaped**: the natural task is "land N datasets and get typed entities and relationships, not N piles of columns", which is Phase 3's wedge and the buyer's actual problem.
+**Why it is the right third fixture [Inferred].** It is the public analogue of the partner-agency situation VISION §2 describes — many organisational units, rotating authors, no shared curation — with the multi-team collision mechanism visibly present: the same column word (`status`, `type`, `district`, `borough`, `agency`) carries different value sets and different meanings across publishers. It is also **ingestion-shaped**: the natural task is "land N datasets and get typed entities and relationships, not N piles of columns", which is Phase 3's wedge and the buyer's actual problem.
 
 **What it tests.**
 - **Mechanism 4, semantic collision across teams** — the ROADMAP kill row. The interface must handle two agencies' `status` as *scoped* types, not merge them. `namespace` (INTERFACE §2, currently "v0 requires nobody to use it") becomes load-bearing; `merge_types`'s `cross_namespace_merge` refusal gets its first real exercise.

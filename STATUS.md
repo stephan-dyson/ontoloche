@@ -5,10 +5,10 @@
 | Roadmap item | Status |
 |---|---|
 | 0.1 Tenshen archaeology | ✅ done |
-| 0.2 HHS pollution question | 🟡 assumed (A1) — office visit refines |
-| 0.2b What contractors produce | 🟡 assumed (A2) — office visit refines |
+| 0.2 Partner-agency pollution question | 🟡 assumed (A1) — partner conversation refines |
+| 0.2b What contractors produce | 🟡 assumed (A2) — partner conversation refines |
 | 0.3 Prior art | ✅ done |
-| 0.4 Ingestion question | 🟡 assumed (A3) — office visit refines |
+| 0.4 Ingestion question | 🟡 assumed (A3) — partner conversation refines |
 | 0.5 Proposal-quality test | ✅ done |
 | #1 `docs/specs/INTERFACE.md` v0 | ✅ done |
 | #2 `docs/specs/PACKAGE.md` v0 | ✅ done |

@@ -1,22 +1,22 @@
-# Decision 2026-08-28 — proceed on assumptions; office answers refine, not gate
+# Decision 2026-08-28 — proceed on assumptions; partner answers refine, not gate
 
 **Founder ruling (verbatim intent):** "make reasonable assumptions and move forward — I will refine over the next few weeks and we can adjust. Begin working on a roadmap, specs, etc. and be cognizant of ordering with respect to unblocking Tenshen rebuilding on top of open-ontology."
 
-**What this changes.** Phase 0's three office conversations (0.2, 0.2b, 0.4) stop being gates. Each gets an **[Assumed]** answer below, chosen to be the *most likely* reading given 0.1 and 0.5, and each names what would revise it. Phase 1 starts now. Every spec written under this decision carries the line *"written against the 2026-08-28 assumptions; see docs/decisions/"* so a later correction knows what to re-examine.
+**What this changes.** Phase 0's three partner conversations (0.2, 0.2b, 0.4) stop being gates. Each gets an **[Assumed]** answer below, chosen to be the *most likely* reading given 0.1 and 0.5, and each names what would revise it. Phase 1 starts now. Every spec written under this decision carries the line *"written against the 2026-08-28 assumptions; see docs/decisions/"* so a later correction knows what to re-examine.
 
 **What this does NOT change.** Standing constraint 0 (no employer data, ever) and constraint 5 (consume the ETL layer) are untouched. The kill criteria stand; assumptions are not a licence to skip them.
 
 ---
 
-## A1 — 0.2, the HHS pollution mechanism
+## A1 — 0.2, the partner-agency pollution mechanism
 
-**[Assumed]** HHS's dominant mechanism is **1 + 3 together: anyone could add a type with no review, and nothing was ever retired** — with a named cause, contractor rotation (`VISION.md` §2, [Inferred]). Semantic collision (mechanism 4) is **present but not dominant**, as in Tenshen (2 of 7). Silent per-consumer drop (Cause C from 0.1) is **present but unobserved by the office**, because no existing tool surfaces it.
+**[Assumed]** the partner agency's dominant mechanism is **1 + 3 together: anyone could add a type with no review, and nothing was ever retired** — with a named cause, contractor rotation (`VISION.md` §2, [Inferred]). Semantic collision (mechanism 4) is **present but not dominant**, as in Tenshen (2 of 7). Silent per-consumer drop (Cause C from 0.1) is **present but unobserved by the partner organisation**, because no existing tool surfaces it.
 
 **Why this reading:** it is the only one consistent with all three first-hand observations — "too many entities", "too many people making changes", and "contractors build the pipelines". Plain duplicate sprawl without review is the base rate for multi-writer schemas everywhere.
 
 **What it commits the interface to:** `propose_type` with an approval queue (mechanism 1), `usage`/`orphaned`/lifecycle (mechanism 3), `consumers` (Cause C), and `resolve_type` good enough that a proposer *finds* the existing type — all four first-class, none demoted. `merge_types` stays guarded. **No single call is "the centre"**; the centre is the proposal→approval loop.
 
-**Kill-criterion check:** not tripped by assumption — collision assumed non-dominant. **Revise if:** the office reports two teams meaning different things by one word as the *main* complaint → stop, re-centre on namespacing, per the roadmap's kill row.
+**Kill-criterion check:** not tripped by assumption — collision assumed non-dominant. **Revise if:** the partner agency reports two teams meaning different things by one word as the *main* complaint → stop, re-centre on namespacing, per the roadmap's kill row.
 
 ## A2 — 0.2b, what the contractors produce
 
@@ -30,7 +30,7 @@
 
 **[Assumed]** the answer is **"a pipeline means a contractor engagement, and that queue is long"** — the first of the three readings. Manual upload is rational avoidance of a procurement, not a skills gap.
 
-**Why this reading:** it is the direct consequence of the observed services dependency; "source system won't allow it" would not explain *two* people across *different* sources, and "nobody has asked" is unlikely in an office that already licenses the platform.
+**Why this reading:** it is the direct consequence of the observed services dependency; "source system won't allow it" would not explain multiple people across *different* sources, and "nobody has asked" is unlikely in an organisation that already licenses the platform.
 
 **What it commits Phase 3 to:** self-serve mapping — a domain analyst, not a contractor, gets a CSV into typed entities (`docs/WALKTHROUGH.md`). **Revise if:** "source system won't allow it" → Phase 3 is an engineering problem on the extraction side and belongs to Airbyte, not us.
 
@@ -52,7 +52,7 @@ The beacon spec §12 (commit `27a9b712`) records: Tenshen will be rebuilt on top
 
 ---
 
-## Assumptions register (for the office visits)
+## Assumptions register (for the partner conversations)
 
 | # | Roadmap row | Assumed answer | The one question that tests it |
 |---|---|---|---|
@@ -62,4 +62,4 @@ The beacon spec §12 (commit `27a9b712`) records: Tenshen will be rebuilt on top
 | A4 | Q7a | file with lint | founder ruling in beacon |
 | A5 | §12 arrow | relaxed to "2A passes contract tests on CMS data" | **confirmed 2026-08-28** — now a ruling, not an assumption |
 
-When an office answer arrives, edit the row, tag the change **[Observed]**, and open a roadmap diff — do not silently rewrite the specs.
+When a partner answer arrives, edit the row, tag the change **[Observed]**, and open a roadmap diff — do not silently rewrite the specs.

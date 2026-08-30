@@ -8,9 +8,9 @@
 
 ## Read this before the verdict — what this finding does and does not test
 
-**The four mechanisms in `ROADMAP.md` §0 are hypotheses about why the ontology at HHS got polluted.** They were written to describe a multi-team Foundry deployment with rotating contractors. **This finding did not test them.** It examined a different system — single-owner, AI-authored, no procurement, no teams — and found a different set of causes.
+**The four mechanisms in `ROADMAP.md` §0 are hypotheses about why the ontology at the partner agency got polluted.** They were written to describe a multi-team Foundry deployment with rotating contractors. **This finding did not test them.** It examined a different system — single-owner, AI-authored, no procurement, no teams — and found a different set of causes.
 
-**A poor fit between those four mechanisms and Tenshen is therefore not evidence against them.** It is evidence that the two systems have different diseases, which is itself the useful result. The founder's standing read on the HHS side — *too complex, vendor lock-in, already polluted* — remains **untested and unchallenged by anything below.** §0.2 is its test, and this document has no bearing on it.
+**A poor fit between those four mechanisms and Tenshen is therefore not evidence against them.** It is evidence that the two systems have different diseases, which is itself the useful result. The founder's standing read on the partner-agency side — *too complex, vendor lock-in, already polluted* — remains **untested and unchallenged by anything below.** §0.2 is its test, and this document has no bearing on it.
 
 ## Verdict, first
 
@@ -24,7 +24,7 @@ Three distinct things are happening:
 | **B — semantic collision** | 2 of 7 | Yes | **Mechanism 4** — the kill-criterion one |
 | **C — silent per-consumer drop** | the actual harm | Yes, and it shipped a bug | **absent from the table** |
 
-In this codebase: **mechanism 4 is present**, mechanisms 1 and 3 are largely absent, and the mechanism that caused real damage is a fifth one. Whether any of that holds at HHS is unknown and untestable from here.
+In this codebase: **mechanism 4 is present**, mechanisms 1 and 3 are largely absent, and the mechanism that caused real damage is a fifth one. Whether any of that holds at the partner agency is unknown and untestable from here.
 
 ---
 
@@ -115,10 +115,10 @@ So discovery was **possible but not prompted**. There is no shared module, no im
 
 ## What this changes in the Phase 1 interface
 
-**First, the size of the claim.** This is one system's disease. Re-centring the whole interface on it before §0.2 measures HHS would be **designing for the consumer we happened to dissect first** — which is precisely the "Tenshen's data model with the names filed off" failure `VISION.md` §9 names. So the changes below are of two kinds, and the difference matters:
+**First, the size of the claim.** This is one system's disease. Re-centring the whole interface on it before §0.2 measures the partner agency would be **designing for the consumer we happened to dissect first** — which is precisely the "Tenshen's data model with the names filed off" failure `VISION.md` §9 names. So the changes below are of two kinds, and the difference matters:
 
-- **`consumers(type)` and `predicate` are additions the evidence forced.** A real incident proved `consumers` necessary; five real vocabularies proved `predicate` necessary. These stand regardless of what HHS says — HHS cannot make them unnecessary.
-- **Calling `consumers` "the centre" is provisional.** It is the centre *of Tenshen's disease*. If §0.2 finds HHS suffering plain duplicate sprawl, the centre is contested and `resolve_type` may reclaim it. **Do not treat the ordering as settled until 0.2 reports.**
+- **`consumers(type)` and `predicate` are additions the evidence forced.** A real incident proved `consumers` necessary; five real vocabularies proved `predicate` necessary. These stand regardless of what the partner agency says — the partner agency cannot make them unnecessary.
+- **Calling `consumers` "the centre" is provisional.** It is the centre *of Tenshen's disease*. If §0.2 finds the partner agency suffering plain duplicate sprawl, the centre is contested and `resolve_type` may reclaim it. **Do not treat the ordering as settled until 0.2 reports.**
 
 `ROADMAP.md` §1 states the provisional surface, with the note *"`resolve_type` and `merge_types` carry the thesis."* **That note is unsupported — but so is any replacement asserted from this evidence alone.**
 
@@ -136,15 +136,15 @@ So discovery was **possible but not prompted**. There is no shared module, no im
 
 ## Limits of this evidence — read before generalising
 
-0. **This tested Tenshen; it did not test the Foundry hypotheses.** An earlier revision of this document scored the founder's HHS read (*too complex / vendor lock-in / already polluted*) against Tenshen evidence and called it unsupported. That was a category error — those are claims about a multi-team Foundry deployment and nothing in a single-owner codebase can speak to them. **They remain live and untested.** Recorded because the error was in the conclusion, not the data.
-1. **N=1 codebase**, single owner, AI-authored commits. HHS is multi-team with rotating contractors; §0.2 may find a completely different distribution, and mechanisms 1 and 3 (no review, never retired) may well dominate *there* even though they are weak here. **The absence of teams is the whole point** — Tenshen structurally *cannot* exhibit contractor rotation or cross-team collision, so their absence here is a property of the sample, not a finding.
+0. **This tested Tenshen; it did not test the Foundry hypotheses.** An earlier revision of this document scored the founder's partner-agency read (*too complex / vendor lock-in / already polluted*) against Tenshen evidence and called it unsupported. That was a category error — those are claims about a multi-team Foundry deployment and nothing in a single-owner codebase can speak to them. **They remain live and untested.** Recorded because the error was in the conclusion, not the data.
+1. **N=1 codebase**, single owner, AI-authored commits. The partner agency is multi-team with rotating contractors; §0.2 may find a completely different distribution, and mechanisms 1 and 3 (no review, never retired) may well dominate *there* even though they are weak here. **The absence of teams is the whole point** — Tenshen structurally *cannot* exhibit contractor rotation or cross-team collision, so their absence here is a property of the sample, not a finding.
 2. **Cause A vs Cause B is my reading of intent** from names, comments and call sites. It was not confirmed with the authors. The `view_query_spec` collision is solid because the file declares both lists side by side; the capability-predicate reading of the other five is an inference from comments — strong, but not certified.
 3. **Only one incident is documented.** Others may exist unrecorded, and their mechanism could differ.
 4. **Seven vocabularies is a small sample.** A real disagreement rate cannot be estimated from it.
 
 ## What this makes cheaper in Phase 0.2
 
-The HHS conversation should now ask a sharper question than "why did it get polluted?" Ask instead:
+The partner conversation should now ask a sharper question than "why did it get polluted?" Ask instead:
 
 - **"When someone adds a new object type, how do they find out what breaks?"** — tests Cause C directly, and it is the question with a known-expensive answer here.
 - **"Do two teams use the same word for different things?"** — tests Cause B, the kill criterion.
