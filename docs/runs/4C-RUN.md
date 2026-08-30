@@ -10,17 +10,38 @@
 
 | | before (row #6) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 196 | **214** |
-| sync suite, one run, three legs | `484 passed, 122 skipped` (606 collected) | **`523 passed, 138 skipped`** (661 collected) |
-| async suite, one run, three legs | `520 passed, 122 skipped` (642 collected) | **`558 passed, 138 skipped`** (696 collected) |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 196 | **220** |
+| sync suite, one run, three legs | `484 passed, 122 skipped` (606 collected) | **`537 passed, 142 skipped`** |
+| async suite, one run, three legs | `520 passed, 122 skipped` (642 collected) | **`572 passed, 142 skipped`** |
 | `warnings` values ([`INTERFACE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) §5.4) | 25 | **27** |
 | `Refusal.reason` values (§5.12) | 28 | **28** — and that is a result, not an omission. §3 |
 | mechanical gates in the suite | 4 | **5** — [`check_merge_guard.py`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/check_merge_guard.py) |
 | `EDGES.md` sections under R31's rule gate | 3 (§2.4.1, §4.3, §4.4) | **5** (+ §2.5, §5.2) |
 | `EDGES.md` printed call signatures held against the code | **0** | **4** |
-| `ROADMAP.md` kill-row trips | 3, all found by human reviewers | **4**, and the fourth was found by a checker |
+| `ROADMAP.md` kill-row trips | 3, all found by human reviewers | **5** — the fourth by this row's checker, the **fifth by this row's adversarial loop, while that checker exited 0**. §6.4 |
 
-**The floor held.** Row #6's floor was 196 ids and a sync suite that must never go below it; every commit in this row ran both suites on all three legs before it landed, and the count moved 196 → 203 → 206 → 209 → 210 → 211 → 214.
+**The floor held.** Row #6's floor was 196 ids and a sync suite that must never go below it; every commit in this row ran both suites on all three legs before it landed, and the count moved 196 → 203 → 206 → 209 → 210 → 211 → 214 → 220.
+
+---
+
+## 1b. The loop's first round, and the number that matters
+
+**Two fresh reviewers, distinct lenses, both required to construct and RUN probes. Between them: 8 BLOCKING, 7 MAJOR, 7 MINOR — every code finding reproduced here before it was believed, and every one reproduced.**
+
+That is a lot for work that had five mechanical gates green, and the shape of it is worth stating before the detail: **three of the eight BLOCKING were in code this row had just written or just changed**, one was in the checker this row built to prevent exactly this class, and one was the kill row itself.
+
+| | found by | closed by |
+|---|---|---|
+| **the kill row's FIFTH trip** — a *partial* extent compares equal | the loop | `C10-11` |
+| `predicate_requires_review` on every approved predicate, destroying its own signal | the loop | `C10-12` |
+| `amend_edge` erasing an invalid payload's enumeration | the loop | `C17-50` |
+| an unregistered family's edge returned without an incidence check | the loop | `C17-49` |
+| `via_successor` on a written reference; `nodes` not deduped; the marker fired only for the origin | the loop | `C17-48` |
+| `AmbiguousKind` escaping the new import guard | the loop | `C12-10` |
+| `check_merge_guard.py`'s only overridability assertion being a `NameError` | the loop | fixed, plus five more watched mutations |
+| five checker rows printing `REFUSED` for a probe that never ran | the loop | `NOT REACHABLE`, named |
+
+§6.4 is the honest reading of the first row.
 
 ---
 
@@ -181,6 +202,20 @@ Every extent state × every collapsing caller × every leg: **known-different** 
 **The diagnosis, in its full form after four trips:** *a guard written for **one call**, over a fact that **more than one call** can change, reached through **more than one field**.* Recorded in the [`ROADMAP.md`](https://github.com/stephan-dyson/open-ontology/blob/main/ROADMAP.md) kill row and in [`2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md).
 
 **What is different about this one, and it is the whole argument for the checker:** the three before it were found by human adversarial reviewers, one round at a time, each after the previous fix had shipped. This one was found before any reviewer read the row, by a gate that now runs **inside the contract suite on every commit** — so the *next* caller cannot arrive unnoticed.
+
+### 6.4 The FIFTH trip, and the honest qualification of §6.3's argument
+
+§6.3 argues that the checker is the answer, because it found the fourth trip mechanically. **The fifth trip qualifies that, and the qualification is the most useful thing in this document.**
+
+**What happened [Observed, round 1].** `_extent` read **one page** of a predicate's members and returned it. Every guard that compares two extents — `merge_types`' refusal #2, `retire(successor=)`'s (added by the third trip) and `_alias_identity_breach`'s (added by the fourth) — took `set(self._extent(...)[0])` and **threw away the third element, which is the `why` saying the read was partial**. Two predicates whose *first page* of members matched compared equal, and all three callers performed the collapse. Reproduced on this repository's own honest-paging double, added by row 3e because *"`PACKAGE.md` §3.3 permits it and UC3's scale produces it"*: true extents of three members and two, `merge_types` returning a `MergeResult`, `resolve_type("commentable")` answering `searchable` at confidence 1.0.
+
+**It is Rule U's third operand on one expression.** Row 3c closed *unknowable is not equal*. Row #6's second round closed *empty is not equal*. Nobody had closed **partial is not equal** — and the read path had been publishing exactly that fact, as `PredicateEntry.why_extent_incomplete`, since row 3c. Fixed on two axes, because there are two backends and one fix does not cover the other: an honest **page** (a cursor to the rest) is answered by `_extent` looping to exhaustion; a **truncated** answer (capped, no cursor) has no rest to read and is answered by folding the `why` into `knowable`. `C10-11` pins both, on all three callers, plus the narrowing case.
+
+> **`check_merge_guard.py` exited 0 the whole time, and that is the finding about the finding.** Its three real legs — sqlite, `sqlite_minimal`, Postgres — all answer a predicate-extent query in one page, so *no fixture it had could pose the question*. It now carries a `partial` and a `truncated` state for every collapsing caller, and `unknowable` for all three rather than for `merge_types` alone. But the general lesson is not "add more states": it is that **a checker only asks the questions its fixtures can pose, and this one's fixtures were built by the same person, in the same hour, with the same blind spot as the guard.** The loop is what asked a question the checker's author had not thought to ask.
+>
+> **So the fourth trip is not evidence that reviewers are now optional.** Both are load-bearing and neither replaces the other: the checker runs on every commit and catches the *next caller*; the loop runs once a row and catches the *next question*. Anyone reading §6.3 as an argument for dropping constraint 7's loop should read this box instead.
+
+**Three more defects in the checker itself, all found by the loop:** its only overridability assertion was a `NameError` (`reason` where the local is `reasons`), so the one thing its docstring promises could never have fired; five rows printed **REFUSED** for a probe whose fixture could not be built on that leg — ruling **R12**'s own rule, *a verdict without its coverage line is not a verdict*, broken inside the checker built to enforce it; and Part A's AST scan saw one of four realistic write shapes, so a caller written with `d["successor"] = x` rather than a dict literal was invisible. All three fixed, with five further mutations watched failing.
 
 ---
 
