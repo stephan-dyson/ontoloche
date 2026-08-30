@@ -148,6 +148,17 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 #: :meth:`Registry._family_version`.
 _DECLARATION_EVENTS = ("approved", "imported", "seeded")
 
+#: INTERFACE.md 5.10's three IDENTITY refusals, in the order 5.10 itself lists them.
+#: **Ruling R53, row 6b** -- and the tuple exists because until the five callers were put
+#: side by side nobody had noticed that they do not agree on it. See
+#: :meth:`Registry._identity_breach`, whose `order` parameter is what preserves each
+#: door's own sequence rather than quietly canonicalising it.
+#:
+#: Refusal **#1** is in here because `C9-20` ruled it an IDENTITY guard rather than an
+#: evidence one, after the sixth trip collapsed through `force=True` a pair `merge_types`
+#: refuses under all seven acknowledgements. All three are non-overridable.
+IDENTITY_GUARD_ORDER = ("different_consumer_sets", "predicate_merge", "kind_mismatch")
+
 #: How many ledger rows the facade reads when it has to answer a question the primitive
 #: cannot -- today, deriving ACTIONS.md 9's BACKWARD `compensated_by` pointer from the
 #: forward one every row carries.
@@ -1060,7 +1071,7 @@ class Registry:
         predicate: str,
         include_retired: bool,
         *,
-        identity: bool = False,
+        identity: bool,
         cache: dict | None = None,
     ) -> tuple[tuple[str, ...], int | None, str | None]:
         """The types that satisfy a predicate. **Ruling R54, row 4d, adds ``identity``.**
@@ -1234,8 +1245,12 @@ class Registry:
             return False
         if written.kind != "predicate" or answered.kind != "predicate":
             return False
-        left_names, _, left_why = self._extent(namespace, written.name, True)
-        right_names, _, right_why = self._extent(namespace, answered.name, True)
+        left_names, _, left_why = self._written_extent(
+            namespace, written.name, include_retired=True
+        )
+        right_names, _, right_why = self._written_extent(
+            namespace, answered.name, include_retired=True
+        )
         knowable = (
             self.caps.indexes_membership and left_why is None and right_why is None
         )
@@ -2843,28 +2858,35 @@ class Registry:
                 namespace, successor, kind=rec.kind
             )
             if succ_for_consumers is not None:
+                # **Refusal #1 through the SHARED function** (R53, row 6b), and it
+                # stays HERE -- before the successor lookup below -- rather than moving
+                # into one call with #2 and #3. Moving it would change which
+                # non-overridable refusal a CROSS-KIND successor pair is told, and R53's
+                # boundary is that this row may extract and may not change what a guard
+                # compares. `order=` is what makes that preservation visible instead of
+                # accidental.
+                #
                 # Computed here rather than reused: D-4c-5 moved the identity guards
                 # ABOVE the consumer guards, so `report` does not exist yet -- and that
                 # ordering is the point, since this refusal is an identity guard too.
-                here = {c.id for c in self._consumer_report(rec).gates_on}
-                there = {
-                    c.id for c in self._consumer_report(succ_for_consumers).gates_on
-                }
-                if here != there:
+                breach = self._identity_breach(
+                    rec,
+                    succ_for_consumers,
+                    claim=(
+                        f"retiring {type!r} toward {successor!r} redirects every "
+                        f"`resolve_type` for this word at confidence 1.0"
+                    ),
+                    order=("different_consumer_sets",),
+                )
+                if breach is not None:
+                    reason_value, sentence, detail = breach
                     return Refusal(
-                        "different_consumer_sets",
+                        reason_value,
                         {
-                            "from": sorted(here),
-                            "into": sorted(there),
+                            **detail,
                             "type": type,
                             "successor": successor,
-                            "why": (
-                                "a successor redirects every `resolve_type` for this "
-                                "word at confidence 1.0, which asserts that every "
-                                "consumer of one accepts the other -- the same claim "
-                                "`merge_types` refuses non-overridably as its refusal #1",
-                            )[0],
-                            "overridable": False,
+                            "why": sentence,
                         },
                     )
 
@@ -2981,40 +3003,34 @@ class Registry:
                             "overridable": False,
                         },
                     )
-                if rec.kind == "predicate":
-# **`knowable` folds in the READ's own verdict, not only the capability flag** (row
-                    # 4c round 1, the kill row's FIFTH trip). `_extent` returns a third
-                    # element that says the read was partial -- a paged backend, a page it
-                    # could not count, a cursor it repeated -- and every guard here used to
-                    # discard it, so two predicates whose first page matched compared equal.
-                    # Rule U, a third time: unknown is not equal, EMPTY is not equal, and
-                    # **PARTIAL is not equal** either.
-                    left_names, _, left_why = self._extent(namespace, rec.name, True)
-                    right_names, _, right_why = self._extent(namespace, succ.name, True)
-                    knowable = (
-                        self.caps.indexes_membership
-                        and left_why is None
-                        and right_why is None
+                # **Refusal #2 through the SHARED function** (R53, row 6b). The
+                # expression it runs is unchanged to the letter -- `knowable` folds in
+                # the READ's own verdict and not only the capability flag (the FIFTH
+                # trip), an empty extent is no evidence of identical membership (the
+                # SECOND), and an unknowable one is not a byte-identical one (the FIRST).
+                # This door evaluates #3 above and #2 here, which is NOT 5.10's order and
+                # is preserved because it is what `C9-18` and `C9-22` were written
+                # against.
+                breach = self._identity_breach(
+                    rec,
+                    succ,
+                    claim=(
+                        f"retiring {type!r} with {successor!r} as its successor "
+                        f"redirects every `resolve_type` for the first to the second"
+                    ),
+                    order=("predicate_merge",),
+                )
+                if breach is not None:
+                    reason_value, sentence, detail = breach
+                    return Refusal(
+                        reason_value,
+                        {
+                            **detail,
+                            "type": type,
+                            "successor": successor,
+                            "why": sentence,
+                        },
                     )
-                    left, right = set(left_names), set(right_names)
-                    if not knowable or not left or left != right:
-                        return Refusal(
-                            "predicate_merge",
-                            {
-                                "from_extent": sorted(left),
-                                "into_extent": sorted(right),
-                                "extents_knowable": knowable,
-                                "extents_empty": not left and not right,
-                                "type": type,
-                                "successor": successor,
-                                "why": "retiring a predicate with another as its "
-                                "successor redirects every `resolve_type` for the "
-                                "first to the second -- the same claim `merge_types` "
-                                "refuses non-overridably unless the two extents are "
-                                "non-empty and identical",
-                                "overridable": False,
-                            },
-                        )
 
         # **The identity guards run FIRST, and that ordering is row 3c's lesson applied
         # to this call** (row 4c, found by `check_merge_guard.py`). `merge_types` moved
@@ -3553,6 +3569,237 @@ class Registry:
             return backward, "predecessor", why
         return None, None, why
 
+
+    # ==================================================== 5.10's identity guards, ONCE
+    #
+    # **Ruling R53, and the seventh trip's countersignature rules what this row is for:**
+    # *"row 6b's guard extraction is the review 4c's guards did not get -- its first
+    # adversarial lens is the extracted function against all the trip records."*
+    #
+    # Five callers carried copies of these three refusals -- `merge_types`, `retire(
+    # successor=)`, `import_types` (through `_alias_identity_breach`), `reinstate`
+    # (through `_lifecycle_collisions`) and `propose_type`/`_write_approved` (through
+    # `_alias_holder` and `_word_rows`) -- and the kill row has been reached through
+    # **eight** of the gaps between them. R53's own reasoning is worth restating, because
+    # it is the reason this is a refactor and not a fix: *"extraction is a refactor with
+    # no new behaviour, and this row's evidence is that the CHECKER -- not a shared
+    # function -- catches the next caller."* A shared function does not close the class;
+    # it makes the class **readable in one place**, which is the precondition for the
+    # ninth walk being attempted at all.
+    #
+    # **What this must NOT do, stated before the code because it is the row's boundary:
+    # change what any guard compares.** R53 and R64 both say so, and both give the same
+    # reason -- *changing the guards' shape in the row that changes what they compare is
+    # how trips 2, 5 and 6 happened.* Every existing kill-row id passes unchanged and
+    # `check_merge_guard.py`'s six axes exit 0 with no edits to their fixtures.
+
+    def _written_extent(
+        self, namespace: str, predicate: str, *, include_retired: bool
+    ) -> tuple[tuple[str, ...], int | None, str | None]:
+        """**The guards' reading: the members of the WRITTEN WORD.** Ruling **R64**.
+
+        Row 4d gave :meth:`_extent` a keyword-only ``identity`` and every one of the five
+        collapsing guards kept the positional call -- deviation **D-4d-1** -- because *a
+        single unconditional line would have reopened the kill row through the fix meant
+        to close a different hole*: the guards compare two extents to decide whether a
+        collapse asserts something false, and the merge under examination is exactly what
+        joins the two names into one identity, **so the two closures would be equal by
+        construction and the guard would agree with itself.**
+
+        That reasoning was correct and it lived in a comment. R64 ruled that the reading
+        gets a **name** in this row -- *"6b renames (`_written_extent`, or a required
+        keyword) in the same change that extracts"* -- and this row takes **both**:
+        ``_extent``'s ``identity`` is now a **required** keyword, so no caller can get a
+        reading by accident, and this is the name the reading has.
+
+        **What it is NOT, which is the half a reader has to hold:** it is not
+        ``predicates()``'s reading. That one resolves the identity (**R54**), so a member
+        that declared an absorbed word is still found -- correct for *"what can this type
+        do?"* and circular for *"do these two words denote the same set of their own
+        accord?"*. `C10-14` is what breaks if a later row flips the default back.
+
+        **``include_retired`` is required too, and no guard may take it by accident.**
+        Every one of the five reads it ``True``: 5.9 makes a retired name still RESOLVE,
+        and a retired predicate still HAS an extent -- which is precisely how the FOURTH
+        trip walked in, aliasing a retired `commentable` onto a live `searchable`
+        (`C12-08`). A guard that read only live members would compare a word against half
+        of itself.
+        """
+        return self._extent(namespace, predicate, include_retired, identity=False)
+
+    def _identity_breach(
+        self,
+        here: TypeRecord,
+        there: TypeRecord | TypeRef,
+        *,
+        claim: str,
+        order: Sequence[str] = IDENTITY_GUARD_ORDER,
+    ) -> tuple[str, str, dict] | None:
+        """INTERFACE.md 5.10's refusals **#1, #2 and #3**, in one place. **Ruling R53.**
+
+        ``(Refusal.reason, sentence, detail)`` or ``None``. The triple rather than a
+        ``Refusal`` because one of the callers is ``import_types``, whose contract is
+        *"an import returns entries, not refusals"* and which must turn this into an
+        ``import_refused:<reason>`` warning -- the same shape
+        ``edges.family_declaration_problem`` returns for the same reason.
+
+        ``claim`` is the caller's own sentence naming **what the collapse would assert**:
+        a merge, a successor redirect at confidence 1.0, an alias write, a reinstatement.
+        It is required and it is not decoration -- `C9-19`, `C12-13` and row 4d's D-4c-5
+        are all one defect (*the right refusal reached by the wrong route*, or the right
+        outcome with the wrong story), and *the story is what a caller acts on*.
+
+        ``order`` is **the order this door evaluates the three in**, and it is a parameter
+        rather than a constant because the three callers did not agree and **nobody had
+        noticed until they were put side by side.** `merge_types` fires #1, #2, #3 --
+        5.10's own order. `_alias_identity_breach` fires #3 first, because an alias whose
+        holder is of another kind is a kind question before it is an extent question.
+        `retire` interleaves `successor_unregistered` and `retired_operand` between them,
+        which is why it resolves the successor row before calling this at all. **Every
+        one of those orders is preserved exactly**, because R53's boundary is that this
+        row may extract and may not change what a guard compares -- and which of two
+        non-overridable refusals a caller is told is part of what it compares.
+
+        **All three are NON-OVERRIDABLE**, and each returns ``overridable: False`` in its
+        detail. `force` and `acknowledge` override what could be **seen**, never what
+        would become **true**.
+
+        ``there`` may be a ``TypeRef`` rather than a stored row, because one door asks
+        about a row it is in the act of creating -- and it is deliberately **not** a
+        synthetic ``TypeRecord``. `check_merge_guard.py`'s Part A reads `registry.py`'s
+        AST for every construction of a record carrying an identity field, and a
+        throwaway operand built that way is indistinguishable from a WRITE: the
+        extraction's first cut built one here and Part A failed the suite until it came
+        back out, which is the enumeration doing exactly what row 4c built it to do.
+        Refusal #1 needs a real row (it reads consumers off it) and says so.
+        """
+        # **Each guard's `detail` is EXACTLY the one its shipped copy produced**, key for
+        # key, and that is not tidiness: `C10-03` asserts `merge_types`' `kind_mismatch`
+        # detail by full equality, and the three guards already used `from`/`into` for
+        # three different things -- the two KINDS, the two GATE SETS, and (for #2) nothing
+        # at all. A shared "base" dict looked obviously right and changed all three.
+        # Found by the suite on the first run of the extraction, which is the extraction
+        # being reviewable rather than the extraction being clean.
+        for guard in order:
+            if guard == "kind_mismatch":
+                # 5.10 refusal #3. A word that answers at confidence 1.0 with an entry of
+                # ANOTHER KIND answers a question about one kind with an entry of
+                # another. PACKAGE.md 4.1 blesses one word under two kinds, which is
+                # exactly why joining them is a claim nobody made.
+                if here.kind != there.kind:
+                    return (
+                        "kind_mismatch",
+                        f"{claim} -- and they are of different kinds "
+                        f"({here.kind!r} and {there.kind!r}), so the answer would be a "
+                        f"question about one kind answered with an entry of another "
+                        f"(INTERFACE.md 5.10 refusal #3)",
+                        {"from": here.kind, "into": there.kind, "overridable": False},
+                    )
+            elif guard == "different_consumer_sets":
+                # 5.10 refusal #1, and `C9-20` is the record that it is an IDENTITY guard
+                # rather than an evidence one. 5.9 filed it under *evidence* while 5.10's
+                # own rationale calls it *"merging asserts that every consumer of one
+                # accepts the other"* -- an identity claim -- and marked it *"No. Not by
+                # `force`, not by `acknowledge`."* Two sections disagreed about which
+                # bucket it was in, and the disagreement had a `force=True` door in it:
+                # the SIXTH trip collapsed a pair refused under all seven
+                # acknowledgements through `retire(successor=, force=True)`.
+                if isinstance(there, TypeRef):  # pragma: no cover - a programming error
+                    raise AssertionError(
+                        "INTERFACE.md 5.10 refusal #1 compares CONSUMER SETS and needs a "
+                        "stored row to read them off; a TypeRef names a word, not a row"
+                    )
+                mine = {c.id for c in self._consumer_report(here).gates_on}
+                theirs = {c.id for c in self._consumer_report(there).gates_on}
+                if mine != theirs:
+                    return (
+                        "different_consumer_sets",
+                        f"{claim} -- which asserts that every consumer of one accepts "
+                        f"the other, and they gate differently "
+                        f"({sorted(mine)} vs {sorted(theirs)}). ROADMAP.md states the "
+                        f"requirement without qualification: *it MUST refuse when the "
+                        f"two have different consumer sets* (INTERFACE.md 5.10 "
+                        f"refusal #1)",
+                        {"from": sorted(mine), "into": sorted(theirs), "overridable": False},
+                    )
+            elif guard == "predicate_merge":
+                # 5.10 refusal #2 -- **the kill row itself**, and the expression every
+                # one of the first five trips ran through. Rule U has three operands on
+                # it and each cost a trip:
+                #
+                #   UNKNOWABLE is not equal (trip 1, `C9-08`) -- on
+                #     `indexes_membership=False` every extent came back empty, so two
+                #     predicates with genuinely different members compared EQUAL;
+                #   EMPTY is not equal (trip 2, `C10-09`) -- `set() == set()`, so two
+                #     freshly minted predicates that NOTHING satisfies compared equal,
+                #     and an empty extent is *no evidence of membership* rather than
+                #     *evidence of identical membership*;
+                #   PARTIAL is not equal (trip 5, `C10-11`) -- `_extent` returns a third
+                #     element saying the read did not finish, and every guard threw it
+                #     away, so two predicates whose FIRST PAGE matched compared equal.
+                #
+                # `knowable` folds all three into one condition, and `demonstrably_same`
+                # requires POSITIVE, NON-EMPTY, IDENTICAL evidence. The guard is
+                # NARROWED, not banned: a non-empty identical extent still merges, which
+                # `C10-09` pins in the same breath.
+                if "predicate" in (here.kind, there.kind):
+                    left_names, _, left_why = self._written_extent(
+                        here.namespace, here.name, include_retired=True
+                    )
+                    right_names, _, right_why = self._written_extent(
+                        there.namespace, there.name, include_retired=True
+                    )
+                    knowable = (
+                        self.caps.indexes_membership
+                        and left_why is None
+                        and right_why is None
+                    )
+                    left, right = set(left_names), set(right_names)
+                    demonstrably_same = bool(left) and left == right
+                    if (
+                        not knowable
+                        or here.kind != "predicate"
+                        or there.kind != "predicate"
+                        or not demonstrably_same
+                    ):
+                        return (
+                            "predicate_merge",
+                            f"{claim} -- the same claim `merge_types` refuses "
+                            f"non-overridably unless the two extents are NON-EMPTY and "
+                            f"IDENTICAL (INTERFACE.md 5.10 refusal #2, the ROADMAP.md "
+                            f"kill row)",
+                            {
+                                "from_extent": sorted(left),
+                                "into_extent": sorted(right),
+                                "extents_knowable": knowable,
+                                "extents_empty": not left and not right,
+                                "why": (
+                                    "both extents are EMPTY, which is no evidence of "
+                                    "membership rather than evidence of identical "
+                                    "membership -- two predicates nothing satisfies are "
+                                    "not demonstrably duplicates"
+                                    if knowable and not left and not right
+                                    else None
+                                    if knowable
+                                    else "this backend cannot compute a predicate's "
+                                    "extent, so two predicates cannot be shown to have "
+                                    "identical members: "
+                                    + (
+                                        self.caps.reason("indexes_membership")
+                                        if not self.caps.indexes_membership
+                                        else (left_why or right_why or "")
+                                    )
+                                ),
+                                "overridable": False,
+                            },
+                        )
+            else:  # pragma: no cover - the tuple is closed and this says so
+                raise AssertionError(
+                    f"{guard!r} is not one of INTERFACE.md 5.10's identity guards "
+                    f"{list(IDENTITY_GUARD_ORDER)}"
+                )
+        return None
+
     # =========================================================== 5.10 merge_types
     def merge_types(
         self,
@@ -3579,90 +3826,34 @@ class Registry:
         left = self._require(namespace, from_)
         right = self._require(target_ns, into)
 
-        left_report = self._consumer_report(left)
-        right_report = self._consumer_report(right)
-        left_gates = {c.id for c in left_report.gates_on}
-        right_gates = {c.id for c in right_report.gates_on}
-
-        # 1 -- non-overridable. Merging asserts every consumer of one accepts the other.
-        if left_gates != right_gates:
-            return Refusal(
-                "different_consumer_sets",
-                {
-                    "from": sorted(left_gates),
-                    "into": sorted(right_gates),
-                    "overridable": False,
-                },
-            )
-
-        # 2 -- the kill row. A predicate is not a type list; merging two whose extents
-        # differ asserts that anything commentable is searchable.
-        if "predicate" in (left.kind, right.kind):
-            # **An extent we could not compute is not a byte-identical extent.** On a
-            # backend with indexes_membership=False every extent comes back empty, so
-            # two predicates with genuinely different members compared EQUAL and this
-            # refusal never fired -- the merge fell through to the *overridable*
-            # no_consumer_evidence guard, and `ROADMAP.md`'s kill row ("a capability
-            # predicate gets merged as a duplicate") tripped on the declared capability
-            # shape of Tenshen's own table (PACKAGE.md 7.3 B3). Rule U: unknown is not
-            # equal. Row 3c, after an adversarial review round reproduced the merge.
-            #
-            # **And two EMPTY extents are not a byte-identical extent either.** Row #6's
-            # second adversarial round reached the same kill row by the other end of the
-            # same expression: `set() == set()`, so two predicates that NOTHING satisfies
-            # compared equal, the refusal did not fire, and the merge fell through to the
-            # overridable guards again -- reproduced end to end against this registry with
-            # two AI-proposed predicates auto-approved at Haiku and merged under two
-            # acknowledgements. An empty extent is *no evidence of membership*, not
-            # *evidence of identical membership*; INTERFACE.md 5.10 says of the guard one
-            # row down that "merging two types about which nothing is known is the single
-            # most destructive thing this interface can do", and that is exactly this
-            # case with a predicate in it. Rule U again, on the other operand: EMPTY is
-            # not EQUAL. Pinned by C10-09.
-            # See `retire`'s note: `knowable` folds in the READ's verdict, because
-            # **a PARTIAL extent is not an identical extent** -- the kill row's fifth
-            # trip, and Rule U's third operand after *unknowable* and *empty*.
-            left_names, _, left_why = self._extent(namespace, left.name, True)
-            right_names, _, right_why = self._extent(target_ns, right.name, True)
-            knowable = (
-                self.caps.indexes_membership and left_why is None and right_why is None
-            )
-            left_extent, right_extent = set(left_names), set(right_names)
-            demonstrably_same = bool(left_extent) and left_extent == right_extent
-            if (
-                not knowable
-                or left.kind != "predicate"
-                or right.kind != "predicate"
-                or not demonstrably_same
-            ):
-                return Refusal(
-                    "predicate_merge",
-                    {
-                        "from_extent": sorted(left_extent),
-                        "into_extent": sorted(right_extent),
-                        "extents_knowable": knowable,
-                        "extents_empty": not left_extent and not right_extent,
-                        "why": (
-                            "both extents are EMPTY, which is no evidence of membership "
-                            "rather than evidence of identical membership -- two "
-                            "predicates nothing satisfies are not demonstrably duplicates"
-                            if knowable and not left_extent and not right_extent
-                            else None
-                            if knowable
-                            else "this backend cannot compute a predicate's extent, so "
-                            "two predicates cannot be shown to have identical members: "
-                            + (self.caps.reason("indexes_membership") or "")
-                        ),
-                        "overridable": False,
-                    },
-                )
-
-        # 3
-        if left.kind != right.kind:
-            return Refusal(
-                "kind_mismatch",
-                {"from": left.kind, "into": right.kind, "overridable": False},
-            )
+        # **Guards #1, #2 and #3 are ONE call now -- ruling R53, row 6b.** They were
+        # three copies here, three in `retire(successor=)` and three in
+        # `_alias_identity_breach`, and ROADMAP.md's kill row has been reached through
+        # EIGHT of the gaps between them. The extraction changes nothing about what they
+        # compare -- that is R53's own boundary, and R64 gives the same reason: *changing
+        # the guards' shape in the row that changes what they compare is how trips 2, 5
+        # and 6 happened.* The three arguments in the docstring below are the whole of
+        # what a caller supplies: the two rows, the sentence naming what the collapse
+        # would assert, and this door's own order.
+        #
+        # **This door's order is 5.10's own** -- #1, then #2, then #3 -- because this is
+        # the call 5.10 was written about.
+        breach = self._identity_breach(
+            left,
+            right,
+            claim=(
+                f"merging {from_!r} into {into!r} makes one word answer for both"
+            ),
+        )
+        if breach is not None:
+            # **The detail is returned untouched.** `C10-03` asserts `kind_mismatch`'s by
+            # full equality and `C10-09` asserts that `predicate_merge`'s `why` is `None`
+            # when the extents were knowable -- so a caller that helpfully stamped the
+            # claim sentence over it would be changing what this door says. The sentence
+            # is for the two doors that carry one: `retire`, and the import path, which
+            # has no `Refusal` to put a detail in at all.
+            reason_value, _sentence, detail = breach
+            return Refusal(reason_value, detail)
 
         # 4 -- cross-namespace collision is what namespaces exist to preserve.
         if left.namespace != right.namespace:
@@ -3791,6 +3982,15 @@ class Registry:
             )
 
         # 7 -- the one place "we do not know" blocks rather than warns.
+        #
+        # The two gate sets are read HERE now rather than above guard #1, because guard
+        # #1 moved into `_identity_breach` (R53) and reads them itself. This is an
+        # OVERRIDABLE guard about evidence; #1 is a NON-OVERRIDABLE one about identity
+        # (`C9-20`), and the whole of `C9-19`'s defect class is a caller being told to
+        # `acknowledge` past something that never moves -- so the two reads staying in
+        # their own halves is the point rather than a duplication to tidy away.
+        left_gates = {c.id for c in self._consumer_report(left).gates_on}
+        right_gates = {c.id for c in self._consumer_report(right).gates_on}
         if not left_gates and not right_gates and "no_consumer_evidence" not in acknowledge:
             return Refusal(
                 "no_consumer_evidence",
@@ -6197,63 +6397,55 @@ class Registry:
                     f"so importing it as an alias of {namespace}:{kind}:{name} cannot be "
                     f"shown to be safe: " + partial_why,
                 )
+            # **Guards #3, #1 and #2 through the SHARED function** (ruling R53, row 6b),
+            # and this door calls it THREE times rather than once. That is not
+            # duplication: it is the only way to extract without changing what each
+            # guard compares, which is R53's own boundary.
+            #
+            # The reason is that the row being aliased ONTO may not exist yet -- an
+            # `import_types` dump routinely writes a brand-new entry with aliases in the
+            # same call -- so the three guards do not agree about what the right-hand
+            # operand is:
+            #
+            #   #3 and #2 compare against the DECLARED `(namespace, kind, name)`, which
+            #     is a fact whether or not the row is there yet: `resolve_type` will
+            #     answer with it at 1.0 as soon as it is;
+            #   #1 compares CONSUMER SETS, and a row that does not exist has none to
+            #     read, so the shipped guard falls back to `other`'s -- which makes the
+            #     two sets equal by construction and #1 unable to fire.
+            #
+            # **That fallback is preserved exactly and it is a residual, stated rather
+            # than fixed here.** It means an alias written onto a row this call is
+            # creating gets #3 and #2 and not #1. Whether that is a ninth walk is what
+            # this row's review round is for; changing it would be changing what a guard
+            # compares, which R53 forbids this row to do. Raised as **Q70**.
+            # A `TypeRef` and NOT a synthetic `TypeRecord`: see `_identity_breach`'s
+            # own note. Part A reads this file's AST for every record construction
+            # carrying an identity field, and a throwaway operand built that way reads
+            # exactly like a write -- the first cut of this extraction built one and the
+            # checker failed the suite until it came out.
+            declared_row = TypeRef(namespace, kind, name)
             for other in others:
                 if other.name == name and other.kind == kind:
                     continue
-                if other.kind != kind:
-                    return (
-                        "kind_mismatch",
-                        f"importing {alias!r} as an alias of {namespace}:{kind}:{name} "
-                        f"would make `resolve_type({alias!r})` answer at confidence 1.0 "
-                        f"with an entry of kind {other.kind!r} -- a question about one "
-                        f"kind answered with an entry of another (INTERFACE.md 5.10 "
-                        f"refusal #3)",
+                for operand, guard in (
+                    (declared_row, "kind_mismatch"),
+                    (self.adapter.get_type(namespace, name, kind=kind) or other, "different_consumer_sets"),
+                    (declared_row, "predicate_merge"),
+                ):
+                    breach = self._identity_breach(
+                        other,
+                        operand,
+                        claim=(
+                            f"importing {alias!r} as an alias of "
+                            f"{namespace}:{kind}:{name} would make "
+                            f"`resolve_type({alias!r})` answer at confidence 1.0 with "
+                            f"{name!r}"
+                        ),
+                        order=(guard,),
                     )
-                # **§5.10's refusal #1 belongs here too, and `C9-20` is the record
-                # that it is an IDENTITY guard rather than an evidence one.** An alias
-                # produces the identical confidence-1.0 redirect a merge does, and both
-                # `merge_types` and `retire(successor=)` refuse a pair with different
-                # consumer sets NON-OVERRIDABLY -- so the pair they both refuse collapsed
-                # through the third door with no refusal at all. [Observed] row 4d, round
-                # 1. `ROADMAP.md` states the requirement without qualification: *"It MUST
-                # refuse when the two have different consumer sets."*
-                here = {c.id for c in self._consumer_report(other).gates_on}
-                there = {
-                    c.id
-                    for c in self._consumer_report(
-                        self.adapter.get_type(namespace, name, kind=kind)
-                        or other
-                    ).gates_on
-                }
-                if here != there:
-                    return (
-                        "different_consumer_sets",
-                        f"making {alias!r} answer at confidence 1.0 with "
-                        f"{namespace}:{kind}:{name} asserts that every consumer of one "
-                        f"accepts the other, and they gate differently "
-                        f"({sorted(here)} vs {sorted(there)}) -- the same claim "
-                        f"`merge_types` refuses non-overridably as its refusal #1",
-                    )
-                if kind == "predicate" or other.kind == "predicate":
-                    # See `retire`'s note: a PARTIAL extent is not an identical extent.
-                    left_names, _, left_why = self._extent(namespace, other.name, True)
-                    right_names, _, right_why = self._extent(namespace, name, True)
-                    knowable = (
-                        self.caps.indexes_membership
-                        and left_why is None
-                        and right_why is None
-                    )
-                    left, right = set(left_names), set(right_names)
-                    if not knowable or not left or left != right:
-                        return (
-                            "predicate_merge",
-                            f"importing {alias!r} as an alias of {namespace}:predicate:"
-                            f"{name} would make `resolve_type({alias!r})` answer at "
-                            f"confidence 1.0 with {name!r} -- the same claim "
-                            f"`merge_types` refuses non-overridably unless the two "
-                            f"extents are non-empty and identical (INTERFACE.md 5.10 "
-                            f"refusal #2, the ROADMAP.md kill row)",
-                        )
+                    if breach is not None:
+                        return (breach[0], breach[1])
         return None
 
     def _declared_predicate_moved(self, namespace: str, declared: str) -> str | None:
