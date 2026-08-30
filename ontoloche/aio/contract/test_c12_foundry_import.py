@@ -774,3 +774,109 @@ async def test_c12_16_the_tenth_trip_the_guard_read_a_state_the_call_destroys(
         "the tenth trip: the guard read the consumer set the import was about to "
         "overwrite, and answered two ways for one final state"
     )
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+async def test_c12_17_the_eleventh_trip_one_call_site_of_four(adapter, make_registry):
+    """**The kill row's ELEVENTH trip**, found by round 3's kill-row lens — the questions
+    round 2's lens never got to ask, because it died on a rate limit before reporting.
+
+    `C12-14` and `C12-16` closed refusal #1's missing operand at `import_types`. It was
+    passed at **one of `_alias_identity_breach`'s four call sites**: `retire(successor=)`,
+    `reinstate` and `merge_types` all called it bare, and the async mirror was identical.
+    Without it `_gates_on`'s `member_of` is empty, so **every consumer gating on a
+    predicate the target row itself declares is invisible to refusal #1** — the exact
+    fact trips 9 and 10 were built on.
+
+    The walk, through `reinstate`, in seven ordinary calls and with refusal #2 passing
+    honestly throughout:
+
+    1. `commentable` and `gamma` are predicates with identical non-empty extents;
+    2. `commentable` is retired — an ordinary, permitted governance act;
+    3. the alias is imported and **correctly allowed**: no consumer exists yet, both gate
+       sets are empty, and the write asserts nothing false;
+    4. `gamma` is retired — the alias goes dormant. Also ordinary;
+    5. a consumer is registered on `meta_p`, which only `gamma` declares. **The world
+       moves**: the sets now differ;
+    6. `reinstate("gamma")` → `TypeEntry`, **no refusal, no warning**;
+    7. `resolve_type("commentable")` → **`gamma` at confidence 1.0**, up from
+       `proposal / 0.4706` the call before.
+
+    **This is the sixth trip's diagnosis applied to a FIX for the third consecutive
+    round** — trip 9 the missing operand, trip 10 the operand on one branch of two, trip
+    11 the operand at one call site of four.
+
+    `declared_predicates` is a **required keyword** now, which is ruling **R64**'s
+    treatment of `_extent`'s `identity` for the same reason: *no caller can take a
+    reading by accident.*
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "meta_p", kind="predicate")
+    await seed(registry, "commentable", kind="predicate")
+    await seed(registry, "gamma", kind="predicate", predicates=["meta_p"])
+    for member in ("aaa_note", "bbb_memo"):
+        await seed(registry, member, predicates=["commentable", "gamma"])
+
+    retired = await registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        pytest.skip(
+            "PACKAGE.md 3.6 -- this backend cannot record a forced retirement: "
+            f"{retired.reason}"
+        )
+    legal = (await registry.import_types(
+        [
+            {
+                "name": "gamma", "kind": "predicate", "definition": "a capability",
+                "predicates": ["meta_p"], "aliases": ["commentable"], "status": "active",
+            }
+        ],
+        namespace="default", kind="predicate",
+    ))[0]
+    assert not [w for w in legal.warnings if w.startswith("import_refused:")], (
+        "the alias is LEGAL at this moment -- both gate sets are empty -- and a guard "
+        "that refused here would be banned rather than narrowed"
+    )
+    assert await registry.retire("gamma", "dormant", retired_by="user:sd", force=True)
+
+    # The world moves between the write and the reinstatement, which is trip 6's shape.
+    await registry.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    assert {c.id for c in (await registry.consumers("gamma")).gates_on} == {"svc:meta"}
+    assert {c.id for c in (await registry.consumers("commentable")).gates_on} == set()
+
+    out = await registry.reinstate("gamma", "back in service", reinstated_by="user:sd")
+    assert isinstance(out, Refusal), f"reinstate performed the collapse: {out!r}"
+    assert out.reason == "different_consumer_sets", out
+    resolution = await registry.resolve_type(
+        "commentable", ResolveContext(source="the C12-17 fixture"), tier="opus"
+    )
+    assert resolution.outcome != "existing", (
+        "the eleventh trip: a capability predicate merged as a duplicate, through the "
+        "one door of four the ninth trip's fix did not reach"
+    )
+
+def test_c12_18_declared_predicates_is_a_required_keyword(adapter, make_registry):
+    """`C12-17`'s narrowing, in the shape ruling **R64** chose for `_extent`.
+
+    The eleventh trip was three callers **silently defaulting** an operand refusal #1
+    cannot work without. A default is what let them: R64 made `_extent`'s `identity` a
+    required keyword precisely so *no caller can take a reading by accident*, and the
+    same treatment here means a fifth caller cannot arrive bare — it fails at the call,
+    not at a kill-row walk two rounds later.
+
+    Asserted by signature rather than by behaviour, because the thing being pinned is
+    that **there is no default to fall back to** — a behavioural test would pass just as
+    happily with one.
+    """
+    import inspect
+
+    from ontoloche.aio.registry import AsyncRegistry
+
+    parameter = inspect.signature(AsyncRegistry._alias_identity_breach).parameters[
+        "declared_predicates"
+    ]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is inspect.Parameter.empty, (
+        "a default here is what let three of four callers omit the operand refusal #1 "
+        "cannot work without -- R64's own reasoning, one guard along"
+    )

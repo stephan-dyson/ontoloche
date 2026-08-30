@@ -2971,3 +2971,167 @@ async def test_c19_70_the_invocation_input_census_enumerates_what_was_written(
     census = await registry.attribute_census(kind="action_payload")
     assert [e.key for e in census.entries] == ["ticket"], census
     assert census.entries[0].example == "default:entity:task"
+
+@NEEDS_ATTRIBUTES
+async def test_c19_71_the_kind_on_a_reference_is_a_claim_and_the_stored_row_is_the_fact(
+    adapter, make_registry
+):
+    """**BLOCKING, round 3** — the ACTIONS door's own kill-row walk, alive through a
+    mislabelled string.
+
+    `C19-51` closed *"a `kind="predicate"` ref is refused whatever the family declared"*
+    — and it closed it against `ref_kind`, which returns
+    ``getattr(ref, "kind", None)``: **the kind the CALLER wrote on the reference, never
+    checked against the stored row.** So a `TypeRef("default", "entity", "commentable")`
+    naming a real capability predicate — or a misspelled `"Predicate"` — walked straight
+    past the exclusion, and **[Observed]** `merge_capabilities(commentable, searchable)`
+    reached `verdict="allowed"` at `preflight` and was **recorded `applied`** on two live
+    predicates.
+
+    That is the **seventh** trip's diagnosis one surface along: *a guard comparing a byte
+    where the registry holds a stored fact.* Row 6b hardened `ref_shape` to refuse an
+    unrecognised **shape** and left the sibling hole in the **kind** open. §2.3's rule is
+    *"the exclusion is general or it is nothing"*, and **a general exclusion cannot rest
+    on the caller spelling one word correctly.**
+
+    **A ref naming no registered row is deliberately NOT refused here.** §1's last
+    non-goal is that an `InstanceRef` names an id the host already has and this registry
+    does not resolve instances; `type_active` is the precondition that asks about
+    registration. What is refused is a claim the registry can **see** is false.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "commentable", kind="predicate")
+    await seed(registry, "searchable", kind="predicate")
+    await action_family(
+        registry,
+        "merge_capabilities",
+        inputs=[InputSpec("a", "type", kinds=None), InputSpec("b", "type", kinds=None)],
+    )
+
+    for label, left, right in (
+        ("honest", TypeRef("default", "predicate", "commentable"),
+         TypeRef("default", "predicate", "searchable")),
+        ("misspelled", TypeRef("default", "Predicate", "commentable"),
+         TypeRef("default", "Predicate", "searchable")),
+        ("mislabelled", TypeRef("default", "entity", "commentable"),
+         TypeRef("default", "entity", "searchable")),
+    ):
+        gate = await registry.preflight("merge_capabilities", {"a": left, "b": right}, actor="ai:c")
+        assert isinstance(gate, Refusal), f"{label}: the gate said {gate!r}"
+        assert gate.reason == "input_kind_mismatch", (label, gate)
+        if registry.caps.stores_invocations:
+            recorded = await registry.record_invocation(
+                "merge_capabilities", {"a": left, "b": right},
+                actor="ai:c", outcome="applied", gate_verdict="not_asked",
+            )
+            assert isinstance(recorded, Refusal), f"{label}: recorded {recorded!r}"
+    if registry.caps.stores_invocations:
+        assert (await registry.invocations()).known == 0, "nothing was written by any of the three"
+
+    # A ref to a row nobody registered is NOT refused on this axis -- there is no stored
+    # fact to contradict, and inventing one would be the confident answer Rule U forbids.
+    await seed(registry, "task", kind="entity")
+    await action_family(registry, "ordinary", inputs=[InputSpec("a", "type")])
+    assert not isinstance(
+        await registry.preflight(
+            "ordinary", {"a": TypeRef("default", "entity", "never_registered")},
+            actor="user:sd",
+        ),
+        Refusal,
+    )
+
+@NEEDS_ATTRIBUTES
+async def test_c19_72_the_payload_schema_binds_at_both_invocation_doors(adapter, make_registry):
+    """**MAJOR, round 3.** `preflight` never evaluated the family's `payload_schema`, so
+    the gate said *may this run* → **yes** for inputs the recorder then refused
+    `attributes_schema_violation` **non-overridably**.
+
+    `_input_refusal`'s own docstring states the rule it broke: *a rule with one
+    enforcement point is a rule with one door left open* — the sentence rule **2.2-4**
+    was written from, and the reason the declaration rules bind at three doors rather
+    than one. It is round 2's `C19-63` fix reaching one call site of two, which the
+    tenth-trip countersignature made a standing thing to check.
+
+    **A gate a recorder overrules is worse than no gate**: it tells a host the action may
+    run, and §4's whole argument is that the host acts on what the gate said.
+    """
+    from ontoloche.actions import ACTION_PAYLOAD_KIND
+    from ontoloche.attributes import AttributeSchema, FieldSpec
+
+    registry = await make_registry(adapter)
+    if registry._attribute_store() is None:
+        pytest.skip(
+            "PACKAGE.md 5 -- the AsyncAttributeStore extension is optional (ruling R2) and "
+            "this backend declines it, so no schema can be in force."
+        )
+    await registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default",
+            kind=ACTION_PAYLOAD_KIND,
+            name="ticket_inputs",
+            version=1,
+            fields={"ticket": FieldSpec(type="str", description="the ticket id", required=True)},
+            mode="enforce",
+        )
+    )
+    await action_family(registry, "close_ticket", payload_schema="ticket_inputs")
+
+    gate = await registry.preflight("close_ticket", {}, actor="user:sd")
+    assert isinstance(gate, Refusal), f"the gate allowed inputs the recorder refuses: {gate!r}"
+    assert gate.reason == "attributes_schema_violation"
+    assert any("ticket" in v for v in gate.detail["violations"]), gate.detail
+
+    if registry.caps.stores_invocations:
+        recorded = await registry.record_invocation(
+            "close_ticket", {}, actor="user:sd", outcome="applied",
+            gate_verdict="not_asked",
+        )
+        assert isinstance(recorded, Refusal) and recorded.reason == gate.reason, (
+            "one registry may not answer two ways about one set of inputs"
+        )
+
+@NEEDS_ATTRIBUTES
+async def test_c19_73_a_precondition_names_a_predicate_by_the_registrys_notion_of_one_word(
+    adapter, make_registry
+):
+    """**MAJOR, round 3**, and it is the seventh trip's surface that `6B-RUN.md` §6.2
+    predicted this round would reach.
+
+    `preflight`'s `predicate_holds` found its predicate with `p.name == condition.
+    predicate` — an exact **byte** match — on a registry whose published notion of *the
+    same word* is `same_word`/`identity_key`, minted by the seventh trip precisely so
+    that *the registry cannot disagree with the scorer that delivers its 1.0*.
+
+    **The direction was safe** — Rule U, `holds=None`, verdict refused — so this is not a
+    collapse. What it was is a **confident false sentence**: *"no registered predicate
+    named `commentable`"* about a word `resolve_type` answers at confidence 1.0. The
+    seventh trip's rule is that one registry has one notion of a word, and a gate is not
+    exempt from it.
+    """
+    registry = await make_registry(adapter)
+    if not registry.caps.indexes_membership:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- indexes_membership=False, so every extent is unknowable "
+            "and `predicate_holds` is Rule U's unknown for a reason that is not this one."
+        )
+    await seed(registry, "commentable_", kind="predicate")
+    await seed(registry, "note", predicates=["commentable_"])
+    await action_family(
+        registry,
+        "ph",
+        inputs=[InputSpec("a", "type")],
+        preconditions=[
+            # The condition spells the word the way a host would -- and the registry
+            # holds `commentable_`, which `identity_key` says is the same word.
+            Precondition("predicate_holds", "a", "must be commentable", predicate="commentable")
+        ],
+    )
+    out = await registry.preflight(
+        "ph", {"a": TypeRef("default", "entity", "note")}, actor="user:sd"
+    )
+    assert out.preconditions[0].holds is True, (
+        "the registry answers `resolve_type('commentable')` with `commentable_` at "
+        "confidence 1.0; a gate that calls the same word unregistered is one registry "
+        "disagreeing with itself"
+    )
+    assert out.verdict == "allowed"

@@ -115,6 +115,7 @@ from ontoloche._resolve import _norm, identity_key  # noqa: E402
 from ontoloche.registry import NAME_RE  # noqa: E402
 from ontoloche.policy import NamespacePolicy  # noqa: E402
 from ontoloche.types import (  # noqa: E402
+    Consumer,
     Evidence,
     Refusal,
     ResolveContext,
@@ -1809,6 +1810,262 @@ def check_one_word() -> tuple[list[str], list[str], list[str]]:
 # dozens-of-publishers catalogue.
 
 
+# ---------------------------------------------------------------------------
+# The CONSUMER-SET axis -- refusal #1, which until row 6b's third round this checker
+# **could not fail on at all**.
+#
+# **The structural finding, and it is countable rather than descriptive.** Before this
+# axis, `check_merge_guard.py` contained **zero** occurrences of `register_consumer` and
+# zero of `Consumer(`. No fixture, on any leg, at any door, ever registered one -- so both
+# gate sets were empty in every probe and `different_consumer_sets` passed **vacuously
+# everywhere**. The previous six trips were *"its fixtures could not pose the question"*;
+# this is stronger: **the guard whose fix reached one call site of four is a guard this
+# checker had no way to fail on.**
+#
+# It is `C9-20` that makes refusal #1 an IDENTITY guard rather than an evidence one --
+# after the sixth trip collapsed, through `force=True`, a pair `merge_types` refuses under
+# all seven acknowledgements -- and identity guards are exactly what Part B exists to
+# drive. The ELEVENTH trip is what it missed: `retire`, `reinstate` and `merge_types` all
+# called `_alias_identity_breach` without the target row's own `predicates`, so #1's
+# `member_of` was empty and every consumer gating on a predicate the target declares was
+# invisible to it. Three call sites out of four, unfixed at the doors trips 9 and 10 did
+# not come through.
+
+#: The predicate the fixture's consumer gates on. **Not** either of the two words being
+#: collapsed: a gate naming the aliased word is re-pointed by the write itself, which
+#: makes the two sets agree and the question unaskable. This is the shape the eleventh
+#: trip needed.
+_GATE_PREDICATE = "meta_p"
+
+
+def _consumer_pair(registry: Registry, *, gated: str) -> str | None:
+    """`commentable` and `searchable`, identical non-empty extents, DIFFERENT gate sets.
+
+    Both extents are `{aaa_note, bbb_memo}`, so refusal **#2 passes honestly** and
+    anything that refuses does so on **#1** -- which is the whole point of the axis. Only
+    ``gated`` declares `meta_p`, and the consumer gates on `meta_p`.
+    """
+    _seed(registry, _GATE_PREDICATE, kind="predicate", definition="a meta capability")
+    for word in ("commentable", "searchable"):
+        _seed(
+            registry,
+            word,
+            kind="predicate",
+            definition="a capability",
+            predicates=(
+                [_GATE_PREDICATE] if gated in (word, "both") else []
+            ),
+        )
+    for member in ("aaa_note", "bbb_memo"):
+        _seed(registry, member, predicates=["commentable", "searchable"])
+    out = registry.register_consumer(
+        Consumer(id="svc:meta", gate=_GATE_PREDICATE, on_unknown="drop", owner="ops")
+    )
+    if isinstance(out, Refusal):  # pragma: no cover - a fixture that cannot be built
+        return _NOT_REACHABLE + (
+            f"this backend cannot register a consumer, so the two gate sets cannot be "
+            f"made to differ: {out.reason}"
+        )
+    here = {
+        c.id
+        for c in registry.consumers(
+            "searchable" if gated == "both" else gated
+        ).gates_on
+    }
+    if here != {"svc:meta"}:
+        return _NOT_REACHABLE + (
+            f"this backend cannot report which consumers gate on a predicate "
+            f"({sorted(here)}), so refusal #1 has nothing to compare"
+        )
+    return None
+
+
+def _consumer_probe_merge(registry: Registry) -> str | None:
+    fixture = _consumer_pair(registry, gated="searchable")
+    if fixture is not None:
+        return fixture
+    result = registry.merge_types(
+        "commentable", "searchable", "the consumer axis",
+        merged_by="user:sd", acknowledge=ALL_ACKNOWLEDGEMENTS,
+    )
+    if not isinstance(result, Refusal):
+        return (
+            "merge_types COLLAPSED a pair whose extents agree and whose CONSUMER SETS "
+            "differ -- refusal #1, which ROADMAP.md states without qualification: *it "
+            "MUST refuse when the two have different consumer sets*"
+        )
+    if result.reason != "different_consumer_sets":
+        return (
+            f"merge_types refused {result.reason!r} where #1 is the guard that binds -- "
+            f"the right outcome by the wrong route is `C9-19`'s defect class"
+        )
+    if result.detail.get("overridable") is not False:
+        return "refusal #1 must be non-overridable; `C9-20` is the record that it is"
+    return None
+
+
+def _consumer_probe_retire(registry: Registry) -> str | None:
+    fixture = _consumer_pair(registry, gated="searchable")
+    if fixture is not None:
+        return fixture
+    for force in (False, True):
+        result = registry.retire(
+            "commentable", "the consumer axis", retired_by="user:sd",
+            successor="searchable", force=force,
+        )
+        if not isinstance(result, Refusal):
+            return (
+                f"retire(successor=, force={force}) COLLAPSED a pair whose consumer sets "
+                f"differ -- `resolve_type` now answers the old word with the new entry at "
+                f"confidence 1.0, which is the merge refusal #1 forbids"
+            )
+        if result.reason == "cannot_record_override":
+            return _NOT_REACHABLE + "this backend cannot record the retirement"
+        if result.detail.get("overridable") is not False:
+            return (
+                f"retire(successor=)'s {result.reason!r} is overridable -- `force` "
+                f"overrides what could be SEEN, never what would become TRUE"
+            )
+    return None
+
+
+def _consumer_probe_import(registry: Registry) -> str | None:
+    """The alias door, on the row `import_types` is REWRITING -- the tenth trip's shape
+    with the eleventh's operand."""
+    # **BOTH declare the gated predicate**, so the two sets AGREE at guard time and
+    # refusal #1 passes honestly on the pre-write reading -- and the import then drops
+    # the target's, so the sets the write PRODUCES differ. Gating only the target would
+    # leave both sets empty afterwards, which is a legal alias and not this walk; the
+    # axis' first cut did exactly that and reported a FAILURE against correct behaviour.
+    fixture = _consumer_pair(registry, gated="both")
+    if fixture is not None:
+        return fixture
+    retired = registry.retire(
+        "commentable", "superseded", retired_by="user:sd", force=True
+    )
+    if isinstance(retired, Refusal):
+        return _NOT_REACHABLE + (
+            f"this backend cannot record the forced retirement the fixture needs: "
+            f"{retired.reason}"
+        )
+    entry = registry.import_types(
+        [
+            {
+                "name": "searchable",
+                "kind": "predicate",
+                "definition": "a capability",
+                # The import DROPS `meta_p`, so the set this write produces is empty
+                # while `commentable`'s is not. The guard must compare what the write
+                # leaves behind, not what it is about to erase.
+                "predicates": [],
+                "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    )[0]
+    if not any(w.startswith("import_refused:") for w in entry.warnings):
+        return (
+            "import_types wrote the alias onto a row whose consumer set this same call "
+            "empties -- `resolve_type('commentable')` now answers 'searchable' at "
+            "confidence 1.0 on a pair `merge_types` refuses non-overridably. The TENTH "
+            "trip's shape with the ELEVENTH's operand"
+        )
+    if "commentable" in (entry.aliases or ()):
+        return "import_types refused and wrote the alias anyway"
+    return None
+
+
+def _consumer_probe_reinstate(registry: Registry) -> str | None:
+    """**The ELEVENTH trip's own door.** The alias is written while it is legal, goes
+    dormant, the world moves, and `reinstate` makes it answer at 1.0 again."""
+    _seed(registry, _GATE_PREDICATE, kind="predicate", definition="a meta capability")
+    for word in ("commentable", "searchable"):
+        _seed(
+            registry, word, kind="predicate", definition="a capability",
+            predicates=[_GATE_PREDICATE] if word == "searchable" else [],
+        )
+    for member in ("aaa_note", "bbb_memo"):
+        _seed(registry, member, predicates=["commentable", "searchable"])
+
+    retired = registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot record a forced retirement: {retired.reason}"
+    entry = registry.import_types(
+        [
+            {
+                "name": "searchable", "kind": "predicate", "definition": "a capability",
+                "predicates": [_GATE_PREDICATE], "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default", kind="predicate",
+    )[0]
+    if any(w.startswith("import_refused:") for w in entry.warnings):
+        return _NOT_REACHABLE + (
+            f"the alias is not writable on this backend even while it is LEGAL "
+            f"(both gate sets empty): {entry.warnings}"
+        )
+    dormant = registry.retire("searchable", "dormant", retired_by="user:sd", force=True)
+    if isinstance(dormant, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot record the second retirement: {dormant.reason}"
+
+    # The world moves: a consumer now gates on what only `searchable` declares.
+    out = registry.register_consumer(
+        Consumer(id="svc:meta", gate=_GATE_PREDICATE, on_unknown="drop", owner="ops")
+    )
+    if isinstance(out, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot register a consumer: {out.reason}"
+    if {c.id for c in registry.consumers("searchable").gates_on} != {"svc:meta"}:
+        return _NOT_REACHABLE + "this backend cannot report which consumers gate on a predicate"
+
+    result = registry.reinstate("searchable", "back", reinstated_by="user:sd")
+    if not isinstance(result, Refusal):
+        return (
+            "reinstate re-activated a row carrying a dormant alias whose consumer sets "
+            "now DIFFER -- `resolve_type('commentable')` answers 'searchable' at "
+            "confidence 1.0 on a pair `merge_types` refuses non-overridably. The "
+            "ELEVENTH trip"
+        )
+    return None
+
+
+CONSUMER_PROBES = {
+    "merge_types": _consumer_probe_merge,
+    "retire": _consumer_probe_retire,
+    "import_types": _consumer_probe_import,
+    "reinstate": _consumer_probe_reinstate,
+}
+
+
+def check_consumer_sets() -> tuple[list[str], list[str], list[str]]:
+    """Refusal #1, driven through every collapsing caller on every leg."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+    for leg, build, knowable in _legs():
+        for caller, probe in CONSUMER_PROBES.items():
+            registry = build()
+            try:
+                failure = probe(registry)
+            except Exception as exc:  # pragma: no cover - a probe that cannot run
+                failure = f"the probe raised {type(exc).__name__}: {exc}"
+            if failure is None:
+                lines.append(f"  {leg:15s} {caller:13s} consumer sets differ  REFUSED")
+            elif failure.startswith(_NOT_REACHABLE):
+                lines.append(
+                    f"  {leg:15s} {caller:13s} consumer sets differ  NOT REACHABLE"
+                )
+                unreachable.append(
+                    f"{leg} / {caller} / consumer sets: {failure[len(_NOT_REACHABLE):]}"
+                )
+            else:
+                lines.append(f"  {leg:15s} {caller:13s} consumer sets differ  FAILED")
+                problems.append(f"{leg} / {caller} / consumer sets: {failure}")
+    return problems, lines, unreachable
+
+
 def check_forward_successor() -> tuple[list[str], list[str], list[str]]:
     problems: list[str] = []
     lines: list[str] = []
@@ -1917,6 +2174,11 @@ def main() -> int:
         (
             "  and a SUCCESSOR THAT DOES NOT EXIST YET -- a guard with nothing to compare:",
             check_forward_successor,
+        ),
+        (
+            "  and CONSUMER SETS -- refusal #1, which this checker could not fail on "
+            "until row 6b's third round:",
+            check_consumer_sets,
         ),
     ):
         print()
