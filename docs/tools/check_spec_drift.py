@@ -54,13 +54,13 @@ EDGES = ROOT / "docs" / "specs" / "EDGES.md"
 ACTIONS = ROOT / "docs" / "specs" / "ACTIONS.md"
 sys.path.insert(0, str(ROOT))
 
-from open_ontology import actions as actions_module  # noqa: E402
-from open_ontology import adapter as adapter_module  # noqa: E402
-from open_ontology import edges as edges_module  # noqa: E402
-from open_ontology import attributes as attributes_module  # noqa: E402
-from open_ontology.contract import harness as harness_module  # noqa: E402
-from open_ontology import registry as registry_module  # noqa: E402
-from open_ontology import types as types_module  # noqa: E402
+from ontoloche import actions as actions_module  # noqa: E402
+from ontoloche import adapter as adapter_module  # noqa: E402
+from ontoloche import edges as edges_module  # noqa: E402
+from ontoloche import attributes as attributes_module  # noqa: E402
+from ontoloche.contract import harness as harness_module  # noqa: E402
+from ontoloche import registry as registry_module  # noqa: E402
+from ontoloche import types as types_module  # noqa: E402
 
 #: Shapes the spec prints as ``Name:`` inside a fenced block, and their dataclass.
 #: A shape is listed here only when the spec means it to be the whole record.
@@ -181,7 +181,7 @@ EDGES_SHAPES = {
 #: Same rule as the other two omit maps. An entry is a decision on the record.
 EDGES_OMITS: dict[str, set[str]] = {}
 
-#: `ACTIONS.md`'s printed shapes, against `open_ontology/actions.py`. **Row 6b, and
+#: `ACTIONS.md`'s printed shapes, against `ontoloche/actions.py`. **Row 6b, and
 #: nothing held them for three adversarial rounds -- which is why they drifted in every
 #: one of the three.**
 #:
@@ -872,7 +872,7 @@ def main() -> int:
                 f"PACKAGE {printed}.{name}: printed by PACKAGE.md, absent from the code"
             )
 
-    # --- EDGES.md's printed shapes, against open_ontology/edges.py. Row 4b, round 2.
+    # --- EDGES.md's printed shapes, against ontoloche/edges.py. Row 4b, round 2.
     if EDGES.exists():
         edges_blocks = spec_blocks(EDGES.read_text(encoding="utf-8"))
         # --- and its printed CALL signatures, against `Registry`. Row 4c.
@@ -903,7 +903,7 @@ def main() -> int:
         for printed, attribute in EDGES_SHAPES.items():
             cls = getattr(edges_module, attribute, None)
             if cls is None or not hasattr(cls, "__dataclass_fields__"):
-                problems.append(f"EDGES {printed}: open_ontology.edges has no dataclass {attribute}")
+                problems.append(f"EDGES {printed}: ontoloche.edges has no dataclass {attribute}")
                 continue
             fields = shape_fields(edges_blocks, printed)
             if fields is None:
@@ -1022,7 +1022,7 @@ def main() -> int:
     # Ruling R31, row 4b. The suite is the authority on which ids exist, so it is
     # read rather than listed: a rule table naming an id nobody wrote is exactly the
     # drift this constraint is for, pointing the other way.
-    from open_ontology.contract.test_manifest import implemented_ids
+    from ontoloche.contract.test_manifest import implemented_ids
 
     problems.extend(_check_rule_coverage(set(implemented_ids())))
 
@@ -1051,7 +1051,7 @@ def main() -> int:
         f"StorageAdapter.\n"
         f"docs/specs/EDGES.md: every printed shape and call signature matches the "
         f"implementation ({len(EDGES_SHAPES)} shapes, {len(EDGE_CALLS)} calls).\n"
-        f"docs/specs/ACTIONS.md: every printed shape matches open_ontology/actions.py "
+        f"docs/specs/ACTIONS.md: every printed shape matches ontoloche/actions.py "
         f"({len(ACTIONS_SHAPES) + len(ACTIONS_CLASS_SHAPES)} shapes), every printed call "
         f"signature matches Registry "
         f"({len(ACTION_CALLS)} calls), and every closed vocabulary it prints matches the "

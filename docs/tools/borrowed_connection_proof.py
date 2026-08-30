@@ -18,12 +18,12 @@ import uuid
 
 sys.path.insert(0, os.path.abspath("."))
 
-from open_ontology._clock import FixedClock
-from open_ontology.backends.postgres import PostgresAdapter
-from open_ontology.backends.sqlite import SQLiteAdapter
-from open_ontology.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: F401
-from open_ontology.policy import NamespacePolicy
-from open_ontology.registry import Registry
+from ontoloche._clock import FixedClock
+from ontoloche.backends.postgres import PostgresAdapter
+from ontoloche.backends.sqlite import SQLiteAdapter
+from ontoloche.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: F401
+from ontoloche.policy import NamespacePolicy
+from ontoloche.registry import Registry
 
 DSN = os.environ["OO_POSTGRES_DSN"]
 

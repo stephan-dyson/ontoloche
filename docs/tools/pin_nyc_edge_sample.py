@@ -3,7 +3,7 @@
 `C18-05` … `C18-08` walk the three NYC datasets through the **shipped** edge store, and
 a contract test may not depend on a network. `edges_nyc_probe.py` (row #4's design test)
 went live to the SODA API; this script runs the same queries once and writes what they
-returned to `open_ontology/contract/fixtures/nyc_edge_sample.json`, with the dataset
+returned to `ontoloche/contract/fixtures/nyc_edge_sample.json`, with the dataset
 ids, the `data_updated_at` of each source and the retrieval date on the row -- so the
 fixture carries its own provenance and `EdgeProvenance.source_version` has something
 true to say.
@@ -14,7 +14,7 @@ window, and two runs of the probe printed different numbers (73 edges / max 29, 
 62 / max 16). *A design test whose numbers move between runs is not a design test.* The
 `order=unique_key` pin fixed that for the probe; a checked-in fixture fixes it for the
 suite, and also makes the suite runnable on a machine with no network, which is what
-`--pyargs open_ontology.contract` promises a third-party backend author.
+`--pyargs ontoloche.contract` promises a third-party backend author.
 
     py docs/tools/pin_nyc_edge_sample.py
 
@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "open_ontology" / "contract" / "fixtures" / "nyc_edge_sample.json"
+OUT = ROOT / "ontoloche" / "contract" / "fixtures" / "nyc_edge_sample.json"
 
 #: `USE-CASES.md` and `3C-VALIDATION.md` §1 fix these three, and they are kept so the
 #: test is reproducible. A = DPR street trees, B = 311 service requests, C = DOT

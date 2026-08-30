@@ -1,4 +1,4 @@
-"""The three design tests, re-run through **`open_ontology.Registry`** rather than
+"""The three design tests, re-run through **`ontoloche.Registry`** rather than
 through the throwaway kit they were written against. Row 6b, brief item 5.
 
 **Why this module exists, in one sentence:** row #6's own §17 had to record that its
@@ -29,16 +29,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
 
-from open_ontology import Registry  # noqa: E402
-from open_ontology.actions import (  # noqa: E402
+from ontoloche import Registry  # noqa: E402
+from ontoloche.actions import (  # noqa: E402
     Effect,
     InputSpec,
     Precondition,
     action_attributes,
 )
-from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
-from open_ontology.edges import InstanceRef, TypeRef  # noqa: E402
-from open_ontology.types import Evidence, Refusal, TypeEntry  # noqa: E402
+from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
+from ontoloche.edges import InstanceRef, TypeRef  # noqa: E402
+from ontoloche.types import Evidence, Refusal, TypeEntry  # noqa: E402
 
 EVIDENCE = [Evidence(kind="data", summary="the shipped-leg fixture")]
 
@@ -109,7 +109,7 @@ def shipped_leg(check, *, fixture: str) -> None:
 
 
 def _beacon(check) -> None:
-    """T1.1, T1.3, T1.4, T1.6 and T1.7 against `open_ontology.Registry`.
+    """T1.1, T1.3, T1.4, T1.6 and T1.7 against `ontoloche.Registry`.
 
     Nothing in `beacon` is imported, executed or written here either: the three families
     are declared in a registry BESIDE it, about its actions, which is 11's own method.
@@ -245,7 +245,7 @@ def _beacon(check) -> None:
 
 
 def _cms(check) -> None:
-    """T2.1–T2.7 and T2.9 against `open_ontology.Registry`."""
+    """T2.1–T2.7 and T2.9 against `ontoloche.Registry`."""
     registry = _registry()
     _seed(registry, "facility", kind="entity", namespace="cms")
     _seed(registry, "scope_severity_code", kind="value_set", namespace="cms")
@@ -347,7 +347,7 @@ def _cms(check) -> None:
         f"{high.verdict} {high.approved_by}",
     )
 
-    from open_ontology.policy import NamespacePolicy, TierOrder
+    from ontoloche.policy import NamespacePolicy, TierOrder
 
     orderless = Registry(
         registry.adapter, policy=NamespacePolicy(tier_order=TierOrder(())), seed_equivalent_to=False
@@ -406,7 +406,7 @@ def _cms(check) -> None:
 
 
 def _nyc(check) -> None:
-    """T3.1, T3.3, T3.4 and T3.5 against `open_ontology.Registry`.
+    """T3.1, T3.3, T3.4 and T3.5 against `ontoloche.Registry`.
 
     **T3.5 is the load-bearing one** and it was already a claim about the shipped
     registry in the kit-driven probe: with the `equivalent_to` edge present and

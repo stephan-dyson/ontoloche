@@ -1,15 +1,14 @@
-# open-ontology *(working name)*
+# ontoloche
 
-An open ontology and pipeline layer — typed entities, typed relationships, and
-governed actions that AI agents can safely call.
+**ontoloche** ("on-tuh-LOH-chee" — the *-che* after Apache) — an open ontology and pipeline layer: typed entities, typed relationships, and governed actions that AI agents can safely call.
 
-**Status: Phase 2A shipped, plus its async mirror.** Phase 0 discovery is closed, Phase 1's interface contract is written, and the reference implementation exists: the `open_ontology` package, a fifteen-primitive storage adapter over SQLite and Postgres, and **145 contract tests that are the definition of conformance** — green on both backends, synchronously and asynchronously, in one run.
+**Status: Phase 2A shipped, plus its async mirror.** Phase 0 discovery is closed, Phase 1's interface contract is written, and the reference implementation exists: the `ontoloche` package, a fifteen-primitive storage adapter over SQLite and Postgres, and **145 contract tests that are the definition of conformance** — green on both backends, synchronously and asynchronously, in one run.
 
 ```bash
 pip install -e ".[contract]"
-pytest --pyargs open_ontology.contract          # the sync conformance suite
+pytest --pyargs ontoloche.contract          # the sync conformance suite
 pip install -e ".[contract-aio]"
-pytest --pyargs open_ontology.aio.contract      # the same 145 ids, awaited
+pytest --pyargs ontoloche.aio.contract      # the same 145 ids, awaited
 ```
 
 ## Start here

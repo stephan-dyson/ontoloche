@@ -47,10 +47,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from open_ontology.adapter import CAPABILITY_FLAGS, REQUIRED_CAPABILITIES  # noqa: E402
-from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
-from open_ontology.contract import run_contract_suite  # noqa: E402
-from open_ontology.contract.doubles import DegradedAdapter, WithoutAttributeStore  # noqa: E402
+from ontoloche.adapter import CAPABILITY_FLAGS, REQUIRED_CAPABILITIES  # noqa: E402
+from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
+from ontoloche.contract import run_contract_suite  # noqa: E402
+from ontoloche.contract.doubles import DegradedAdapter, WithoutAttributeStore  # noqa: E402
 
 OPTIONAL = tuple(f for f in CAPABILITY_FLAGS if f not in REQUIRED_CAPABILITIES)
 _TALLY = re.compile(r"(\d+) (passed|failed|skipped|error)")

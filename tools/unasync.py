@@ -1,7 +1,7 @@
 """Sync -> async source transformation. Deliverable 3b's answer to "how do you not drift?"
 
-The sync package is the single source of truth. Everything under ``open_ontology/aio/``
-and ``open_ontology/aio/contract/`` is *generated from it by this file* and checked in,
+The sync package is the single source of truth. Everything under ``ontoloche/aio/``
+and ``ontoloche/aio/contract/`` is *generated from it by this file* and checked in,
 and ``test_generated_matches_source.py`` regenerates and compares, so a change to the
 sync code that is not mirrored fails the suite rather than rotting quietly.
 
@@ -116,14 +116,14 @@ RENAMES = {
 
 #: Absolute module paths that must point at the async mirror instead of the sync module.
 REDIRECTS = {
-    "open_ontology.adapter": "open_ontology.aio.adapter",
-    "open_ontology.registry": "open_ontology.aio.registry",
-    "open_ontology.backends": "open_ontology.aio.backends",
-    "open_ontology.backends.sqlite": "open_ontology.aio.backends.sqlite",
-    "open_ontology.backends.postgres": "open_ontology.aio.backends.postgres",
-    "open_ontology.backends._sql": "open_ontology.aio.backends._sql",
-    "open_ontology.contract._support": "open_ontology.aio.contract._support",
-    "open_ontology.contract.doubles": "open_ontology.aio.contract.doubles",
+    "ontoloche.adapter": "ontoloche.aio.adapter",
+    "ontoloche.registry": "ontoloche.aio.registry",
+    "ontoloche.backends": "ontoloche.aio.backends",
+    "ontoloche.backends.sqlite": "ontoloche.aio.backends.sqlite",
+    "ontoloche.backends.postgres": "ontoloche.aio.backends.postgres",
+    "ontoloche.backends._sql": "ontoloche.aio.backends._sql",
+    "ontoloche.contract._support": "ontoloche.aio.contract._support",
+    "ontoloche.contract.doubles": "ontoloche.aio.contract.doubles",
 }
 
 BANNER = """\
@@ -133,7 +133,7 @@ BANNER = """\
 #     python tools/unasync.py
 #
 # The sync module is the single source of truth; this is its mechanical async mirror
-# (deliverable 3b). open_ontology/aio/contract/test_generated_matches_source.py fails
+# (deliverable 3b). ontoloche/aio/contract/test_generated_matches_source.py fails
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 """
@@ -184,7 +184,7 @@ ADAPTER_EXTRA_HEADER = '''
 # The records, queries, pages and capability flags are storage shapes with no I/O in
 # them, so the async mirror does not copy them -- it re-exports the sync package's.
 # One definition, two protocols over it.
-from open_ontology.adapter import (
+from ontoloche.adapter import (
     ACTION_CAPABILITY_FLAGS,
     CAPABILITY_FLAGS,
     EDGE_CAPABILITY_FLAGS,
@@ -255,38 +255,38 @@ HAND_WRITTEN_ASYNC = frozenset({"test_c0_backend_local.py"})
 CONTRACT_TESTS = tuple(
     sorted(
         p.name
-        for p in (ROOT / "open_ontology" / "contract").glob("test_c*.py")
+        for p in (ROOT / "ontoloche" / "contract").glob("test_c*.py")
         if p.name not in HAND_WRITTEN_ASYNC
     )
 )
 
 SPECS: tuple[FileSpec, ...] = (
     FileSpec(
-        source="open_ontology/adapter.py",
-        target="open_ontology/aio/adapter.py",
+        source="ontoloche/adapter.py",
+        target="ontoloche/aio/adapter.py",
         extract=("StorageAdapter", "AttributeStore"),
         extra_header=ADAPTER_EXTRA_HEADER,
-        borrow_from="open_ontology.adapter",
+        borrow_from="ontoloche.adapter",
     ),
     FileSpec(
-        source="open_ontology/backends/_sql.py",
-        target="open_ontology/aio/backends/_sql.py",
+        source="ontoloche/backends/_sql.py",
+        target="ontoloche/aio/backends/_sql.py",
         extract=("BaseSqlAdapter",),
         extra_header=SQL_EXTRA_HEADER,
-        borrow_from="open_ontology.backends._sql",
+        borrow_from="ontoloche.backends._sql",
     ),
     FileSpec(
-        source="open_ontology/registry.py",
-        target="open_ontology/aio/registry.py",
+        source="ontoloche/registry.py",
+        target="ontoloche/aio/registry.py",
         extract=("Registry",),
         extra_header='\n__all__ = ["AsyncRegistry"]\n',
         trailer=REGISTRY_TRAILER,
-        borrow_from="open_ontology.registry",
+        borrow_from="ontoloche.registry",
         pre_substitutions=((r"^    def __init__\(", "    def _open("),),
     ),
     FileSpec(
-        source="open_ontology/contract/_support.py",
-        target="open_ontology/aio/contract/_support.py",
+        source="ontoloche/contract/_support.py",
+        target="ontoloche/aio/contract/_support.py",
         # The two checked-in fixtures -- the 153 KB CMS sample and the pinned NYC edge
         # sample -- live once, under the sync suite, and are read from where they live.
         # The generated copy sits elsewhere in the tree, so the only thing that changes
@@ -307,13 +307,13 @@ SPECS: tuple[FileSpec, ...] = (
         ),
     ),
     FileSpec(
-        source="open_ontology/contract/doubles.py",
-        target="open_ontology/aio/contract/doubles.py",
+        source="ontoloche/contract/doubles.py",
+        target="ontoloche/aio/contract/doubles.py",
     ),
     *(
         FileSpec(
-            source=f"open_ontology/contract/{name}",
-            target=f"open_ontology/aio/contract/{name}",
+            source=f"ontoloche/contract/{name}",
+            target=f"ontoloche/aio/contract/{name}",
         )
         for name in CONTRACT_TESTS
     ),

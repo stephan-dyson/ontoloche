@@ -1,6 +1,6 @@
 """UC2 design test for EDGES.md v0 -- the implicit edges in the 400-row CMS sample.
 
-Drives the checked-in Montana sample (``open_ontology/contract/fixtures/
+Drives the checked-in Montana sample (``ontoloche/contract/fixtures/
 cms_sample_400.csv``, cut by ``make_sample.py`` from the public CMS file) through
 the EDGES v0 model, using the throwaway kit in ``edges_probe_kit.py``.
 
@@ -33,7 +33,7 @@ from docs.tools.edges_probe_kit import (  # noqa: E402
 
 SAMPLE = (
     pathlib.Path(__file__).resolve().parents[2]
-    / "open_ontology"
+    / "ontoloche"
     / "contract"
     / "fixtures"
     / "cms_sample_400.csv"

@@ -5,7 +5,7 @@ finding of substance came from driving the real registry through a real
 scenario, none from reading* -- so the three design tests in EDGES.md 9-11 are
 walked by executing the spec against real rows rather than by reasoning about
 it. This module is that execution: it is deliberately in ``docs/tools`` and not
-in ``open_ontology``, it is not imported by the package, and the contract suite
+in ``ontoloche``, it is not imported by the package, and the contract suite
 does not know it exists.
 
 What it implements, and nothing more:
@@ -21,7 +21,7 @@ What it implements, and nothing more:
 * EDGES 6 the four capability flags and two declarations, enough of them to
   make the refusals real (driven by ``edges_capability_probe.py``)
 
-The refusal vocabulary is imported from ``open_ontology.types`` rather than
+The refusal vocabulary is imported from ``ontoloche.types`` rather than
 re-declared, so a probe that invented a reason would fail here rather than in a
 reviewer's head.
 """
@@ -32,7 +32,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Iterable, Literal, Sequence
 
-from open_ontology.types import REFUSAL_REASONS
+from ontoloche.types import REFUSAL_REASONS
 
 # --------------------------------------------------------------------------
 # EDGES 2.1 -- references

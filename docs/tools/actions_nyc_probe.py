@@ -2,7 +2,7 @@
 edge and never a merge.
 
 Two engines on purpose, exactly as ``edges_nyc_probe.py`` uses them: the
-**shipped** ``open_ontology.Registry`` on SQLite for everything about types (so
+**shipped** ``ontoloche.Registry`` on SQLite for everything about types (so
 T3.5's claim about ``merge_types`` is a claim about the real implementation),
 and the throwaway probe kits for edges and actions.
 
@@ -202,8 +202,8 @@ def main() -> int:
     edges.add_edge("reconciled_with", boroughs["dpr"], boroughs["oti_311"],
                    prov("derived:catalogue_rule", by="derived"))
 
-    from open_ontology import Evidence, NamespacePolicy, Registry  # noqa: E402
-    from open_ontology.backends.sqlite import SQLiteAdapter    # noqa: E402
+    from ontoloche import Evidence, NamespacePolicy, Registry  # noqa: E402
+    from ontoloche.backends.sqlite import SQLiteAdapter    # noqa: E402
 
     shipped = Registry(
         SQLiteAdapter.open(":memory:"),

@@ -1,7 +1,7 @@
 """UC2 design test for ACTIONS.md v0 -- `flag_facility_for_review` over the
 400-row CMS sample, and the severity value the precondition cannot see.
 
-Data: ``open_ontology/contract/fixtures/cms_sample_400.csv``, the checked-in
+Data: ``ontoloche/contract/fixtures/cms_sample_400.csv``, the checked-in
 Montana cut of the public CMS health-citations file. Ground truth is
 pre-registered in ``docs/findings/0.5-ground-truth-PREREGISTERED.md``.
 
@@ -39,7 +39,7 @@ from edges_probe_kit import (  # noqa: E402
 )
 
 REPO = Path(__file__).resolve().parent.parent.parent
-SAMPLE = REPO / "open_ontology" / "contract" / "fixtures" / "cms_sample_400.csv"
+SAMPLE = REPO / "ontoloche" / "contract" / "fixtures" / "cms_sample_400.csv"
 IJ = {"J", "K", "L"}
 HARM = {"G", "H", "I", "J", "K", "L"}
 

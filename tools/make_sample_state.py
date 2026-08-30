@@ -46,7 +46,7 @@ ROWS = 400
 
 DEFAULT_OUT = (
     Path(__file__).resolve().parent.parent
-    / "open_ontology"
+    / "ontoloche"
     / "contract"
     / "fixtures"
     / "cms_sample_400.csv"
