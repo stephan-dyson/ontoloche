@@ -111,7 +111,8 @@ from open_ontology import Registry  # noqa: E402
 from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
 from open_ontology.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
 from open_ontology.contract.doubles import DegradedAdapter  # noqa: E402
-from open_ontology._resolve import _norm  # noqa: E402
+from open_ontology._resolve import _norm, identity_key  # noqa: E402
+from open_ontology.registry import NAME_RE  # noqa: E402
 from open_ontology.policy import NamespacePolicy  # noqa: E402
 from open_ontology.types import (  # noqa: E402
     Evidence,
@@ -1205,11 +1206,30 @@ def check_staleness() -> tuple[list[str], list[str], list[str]]:
 # because the defect is precisely that two definitions of *the same word* exist in one
 # codebase and disagree.
 
-#: Spellings `DeterministicResolver._norm` maps onto `commentable`, so the shipped
-#: resolver scores each of them 1.0 against it: case, a trailing space, and a punctuation
-#: run that normalises away -- three ways one word arrives from a foreign system.
-#: **A verdict that changes with the spelling is the defect.**
-_SPELLINGS = ("Commentable", "COMMENTABLE", "commentable ", "commentable-")
+#: Spellings `identity_key` maps onto `commentable`, so the shipped resolver scores each
+#: of them 1.0 against it: case, a trailing space, a punctuation run that normalises away
+#: -- and **`commentable_`, which is a `NAME_RE`-LEGAL NAME.**
+#:
+#: **That last one is the EIGHTH trip, and its absence is why four axes exited 0 through
+#: it** (row 4d, round 3). Not one of the first four spellings satisfies
+#: `^[a-z][a-z0-9_]{0,63}$`, so every one of them can only ever arrive in the `aliases`
+#: field -- and the axis could therefore pose *"can a variant reach the alias door?"* and
+#: never *"can a variant be a row's own NAME?"*. `NAME_RE` admits `commentable_`,
+#: `commentable__`, `bike__lane`, `borough_`: every one a variant by `identity_key`, and
+#: every one a legal name two agencies normalising their own column headers will produce.
+#:
+#: **`name` is an identity field too**, and Part A's `IDENTITY_FIELDS` says only
+#: `successor` and `aliases`: two rows whose names share one key are two entries
+#: answering one word, which is `C16-06` and mechanism 4.
+_SPELLINGS = ("Commentable", "COMMENTABLE", "commentable ", "commentable-", "commentable_")
+
+#: Words `identity_key` maps to the EMPTY string, which `difflib` then rates **1.0**
+#: against every other such word. Row 4d, round 3: the identity function erases every
+#: word with no ASCII alphanumerics -- and UC3's catalogue is multi-agency with non-Latin
+#: labels, while UC2's CMS export has punctuation-only headers. It fails in **both**
+#: directions: a false 1.0 between two unrelated labels, and a false `alias_collision`
+#: refusing a second agency's legitimate word.
+_ERASED_WORDS = ("\u72b6\u6001", "\u7c7b\u578b", "---", "!!!")
 
 
 def _spelling_store(registry: Registry) -> str | None:
@@ -1292,16 +1312,100 @@ def _spelling_probe_read(registry: Registry, spelling: str) -> str | None:
     return None
 
 
+def _spelling_probe_name(registry: Registry, spelling: str) -> str | None:
+    """The NAME door: the same word, arriving as a row's own name rather than an alias.
+
+    Only reachable for a `NAME_RE`-legal spelling, and that is the point -- the four
+    spellings this axis started with are all illegal as names, so it could not pose this
+    question and exited 0 through the EIGHTH trip.
+    """
+    if not NAME_RE.match(spelling):
+        return _NOT_REACHABLE + (
+            f"{spelling!r} is not a legal type NAME (`NAME_RE`), so it can only ever "
+            f"arrive as an alias -- which the write row above is what asks"
+        )
+    out = registry.propose_type(
+        spelling, "a capability", EVIDENCE, "user:sd", kind="predicate"
+    )
+    if not isinstance(out, (Refusal, TypeEntry)):
+        approved = registry.approve(out.id, "user:sd")
+        if isinstance(approved, Refusal):
+            return None
+    elif isinstance(out, Refusal):
+        return None
+    _seed(registry, "ddd_doc", predicates=[spelling])
+    resolution = registry.resolve_type(
+        "commentable", ResolveContext(), tier="unspecified"
+    )
+    if (
+        resolution.type is not None
+        and identity_key(resolution.type.name) == identity_key("commentable")
+        and resolution.type.name != "commentable"
+        and resolution.confidence == 1.0
+    ):
+        return (
+            f"a row NAMED {spelling!r} went live beside the retired `commentable`, and "
+            f"`resolve_type('commentable')` answers it at confidence 1.0 carrying "
+            f"{list(resolution.type.warnings)} -- two rows whose names are ONE WORD by "
+            f"the registry's own key, over extents `merge_types` refuses "
+            f"non-overridably. `name` is an identity field, and this door compares bytes"
+        )
+    return None
+
+
+def _spelling_probe_erased(registry: Registry, spelling: str) -> str | None:
+    """A word `identity_key` maps to the EMPTY string, offered as an alias."""
+    entries = registry.import_types(
+        [{
+            "name": "searchable", "kind": "predicate", "definition": "a capability",
+            "aliases": [spelling], "status": "active",
+        }],
+        namespace="default", kind="predicate",
+    )
+    if any(w.startswith("import_refused:") for w in entries[0].warnings):
+        return None
+    other = next(w for w in _ERASED_WORDS if w != spelling)
+    resolution = registry.resolve_type(other, ResolveContext(), tier="unspecified")
+    if resolution.type is not None and resolution.confidence == 1.0:
+        return (
+            f"`searchable` was given the alias {spelling!r}, and "
+            f"`resolve_type({other!r})` -- a DIFFERENT word -- answers it at confidence "
+            f"1.0. `identity_key` maps every word with no ASCII alphanumerics to the "
+            f"empty string, and `difflib` rates two empty strings a perfect match, so "
+            f"the identity function MANUFACTURES mechanism 4 instead of preventing it"
+        )
+    return None
+
+
 def check_spellings() -> tuple[list[str], list[str], list[str]]:
     """The spelling axis, on every leg that can pose it."""
     problems: list[str] = []
     lines: list[str] = []
     unreachable: list[str] = []
     for leg, build, _knowable in _legs():
+        for spelling in _ERASED_WORDS:
+            registry = build()
+            built = _spelling_store(registry)
+            label = "erased word"
+            if built is not None:
+                unreachable.append(f"{leg} / import_types / {label}: " + built[len(_NOT_REACHABLE):])
+                lines.append(f"  {leg:15s} {'import_types':13s} {label:28s} NOT REACHABLE")
+                continue
+            try:
+                failure = _spelling_probe_erased(registry, spelling)
+            except Exception as error:  # pragma: no cover
+                failure = f"the probe raised {type(error).__name__}: {error}"
+            if failure:
+                problems.append(f"{leg} / import_types / {label}: {failure}")
+                lines.append(f"  {leg:15s} {'import_types':13s} {label:28s} FAILED")
+            else:
+                lines.append(f"  {leg:15s} {'import_types':13s} {label:28s} guarded")
+    for leg, build, _knowable in _legs():
         for spelling in _SPELLINGS:
             for caller, label, store, probe in (
                 ("import_types", f"write {spelling!r}", _spelling_store, _spelling_probe_import),
                 ("resolve_type", f"read {spelling!r}", _stale, _spelling_probe_read),
+                ("propose_type", f"name {spelling!r}", _spelling_store, _spelling_probe_name),
             ):
                 registry = build()
                 built = store(registry)
@@ -1313,7 +1417,12 @@ def check_spellings() -> tuple[list[str], list[str], list[str]]:
                     failure = probe(registry, spelling)
                 except Exception as error:  # pragma: no cover
                     failure = f"the probe raised {type(error).__name__}: {error}"
-                if failure:
+                if failure and failure.startswith(_NOT_REACHABLE):
+                    unreachable.append(
+                        f"{leg} / {caller} / {label}: " + failure[len(_NOT_REACHABLE):]
+                    )
+                    lines.append(f"  {leg:15s} {caller:13s} {label:28s} NOT REACHABLE")
+                elif failure:
                     problems.append(f"{leg} / {caller} / {label}: {failure}")
                     lines.append(f"  {leg:15s} {caller:13s} {label:28s} FAILED")
                 else:
