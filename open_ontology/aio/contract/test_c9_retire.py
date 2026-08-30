@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C9 -- ``retire`` and ``reinstate`` (21). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (23). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -926,3 +926,122 @@ async def test_c9_21_a_consumers_gate_and_a_types_usage_follow_the_identity(
         "backend that cannot timestamp usage is Rule U and correct; `True` here would "
         "be the confident false negative"
     )
+
+@pytest.mark.requires_capability("stores_events")
+async def test_c9_22_a_successor_that_does_not_exist_yet_is_refused(registry):
+    """**`ROADMAP.md`'s kill row, SEVENTH trip — the forward-declared successor.**
+    Row 4d, first adversarial round, lens A.
+
+    Every one of §5.10's identity guards on `retire(successor=)` is evaluated against the
+    successor's **row** — refusal #1 (`different_consumer_sets`, transferred by `C9-20`),
+    #2 (`predicate_merge`) and #3 (`kind_mismatch`). Naming a successor **before it is
+    registered** gave all three nothing to compare, so none of them ran; the word was
+    then created by an ordinary `propose_type` + `approve`, and `resolve_type` cashed the
+    redirect at confidence **1.0** — which §5.3 calls a guarantee — over a pair nothing
+    had ever compared.
+
+    **[Observed]** on both fully-capable legs and the async mirror. The `kind` case is
+    worse than the predicate case and is asserted below: a question about a `predicate`
+    answered with an `entity` at 1.0 is refusal #3 verbatim, and the **Q56 default cannot
+    warn about it**, because it re-verifies predicate pairs and this is not one.
+
+    **A guard that could not be EVALUATED has not said the collapse is safe.** Rule U, at
+    the one call §5.3 calls a guarantee — and it is the sixth trip's own shape applied to
+    the guards the sixth trip's commit shipped: the guard looked, found nothing, and then
+    the fact arrived.
+
+    The narrowing is asserted too: retiring toward a successor that **does** exist and
+    agrees is still legal, and the refusal names the one reordering that fixes it.
+    """
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable"])
+
+    refusal = await registry.retire(
+        "commentable", "superseded by a word we have not registered yet",
+        retired_by="user:sd", successor="searchable",
+    )
+    assert isinstance(refusal, Refusal), (
+        "naming a successor that does not exist skips every identity guard, and the "
+        "word can be created afterwards"
+    )
+    assert refusal.reason == "successor_unregistered"
+    assert refusal.detail["overridable"] is False
+    assert "searchable" in refusal.detail["why"]
+
+    # ...and `force` does not open it either: force overrides what could be SEEN, never
+    # what would become TRUE.
+    forced = await registry.retire(
+        "commentable", "we really mean it", retired_by="user:sd",
+        successor="searchable", force=True,
+    )
+    assert isinstance(forced, Refusal) and forced.reason == "successor_unregistered"
+
+    # **The guard is narrowed, not banned.** Register the successor first -- the one
+    # reordering the refusal names -- and the identical retirement is legal.
+    await seed(registry, "searchable", kind="predicate", definition="a capability")
+    await seed(registry, "doc", predicates=["searchable"])
+    await seed(registry, "shared", predicates=["commentable", "searchable"])
+    # Extents now differ, so the IDENTITY guard is what answers -- which is the point:
+    # a real guard ran, instead of no guard at all.
+    answered = await registry.retire(
+        "commentable", "superseded", retired_by="user:sd", successor="searchable",
+    )
+    assert isinstance(answered, Refusal) and answered.reason == "predicate_merge", (
+        "with the successor registered there is finally something to compare, and the "
+        "refusal is the identity guard rather than the absence of one"
+    )
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+async def test_c9_23_reinstate_asks_the_collision_question_its_sibling_asks(
+    adapter, make_registry
+):
+    """**§5.9b's own named failure, reached through `reinstate`.** Row 4d, round 1.
+
+    Row 4c gave `reinstate` §5.10's **extent** guards over the aliases it re-activates.
+    It never asked §5.9b's **collision** question — *is one of those dormant aliases
+    already held by a LIVE entry?* — which is the question its sibling `import_types`
+    asks with `_alias_clash` on the same field.
+
+    So a row retired while carrying an alias, and a live entry that comes to answer to
+    that word while the row is dormant, produce **two active entries holding one word
+    between them** the moment the row is reinstated — `C16-06`'s whole-store invariant
+    and mechanism **4** itself, in four ordinary calls.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "searchable", kind="predicate", definition="a capability")
+    await seed(registry, "taggable", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["searchable", "taggable"])
+
+    parked = await registry.import_types(
+        [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["commentable"], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+    assert "commentable" in (parked[0].aliases or ()), parked[0].warnings
+    assert isinstance(
+        await registry.retire("searchable", "parked", retired_by="user:sd", force=True),
+        TypeEntry,
+    )
+
+    # While it is dormant, another live entry comes to answer to the same word.
+    await registry.import_types(
+        [{"name": "taggable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["commentable"], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+
+    refusal = await registry.reinstate("searchable", "unparked", reinstated_by="user:sd")
+    assert isinstance(refusal, Refusal), (
+        "re-activating this row puts two live entries under one word -- 5.9b's own "
+        "named failure, and `import_types` refuses the identical act"
+    )
+    assert refusal.reason == "alias_collision"
+    assert refusal.detail["overridable"] is False
+    assert refusal.detail["held_by"] == "taggable"
+
+    # Nothing was written: a refusal is a refusal, not a warning on a completed act.
+    assert (await registry.list_types(namespace="default")).types
+    assert [
+        t.status for t in (await registry.list_types(namespace="default", include_retired=True)).types
+        if t.name == "searchable"
+    ] == ["retired"]

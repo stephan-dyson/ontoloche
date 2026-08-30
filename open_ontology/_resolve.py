@@ -40,8 +40,55 @@ class Resolver(Protocol):
     ) -> NotAType | None: ...
 
 
-def _norm(text: str) -> str:
+def identity_key(text: str) -> str:
+    """The registry's notion of *the same word*. **The kill row's SEVENTH trip.**
+
+    Two words are the same word here iff this function maps them to one string:
+    lowercased, with every run of non-``[a-z0-9]`` collapsed to ``_`` and stripped.
+
+    **It is public, and one function, because the seventh trip is what happens when
+    there are two.** Every alias guard in `registry.py` found its collision by an exact
+    byte comparison -- ``rec.name == alias``, ``alias in rec.aliases``, ``candidate in
+    entry.aliases`` -- while this module scored ``identity_key(candidate)`` against
+    ``identity_key(alias)`` and rated an exact match **1.0**. So ``'Commentable'`` was a
+    word the guards had never heard of and the resolver answered at the confidence
+    `INTERFACE.md` 5.3 calls a **guarantee**:
+
+    * `merge_types` refuses `commentable` / `searchable` NON-OVERRIDABLY when their
+      extents differ, under every acknowledgement;
+    * `import_types` writing ``aliases: ["commentable"]`` is refused `predicate_merge`;
+    * `import_types` writing ``aliases: ["Commentable"]`` was **written, unrefused**;
+    * `resolve_type("commentable")` then answered `searchable` at **1.0**, extents still
+      different, carrying no warning at all.
+
+    **[Observed]** on both fully-capable legs and the async mirror, row 4d's first
+    adversarial round, with all five gates green.
+
+    Trips 1-5 were *the guard did not look properly*. Trip 6 was *the guard looked
+    correctly, and then the fact changed*. Trip 7 is **the guard and the resolver
+    disagreeing about what the same word is** -- and every operand of Rule U so far has
+    been about the EXTENT comparison, while nothing in this project had written down the
+    identity of the **name**.
+
+    **Why the key lives beside the resolver rather than in `registry.py`.** The registry
+    must not be able to disagree with the scorer that delivers its 1.0; putting the key
+    here, and importing it there, is the arrangement in which they cannot. It is a
+    property of *words in this vocabulary*, not of any one resolver's scoring: a
+    deployment supplying its own `Resolver` (`PACKAGE.md` 2.6's production path) changes
+    what SCORES alike, never what counts as one word, and the guards are keyed to this
+    rather than to whatever that resolver happens to do -- which is `C3-11`'s own
+    argument, one layer down.
+
+    Non-canonical words only ever reach the store through an **alias**: `propose_type`
+    puts every `name` through `NAME_RE`, so a row can never be called ``'Commentable'``.
+    A dump's alias list is validated by nothing, and `import_types` is UC1's Foundry
+    migration path.
+    """
     return re.sub(r"[^a-z0-9]+", "_", (text or "").lower()).strip("_")
+
+
+#: The old private name, kept so nothing in this module has to change shape. Row 4d.
+_norm = identity_key
 
 
 def _similar(a: str, b: str) -> float:

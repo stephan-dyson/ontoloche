@@ -28,7 +28,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any, Iterable, Sequence
 from open_ontology._clock import Clock, SystemClock
-from open_ontology._resolve import DeterministicResolver, Resolver
+from open_ontology._resolve import DeterministicResolver, identity_key, Resolver
 from open_ontology.aio.adapter import (
     AttrObservedRecord,
     AttrSchemaRecord,
@@ -1100,11 +1100,48 @@ class AsyncRegistry:
             # claim `merge_types` refuses non-overridably when the two extents differ.
             # A near miss is NOT one -- nobody wrote that the two words denote one
             # thing -- so only an exact alias is re-verified.
+            # **Keyed by `identity_key`, and `candidate in entry.aliases` was the
+            # SEVENTH trip's read half** (row 4d, round 1). This gate was an exact-string
+            # test on a redirect the resolver reached by NORMALISING, so every variant
+            # spelling -- `'Commentable'`, `'COMMENTABLE'`, `'commentable '` -- answered
+            # at 1.0 with the warning silently absent. The production shape of this call
+            # is a raw column header, which is precisely the spelling that lost it.
+            #
+            # The LEFT side is the row the matched alias names, not `exact`: under a
+            # variant spelling `get_type(namespace, candidate)` is `None`, so the
+            # comparison had nothing to stand on and returned `False` for the wrong
+            # reason.
+            matched = next(
+                (
+                    alias
+                    for alias in (entry.aliases or ())
+                    if identity_key(alias) == identity_key(candidate)
+                ),
+                None,
+            )
+            written = exact
+            if matched is not None and written is None:
+                page = await self.adapter.find_types(
+                    TypeQuery(
+                        namespace=namespace,
+                        name_in=(await self._word_spellings(namespace, candidate))[0],
+                        include_retired=True,
+                    )
+                )
+                written = next(
+                    (
+                        record
+                        for record in page.records
+                        if record.kind == entry.kind
+                        and identity_key(record.name) == identity_key(candidate)
+                    ),
+                    None,
+                )
             stale = (
                 entry is not None
-                and best_name != candidate
-                and candidate in (entry.aliases or ())
-                and await self._identity_stale(namespace, exact, entry)
+                and matched is not None
+                and identity_key(best_name) != identity_key(candidate)
+                and await self._identity_stale(namespace, written, entry)
             )
             reason_bits.insert(0, f"{best_name!r} matches at {best_score}")
             if stale:
@@ -1586,7 +1623,24 @@ class AsyncRegistry:
         # that `get_type` raises on it. Refusing there would have made this row reject
         # vocabularies the specification permits, which is the shape D-4b-5 records for
         # a different rule. Caught by `C12-10` within the minute.
-        clash = await self._alias_holder(namespace, name, kind)
+        clash, clash_why = await self._alias_holder(namespace, name, kind)
+        # **A look that did not finish has not said the word is free -- and it has not
+        # said it is taken either.** Rule U's third operand (*partial is not equal*, the
+        # FIFTH trip) was missing from this guard entirely: `_alias_holder` read
+        # `_active_page` and discarded the sentence saying the backend had capped the
+        # query, so a truncated look read as *"the word is free"*.
+        #
+        # **It is a WARNING and not a refusal, and finding that out cost one suite run.**
+        # The first cut refused, and `C3-13` -- whose whole subject is a backend that
+        # caps an unlimited query -- went red, because refusing there does not narrow the
+        # guard, it **bans the call on every paging backend**, at exactly the scale
+        # (UC3: one namespace, dozens of agencies, thousands of active types) where
+        # paging happens. `C10-09`'s lesson, one call along: the guard is narrowed, not
+        # banned. So the fact is reported rather than suppressed, which is 5.4's own rule
+        # -- this call refuses two things and warns about everything else -- and it is
+        # the shape `reinstate_alias_check_unavailable` already has for the same question
+        # one call away.
+        alias_check_why = clash_why if clash is None else None
         if clash is not None:
             return Refusal(
                 "alias_collision",
@@ -1607,6 +1661,8 @@ class AsyncRegistry:
 
         schema, violations = await self._check_attributes(namespace, kind, name, attributes)
         warnings: list[str] = []
+        if alias_check_why is not None:
+            warnings.append("alias_check_incomplete:" + alias_check_why)
         if violations:
             if schema and schema.mode == "enforce":
                 return Refusal(
@@ -1908,6 +1964,43 @@ class AsyncRegistry:
             created_at=rec.proposed_at,
             updated_at=now,
         )
+        # **The word was free when the proposal was made and may not be now** (row 4d,
+        # round 1). `propose_type` asks `_alias_holder`; this writes the row, sometimes
+        # days later, and re-checked nothing -- so a merge or an import in between left
+        # two ACTIVE entries answering to one word, which is `C16-06`'s whole-store
+        # invariant and mechanism 4 itself. **Ruling R40 forces every `kind="predicate"`
+        # down this two-step path**, so the guard was structurally unavailable for the
+        # one kind the kill row is about, and R40's own human-review window is exactly
+        # the window in which the check goes stale. Reproduced in three ordinary calls.
+        #
+        # Before the transaction, not inside it: nothing is written when it refuses.
+        holder, holder_why = await self._alias_holder(rec.namespace, rec.name, rec.kind)
+        if holder is not None:
+            return Refusal(
+                "alias_collision",
+                {
+                    "name": rec.name,
+                    "kind": rec.kind,
+                    "namespace": rec.namespace,
+                    "held_by": holder,
+                    "why": (
+                        f"{holder!r} is an active entry that answers to {rec.name!r}; "
+                        f"it did not when this was proposed, and approving would leave "
+                        f"two live entries holding one word (INTERFACE.md 5.9b)"
+                    ),
+                    "overridable": False,
+                },
+            )
+        if holder_why is not None:
+            # See `propose_type`: reported, never suppressed, and never a refusal that
+            # would ban the call on a paging backend.
+            type_rec = TypeRecord(
+                **{
+                    **type_rec.__dict__,
+                    "warnings": tuple(type_rec.warnings)
+                    + ("alias_check_incomplete:" + holder_why,),
+                }
+            )
         async with self.adapter.transaction():
             stored = await self.adapter.put_type(type_rec, expect_absent=True)
             if store_proposal:
@@ -2136,8 +2229,13 @@ class AsyncRegistry:
         why: str | None = None
         if applied:
             why = "filters suppressed rows: " + ", ".join(applied)
-        elif not page_complete:
-            why = page_why
+        # **Joined, never chosen** (row 4d, round 1). `predicate` is always in `applied`
+        # when the filter was used, so the branch above swallowed the backend's own
+        # reason and the caller was told *"filters suppressed rows"* about types the
+        # query had silently lost -- under a `known` that counted only what it found.
+        # Two different facts, and a caller acts on them differently.
+        if not page_complete and page_why:
+            why = f"{why}; {page_why}" if why else page_why
         known = len(entries) if page_known_ok else None
         return TypeListing(
             types=tuple(entries),
@@ -2250,6 +2348,41 @@ class AsyncRegistry:
                     )
                 )
                 succ = next((r for r in cross.records if r.name == successor), None)
+            if succ is None:
+                # **A guard with nothing to compare has not said the collapse is safe.**
+                # Every identity guard above is nested inside *"if the successor row
+                # exists"*, so naming a successor BEFORE it is registered skipped #1, #2
+                # and #3 -- and the word was then created by an ordinary `propose_type` +
+                # `approve`, after which `resolve_type` cashes the redirect at confidence
+                # 1.0. **[Observed]** row 4d, round 1, on both fully-capable legs: a
+                # `predicate` retired toward a word that arrived later as an **entity**
+                # answered a question about one kind with an entry of another at 1.0 --
+                # §5.10 refusal #3, non-overridable, walked past entirely, and Q56's
+                # default cannot warn about it because it is not a predicate pair.
+                #
+                # It is the SIXTH trip's shape applied to the sixth trip's own commit:
+                # the guard looked, found nothing to compare, and then the fact arrived.
+                # Rule U, at the one call §5.3 calls a guarantee.
+                #
+                # Non-overridable, and `force=True` included, for the reason the guards
+                # below are: `force` overrides what could be SEEN, never what would
+                # become TRUE.
+                return Refusal(
+                    "successor_unregistered",
+                    {
+                        "type": type,
+                        "successor": successor,
+                        "namespace": namespace,
+                        "why": (
+                            f"{successor!r} names no entry in {namespace!r}, so none of "
+                            f"§5.10's identity guards could be evaluated against it -- "
+                            f"and a successor redirects every `resolve_type` for this "
+                            f"word at confidence 1.0 as soon as the word is created. "
+                            f"Register the successor first, then retire toward it"
+                        ),
+                        "overridable": False,
+                    },
+                )
             if succ is not None:
                 if succ.kind != rec.kind:
                     return Refusal(
@@ -2579,6 +2712,34 @@ class AsyncRegistry:
         dormant = tuple(getattr(rec, "aliases", ()) or ())
         if dormant:
             breach = await self._alias_identity_breach(namespace, rec.name, rec.kind, dormant)
+            # **`_alias_identity_breach` asks 5.10's EXTENT question; it does not ask
+            # 5.9b's COLLISION question, and this call never did** (row 4d, round 1).
+            # A row retired while carrying an alias that a live entry has since come
+            # to answer to is re-activated into exactly the state `alias_collision`
+            # exists to prevent -- two active entries holding one word -- and its
+            # sibling `import_types` asks that question on the same field with
+            # `_alias_clash`. Four ordinary calls reproduce it.
+            collision, collision_why = await self._alias_clash(
+                namespace, rec.name, rec.kind, dormant
+            )
+            if collision_why is not None:
+                alias_warnings.append("alias_check_incomplete:" + collision_why)
+            if collision is not None:
+                return Refusal(
+                    "alias_collision",
+                    {
+                        "type": type,
+                        "aliases": list(dormant),
+                        "held_by": collision,
+                        "why": (
+                            f"{collision!r} is an active entry that already answers to "
+                            f"one of the aliases this row would re-activate; reinstating "
+                            f"it would leave two live entries holding one word "
+                            f"(INTERFACE.md 5.9b)"
+                        ),
+                        "overridable": False,
+                    },
+                )
             if breach is not None:
                 reason, sentence = breach
                 return Refusal(
@@ -2892,6 +3053,48 @@ class AsyncRegistry:
                 {"why": self.caps.reason("stores_events"), "acknowledge": list(acknowledge)},
             )
 
+        # **The TRANSFERRED aliases are checked, and not checking them was the kill row's
+        # SIXTH trip** (row 4c, round 3). Guard #2 above compares `left`'s extent to
+        # `right`'s and says nothing about `left.aliases` -- which this line re-points at
+        # `right` as well. **[Observed]** in two ordinary, individually legal merges and
+        # one new type declaring two existing predicates: `commentable` -> `searchable`
+        # while their extents matched, then a `doc` making `searchable` and `taggable`
+        # match, then `searchable` -> `taggable`. `resolve_type("commentable")` came back
+        # `taggable` at confidence 1.0 with extents `{note}` and `{doc, note}` -- and the
+        # registry refuses that exact pair NON-OVERRIDABLY when asked directly.
+        #
+        # **This is a different failure from the five before it, and the difference is
+        # what makes it a class rather than a bug.** Trips 1-5 were *the guard did not
+        # look properly*; this one is *the guard looked correctly and then the fact
+        # changed*. The alias was VALID when it was written. Rule U's fourth operand:
+        # unknowable is not equal, empty is not equal, partial is not equal, and
+        # **STALE is not equal**.
+        transferred = tuple(a for a in left.aliases if a not in right.aliases)
+        if transferred:
+            breach = await self._alias_identity_breach(
+                target_ns, right.name, right.kind, transferred
+            )
+            if breach is not None:
+                reason, sentence = breach
+                return Refusal(
+                    reason,
+                    {
+                        "from": from_,
+                        "into": into,
+                        "transferred_aliases": list(transferred),
+                        "why": sentence,
+                        "overridable": False,
+                    },
+                )
+        # **Moved ABOVE the overridable guards** (row 4d, round 1). It sat last, after
+        # `retired_operand`, `definitions_diverge`, `no_consumer_evidence` and the
+        # `cannot_record_override` gate -- so a caller asking for this collapse without
+        # acknowledgements was told `no_consumer_evidence`, `overridable=True`, with an
+        # acknowledgement named, about a collapse that NEVER moves. That is `C9-19`'s
+        # defect class exactly, and `retire` had it fixed by D-4c-5 in the same commit
+        # that added this check; the lesson did not travel two functions. The outcome was
+        # safe and the story was wrong, and *the story is what a caller acts on*.
+
         # 5
         if "retired" in (left.status, right.status) and "retired_operand" not in acknowledge:
             return Refusal(
@@ -2960,39 +3163,6 @@ class AsyncRegistry:
 
         now = self._now()
         aliases = tuple(dict.fromkeys(tuple(right.aliases) + (left.name,) + tuple(left.aliases)))
-        # **The TRANSFERRED aliases are checked, and not checking them was the kill row's
-        # SIXTH trip** (row 4c, round 3). Guard #2 above compares `left`'s extent to
-        # `right`'s and says nothing about `left.aliases` -- which this line re-points at
-        # `right` as well. **[Observed]** in two ordinary, individually legal merges and
-        # one new type declaring two existing predicates: `commentable` -> `searchable`
-        # while their extents matched, then a `doc` making `searchable` and `taggable`
-        # match, then `searchable` -> `taggable`. `resolve_type("commentable")` came back
-        # `taggable` at confidence 1.0 with extents `{note}` and `{doc, note}` -- and the
-        # registry refuses that exact pair NON-OVERRIDABLY when asked directly.
-        #
-        # **This is a different failure from the five before it, and the difference is
-        # what makes it a class rather than a bug.** Trips 1-5 were *the guard did not
-        # look properly*; this one is *the guard looked correctly and then the fact
-        # changed*. The alias was VALID when it was written. Rule U's fourth operand:
-        # unknowable is not equal, empty is not equal, partial is not equal, and
-        # **STALE is not equal**.
-        transferred = tuple(a for a in left.aliases if a not in right.aliases)
-        if transferred:
-            breach = await self._alias_identity_breach(
-                target_ns, right.name, right.kind, transferred
-            )
-            if breach is not None:
-                reason, sentence = breach
-                return Refusal(
-                    reason,
-                    {
-                        "from": from_,
-                        "into": into,
-                        "transferred_aliases": list(transferred),
-                        "why": sentence,
-                        "overridable": False,
-                    },
-                )
         async with self.adapter.transaction():
             merged = await self.adapter.put_type(
                 TypeRecord(**{**right.__dict__, "aliases": aliases, "updated_at": now})
@@ -3214,6 +3384,29 @@ class AsyncRegistry:
             # that the surface could not otherwise produce it was wrong twice over.
             # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
             incoming = tuple(row.get("aliases") or ())
+            extra_import_warnings: list[str] = []
+            # **The row's own NAME is a word too, and this door never asked** (row 4d,
+            # round 1). The alias block below runs only `if incoming:`, so a row whose
+            # NAME a live entry already answers to -- carrying no aliases of its own --
+            # was written with no refusal and no warning, and two active entries came to
+            # hold one word between them. `propose_type` refuses that exact act
+            # (`alias_collision`, non-overridable); the sibling write door did not ask.
+            # `C16-06`'s whole-store invariant, in one ordinary import row.
+            if standing is None:
+                holder, holder_why = await self._alias_holder(
+                    namespace, name, row.get("kind", kind)
+                )
+                if holder is not None:
+                    out.append(
+                        self._refused_import(
+                            namespace, name, holder, kind=row.get("kind", kind)
+                        )
+                    )
+                    continue
+                if holder_why is not None:
+                    # See `propose_type`: a look that did not finish is reported, not
+                    # refused. An import cannot be banned on a paging backend either.
+                    extra_import_warnings.append("alias_check_incomplete:" + holder_why)
             # **The identity guards run whatever the row's `status` is** (row 4c, round
             # 3). `status != "retired"` scoped them to live rows, so a Foundry
             # `deprecated` row carrying `aliases` was written with NEITHER guard -- and
@@ -3242,7 +3435,11 @@ class AsyncRegistry:
                         )
                     )
                     continue
-                clash = await self._alias_clash(namespace, name, row.get("kind", kind), incoming)
+                clash, clash_why = await self._alias_clash(
+                    namespace, name, row.get("kind", kind), incoming
+                )
+                if clash is None and clash_why is not None:
+                    extra_import_warnings.append("alias_check_incomplete:" + clash_why)
                 if clash is not None:
                     out.append(
                         await self._entry(standing, extra_warnings=("import_refused:alias_collision",))
@@ -3308,6 +3505,7 @@ class AsyncRegistry:
                     # vocabulary arriving already decided and warning is all this call
                     # may do about a declaration (2.5).
                     + tuple(await self._declared_predicate_warnings(namespace, predicates))
+                    + tuple(extra_import_warnings)
                 ),
                 retire_reason=retire_reason,
                 retired_by=imported_by if status == "retired" else None,
@@ -5177,19 +5375,28 @@ class AsyncRegistry:
             others: list = []
             after: str | None = None
             cursors: set[str] = set()
-            partial_why: str | None = None
+            spellings, partial_why = await self._word_spellings(namespace, alias)
             while True:
                 page = await self.adapter.find_types(
                     TypeQuery(
                         namespace=namespace,
-                        name_in=(alias,),
+                        name_in=spellings,
                         include_retired=True,
                         after=after,
                     )
                 )
-                others.extend(rec for rec in page.records if rec.name == alias)
+                # **Keyed by `identity_key`, and byte equality was the SEVENTH trip.**
+                # `name_in` is an exact-match query, so it is asked for every spelling
+                # of the word this registry considers one word -- otherwise
+                # `aliases: ["Commentable"]` is a word this guard has never heard of and
+                # the resolver rates 1.0 against `commentable`.
+                others.extend(
+                    rec
+                    for rec in page.records
+                    if identity_key(rec.name) == identity_key(alias)
+                )
                 if not page.complete and page.next_after is None:
-                    partial_why = page.why_incomplete or (
+                    partial_why = partial_why or page.why_incomplete or (
                         "the backend could not answer the query"
                     )
                     break
@@ -5225,6 +5432,31 @@ class AsyncRegistry:
                         f"with an entry of kind {other.kind!r} -- a question about one "
                         f"kind answered with an entry of another (INTERFACE.md 5.10 "
                         f"refusal #3)",
+                    )
+                # **§5.10's refusal #1 belongs here too, and `C9-20` is the record
+                # that it is an IDENTITY guard rather than an evidence one.** An alias
+                # produces the identical confidence-1.0 redirect a merge does, and both
+                # `merge_types` and `retire(successor=)` refuse a pair with different
+                # consumer sets NON-OVERRIDABLY -- so the pair they both refuse collapsed
+                # through the third door with no refusal at all. [Observed] row 4d, round
+                # 1. `ROADMAP.md` states the requirement without qualification: *"It MUST
+                # refuse when the two have different consumer sets."*
+                here = {c.id for c in (await self._consumer_report(other)).gates_on}
+                there = {
+                    c.id
+                    for c in (await self._consumer_report(
+                        await self.adapter.get_type(namespace, name, kind=kind)
+                        or other
+                    )).gates_on
+                }
+                if here != there:
+                    return (
+                        "different_consumer_sets",
+                        f"making {alias!r} answer at confidence 1.0 with "
+                        f"{namespace}:{kind}:{name} asserts that every consumer of one "
+                        f"accepts the other, and they gate differently "
+                        f"({sorted(here)} vs {sorted(there)}) -- the same claim "
+                        f"`merge_types` refuses non-overridably as its refusal #1",
                     )
                 if kind == "predicate" or other.kind == "predicate":
                     # See `retire`'s note: a PARTIAL extent is not an identical extent.
@@ -5282,9 +5514,20 @@ class AsyncRegistry:
             # trip's fourth door), not this warning's question.
             return None
         if rec is not None:
-            successor = getattr(rec, "successor", None)
-            if successor:
-                live = await self.adapter.get_type(namespace, successor, kind="predicate")
+            # **The chain, not one hop** (row 4d, round 1). This followed a single
+            # `successor` and required it to be active, so a vocabulary merged TWICE --
+            # the ordinary outcome after two curation passes -- left the first word
+            # unwarned, because the word in the middle is itself retired and `retire`
+            # writes no alias for the fallback scan to find. `_identity_closure` already
+            # walks chains, with a cap and a cycle guard, and `_extent(identity=True)`
+            # already uses it.
+            closure, _complete, _why = await self._identity_closure(
+                TypeRef(namespace, "predicate", declared), {}
+            )
+            for ref in closure:
+                if ref.name == declared:
+                    continue
+                live = await self.adapter.get_type(namespace, ref.name, kind="predicate")
                 if live is not None and live.status == "active":
                     return live.name
         records, _ = await self._active_page(namespace)
@@ -5306,8 +5549,76 @@ class AsyncRegistry:
                 out.append(f"declared_predicate_merged:{declared}:{moved}")
         return out
 
-    async def _alias_holder(self, namespace: str, name: str, kind: str) -> str | None:
+    async def _word_spellings(
+        self, namespace: str, word: str
+    ) -> tuple[tuple[str, ...], str | None]:
+        """Every row NAME in this namespace that is the same word. **Row 4d, round 1.**
+
+        ``(spellings, why the scan did not finish)``.
+
+        ``name_in`` is an exact-match query and `identity_key` is a many-to-one map, so a
+        guard asking *"does this word name a row?"* cannot put the word straight into the
+        query: `'Commentable'` matches nothing while `commentable` is exactly the row the
+        guard exists to find. That is the SEVENTH trip's write half.
+
+        **Retired rows are included, and leaving them out was this fix's own first
+        defect.** The first cut reused :meth:`_active_page`, and the checker's spelling
+        axis stayed red on every leg: the fixture's word is *retired*, which is the
+        FOURTH trip's whole point -- *a retired predicate name still resolves and still
+        has an extent*. Found by running the gate rather than by reading the patch.
+
+        **A full namespace scan, and the cost is stated rather than hidden.** Row names
+        are *usually* their own key (`NAME_RE` admits only ``[a-z][a-z0-9_]*``), so
+        ``{word, identity_key(word)}`` would answer nearly always and cheaply -- but
+        ``foo__bar`` is a legal name whose key is ``foo_bar``, so *nearly* is the word a
+        kill-row guard may not use. This is one paged read per alias written, the same
+        order as :meth:`_alias_holder`'s scan on the neighbouring door.
+
+        The ``why`` is Rule U's: a scan that did not finish has not said the word names
+        nothing, and the caller refuses on it.
+        """
+        wanted = identity_key(word)
+        spellings = {word}
+        why: str | None = None
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = await self.adapter.find_types(
+                TypeQuery(namespace=namespace, include_retired=True, after=after)
+            )
+            for other in page.records:
+                if identity_key(other.name) == wanted:
+                    spellings.add(other.name)
+            if not page.complete and page.next_after is None:
+                why = page.why_incomplete or "the backend could not answer this query in full"
+                break
+            after = page.next_after
+            if after is None:
+                break
+            if after in cursors:
+                why = (
+                    "this backend returned a pagination cursor it had already returned, "
+                    "so the namespace's names cannot be read to exhaustion "
+                    "(PACKAGE.md 3.4 primitive 6)"
+                )
+                break
+            cursors.add(after)
+        return tuple(sorted(spellings)), why
+
+    async def _alias_holder(
+        self, namespace: str, name: str, kind: str
+    ) -> tuple[str | None, str | None]:
         """The ACTIVE entry that already answers to ``name`` as one of its ALIASES.
+
+        ``(holder, why the look did not finish)`` -- **and returning the second element
+        is row 4d's fix for the FIFTH trip's operand, missing from a guard shipped by the
+        commit whose subject was the fourth.** This read `records, _ = self._active_page(
+        namespace)` and threw away the sentence saying the backend had capped the query,
+        so **[Observed]** on `AsyncDegradedAdapter(page_cap=3)` over ten active rows a
+        truncated look read as *"the word is free"* and `propose_type` created a second
+        live entry for a word the full read refuses non-overridably. Rule U: *partial is
+        not equal*, and a guard that could not finish looking has not said the word is
+        free.
 
         Narrower than :meth:`_alias_clash` on purpose, and the narrowing is the whole
         point: that guard's question is *"is this word spoken for at all?"*, which
@@ -5315,29 +5626,38 @@ class AsyncRegistry:
         **blesses** one word under two kinds. This one asks only *"would creating this
         row make two live entries answer to one word?"*, which is mechanism 4 and
         nothing else.
+
+        The comparison is `identity_key`'s, not bytes': see that function for the
+        seventh trip.
         """
-        records, _ = await self._active_page(namespace)
+        records, why = await self._active_page(namespace)
+        wanted = identity_key(name)
         for other in records:
-            if other.name == name and other.kind == kind:
+            if identity_key(other.name) == wanted and other.kind == kind:
                 continue
-            if name in (other.aliases or ()):
-                return other.name
-        return None
+            if any(identity_key(alias) == wanted for alias in (other.aliases or ())):
+                return other.name, None
+        return None, why
 
     async def _alias_clash(
         self, namespace: str, name: str, kind: str, aliases: Sequence[str]
-    ) -> str | None:
-        """An ACTIVE entry that already answers to one of these words, or to ``name``."""
-        records, _ = await self._active_page(namespace)
-        wanted = set(aliases) | {name}
+    ) -> tuple[str | None, str | None]:
+        """An ACTIVE entry that already answers to one of these words, or to ``name``.
+
+        ``(holder, why the look did not finish)``. Keyed by `identity_key` and carrying
+        the page's `why`, for the two reasons row 4d records at :meth:`_alias_holder`:
+        the seventh trip, and Rule U's third operand.
+        """
+        records, why = await self._active_page(namespace)
+        wanted = {identity_key(word) for word in tuple(aliases) + (name,)}
         for other in records:
-            if other.name == name and other.kind == kind:
+            if identity_key(other.name) == identity_key(name) and other.kind == kind:
                 continue
-            if other.name in wanted:
-                return other.name
-            if wanted & set(other.aliases or ()):
-                return other.name
-        return None
+            if identity_key(other.name) in wanted:
+                return other.name, None
+            if wanted & {identity_key(alias) for alias in (other.aliases or ())}:
+                return other.name, None
+        return None, why
 
     def _refused_import(
         self,

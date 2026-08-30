@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C10 -- ``merge_types``, and the doors its operands come through (14). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the doors its operands come through (16). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -681,3 +681,116 @@ async def test_c10_14_door_1s_store_read_the_q56_default_at_the_alias_door(
     plain = await registry.resolve_type("capture", ResolveContext(), tier="opus")
     assert plain.outcome == "existing" and plain.type is not None
     assert "identity_stale" not in plain.type.warnings
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+async def test_c10_15_the_seventh_trip_one_word_is_not_one_string(adapter, make_registry):
+    """**`ROADMAP.md`'s kill row, SEVENTH trip — and it is a third kind.**
+    Row 4d, first adversarial round.
+
+    Trips 1–5 were one sentence: *the guard did not look properly.* Trip 6 was: *the
+    guard looked correctly, and then the fact changed.* **This one is: the guard and the
+    resolver disagree about what THE SAME WORD is.**
+
+    Every alias guard found its collision by an exact byte comparison — `rec.name ==
+    alias`, `alias in rec.aliases`, `candidate in entry.aliases`. The shipped
+    `DeterministicResolver` scores `identity_key(candidate)` against
+    `identity_key(alias)`, lowercasing and collapsing every run of non-`[a-z0-9]` to
+    `_`. So `'Commentable'` was a word the guards had never heard of, and the resolver
+    rated it **1.0**.
+
+    > Every operand of Rule U so far has been about the **extent** comparison —
+    > unknowable, empty, partial, stale. Nothing in this project had written down the
+    > identity of the **name**. *One word is not one string.*
+
+    **The non-canonical spelling is the real one.** `import_types` is UC1 Tenshen's own
+    Foundry migration path and UC3's Socrata shape, and a real export's field labels
+    arrive as `"Status"`, not as `snake_case`.
+
+    Both halves are pinned: the **write** door refuses whatever the spelling, and the
+    **read** carries `identity_stale` whatever the spelling. And the negative that a
+    careless fix breaks: a genuinely different word still resolves to nothing.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "searchable", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["commentable", "searchable"])
+    await seed(registry, "bbb_memo", predicates=["searchable"])
+
+    # HALF ONE -- the direct ask. Two live predicates whose extents genuinely differ.
+    direct = await registry.merge_types(
+        "commentable", "searchable", "the same thing, we think", merged_by="user:sd",
+        acknowledge=[
+            "definitions_diverge", "no_consumer_evidence", "retired_operand",
+            "predicate_merge", "kind_mismatch",
+        ],
+    )
+    assert isinstance(direct, Refusal) and direct.reason == "predicate_merge"
+    assert direct.detail["overridable"] is False
+
+    assert isinstance(
+        await registry.retire("commentable", "superseded", retired_by="user:sd", force=True),
+        TypeEntry,
+    )
+
+    # HALF TWO -- the same claim, spelled the way a foreign system spells it.
+    for spelling in ("commentable", "Commentable", "COMMENTABLE", "commentable ", "commentable-"):
+        entry = (await registry.import_types(
+            [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+              "aliases": [spelling], "status": "active"}],
+            namespace="default", kind="predicate",
+        ))[0]
+        assert any(w.startswith("import_refused:") for w in entry.warnings), (
+            f"{spelling!r} and 'commentable' are one word to the resolver, which rates "
+            f"the alias 1.0 -- so a guard that refuses one spelling and writes another "
+            f"is two answers to one question"
+        )
+        assert spelling not in (entry.aliases or ())
+
+    # **The negative.** A genuinely different word is still a different word: the key is
+    # many-to-one, not permissive, and a fix that widened it into a fuzzy match would
+    # refuse aliases the vocabulary is entitled to.
+    ok = (await registry.import_types(
+        [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["commentary"], "status": "active"}],
+        namespace="default", kind="predicate",
+    ))[0]
+    assert not any(w.startswith("import_refused:") for w in ok.warnings), (
+        "`commentary` is not `commentable`; the guard compares words, not neighbourhoods"
+    )
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+async def test_c10_16_the_stale_warning_survives_every_spelling(adapter, make_registry):
+    """**The seventh trip's READ half.** Row 4d, first adversarial round.
+
+    Row 4d's own staleness gate was `candidate in entry.aliases` — an exact-string test
+    on a redirect the resolver reached by **normalising**. So on Door 1's store the
+    canonical spelling carried `identity_stale` and **every variant spelling answered at
+    1.0 with the warning silently absent** — and the production shape of this call is a
+    raw column header, which is precisely the spelling that lost it.
+
+    `min_confidence`, `kind=` and `search_namespaces` are asserted not to be escapes
+    either: they were each tried as one, and none of them is.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable"):
+        await seed(registry, name, kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["commentable", "searchable"])
+    merged = await registry.merge_types(
+        "commentable", "searchable", "identical non-empty extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    await seed(registry, "zzz_doc", predicates=["searchable"])
+
+    for spelling in ("commentable", "Commentable", "COMMENTABLE", "commentable ", "commentable-"):
+        for kwargs in ({}, {"kind": "predicate"}, {"min_confidence": 1.0}):
+            resolution = await registry.resolve_type(
+                spelling, ResolveContext(), tier="opus", **kwargs
+            )
+            if resolution.type is None or resolution.type.name != "searchable":
+                continue
+            assert resolution.confidence == 1.0
+            assert "identity_stale" in resolution.type.warnings, (
+                f"{spelling!r} reached the same 1.0 redirect as 'commentable' and said "
+                f"nothing about the two extents no longer agreeing: {kwargs}"
+            )
