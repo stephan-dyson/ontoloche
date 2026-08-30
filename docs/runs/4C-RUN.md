@@ -10,17 +10,17 @@
 
 | | before (row #6) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 196 | **220** |
-| sync suite, one run, three legs | `484 passed, 122 skipped` (606 collected) | **`537 passed, 142 skipped`** |
-| async suite, one run, three legs | `520 passed, 122 skipped` (642 collected) | **`572 passed, 142 skipped`** |
-| `warnings` values ([`INTERFACE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) §5.4) | 25 | **27** |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 196 | **222** |
+| sync suite, one run, three legs | `484 passed, 122 skipped` (606 collected) | **`541 passed, 144 skipped`** |
+| async suite, one run, three legs | `520 passed, 122 skipped` (642 collected) | **`576 passed, 144 skipped`** |
+| `warnings` values ([`INTERFACE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) §5.4) | 25 | **29** |
 | `Refusal.reason` values (§5.12) | 28 | **28** — and that is a result, not an omission. §3 |
 | mechanical gates in the suite | 4 | **5** — [`check_merge_guard.py`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/check_merge_guard.py) |
 | `EDGES.md` sections under R31's rule gate | 3 (§2.4.1, §4.3, §4.4) | **5** (+ §2.5, §5.2) |
 | `EDGES.md` printed call signatures held against the code | **0** | **4** |
 | `ROADMAP.md` kill-row trips | 3, all found by human reviewers | **5** — the fourth by this row's checker, the **fifth by this row's adversarial loop, while that checker exited 0**. §6.4 |
 
-**The floor held.** Row #6's floor was 196 ids and a sync suite that must never go below it; every commit in this row ran both suites on all three legs before it landed, and the count moved 196 → 203 → 206 → 209 → 210 → 211 → 214 → 220.
+**The floor held.** Row #6's floor was 196 ids and a sync suite that must never go below it; every commit in this row ran both suites on all three legs before it landed, and the count moved 196 → 203 → 206 → 209 → 210 → 211 → 214 → 220 → 222.
 
 ---
 
@@ -42,6 +42,22 @@ That is a lot for work that had five mechanical gates green, and the shape of it
 | five checker rows printing `REFUSED` for a probe that never ran | the loop | `NOT REACHABLE`, named |
 
 §6.4 is the honest reading of the first row.
+
+### The loop's second round — **4 BLOCKING, 5 MAJOR, 3 MINOR**
+
+One lens was the brief's mandated *"who integrates next week"*: an engineer building beacon's Tenshen slice 1 against this seam, who reported plainly that **they would not ship against it**. The other was pointed at round 1's own fixes, on this project's documented pattern that a fix is the likeliest place for the next defect. Both were right.
+
+| | what it was |
+|---|---|
+| **R38 was never applied to family NAMES** | `EDGES.md` §2.3's architectural bet is that a family **is** a `TypeEntry`, so it inherits `merge_types` for free. What that inheritance did was **orphan every edge written under an absorbed family name** — `known=2, complete=True, warnings=()`, a real stakeholder missing from the flagship two-hop query, after a steward did the ordinary governance act and a consumer asked for the *surviving* name. **Verbatim the sentence R38 exists to close, one axis over, inside the row that closed it.** Every R38 test merged `entity` types. `C17-51` |
+| **an integer `InstanceRef.id`** | §2.1 records the `str`/`int` cast as contortion **E4**, *"where a silent key mismatch lives"* — and it was living there. `str(ref)` identical for `41` and `"41"`, the refs comparing **unequal**, `add_edge` accepting it, and `neighbors` returning `known=0, complete=True, warnings=()` on SQLite while raising a raw psycopg error on Postgres. **One input, two reference backends, two different wrong answers.** `C17-52` |
+| **round 1's fix reintroduced round 1's defect class** | the alias identity guard — written as the *fifth trip's fix* — read one page of `find_types(name_in=…)` and checked `if not others and not page.complete`, which fires when the page is **empty** and never when it is **short**. A partial read compared as if it were whole, two functions and one hour away from the fix for exactly that |
+| **the checker saw 4 of 9 write shapes** | Part A exited 0 with a collapsing caller live. Enumerating syntactic shapes is *the same artefact as the guard it checks* — something a person must remember to extend — so the rule is now any mention of an identity field's **name**, anywhere in a function. All nine caught; the three readers it now flags are documented in `KNOWN_CALLERS`, which is the over-broad rule's intended cost |
+
+Four more closed with them: `via_successor` still naming an edge's own `src` when **both** merged names were in the frontier (round 1 fixed the read site and left the write site); `amend_edge` neither recomputing nor clearing `edge_family_retired`, so an amendment after `reinstate` asserted a live family was retired; `endpoint_type_merged` firing once per **name** rather than once per identity and never naming the survivor; and a retired origin type having no carrier at all — **mechanism 3**, a steward's explicit *"stop using this word"*, invisible in the call consumers run.
+
+> **The pattern across both rounds, stated because it is the row's most useful output.** Round 1 found a defect in the guard the row had just written. Round 2 found a defect in round 1's fix, *and* found the row's flagship ruling applied to one axis and not another. **Neither round found a defect in anything this row did not touch.** The work is not fragile everywhere; it is fragile exactly where it is new, which is what constraint 7's loop is for and what no gate in this repository measures.
+
 
 ---
 
