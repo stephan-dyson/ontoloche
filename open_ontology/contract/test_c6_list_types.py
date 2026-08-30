@@ -232,3 +232,12 @@ def test_c6_08_the_predicate_filter_resolves_the_identity_per_namespace(
     # teams' meanings being collapsed, and R54 must not undo it.
     other = registry.list_types(predicate="commentable", namespace="dpr")
     assert {t.name for t in other.types} == {"park_sign"}
+
+    # **The identity only ever ADDS (§5.6.1-4).** The written word is queried in
+    # whatever scope the caller asked for, so a type declaring a predicate that names no
+    # row at all -- a dangling reference, which EDGES.md §2.7 calls a fact rather than
+    # an error -- is still found. A fix that replaced the written word with a closure
+    # would have deleted this answer.
+    seed(registry, "leaflet", predicates=["nobody_registered_this"])
+    dangling = registry.list_types(predicate="nobody_registered_this", namespace="default")
+    assert {t.name for t in dangling.types} == {"leaflet"}
