@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C3 -- ``resolve_type`` (14). Mechanism 2, with mechanism 1 as the gate.
+"""C3 -- ``resolve_type`` (15). Mechanism 2, with mechanism 1 as the gate.
 
 No test here may pass or fail because of resolver *quality*: the assertions are about
 outcomes and shapes, never about a score's value.
@@ -16,7 +16,7 @@ outcomes and shapes, never about a score's value.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import Resolution, ResolveContext, TypeEntry
+from open_ontology.types import Refusal, Resolution, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import seed, snapshot
 
 
@@ -524,4 +524,69 @@ async def test_c3_14_a_redirect_whose_identity_claim_went_stale_says_so(registry
     if near.outcome == "existing" and near.type is not None:
         assert "identity_stale" not in near.type.warnings, (
             "the resolver scored a near miss; that is not an identity anybody claimed"
+        )
+
+@pytest.mark.requires_capability("stores_events")
+async def test_c3_15_a_vocabulary_curated_twice_still_resolves(registry):
+    """**§5.10's promise across TWO curation passes.** Row 4d, round 2.
+
+    `resolve_type` read **one** successor and required it to be live, so a word retired
+    toward a word that was later retired again answered `proposal` — while
+    `list_types(predicate=)`, `predicates(of=)` and `propose_type`'s R55 warning all said
+    the identity was live. **One store, two contradictory answers about one word**, which
+    `_identity_closure`'s own docstring calls *"a defect rather than a choice"*.
+
+    Two ordinary curation passes on one word is the ordinary UC3 outcome, and §5.10
+    promises *"the old word still resolves"*. The anti-mechanism-2 call was telling the
+    proposer to create a new type.
+
+    Capped and cycle-guarded, because §5.9 does not forbid constructing a cycle.
+    """
+    for name in ("status_bearing", "svc_status", "service_status"):
+        await seed(registry, name, definition="a word about status")
+
+    # `force=True` so the subject stays reachable on a backend that cannot compute an
+    # extent: the consumer guard is scaffolding here, and `C9-18` is its subject.
+    first = await registry.retire(
+        "status_bearing", "renamed", retired_by="user:sd", successor="svc_status",
+        force=True,
+    )
+    assert isinstance(first, TypeEntry), first
+    second = await registry.retire(
+        "svc_status", "renamed again", retired_by="user:sd",
+        successor="service_status", force=True,
+    )
+    assert isinstance(second, TypeEntry), second
+
+    resolution = await registry.resolve_type("status_bearing", ResolveContext(), tier="opus")
+    assert resolution.outcome == "existing", (
+        "5.10 promises the old word still resolves; one hop lost it on the second pass"
+    )
+    assert resolution.type is not None and resolution.type.name == "service_status"
+    assert resolution.type.status == "active"
+    assert resolution.confidence == 1.0
+
+    # **...and a CYCLE is SURVIVED rather than refused.** Nothing in 5.9 forbids
+    # constructing one -- `_identity_closure`'s own docstring says so, and this test's
+    # first draft asserted a refusal that does not exist. What the walk owes is
+    # termination and an honest answer: both words are retired, so neither redirects.
+    for name in ("alpha", "beta"):
+        await seed(registry, name, definition="a word")
+    assert isinstance(
+        await registry.retire(
+            "alpha", "folded", retired_by="user:sd", successor="beta", force=True
+        ),
+        TypeEntry,
+    )
+    assert isinstance(
+        await registry.retire(
+            "beta", "folded back", retired_by="user:sd", successor="alpha", force=True
+        ),
+        TypeEntry,
+    )
+    for word in ("alpha", "beta"):
+        looped = await registry.resolve_type(word, ResolveContext(), tier="opus")
+        assert looped.outcome != "existing", (
+            f"both words are retired, so {word!r} redirects to nothing -- and the walk "
+            f"must terminate rather than follow the cycle"
         )

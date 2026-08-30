@@ -243,6 +243,18 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
     # is a guard somebody thinks is being checked and is not* -- failed until the entry
     # came out again. Both halves earned their keep inside one row, so the churn is
     # recorded rather than tidied away.
+    "_alias_map": CallerVerdict(
+        False,
+        "**READS** every ACTIVE row's `aliases` in one `(namespace, kind)` and hands "
+        "back `{word -> the live row that answers to it}` -- the mirror of "
+        "`_successor_map`, added by row 4d's SECOND round because `_identity_closure` "
+        "walked the successor relation both ways and the alias relation only ONE way, so "
+        "an identity written the way `import_types` writes one (an alias onto a live row, "
+        "with no row of that name) was findable from the survivor and **invisible** from "
+        "the absorbed word. It builds a map; it writes no row. Flagged by the over-broad "
+        "scan the minute it was added, which is Part A working: a new function naming an "
+        "identity field fails this check until a person writes down what it means.",
+    ),
     "_search_namespaces": CallerVerdict(
         False,
         "**READS** `rec.successor` to build the sentence R6's cross-namespace lookup "
@@ -970,14 +982,26 @@ def _stale_probe_merge(registry: Registry, *, knowable: bool) -> str | None:
 
 
 def _stale_probe_retire(registry: Registry, *, knowable: bool) -> str | None:
-    """`retire('searchable', successor='taggable')` -- and the answer is NOT symmetrical.
+    """`retire('searchable', successor='taggable')` on Door 1's store.
 
-    On a leg that can read both extents to the end this collapse is **legal**: those two
-    predicates genuinely agree now, and `retire` writes no alias, so `commentable` is left
-    resolving to a retired word and falls back to `proposal`. The row asserts both halves
-    -- that the guard stays narrowed rather than banned, **and** that the collapse it
-    declined to refuse does not reach `commentable` anyway. Where the extents cannot be
-    read to the end (the three doubles) Rule U binds and the same call must be REFUSED.
+    **The row asserts the INVARIANT, not a verdict, and getting that wrong twice is why**
+    (row 4d, rounds 1 and 2). What matters is that the collapse `merge_types` refuses
+    non-overridably is not reachable by retiring the word in the middle:
+    `resolve_type('commentable')` must not answer `taggable` at confidence 1.0. Whether
+    the call refuses or allows is the registry's business, provided that holds — and it
+    changed **twice** while this row was open:
+
+    * **round 1** filed all three degraded doubles as *unknowable* and required a REFUSAL
+      on each. On `partial` that was wrong: an honest page carries a cursor, `_extent`
+      loops to exhaustion, and the two extents genuinely agree;
+    * **round 2** made `resolve_type` follow the successor CHAIN, which re-pointed every
+      alias `searchable` carries at `taggable` — so `retire` gained the transferred-alias
+      guard `merge_types` has carried since `C10-13`, and the call this row had asserted
+      *legal* became correctly refused.
+
+    A fixture that asserts a verdict has to be rewritten every time a guard moves; one
+    that asserts the invariant does not. **The invariant is the thing the kill row is
+    about.**
     """
     result = registry.retire(
         "searchable",
@@ -986,28 +1010,23 @@ def _stale_probe_retire(registry: Registry, *, knowable: bool) -> str | None:
         successor="taggable",
         force=True,
     )
-    identity_reasons = {"predicate_merge", "kind_mismatch", "different_consumer_sets"}
-    if not knowable:
-        if not isinstance(result, Refusal):
-            return (
-                "retire(successor=) COLLAPSED `searchable` into `taggable` with "
-                "force=True on a backend that cannot read either extent to the end -- "
-                "Rule U: an extent that could not be computed is not an identical extent, "
-                "and `force` overrides what could be SEEN, never what would become TRUE"
-            )
-        if result.detail.get("overridable") is not False:
+    identity_reasons = {
+        "predicate_merge", "kind_mismatch", "different_consumer_sets",
+        "successor_unregistered",
+    }
+    if isinstance(result, Refusal):
+        if result.reason in identity_reasons and result.detail.get("overridable") is not False:
             return (
                 f"retire(successor=)'s {result.reason!r} does not declare itself "
-                f"non-overridable"
+                f"non-overridable -- `force` overrides what could be SEEN, never what "
+                f"would become TRUE"
             )
-        return None
-    if isinstance(result, Refusal) and result.reason in identity_reasons:
-        return (
-            f"retire(successor=) refused {result.reason!r} a pair whose extents are "
-            f"non-empty and identical RIGHT NOW -- the guard is narrowed, not banned "
-            f"(`C10-09`'s whole content), and a registry that refuses every predicate "
-            f"collapse passes a checker that only tests refusals"
-        )
+        if result.reason not in identity_reasons | {"cannot_record_override"}:
+            return (
+                f"retire(successor=) refused {result.reason!r} on the stale fixture. A "
+                f"non-overridable identity guard reached through some OTHER refusal is "
+                f"`C9-19`'s defect class: the outcome is safe and the story is wrong"
+            )
     after = registry.resolve_type("commentable", ResolveContext(), tier="unspecified")
     if after.type is not None and after.type.name == "taggable" and after.confidence == 1.0:
         return (

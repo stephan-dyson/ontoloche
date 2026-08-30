@@ -1,4 +1,4 @@
-"""C10 -- ``merge_types``, and the doors its operands come through (16). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the doors its operands come through (18). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -802,3 +802,98 @@ def test_c10_16_the_stale_warning_survives_every_spelling(adapter, make_registry
                 f"{spelling!r} reached the same 1.0 redirect as 'commentable' and said "
                 f"nothing about the two extents no longer agreeing: {kwargs}"
             )
+
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+def test_c10_17_retire_validates_the_aliases_its_successor_inherits(adapter, make_registry):
+    """**Door 1 with a different second act — reopened by a fix for something else.**
+    Row 4d, round 2, found by `check_merge_guard.py`'s stale axis within a minute.
+
+    `retire(successor=)` writes no alias, which is exactly why the sixth trip's Door 1
+    did not reach this call while `resolve_type` followed a single hop: `commentable`
+    resolved to a retired `searchable` and fell back to `proposal`. **Round 2 made
+    `resolve_type` follow the chain** — correctly, because one store cannot answer
+    `proposal` at one door and name a live identity at three others — and the same change
+    re-pointed every alias `searchable` carries at `taggable`, uncompared.
+
+    `merge_types` has carried this guard since `C10-13`. The difference between the two
+    calls was never the identity claim, only which write made it.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable", "taggable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    for member in ("aaa_note", "bbb_memo", "ccc_card"):
+        seed(registry, member, predicates=["commentable", "searchable", "taggable"])
+    first = registry.merge_types(
+        "commentable", "searchable", "identical extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(first, Refusal), first
+    seed(registry, "zzz_doc", predicates=["searchable", "taggable"])
+
+    refusal = registry.retire(
+        "searchable", "folded", retired_by="user:sd", successor="taggable", force=True,
+    )
+    assert isinstance(refusal, Refusal), (
+        "`searchable` and `taggable` agree -- but `searchable` carries `commentable`'s "
+        "alias, which the chain now re-points at `taggable`, and those two do not"
+    )
+    assert refusal.detail["overridable"] is False
+    assert "commentable" in refusal.detail.get("transferred_aliases", [])
+
+    after = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert not (
+        after.type is not None
+        and after.type.name == "taggable"
+        and after.confidence == 1.0
+    ), "the collapse the registry refuses when asked directly is not reachable by asking twice"
+
+
+@pytest.mark.requires_capability("indexes_membership", "stores_aliases", "stores_events")
+def test_c10_18_the_fifth_identity_guard_answers_above_the_capability_gate(
+    adapter, make_registry
+):
+    """**The story is what a caller acts on.** Row 4d, round 2.
+
+    Round 1 moved the transferred-alias check above the three OVERRIDABLE guards and left
+    it below `cannot_record_override`. So on a `stores_events=False` backend an
+    acknowledging caller was told **the audit log is missing** about a collapse that never
+    moves — which is verbatim what that gate's own note says it must not do for the four
+    guards above it: *a caller trying to acknowledge past the kill row must be told
+    `predicate_merge`, non-overridable, not that the audit log is missing.*
+
+    This is the **fifth** non-overridable identity guard and it belongs with the other
+    four. `C9-19`'s defect class, one round along, in the fix for `C9-19`'s defect class.
+
+    UC1: Tenshen's 2B is a third backend behind the adapter — a host-owned event log is
+    that shape, and the operator would have been told to fix their logging.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable", "taggable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable", "taggable"])
+    assert not isinstance(
+        registry.merge_types(
+            "commentable", "searchable", "identical", merged_by="user:sd",
+            acknowledge=["definitions_diverge", "no_consumer_evidence"],
+        ),
+        Refusal,
+    )
+    seed(registry, "doc", predicates=["searchable", "taggable"])
+
+    blind = make_registry(
+        DegradedAdapter(adapter, stores_events=False), approval_policy="auto"
+    )
+    refusal = blind.merge_types(
+        "searchable", "taggable", "the same thing", merged_by="user:sd",
+        acknowledge=[
+            "definitions_diverge", "no_consumer_evidence", "retired_operand",
+            "predicate_merge", "kind_mismatch",
+        ],
+    )
+    assert isinstance(refusal, Refusal)
+    assert refusal.reason == "predicate_merge", (
+        f"the caller is told what would become TRUE, not that the audit log is missing: "
+        f"{refusal.reason}"
+    )
+    assert refusal.detail["overridable"] is False

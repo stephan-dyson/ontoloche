@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C6 -- ``list_types`` (8). Mechanism 2: nobody could find the existing types."""
+"""C6 -- ``list_types`` (9). Mechanism 2: nobody could find the existing types."""
 
 from __future__ import annotations
 import pytest
@@ -241,3 +241,51 @@ async def test_c6_08_the_predicate_filter_resolves_the_identity_per_namespace(
     await seed(registry, "leaflet", predicates=["nobody_registered_this"])
     dangling = await registry.list_types(predicate="nobody_registered_this", namespace="default")
     assert {t.name for t in dangling.types} == {"leaflet"}
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+async def test_c6_09_an_identity_written_only_as_an_alias_is_found_both_ways(
+    adapter, make_registry
+):
+    """**`known=0` about types the registry can see.** Row 4d, round 2.
+
+    `_identity_closure` walked the successor relation **both** ways and the alias
+    relation only **one**: it extended its frontier with a row's own aliases, and never
+    asked *which live row answers to THIS word as an alias*. So an identity written the
+    way a foreign dump writes one — `import_types` putting `aliases: ["borough_scoped"]`
+    onto `geo_scoped`, with no row ever named `borough_scoped` — was findable from the
+    survivor and **invisible** from the absorbed word:
+
+    | call | answer |
+    |---|---|
+    | `resolve_type("borough_scoped")` | `geo_scoped` at **1.0** |
+    | `propose_type(predicates=["borough_scoped"])` | `declared_predicate_merged` |
+    | `list_types(predicate="geo_scoped")` | both members |
+    | `list_types(predicate="borough_scoped")` | **`[]`, `known=0`** |
+
+    One store, three doors saying the two words are one identity and a fourth answering a
+    **confident zero** — §5.2's own named failure mode, in the call ruling **R54** exists
+    to fix. It also falsified §5.6.1-1 as written; `C6-08` could not catch it because it
+    builds every identity with `merge_types`, and a merge writes a **row**.
+
+    **UC3:** an export's alias column is how a legacy word survives, and `import_types`
+    is the ingestion wedge's landing path.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "geo_scoped", kind="predicate", definition="a capability")
+    await seed(registry, "bike_rack", predicates=["geo_scoped"])
+    await seed(registry, "street_segment", predicates=["geo_scoped"])
+    imported = (await registry.import_types(
+        [{"name": "geo_scoped", "kind": "predicate", "definition": "a capability",
+          "aliases": ["borough_scoped"], "status": "active"}],
+        namespace="default", kind="predicate",
+    ))[0]
+    assert "borough_scoped" in (imported.aliases or ()), imported.warnings
+
+    survivor = await registry.list_types(namespace="default", predicate="geo_scoped")
+    absorbed = await registry.list_types(namespace="default", predicate="borough_scoped")
+    assert {t.name for t in survivor.types} == {"bike_rack", "street_segment"}
+    assert {t.name for t in absorbed.types} == {"bike_rack", "street_segment"}, (
+        "one identity, and the answer cannot depend on which of its names was used -- "
+        "5.6.1-1, which was false for the alias-only shape"
+    )
+    assert absorbed.known == 2, "and `known` is not a confident zero"

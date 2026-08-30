@@ -1,4 +1,4 @@
-"""C9 -- ``retire`` and ``reinstate`` (23). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (24). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -1067,3 +1067,49 @@ def test_c9_23_reinstate_asks_the_collision_question_its_sibling_asks(
         t.status for t in registry.list_types(namespace="default", include_retired=True).types
         if t.name == "searchable"
     ] == ["retired"]
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_24_reinstate_asks_the_mirror_question_and_a_word_is_not_its_own_successor(
+    adapter, make_registry
+):
+    """**Two halves of `reinstate`/`retire` that round 1's fixes left open.** Round 2.
+
+    **(a) The mirror case.** Round 1 gave `reinstate` `_alias_clash` over the aliases the
+    row being brought back carries — fenced behind `if dormant:`. The row may carry
+    **none** while another live row holds **its name** as an alias, which is exactly the
+    shape `import_types` writes, and that never entered the branch. Four ordinary calls
+    then left two live entries under one word. `rec.name` is already in `_alias_clash`'s
+    own `wanted` set, so the dormant-free case is precisely what it covers.
+
+    **(b) A word is not its own successor.** `retire(X, successor=X)` was accepted, and
+    the tombstone then said *"this word now means this word"* — a claim nobody made, and
+    a cycle `_identity_closure` has to keep guarding for no reason.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    seed(registry, "commentable", definition="a word")
+    seed(registry, "searchable", definition="a word")
+    assert isinstance(
+        registry.retire("commentable", "parked", retired_by="user:sd", force=True),
+        TypeEntry,
+    )
+    held = registry.import_types(
+        [{"name": "searchable", "kind": "entity", "definition": "a word",
+          "aliases": ["Commentable"], "status": "active"}],
+        namespace="default", kind="entity",
+    )[0]
+    assert "Commentable" in (held.aliases or ()), held.warnings
+
+    refusal = registry.reinstate("commentable", "we want it back", reinstated_by="user:sd")
+    assert isinstance(refusal, Refusal), (
+        "`searchable` answers to this word already -- reinstating leaves two live "
+        "entries holding one word, which is 5.9b's own named failure"
+    )
+    assert refusal.reason == "alias_collision"
+    assert refusal.detail["overridable"] is False
+
+    # (b)
+    seed(registry, "aaa", definition="a word")
+    selfish = registry.retire("aaa", "x", retired_by="user:sd", successor="aaa")
+    assert isinstance(selfish, Refusal) and selfish.reason == "successor_unregistered"
+    assert registry.adapter.get_type("default", "aaa").status == "active", "nothing written"

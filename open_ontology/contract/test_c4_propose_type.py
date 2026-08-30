@@ -1,4 +1,4 @@
-"""C4 -- ``propose_type`` (12). Mechanism 1: no review.
+"""C4 -- ``propose_type`` (13). Mechanism 1: no review.
 
 The call that makes an addition a *request* rather than a fact. It refuses exactly two
 things and warns about everything else -- refusing a near-duplicate is how you flatten a
@@ -327,4 +327,65 @@ def test_c4_12_a_word_is_re_checked_at_the_write_and_a_partial_look_says_so(
     assert any(w.startswith("alias_check_incomplete:") for w in out.warnings), (
         "the scan read a page the backend had already said was partial; reporting that "
         "is Rule U, and swallowing it is how a truncated look reads as `free`"
+    )
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+def test_c4_13_two_legal_names_that_are_one_word_cannot_both_go_live(adapter, make_registry):
+    """**Mechanism 4 with no alias, no merge and no retirement.** Row 4d, round 2.
+
+    `NAME_RE` is `^[a-z][a-z0-9_]{0,63}$`, so `commentable` and `commentable_`, and
+    `bike_lane` and `bike__lane`, are all legal **names** that `identity_key` maps to one
+    word — and the shipped resolver therefore scores each pair at **1.0**. Round 1
+    published that key and re-keyed the alias guards; `_alias_holder` still compared the
+    incoming word only against other rows' **aliases**, never against their **names**,
+    and skipped a *different* same-kind row as *"that's me"* because its self-test was
+    keyed too.
+
+    So two ordinary `propose_type` + `approve` calls created two ACTIVE predicates over
+    extents `merge_types` refuses to unify non-overridably, and `resolve_type` answered
+    one of them at 1.0. **UC3 is dozens of agencies normalising their own column
+    headers**: `"Borough"` → `borough` and `"Borough:"` → `borough_` is the ordinary
+    case.
+
+    All three write doors are asserted, and so is the narrowing that a careless fix
+    breaks: `PACKAGE.md` §4.1 **blesses** one word under two kinds, and that must stay
+    legal.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    seed(registry, "commentable", kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable"])
+
+    refused = registry.propose_type(
+        "commentable_", "a capability", [Evidence(kind="data", summary="a sample")],
+        "user:sd", kind="predicate",
+    )
+    assert isinstance(refused, Refusal), (
+        "`commentable_` and `commentable` are one word to the resolver, which scores the "
+        "pair 1.0 -- two live rows under it is mechanism 4 itself"
+    )
+    assert refused.reason == "alias_collision"
+    assert refused.detail["overridable"] is False
+    assert refused.detail["held_by"] == "commentable"
+
+    seed(registry, "bike_lane", kind="predicate", definition="a capability")
+    again = registry.import_types(
+        [{"name": "bike__lane", "kind": "predicate", "definition": "a capability",
+          "status": "active"}],
+        namespace="default", kind="predicate",
+    )[0]
+    assert "import_refused:alias_collision" in again.warnings, (
+        f"`bike__lane` and `bike_lane` are one word; the sibling write door must give "
+        f"the same answer to the same act: {again.warnings}"
+    )
+
+    # **The narrowing.** PACKAGE.md 4.1 blesses one word under two kinds, and C0-11 pins
+    # that `get_type` raises there -- so the guard is per-KIND and must stay so.
+    both_kinds = registry.propose_type(
+        "commentable", "a different thing entirely",
+        [Evidence(kind="data", summary="a sample")], "user:sd", kind="entity",
+    )
+    assert not isinstance(both_kinds, Refusal), (
+        "one word under two KINDS is blessed by PACKAGE.md 4.1; refusing it would make "
+        "this row reject vocabularies the specification permits"
     )
