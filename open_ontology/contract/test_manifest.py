@@ -27,10 +27,10 @@ EXPECTED_PER_GROUP = {
     6: 7,
     7: 7,
     8: 6,
-    9: 18,
+    9: 19,
     10: 10,
     11: 5,
-    12: 7,
+    12: 9,
     13: 5,
     14: 7,
     15: 13,
@@ -38,7 +38,7 @@ EXPECTED_PER_GROUP = {
     17: 47,
     18: 10,
 }
-TOTAL = 211
+TOTAL = 214
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 
@@ -96,6 +96,47 @@ def test_the_spec_still_describes_the_code():
         import pytest
 
         pytest.skip("PENDING -- docs/tools/check_spec_drift.py is not in this install")
+
+    done = subprocess.run(
+        [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_the_kill_row_is_guarded_at_every_caller_and_in_every_state():
+    """Not one of the ids -- suite bookkeeping, and the gate row 4c was told to build.
+
+    `ROADMAP.md`'s kill row -- *"a capability predicate gets merged as a duplicate ->
+    Stop. This is the failure that destroys meaning"* -- **tripped three times in one
+    day**, and the supervisor's ruling after the third was explicit: *"the fix owed is a
+    checker, not a fourth patch."* ``docs/tools/check_merge_guard.py`` is that checker,
+    and it runs here for the reason ``check_spec_drift.py`` does: a guard that is only
+    verified when somebody remembers to run a script is a guard nobody is verifying.
+
+    It has two halves and neither is sufficient alone. **Part A** discovers, from
+    ``registry.py``'s own AST, every function that writes a ``successor`` or an
+    ``aliases`` onto a stored record -- the two fields that change what a name RESOLVES
+    to -- and fails on any it has not been told about, because whether a caller can
+    collapse two identities is a person's judgement and has to be written down. **Part
+    B** drives every collapsing caller through every state a predicate extent pair can
+    be in -- known-different, known-equal, empty, unknowable, kind-mismatch -- on every
+    leg, and checks the guard's answer for each.
+
+    **Part A found the kill row's fourth trip on its first run**, in `import_types`.
+
+    Skipped rather than failed when the checked-in tools are not on disk, since an
+    installed wheel does not ship ``docs/``.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    checker = root / "docs" / "tools" / "check_merge_guard.py"
+    if not checker.exists():  # pragma: no cover - an installed wheel has no docs/
+        import pytest
+
+        pytest.skip("PENDING -- docs/tools/check_merge_guard.py is not in this install")
 
     done = subprocess.run(
         [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)

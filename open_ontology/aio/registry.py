@@ -1761,55 +1761,6 @@ class AsyncRegistry:
         if not reason or not reason.strip():
             raise ValueError("retire requires a non-empty reason")
         rec = await self._require(namespace, type)
-        report = await self._consumer_report(rec)
-
-        # **A destructive override that cannot be recorded is refused -- whichever guard
-        # it is overriding.** This used to be checked only inside the `live_consumers`
-        # branch, so on a backend that also declares `indexes_membership=False`
-        # `gates_on` was always empty, the branch never ran, and `force=True` retired a
-        # type with a real registered gating consumer leaving **no refusal, no warning
-        # and no history**. That is Tenshen's own declared shape (PACKAGE.md 7.3 B3 and
-        # B6 together), and B6 states in terms that this case returns
-        # `cannot_record_override`. `merge_types` had the unconditional form since v0;
-        # `retire` now matches it. Row 3c, after an adversarial review round.
-        if force and not self.caps.stores_events:
-            return Refusal(
-                "cannot_record_override",
-                {
-                    "why": self.caps.reason("stores_events"),
-                    "type": type,
-                    "would_override": [c.id for c in report.gates_on],
-                    "gates_on_knowable": self.caps.indexes_membership,
-                },
-            )
-
-        if report.gates_on and not force:
-            return Refusal(
-                "live_consumers",
-                {"gates_on": [c.id for c in report.gates_on], "type": type},
-            )
-        # An EMPTY gates_on means "nothing gates on this" only when we were able to
-        # look. On a backend that cannot index membership, every extent is empty, so
-        # `gates_on` is empty for a reason that means *we could not check* -- and
-        # retiring on that is mechanism C committed by the call built to catch it.
-        # 5.10 already takes this line for merge_types; retire takes it too, and
-        # `force=True` is the override, recorded in history like any other.
-        # Row 3c, after an adversarial review round reproduced the silent retirement.
-        if not report.gates_on and not self.caps.indexes_membership and not force:
-            return Refusal(
-                "no_consumer_evidence",
-                {
-                    "why": (
-                        "this backend cannot compute a predicate's extent, so an empty "
-                        "`gates_on` means we could not look, not that nothing gates on "
-                        "it: " + (self.caps.reason("indexes_membership") or "")
-                    ),
-                    "type": type,
-                    "overridable": True,
-                    "override_with": "force=True",
-                },
-            )
-
 
         # **`retire(successor=)` IS a collapse, and it gets the merge's guards.**
         # `resolve_type` on a retired name returns its successor at confidence 1.0
@@ -1868,6 +1819,73 @@ class AsyncRegistry:
                                 "overridable": False,
                             },
                         )
+
+        # **The identity guards run FIRST, and that ordering is row 3c's lesson applied
+        # to this call** (row 4c, found by `check_merge_guard.py`). `merge_types` moved
+        # its `cannot_record_override` check to *after* its four non-overridable
+        # refusals for exactly this reason: *"a caller trying to acknowledge past the
+        # kill row must be told **predicate_merge, non-overridable**, not that the audit
+        # log is missing."*
+        #
+        # `retire` had the same defect the other way round. **[Observed, row 4c, on
+        # `sqlite_minimal`]** retiring one predicate with another as its successor, on a
+        # backend that cannot index membership, was refused `no_consumer_evidence` --
+        # which is **overridable** with `force=True` -- while the true answer was
+        # `predicate_merge`, which is not overridable at all. The outcome was safe (the
+        # forced call then met the identity guard), but the caller was told to do
+        # something that could not work, about a collapse the registry will never
+        # permit. Same class as the third trip: the right refusal reached by the wrong
+        # route.
+
+        report = await self._consumer_report(rec)
+
+        # **A destructive override that cannot be recorded is refused -- whichever guard
+        # it is overriding.** This used to be checked only inside the `live_consumers`
+        # branch, so on a backend that also declares `indexes_membership=False`
+        # `gates_on` was always empty, the branch never ran, and `force=True` retired a
+        # type with a real registered gating consumer leaving **no refusal, no warning
+        # and no history**. That is Tenshen's own declared shape (PACKAGE.md 7.3 B3 and
+        # B6 together), and B6 states in terms that this case returns
+        # `cannot_record_override`. `merge_types` had the unconditional form since v0;
+        # `retire` now matches it. Row 3c, after an adversarial review round.
+        if force and not self.caps.stores_events:
+            return Refusal(
+                "cannot_record_override",
+                {
+                    "why": self.caps.reason("stores_events"),
+                    "type": type,
+                    "would_override": [c.id for c in report.gates_on],
+                    "gates_on_knowable": self.caps.indexes_membership,
+                },
+            )
+
+        if report.gates_on and not force:
+            return Refusal(
+                "live_consumers",
+                {"gates_on": [c.id for c in report.gates_on], "type": type},
+            )
+        # An EMPTY gates_on means "nothing gates on this" only when we were able to
+        # look. On a backend that cannot index membership, every extent is empty, so
+        # `gates_on` is empty for a reason that means *we could not check* -- and
+        # retiring on that is mechanism C committed by the call built to catch it.
+        # 5.10 already takes this line for merge_types; retire takes it too, and
+        # `force=True` is the override, recorded in history like any other.
+        # Row 3c, after an adversarial review round reproduced the silent retirement.
+        if not report.gates_on and not self.caps.indexes_membership and not force:
+            return Refusal(
+                "no_consumer_evidence",
+                {
+                    "why": (
+                        "this backend cannot compute a predicate's extent, so an empty "
+                        "`gates_on` means we could not look, not that nothing gates on "
+                        "it: " + (self.caps.reason("indexes_membership") or "")
+                    ),
+                    "type": type,
+                    "overridable": True,
+                    "override_with": "force=True",
+                },
+            )
+
 
         usage = await self._usage_report(rec)
         warnings = list(rec.warnings)
@@ -2649,6 +2667,24 @@ class AsyncRegistry:
             # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
             incoming = tuple(row.get("aliases") or ())
             if incoming and status != "retired":
+                # **The identity guards run FIRST, and the order is the finding.**
+                # `_alias_clash` asks *"is this word already spoken for by something
+                # ALIVE?"*; this asks *"would this alias make one word resolve to a
+                # different identity?"*, which a RETIRED name reaches and a collision
+                # check cannot see. Row 4c; see `_alias_identity_breach`.
+                breach = await self._alias_identity_breach(
+                    namespace, name, row.get("kind", kind), incoming
+                )
+                if breach is not None:
+                    reason, sentence = breach
+                    out.append(
+                        await self._entry(standing, extra_warnings=(f"import_refused:{reason}",))
+                        if standing is not None
+                        else self._refused_import(
+                            namespace, name, sentence, reason=reason
+                        )
+                    )
+                    continue
                 clash = await self._alias_clash(namespace, name, row.get("kind", kind), incoming)
                 if clash is not None:
                     out.append(
@@ -4224,6 +4260,75 @@ class AsyncRegistry:
                 "default", "seeded", "seed", kind="edge", name=EQUIVALENT_TO,
                 detail={"why": "EDGES.md 3.1, ruling R7"},
             )
+
+    async def _alias_identity_breach(
+        self, namespace: str, name: str, kind: str, aliases: Sequence[str]
+    ) -> tuple[str, str] | None:
+        """§5.10's identity guards #2 and #3, applied to an ALIAS write. Row 4c.
+
+        ``(Refusal.reason, sentence)`` or ``None``.
+
+        **This is the kill row's FOURTH trip, and it was found by the caller enumeration
+        `check_merge_guard.py` was mandated to do** (row #6 round 3's ruling: *"the fix
+        owed is a checker, not a fourth patch"* -- and the checker's first act was to
+        enumerate the callers that change what a name resolves to and find one nobody
+        had guarded).
+
+        **What happened [Observed, row 4c], reproduced end to end against the shipped
+        registry:** `commentable` and `searchable`, two live predicates with genuinely
+        different non-empty extents (`{note}` and `{doc}`). `merge_types` refuses that
+        pair **non-overridably** under every acknowledgement. `commentable` is then
+        retired -- an ordinary, permitted governance act with no successor -- and
+        `import_types` writes `aliases: ["commentable"]` onto `searchable` with **no
+        refusal, no warning and no acknowledgement**. `resolve_type("commentable")` goes
+        from `proposal / None / 0.4762` to **`existing / searchable / 1.0`**, a
+        confidence INTERFACE.md 5.3 calls a registry GUARANTEE, while the two extents
+        stay different. *A capability predicate merged as a duplicate*, through the alias
+        door.
+
+        **Why `_alias_clash` did not catch it.** That guard refuses when an alias is a
+        **live** entry's name, because `alias_collision` exists to stop *two active
+        entries holding one word between them* (5.9b). A retired name is not a live
+        entry -- but **a retired predicate name still RESOLVES, and a retired predicate
+        still has an extent.** The guard was written for a collision and the failure is a
+        collapse; they are different questions about the same write.
+
+        **The diagnosis is the third trip's, widened once more:** a guard written for one
+        call, over a fact that more than one call can change -- now with a second axis,
+        because this caller reaches the collapse through a different FIELD (`aliases`
+        rather than `successor`) as well as through a different call. Both fields
+        re-point what a name resolves to, so both carry the identity guards.
+
+        Non-overridable, exactly as they are on `merge_types` and on `retire`: `force`
+        and acknowledgement override what could be SEEN, never what would become TRUE.
+        """
+        for alias in aliases:
+            other = await self.adapter.get_type(namespace, alias)
+            if other is None or (other.name == name and other.kind == kind):
+                continue
+            if other.kind != kind:
+                return (
+                    "kind_mismatch",
+                    f"importing {alias!r} as an alias of {namespace}:{kind}:{name} would "
+                    f"make `resolve_type({alias!r})` answer at confidence 1.0 with an "
+                    f"entry of kind {other.kind!r} -- a question about one kind answered "
+                    f"with an entry of another (INTERFACE.md 5.10 refusal #3)",
+                )
+            if kind == "predicate" or other.kind == "predicate":
+                knowable = self.caps.indexes_membership
+                left = set((await self._extent(namespace, other.name, True))[0])
+                right = set((await self._extent(namespace, name, True))[0])
+                if not knowable or not left or left != right:
+                    return (
+                        "predicate_merge",
+                        f"importing {alias!r} as an alias of {namespace}:predicate:"
+                        f"{name} would make `resolve_type({alias!r})` answer at "
+                        f"confidence 1.0 with {name!r} -- the same claim `merge_types` "
+                        f"refuses non-overridably unless the two extents are non-empty "
+                        f"and identical (INTERFACE.md 5.10 refusal #2, the ROADMAP.md "
+                        f"kill row)",
+                    )
+        return None
 
     async def _alias_clash(
         self, namespace: str, name: str, kind: str, aliases: Sequence[str]
