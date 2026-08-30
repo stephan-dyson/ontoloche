@@ -186,6 +186,14 @@ class _DegradedBase:
                 if self._edge_store_shares_connection is None
                 else self._edge_store_shares_connection
             ),
+            # ACTIONS.md 8.2 binds the ACTION scope to the type scope on one connection
+            # for the same reason the edge scope is bound, so it follows whatever the
+            # type scope was forced to. A double that forced `transaction_scope` and
+            # left this at `owned` would be non-conformant by construction.
+            action_transaction_scope=(
+                self._transaction_scope or base.action_transaction_scope
+            ),
+            action_store_shares_connection=base.action_store_shares_connection,
         )
 
     async def migrate(self) -> int:
@@ -351,13 +359,51 @@ class _DegradedBase:
         return await self.inner.append_event(rec)
 
     async def read_events(
-        self, namespace: str, *, kind=None, name=None, proposal_id=None, edge_id=None
+        self,
+        namespace: str,
+        *,
+        kind=None,
+        name=None,
+        proposal_id=None,
+        edge_id=None,
+        invocation_id=None,
     ):
         if not (await self.capabilities()).stores_events:
             raise NotSupported((await self.capabilities()).reason("stores_events"))
         return await self.inner.read_events(
-            namespace, kind=kind, name=name, proposal_id=proposal_id, edge_id=edge_id
+            namespace,
+            kind=kind,
+            name=name,
+            proposal_id=proposal_id,
+            edge_id=edge_id,
+            invocation_id=invocation_id,
         )
+
+    # ------------------------------------------------------------------ 19 to 21
+    async def _need_invocations(self) -> None:
+        if not (await self.capabilities()).stores_invocations:
+            raise NotSupported((await self.capabilities()).reason("stores_invocations"))
+
+    async def put_invocation(self, rec):
+        await self._need_invocations()
+        return await self.inner.put_invocation(rec)
+
+    async def get_invocation(self, invocation_id: str):
+        await self._need_invocations()
+        return await self.inner.get_invocation(invocation_id)
+
+    async def find_invocations(self, **kwargs):
+        await self._need_invocations()
+        caps = await self.capabilities()
+        if not caps.indexes_invocations_by_family and kwargs.get("family") is not None:
+            # ACTIONS.md 8's third flag, and it takes `find_edges`' treatment rather than
+            # `find_types`': *"correctness is unchanged -- the registry filters above the
+            # store"*, because a family filter on an unindexed ledger is a SCAN and not
+            # an unanswerable question. The scan may hit `limit`, and then `complete` is
+            # False with the backend's own sentence -- which is what the wrapper produces
+            # by dropping the filter and letting the page bound itself.
+            kwargs = {**kwargs, "family": None}
+        return await self.inner.find_invocations(**kwargs)
 
     # ------------------------------------------------------------------ 16 to 18
     async def _need_edges(self) -> None:

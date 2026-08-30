@@ -141,11 +141,16 @@ REFUSAL_REASONS = (
     # exactly this.
     "alias_collision",
     # ACTIONS.md v0, row #6, 2026-08-29 -- twenty-two through twenty-seven. Introduced by
-    # a SPEC, not by code, exactly as EDGES.md v0's four were: row #6 ships no action
-    # store, so nothing in this package returns any of the six yet. They are enumerated
-    # here anyway because R3's rule is that the vocabulary is closed and amended in the
-    # change that introduces a value. (The EDGES four ARE returned now -- row 4b
-    # implemented them -- so twenty-one of the twenty-seven are reachable by code today.)
+    # a SPEC, not by code, exactly as EDGES.md v0's four were: row #6 shipped no action
+    # store. They were enumerated here anyway because R3's rule is that the vocabulary is
+    # closed and amended in the change that introduces a value.
+    #
+    # **Row 6b makes all seven reachable**, which is the other half of R3's bargain: a
+    # value specified in a spec and returned by nothing is a promise, and the build row
+    # is where it becomes a contract. Every one is now pinned by a `C19` id on all three
+    # legs, and `check_spec_drift.py` reads `ACTIONS.md`'s printed shapes and closed
+    # vocabularies for the first time -- which is what 14 asked for, in the change that
+    # lands the code rather than a row early.
     "action_family_unknown",     # ACTIONS 7 -- no such kind="action" entry
     "precondition_unmet",        # ACTIONS 2.4 -- a declared condition is false OR unknown
     "human_approval_required",   # ACTIONS 2.2/5.2 -- irreversible declared non-human, or
@@ -227,7 +232,8 @@ WARNING_VALUES = (
     # Refusal.reason; the UC1 design test moved it here, because refusing to RECORD an
     # invocation whose host reported an undeclared effect destroys the only evidence that
     # the undeclared effect happened. Carried on `Invocation`, one per surplus effect;
-    # `invocations(effect_undeclared=True)` enumerates them. No v0 code path emits it.
+    # `invocations(effect_undeclared=True)` enumerates them.
+    # Returned by `record_invocation` since row 6b, one per surplus effect.
     "effect_undeclared",
     # ACTIONS.md v0, row #6, adversarial round 1 -- the twenty-fourth. `Invocation`,
     # when `outcome="applied"` and no approver is known: the gate was not asked, or
@@ -237,6 +243,7 @@ WARNING_VALUES = (
     # `EdgeProvenance` to avoid ("a field whose only honest value is a lie"). A null
     # plus this warning is the honest form; the never-null rule binds only where the
     # gate actually decided.
+    # Returned by `record_invocation` since row 6b.
     "approval_unrecorded",
     # ACTIONS.md v0, row #6, adversarial round 2 -- the twenty-fifth. `Invocation`,
     # when the host passes back the `Preflight` it acted on and the family has been
@@ -246,6 +253,7 @@ WARNING_VALUES = (
     # the rule says it prevents: a reviewer widened a family between the two calls
     # and an undeclared `retract_edge` was laundered into the ledger with no warning.
     # The fix is to record what the gate judged; this says when the two differ.
+    # Returned by `record_invocation(judged=...)` since row 6b.
     "declaration_amended",
     # EDGES.md 2.5, ruling **R34**, row 4c -- the twenty-sixth. `Edge`, when the family
     # declares a `payload_schema` and no schema of that name is in force in the

@@ -207,6 +207,52 @@ async def edge_family(
         },
     )
 
+async def action_family(
+    registry,
+    name: str,
+    *,
+    reversibility: str = "reversible",
+    approval_mode: str = "auto",
+    inputs: Sequence = (),
+    preconditions: Sequence = (),
+    effects: Sequence = (),
+    min_auto_tier: str | None = None,
+    reachability: Sequence[str] = (),
+    payload_schema: str | None = None,
+    definition: str | None = None,
+    namespace: str = "default",
+):
+    """A ``kind="action"`` TypeEntry with ACTIONS.md 2.2's eight keys, for tests whose
+    subject is something else.
+
+    There is no separate call to create one, and that absence is ACTIONS.md 2.1's whole
+    argument -- *"no new call in INTERFACE.md 5 is required to manage families, and this
+    document adds none"*. So this helper goes through ``propose_type``/``approve``
+    exactly as a caller would, rather than reaching past them into ``put_type``. A
+    helper that wrote the row directly would be a helper that never exercised the
+    declaration rules, which is precisely the hole round 1 of the spec row walked the
+    kill row through at a different layer.
+    """
+    from open_ontology.actions import action_attributes
+
+    return await seed(
+        registry,
+        name,
+        kind="action",
+        namespace=namespace,
+        definition=definition or f"the {name} action, for the purposes of this test",
+        attributes=action_attributes(
+            reversibility=reversibility,
+            approval_mode=approval_mode,
+            inputs=list(inputs),
+            preconditions=list(preconditions),
+            effects=list(effects),
+            min_auto_tier=min_auto_tier,
+            reachability=list(reachability),
+            payload_schema=payload_schema,
+        ),
+    )
+
 DOC_EVIDENCE_URL = "https://www.cms.gov/files/document/qso-23-01-nh-revised-2026-01-28.pdf"
 
 csv.field_size_limit(10_000_000)

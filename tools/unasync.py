@@ -61,6 +61,12 @@ SEED_AWAIT_ATTRS = frozenset(
         "put_edge",
         "get_edge",
         "find_edges",
+        # ACTIONS.md 9's three, added by row 6b. Seeds, not derived: the fixpoint below
+        # picks up `preflight`, `record_invocation`, `invocations`, `projection` and
+        # everything that calls them from these three.
+        "put_invocation",
+        "get_invocation",
+        "find_invocations",
         # the optional AttributeStore extension (deviation D-2)
         "put_attr_schema",
         "get_attr_schema",
@@ -179,6 +185,7 @@ ADAPTER_EXTRA_HEADER = '''
 # them, so the async mirror does not copy them -- it re-exports the sync package's.
 # One definition, two protocols over it.
 from open_ontology.adapter import (
+    ACTION_CAPABILITY_FLAGS,
     CAPABILITY_FLAGS,
     EDGE_CAPABILITY_FLAGS,
     REQUIRED_CAPABILITIES,
@@ -190,6 +197,8 @@ from open_ontology.adapter import (
     EdgeQuery,
     EdgeRecord,
     EventRecord,
+    InvocationPage,
+    InvocationRecord,
     ProposalPage,
     ProposalQuery,
     ProposalRecord,
@@ -217,8 +226,11 @@ __all__ = [
     "EdgeRecord",
     "EdgeQuery",
     "EdgePage",
+    "InvocationRecord",
+    "InvocationPage",
     "CAPABILITY_FLAGS",
     "EDGE_CAPABILITY_FLAGS",
+    "ACTION_CAPABILITY_FLAGS",
     "REQUIRED_CAPABILITIES",
 ]
 '''

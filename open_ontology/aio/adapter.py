@@ -38,6 +38,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 # them, so the async mirror does not copy them -- it re-exports the sync package's.
 # One definition, two protocols over it.
 from open_ontology.adapter import (
+    ACTION_CAPABILITY_FLAGS,
     CAPABILITY_FLAGS,
     EDGE_CAPABILITY_FLAGS,
     REQUIRED_CAPABILITIES,
@@ -49,6 +50,8 @@ from open_ontology.adapter import (
     EdgeQuery,
     EdgeRecord,
     EventRecord,
+    InvocationPage,
+    InvocationRecord,
     ProposalPage,
     ProposalQuery,
     ProposalRecord,
@@ -76,8 +79,11 @@ __all__ = [
     "EdgeRecord",
     "EdgeQuery",
     "EdgePage",
+    "InvocationRecord",
+    "InvocationPage",
     "CAPABILITY_FLAGS",
     "EDGE_CAPABILITY_FLAGS",
+    "ACTION_CAPABILITY_FLAGS",
     "REQUIRED_CAPABILITIES",
 ]
 
@@ -156,16 +162,60 @@ class AsyncStorageAdapter(Protocol):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
-        # NOTE: there is deliberately NO `invocation_id` filter here yet.
-        # `ACTIONS.md` 9.1 specifies it and the BUILD row lands it, together with
-        # the six implementations and the `oo_event` column -- because row #6's
-        # first fix pass added it to this Protocol alone, `runtime_checkable`
-        # kept `isinstance` green, `check_spec_drift.py` compares the printed
-        # signature against this Protocol rather than the backends, and every
-        # shipped adapter raised `TypeError` on the keyword. That is deviation
-        # D-4b-2 (PACKAGE.md 3.4) reproduced inside the fix that quotes it, and
-        # row #6's second adversarial round found it.
+        # **Row 6b lands this, and the ORDER is the whole lesson.** ACTIONS.md 9.1
+        # specifies the filter and says the build row owes *"one keyword, one
+        # `oo_event` column, six implementations"* -- because row #6's first fix
+        # pass added it to this Protocol ALONE: `runtime_checkable` matches on
+        # method NAMES so `isinstance` stayed True, `check_spec_drift.py` compares
+        # the printed signature against this Protocol rather than against the
+        # backends, and every shipped adapter raised `TypeError` on the keyword.
+        # That is deviation D-4b-2 reproduced inside the fix that quotes it, and
+        # row #6's second adversarial round took the amendment back out. It lands
+        # here in the change that lands the six implementations and the column,
+        # which is the only order in which the Protocol is telling the truth.
+        invocation_id: str | None = None,
     ) -> list[EventRecord]: ...
+
+    # ------------------------------------------------------------------ 19 to 21
+    # ACTIONS.md 9. Three, not eight -- and as in EDGES.md 7.1 that number is the
+    # strongest available evidence that 2.1's decision was right: **families need no new
+    # primitive, because put_type/get_type/find_types already serve them.**
+    #
+    # On the protocol rather than in a separate optional extension, with the
+    # `stores_proposals=False` treatment: the methods exist, `stores_invocations=False`
+    # raises `NotSupported`, and this package checks the capability first and never calls
+    # them. An adapter written before this row declares `stores_invocations=False` by
+    # default and every invocation call returns `action_store_absent`.
+
+    # 19
+    async def put_invocation(self, rec: InvocationRecord) -> InvocationRecord: ...
+
+    # 20
+    async def get_invocation(self, invocation_id: str) -> InvocationRecord | None: ...
+
+    # 21
+    async def find_invocations(
+        self,
+        *,
+        family: str | None = None,
+        namespace: str | None = None,
+        actor: str | None = None,
+        outcome: str | None = None,
+        since: datetime | None = None,
+        # **The last three are round 2's, and their omission was ACTIONS.md 4's whole
+        # argument failing quietly.** They are the three reads a governance layer exists
+        # to serve -- the override query, the blast-radius query and the review queue --
+        # and they were on the facade and on NO primitive, so *"the registry filters
+        # above the store"* meant *read a page, then filter it*: on a pinned
+        # 2,399-dataset ledger with one override at row 1,200 the query returned **zero
+        # rows**, `complete=False`. A floor of zero is not a conservative measurement; it
+        # is the wrong one, and it is indistinguishable from a clean deployment.
+        gate_verdict: str | None = None,
+        effect_undeclared: bool | None = None,
+        unreviewed: bool | None = None,
+        after: str | None = None,
+        limit: int = 100,
+    ) -> InvocationPage: ...
 
     # ------------------------------------------------------------------ 16 to 18
     # EDGES.md 7.1. Three, not eight -- and the count is the evidence that making a

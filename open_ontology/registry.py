@@ -22,6 +22,7 @@ from typing import Any, Iterable, Sequence
 from ._clock import Clock, SystemClock
 from ._resolve import DeterministicResolver, identity_key, same_word, Resolver
 from .adapter import (
+    InvocationRecord,
     AttrObservedRecord,
     AttrSchemaRecord,
     AttributeStore,
@@ -46,6 +47,29 @@ from .attributes import (
     strictest,
     validate_attributes,
 )
+from .actions import (
+    ACTION_ATTRIBUTE_KEYS,
+    ADMISSION_RULE,
+    EVALUATORS,
+    GATE_VERDICTS,
+    OUTCOMES,
+    ActionFamily,
+    Effect,
+    EdgeRef,
+    Invocation,
+    InvocationProvenance,
+    InvocationReport,
+    Preflight,
+    PreconditionResult,
+    ProjectionReport,
+    effect_identity,
+    effect_target,
+    is_person,
+    ref_key,
+    ref_kind,
+    ref_shape,
+)
+from .actions import family_declaration_problem as action_declaration_problem
 from .edges import (
     DEFAULT_MAX_EDGES,
     DEPTH_CAP,
@@ -73,6 +97,7 @@ from .edges import (
 from .errors import NotSupported, UnknownType
 from .policy import NamespacePolicy
 from .types import (
+    WARNING_VALUES,
     Alternative,
     Citation,
     Consumer,
@@ -107,6 +132,35 @@ __all__ = ["Registry", "NAME_RE", "CONSUMERS_WHY_INCOMPLETE"]
 _NEAR_MISS_CAP = 5
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+
+#: The events that write a row's DECLARATION, and therefore bump ACTIONS.md 3.1's
+#: ``family_version``. Row 6b.
+#:
+#: ``proposed`` is deliberately NOT among them: a proposal is not a declaration -- the
+#: entry does not exist yet, nothing can be judged against it, and counting it would
+#: make every family's first approval generation **2**. ``retired`` and ``reinstated``
+#: change a row's ``status`` and not its eight keys, and a record judged before a
+#: retirement is not wrong about the blast radius it was judged against.
+#:
+#: **Why a count rather than a stored field.** A ninth attribute would be a second home
+#: for a fact the append-only log already holds (EDGES.md 2.4's rule), and on a backend
+#: with ``stores_events=False`` it would be a number nothing could check. See
+#: :meth:`Registry._family_version`.
+_DECLARATION_EVENTS = ("approved", "imported", "seeded")
+
+#: How many ledger rows the facade reads when it has to answer a question the primitive
+#: cannot -- today, deriving ACTIONS.md 9's BACKWARD `compensated_by` pointer from the
+#: forward one every row carries.
+#:
+#: **A bound rather than an exhaustive read, and the bound is stated rather than hidden.**
+#: Ruling **R58** rules that the facade pages in Phase 3 and that *"a guard never reads a
+#: page"* -- but this read feeds no guard and no refusal: it fills one display field on a
+#: report whose `complete` is already governed by the filter rules above it. A ledger
+#: with more than this many rows can therefore show `compensated_by=None` on an
+#: invocation that WAS compensated, which is Rule U's forbidden confident answer -- so
+#: 6B-RUN.md carries it as a question rather than as a fact, and R58's Phase 3 paging is
+#: what removes it.
+_LEDGER_LIMIT = 10_000
 
 #: How many rows the registry asks the adapter for per page when it is assembling
 #: something to exhaustion -- a depth level of a neighbour walk, or the census of
@@ -498,6 +552,7 @@ class Registry:
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
+        invocation_id: str | None = None,
         detail: dict | None = None,
     ) -> None:
         if not self.caps.stores_events:
@@ -513,6 +568,7 @@ class Registry:
                 name=name,
                 proposal_id=proposal_id,
                 edge_id=edge_id,
+                invocation_id=invocation_id,
                 detail=dict(detail or {}),
             )
         )
@@ -1920,6 +1976,67 @@ class Registry:
         reason, sentence, detail = breach
         return Refusal(reason, {**detail, "why": sentence})
 
+    def _action_family_refusal(
+        self, namespace: str, kind: str, attributes: dict
+    ) -> Refusal | None:
+        """ACTIONS.md 2.2/2.3/2.4/2.5, at DECLARATION time -- rule **2.2-4**.
+
+        Called from ``propose_type``, from ``approve`` **and from ``import_types``**, for
+        the reason its edge sibling one kind along is: *a rule with one enforcement point
+        is a rule with one door left open* -- and the thing on the other side of this one
+        is the ROADMAP.md kill row wearing a verb.
+
+        **The third door is not decoration.** ACTIONS.md said *"at declaration"* eleven
+        times and named no call, and its round 1 imported an **active** ``kind="action"``
+        family declaring ``merge_types`` as an effect *and* breaching 2.2's cross-field
+        rule, through the shipped registry, with no warning at all. ``import_types``
+        returns entries and cannot return a ``Refusal``, so on that path the entry is not
+        written and the caller gets ``import_refused:<reason>``.
+
+        **Unconditional, not schema-mode gated**, exactly as ``_edge_family_refusal``
+        is: ``_check_attributes`` refuses only in ``enforce`` mode and PACKAGE.md 5.3's
+        default is ``off``, so a rule that only bites when a deployment has configured a
+        schema is a rule a deployment can turn off. PACKAGE.md 5.6's R18 exception list
+        goes to **length two**, one cross-field rule per kind, which is the shape R18
+        licensed.
+
+        The one rule that is NOT pure -- rule **2.5-7**, an effect naming an edge family
+        that is not a registered ``kind="edge"`` entry -- is checked here rather than in
+        ``actions.family_declaration_problem``, because it needs the store.
+        ``edge_family_unknown`` is EDGES.md 4.3's existing value and not a new one.
+        """
+        if kind != "action":
+            return None
+        breach = action_declaration_problem(attributes)
+        if breach is not None:
+            reason, sentence, detail = breach
+            return Refusal(reason, {**detail, "why": sentence})
+        for effect in ActionFamily.from_attributes(
+            "", namespace, attributes, "active"
+        ).effects:
+            if effect.op not in ("add_edge", "retract_edge"):
+                continue
+            # `namespace=None` DECLARES an input-determined namespace (rule 2.5-10), so
+            # the family is looked for wherever the declaration says it lives and, when
+            # it says nothing, in the family's own namespace. A declaration that names
+            # no registerable family at all was already refused above.
+            where = effect.namespace or namespace
+            if self.adapter.get_type(where, effect.family, kind="edge") is None:
+                return Refusal(
+                    "edge_family_unknown",
+                    {
+                        "family": effect.family,
+                        "namespace": where,
+                        "op": effect.op,
+                        "why": (
+                            f"an effect may only name a registered `kind=\"edge\"` "
+                            f"family; {where}:edge:{effect.family} is not one "
+                            f"(ACTIONS.md 2.5 rule 2.5-7, EDGES.md 4.3's existing value)"
+                        ),
+                    },
+                )
+        return None
+
     def propose_type(
         self,
         name: str,
@@ -1955,6 +2072,9 @@ class Registry:
         edge_refusal = self._edge_family_refusal(kind, attributes)
         if edge_refusal is not None:
             return edge_refusal
+        action_refusal = self._action_family_refusal(namespace, kind, attributes)
+        if action_refusal is not None:
+            return action_refusal
 
         existing = self.adapter.get_type(namespace, name, kind=kind)
         if existing is None:
@@ -2256,6 +2376,18 @@ class Registry:
             )
             if edge_refusal is not None:
                 return edge_refusal
+            # ACTIONS.md rule 2.2-4, at the SECOND door. R18 names `approve()`
+            # specifically, and it is checked here as well as in `propose_type` because
+            # a proposal may predate the rule and because `approve(definition=...,
+            # predicates=...)` is the one call that amends a pending proposal on its way
+            # in. R40 forces every `kind="predicate"` proposal down this two-step path;
+            # nothing forces an action family down it, which is exactly why the door
+            # must be shut rather than assumed unreachable.
+            action_refusal = self._action_family_refusal(
+                amended.namespace, amended.kind, dict(amended.attributes or {})
+            )
+            if action_refusal is not None:
+                return action_refusal
             schema, violations = self._check_attributes(
                 amended.namespace, amended.kind, amended.name, amended.attributes
             )
@@ -3850,6 +3982,25 @@ class Registry:
                     self._refused_import(
                         namespace, name, edge_breach.detail.get("why", ""),
                         reason=edge_breach.reason, kind=row.get("kind", kind),
+                    )
+                )
+                continue
+
+            # ACTIONS.md rule 2.2-4, at the THIRD door -- the one its round 1 walked
+            # through. A reviewer imported an ACTIVE `kind="action"` family declaring
+            # `merge_types` as an effect AND breaching 2.2's cross-field rule, with no
+            # warning at all, while the same call refused a breaching EDGE family
+            # correctly. An import cannot return a `Refusal`, so the entry is not
+            # written and the caller gets `import_refused:<reason>` -- the treatment the
+            # edge path already gives.
+            action_breach = self._action_family_refusal(
+                namespace, row.get("kind", kind), attributes
+            )
+            if action_breach is not None:
+                out.append(
+                    self._refused_import(
+                        namespace, name, action_breach.detail.get("why", ""),
+                        reason=action_breach.reason, kind=row.get("kind", kind),
                     )
                 )
                 continue
@@ -6709,4 +6860,1319 @@ class Registry:
             observed,
             at=self._now(),
             schema_version=rec.attr_schema_version,
+        )
+
+    # ======================================================== ACTIONS.md 6.1 preflight
+    def _action_family(
+        self, name: str, namespace: str
+    ) -> tuple[ActionFamily | None, TypeRecord | None]:
+        """The ``kind="action"`` entry read through ACTIONS.md 2.2's eight keys.
+
+        A VIEW over ``TypeEntry.attributes``, exactly as ``_edge_family`` is one kind
+        along, and the reason 2.1's architectural bet holds: families need no primitive,
+        because ``put_type`` / ``get_type`` / ``find_types`` already serve them.
+        """
+        rec = self.adapter.get_type(namespace, name, kind="action")
+        if rec is None:
+            return None, None
+        return (
+            ActionFamily.from_attributes(
+                rec.name,
+                rec.namespace,
+                dict(rec.attributes or {}),
+                rec.status,
+                version=self._family_version(rec),
+            ),
+            rec,
+        )
+
+    def _family_version(self, rec: TypeRecord) -> int:
+        """ACTIONS.md 3.1 -- the declaration GENERATION, counted from the event log.
+
+        A family's declaration may be amended after an invocation ran, and rule 3-1's
+        whole point is that the record carries the declaration it was **judged against**
+        rather than pointing at the current one. That needs a generation number, and the
+        honest source for one is the append-only history this registry already keeps:
+        every write door appends an event, so the count of writes to this row IS the
+        generation.
+
+        **Storing it as a ninth attribute was considered and refused**: it would be a
+        second home for a fact the event log already holds (EDGES.md 2.4's rule), and a
+        backend with ``stores_events=False`` would then carry a number nothing could
+        check. On such a backend this returns ``1`` for every read, which is honest --
+        the registry cannot tell one generation from another there, so
+        ``declaration_amended`` is a warning it never emits rather than one it emits
+        wrongly. Rule U: *we cannot tell* is not *it has not changed*.
+        """
+        if not self.caps.stores_events:
+            return 1
+        rows = self.adapter.read_events(rec.namespace, kind=rec.kind, name=rec.name)
+        return max(1, sum(1 for r in rows if r.event in _DECLARATION_EVENTS))
+
+    def _input_refusal(self, family: ActionFamily, inputs: dict) -> Refusal | None:
+        """ACTIONS.md 2.3's SECOND layer, and it is the layer round 1 walked the kill
+        row through.
+
+        A reviewer declared a family with ``kinds=None``, handed ``preflight`` two
+        ``kind="predicate"`` refs, got ``verdict="allowed"`` and recorded it ``applied``:
+        **``merge_capabilities(commentable, searchable)``, end to end, through the one
+        door 2.3 called unconstructible.** EDGES.md 2.4.1 binds its endpoint rule at
+        **both** layers and spent its own round 1 learning why; ACTIONS.md claimed to
+        inherit that rule *unchanged* while enforcing only the declaration half.
+
+        So both invocation calls run this, and **a ``kind="predicate"`` ref is refused
+        whatever the family declared** -- the exclusion is general or it is nothing.
+        """
+        by_name = {spec.name: spec for spec in family.inputs}
+        for name, ref in inputs.items():
+            spec = by_name.get(name)
+            if spec is None:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": name,
+                        "problem": "undeclared",
+                        "why": f"the family declares no input named {name!r}",
+                    },
+                )
+            shape = ref_shape(ref)
+            if shape != spec.ref:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": name,
+                        "problem": "ref",
+                        "declared": spec.ref,
+                        "supplied": shape,
+                        "why": f"input {name!r} is declared ref={spec.ref!r}",
+                    },
+                )
+            kind = ref_kind(ref)
+            # GENERAL, and not a family's opt-in. Two predicates being "equivalent" is a
+            # claim about extents; an action taking two of them is the ROADMAP.md kill
+            # row with a verb in front of it.
+            if kind == "predicate":
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": name,
+                        "problem": "predicate",
+                        "why": (
+                            'a `kind="predicate"` reference is never an action input, '
+                            "whatever the family declared -- EDGES.md 2.4.1's exclusion "
+                            "is general or it is nothing, and an action taking two "
+                            "predicates is ROADMAP.md's kill row one indirection away "
+                            "(ACTIONS.md 2.3)"
+                        ),
+                    },
+                )
+            if spec.ref == "instance" and kind != "entity":
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": name,
+                        "problem": "kind",
+                        "declared": "entity",
+                        "supplied": kind,
+                        "why": 'an InstanceRef names an instance of a kind="entity" type',
+                    },
+                )
+            if spec.kinds is not None and kind not in spec.kinds:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": name,
+                        "problem": "kind",
+                        "declared": list(spec.kinds),
+                        "supplied": kind,
+                        "why": f"input {name!r} accepts {list(spec.kinds)}",
+                    },
+                )
+            if spec.ref == "edge" and spec.families is not None:
+                supplied = getattr(ref, "family", None)
+                if supplied not in spec.families:
+                    return Refusal(
+                        "input_kind_mismatch",
+                        {
+                            "input": name,
+                            "problem": "family",
+                            "declared": list(spec.families),
+                            "supplied": supplied,
+                            "why": f"input {name!r} accepts {list(spec.families)}",
+                        },
+                    )
+        for spec in family.inputs:
+            if spec.required and spec.name not in inputs:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": spec.name,
+                        "problem": "missing",
+                        "why": f"input {spec.name!r} is required and was not supplied",
+                    },
+                )
+        return None
+
+    def _why_unknown_tier(self, namespace: str, tier: str | None) -> str:
+        """Which of ACTIONS.md 5.2's THREE unknown causes this is.
+
+        All three refuse and **none of them says `false`**. The shipped comment on
+        ``TierOrder.below`` gives the reason for the second: returning ``False`` would
+        *"auto-approve an unknown model on the strength of not recognising its name"*.
+        Round 1 found the first draft returning a confident below-the-floor refusal for a
+        tier nobody supplied, and **raising an uncaught ``ValueError``** for a tier
+        outside the order -- in the one place 5.2 flags mixed vendors as **[Assumed]**
+        and possibly wrong.
+        """
+        order = self.policy(namespace).tier_order
+        if not order.tiers:
+            return (
+                "no deployment tier order supplied; the registry does not order tiers "
+                "(INTERFACE.md 2.7)"
+            )
+        if tier is None:
+            return "no tier was supplied for the invoking actor"
+        return f"tier {tier!r} is not in this deployment's order"
+
+    def _evaluate(self, condition, inputs: dict, namespace: str) -> PreconditionResult:
+        """ACTIONS.md 2.4: four kinds, each answered by a call that ALREADY EXISTS.
+
+        ``evaluated_by`` names which, from the closed set ``EVALUATORS``, so 2.4's
+        no-query-language claim is mechanical rather than asserted: a reviewer can
+        confirm that nothing evaluated a condition by some fifth route.
+
+        **Nothing raises where it could return.** ``predicates(of=...)`` raises
+        ``UnknownType`` for an unregistered subject, and a ``predicate_holds`` naming one
+        would escape the return type entirely. It is caught and becomes ``holds=None``
+        plus a ``why`` -- Rule U's unknown, which the verdict then refuses. Round 1 found
+        the escape.
+        """
+        subject = inputs.get(condition.subject)
+        subject_key = ref_key(subject) if subject is not None else condition.subject
+
+        if condition.kind == "type_active":
+            # **`resolve_type` cannot answer this, and the negative case is Rule U's --
+            # contortion ACT6.** `resolve_type` requires a `tier` and a column-shaped
+            # `ResolveContext` (contortion ACT2) that `preflight` has neither of. So the
+            # check is a listing plus a scan above the call -- and INTERFACE.md 5.6
+            # makes a FILTERED `TypeListing` incomplete. A HIT is a fact; a MISS off an
+            # incomplete listing is `None` plus a `why`, because *"we did not find it in
+            # the rows we were shown"* is not *"it is not there"*. Ruling **R45** gives
+            # `list_types` a `name` filter in v1, which would make the negative cheap
+            # and complete; nothing here takes it.
+            parts = subject_key.split(":")
+            if len(parts) < 3:
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "list_types",
+                    why=(
+                        f"{subject_key!r} is not an identity triple, so there is no "
+                        f"entry to look for"
+                    ),
+                )
+            ns, kind, name = parts[0], parts[1], parts[2].split("#")[0]
+            listing = self.list_types(kind, namespace=ns)
+            for entry in listing.types:
+                if entry.name == name and entry.namespace == ns and entry.status == "active":
+                    return PreconditionResult(condition, True, "list_types")
+            if listing.complete:
+                return PreconditionResult(condition, False, "list_types")
+            return PreconditionResult(
+                condition,
+                None,
+                "list_types",
+                why=(
+                    "the listing that would have answered this came back incomplete, so "
+                    "a MISS is not a fact (INTERFACE.md 5.6): "
+                    + (listing.why_incomplete or "a filter suppressed rows")
+                ),
+            )
+
+        if condition.kind == "predicate_holds":
+            # **The question is asked of the PREDICATE's extent, not of the subject's
+            # `of=` listing, and the difference is a deviation this build recorded rather
+            # than shipped quietly.** 2.4's table names *"`predicates()` /
+            # `list_types(predicate=…)`"*, and the obvious reading -- `predicates(of=
+            # subject)` and look for the word -- **can never answer `False`**:
+            # INTERFACE.md 5.6 makes any FILTERED listing incomplete, and `of=` is a
+            # filter, so every miss is Rule U's unknown and rule 2.4-4's *"a precondition
+            # that does not hold"* has no reachable state. Contortion ACT6's twin, in the
+            # kind next door.
+            #
+            # An UNFILTERED `predicates(namespace=…, include_retired=True)` applies no
+            # filter, so it is complete whenever the page is -- and `PredicateEntry`
+            # carries the extent AND its own `why_extent_incomplete`, which is Rule U
+            # already published by the read. So the three answers are separable: in the
+            # extent (True), demonstrably not in a fully-read extent (False), extent
+            # unreadable or predicate unregistered (None plus the read's own sentence).
+            # It is the same `_extent` every identity guard uses, so ruling R54's
+            # identity resolution is inherited rather than re-implemented: a member that
+            # declared an absorbed word is still found.
+            parts = subject_key.split("#")[0].split(":")
+            if len(parts) < 3:
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "predicates",
+                    why=f"{subject_key!r} is not an identity triple",
+                )
+            subject_ns, subject_name = parts[0], parts[2]
+            # **An unregistered subject is UNKNOWN, not false**, and reading the
+            # predicate's extent rather than the subject's `of=` listing is what made
+            # that a live question: the extent simply would not contain a word nobody
+            # registered, and `False` there is a confident claim about a type this
+            # registry has never heard of. The shipped `predicates(of=…)` RAISES
+            # `UnknownType` for exactly this case (rule 6-7), so the honest transposition
+            # is to ask the same question and turn the raise into Rule U's unknown.
+            if self.adapter.get_type(subject_ns, subject_name, kind=ref_kind(subject)) is None:
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "predicates",
+                    why=(
+                        f"{subject_key!r} names no registered entry, so whether it "
+                        f"satisfies {condition.predicate!r} cannot be told -- the shipped "
+                        f"`predicates(of=…)` raises `UnknownType` here, and Rule U's "
+                        f"answer is unknown rather than a confident `no`"
+                    ),
+                )
+            listing = self.predicates(namespace=subject_ns, include_retired=True)
+            entry = next(
+                (p for p in listing.predicates if p.name == condition.predicate), None
+            )
+            if entry is None:
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "predicates",
+                    why=(
+                        f"no registered predicate named {condition.predicate!r} in "
+                        f"{subject_ns!r}, so whether the subject satisfies it cannot be "
+                        f"told -- Rule U, and not a confident `no`"
+                    ),
+                )
+            if subject_name in entry.extent:
+                return PreconditionResult(condition, True, "predicates")
+            if entry.why_extent_incomplete or not listing.complete:
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "predicates",
+                    why=(
+                        "this backend could not read the extent in full, so a MISS is "
+                        "not a fact (INTERFACE.md 5.2's own named failure mode is an "
+                        "empty answer reading as a confident zero): "
+                        + (
+                            entry.why_extent_incomplete
+                            or listing.why_incomplete
+                            or "the listing came back incomplete"
+                        )
+                    ),
+                )
+            return PreconditionResult(condition, False, "predicates")
+
+        # edge_exists / edge_absent -- one call, negated for the second.
+        if not self.caps.stores_edges:
+            return PreconditionResult(
+                condition, None, "neighbors", why=self.caps.reason("stores_edges")
+            )
+        other = inputs.get(condition.object)
+        if subject is None or other is None:
+            return PreconditionResult(
+                condition,
+                None,
+                "neighbors",
+                why=(
+                    f"input {condition.subject!r} or {condition.object!r} was not "
+                    f"supplied, so there is nothing to ask `neighbors` about"
+                ),
+            )
+        origin = subject if isinstance(subject, (TypeRef, InstanceRef)) else None
+        target = other if isinstance(other, (TypeRef, InstanceRef)) else None
+        if origin is None or target is None:
+            return PreconditionResult(
+                condition,
+                None,
+                "neighbors",
+                why=(
+                    "an edge condition's subject and object must each be a type or an "
+                    "instance ref -- an EdgeRef names an edge, and an edge is not a node"
+                ),
+            )
+        # `namespace` is the FAMILY's and comes off the condition -- `Registry.neighbors`
+        # makes it keyword-only WITHOUT a default *precisely because "default" is a wrong
+        # answer nobody notices*, which is UC3's whole subject. Round 1 found the printed
+        # shape missing this field while the probe kit had silently added it, and the two
+        # readings gave OPPOSITE verdicts on UC3's own fixture.
+        report = self.neighbors(origin, [condition.family], 1, namespace=condition.namespace)
+        if isinstance(report, Refusal):
+            return PreconditionResult(
+                condition, None, "neighbors", why=f"`neighbors` refused: {report.reason}"
+            )
+        # **`direction="both"`, and that is a decision.** EDGES.md 2.2 records a
+        # confident, complete FALSE NEGATIVE produced by filtering a symmetric family on
+        # direction, so a precondition that filtered would inherit it. The cost is
+        # stated: for a DIRECTED family, `edge_absent(a, b)` is false when the edge runs
+        # `b -> a`. That is the conservative answer -- it refuses more than it must,
+        # never less -- and there is deliberately no `direction` key, because it is a
+        # fifth field on a shape whose whole argument is that it is not a query language.
+        found = node_key(target) in {node_key(n) for n in report.nodes}
+        if not report.complete and not (found and condition.kind == "edge_exists"):
+            # A walk that could not finish has not said the edge is absent. Rule U, and
+            # the FIFTH kill-row trip's own lesson one surface along: *partial is not
+            # equal*, so a partial look is not `False` either. A HIT off a partial walk
+            # is still a fact -- the edge was seen -- which is the same asymmetry
+            # `type_active` has and for the same reason.
+            return PreconditionResult(
+                condition,
+                None,
+                "neighbors",
+                why=(
+                    "the walk that would have answered this did not finish: "
+                    + (report.why_incomplete or "the report came back incomplete")
+                ),
+            )
+        return PreconditionResult(
+            condition, found if condition.kind == "edge_exists" else not found, "neighbors"
+        )
+
+    def preflight(
+        self,
+        family: str,
+        inputs: dict,
+        *,
+        namespace: str = "default",
+        actor: str,
+        tier: str | None = None,
+        approved_by: str | None = None,
+    ) -> Preflight | Refusal:
+        """ACTIONS.md 6.1 -- may this run, and what does it declare?
+
+        **It records nothing.** It is a question, it is idempotent, and it may be called
+        a hundred times. A host that wants the question answered *and* the answer
+        recorded calls ``record_invocation`` with the verdict it received.
+
+        **It never raises where it could return.** The shipped ``predicates(of=...)``
+        raises ``UnknownType`` for an unregistered subject; a ``predicate_holds`` naming
+        one would escape the return type entirely. Every such escape is caught in
+        ``_evaluate`` and becomes ``holds=None`` plus a ``why``.
+
+        **And the gate is advisory by construction, which ACTIONS.md 4 states in the
+        strongest form available because a weaker statement would be a lie of omission:**
+        this call can be skipped. A host may run an action the gate would have refused
+        and then file a report saying ``gate_verdict="not_asked"``. Nothing here stops
+        it, and nothing could -- a protocol with no executor cannot enforce, and
+        pretending otherwise is exactly the rubber-stamping failure `WALKTHROUGH.md`
+        names. What makes it not-nothing is countable rather than rhetorical: the refusal
+        is typed, and every override is enumerable by ``invocations(gate_verdict=
+        "refused", outcome="applied")``.
+        """
+        fam, _ = self._action_family(family, namespace)
+        if fam is None:
+            return Refusal(
+                "action_family_unknown",
+                {
+                    "family": family,
+                    "namespace": namespace,
+                    "why": (
+                        f'{namespace}:action:{family} is not a registered '
+                        f'`kind="action"` entry. An empty Preflight for a typo\'d '
+                        f"family would be mechanism C committed by the gate"
+                    ),
+                },
+            )
+        if not fam.declared:
+            # Rule 2.2-1's other end. The registration is legal (INTERFACE.md 2.1
+            # requires no attributes at all); using it as an action family is not.
+            return Refusal(
+                "attributes_schema_violation",
+                {
+                    "family": family,
+                    "namespace": namespace,
+                    "why": (
+                        'this `kind="action"` entry declares no `reversibility` or '
+                        "`approval_mode`, so it is a legal TypeEntry that is not yet "
+                        "usable as an action family (ACTIONS.md 2.2 rule 2.2-1)"
+                    ),
+                },
+            )
+        bad = self._input_refusal(fam, inputs)
+        if bad is not None:
+            return bad
+
+        results = tuple(
+            self._evaluate(condition, inputs, namespace) for condition in fam.preconditions
+        )
+        unknown = [r for r in results if r.holds is None]
+        failed = [r for r in results if r.holds is False]
+        complete = not unknown
+
+        base = dict(
+            family=family,
+            namespace=namespace,
+            family_version=fam.version,
+            reversibility=fam.reversibility,
+            declared_effects=fam.effects,
+            preconditions=results,
+            approval_mode=fam.approval_mode,
+            known=len(results),
+            complete=complete,
+            tier_floor=fam.min_auto_tier,
+            # Rule U on the report: `min_auto_tier=None` under `approval_mode="auto"` is
+            # a LEGITIMATE configuration -- a single-tier deployment has nothing to
+            # compare -- so the honest surface is a stated absence, not an alarm. Minting
+            # a warning value for it would put a vocabulary entry on a correct
+            # configuration.
+            tier_floor_why=(
+                None
+                if fam.min_auto_tier
+                else "the family declares no floor; every tier auto-approves"
+            ),
+            why_incomplete=(
+                None
+                if complete
+                else "; ".join(
+                    r.why or "a condition could not be evaluated" for r in unknown
+                )
+            ),
+        )
+
+        if unknown:
+            # **Unknown is refused, and the refusal says UNKNOWN rather than FALSE.**
+            # Treating unknown as *satisfied* would let a degraded backend approve
+            # everything; treating it as *unsatisfied* would be a confident `False` the
+            # registry did not earn. One value, two states, and the states are in
+            # `detail` -- `endpoint_kind_mismatch`'s own precedent.
+            return Preflight(
+                verdict="refused",
+                refusal=Refusal(
+                    "precondition_unmet",
+                    {
+                        "state": "unknown",
+                        "kind": unknown[0].condition.kind,
+                        "subject": unknown[0].condition.subject,
+                        "why": unknown[0].why,
+                    },
+                ),
+                **base,
+            )
+        if failed:
+            return Preflight(
+                verdict="refused",
+                refusal=Refusal(
+                    "precondition_unmet",
+                    {
+                        "state": "false",
+                        "kind": failed[0].condition.kind,
+                        "subject": failed[0].condition.subject,
+                        "why": failed[0].condition.why,
+                    },
+                ),
+                **base,
+            )
+
+        if fam.approval_mode == "human":
+            # **An ALLOWLIST off the actor, not a prefix blocklist, and it took two
+            # rounds to get right.** Round 1's blocklist refused `ai:`, `auto:` and
+            # `derived:`, and a reviewer got `bot:reaper`, `svc:cleanup`, `AI:bot` and
+            # `nobody` past it on an `irreversible`/`human` family. Round 2's
+            # replacement tested the DERIVED `created_by == "user"` -- and the shipped
+            # derivation maps an UNRECOGNISED prefix to `"user"`, which is right for
+            # provenance and wrong for a gate, so the same five walked through the fix.
+            # A human approver must be RECOGNISABLE as one. Rule U: unknown is not a
+            # person.
+            if not is_person(approved_by):
+                return Preflight(
+                    verdict="refused",
+                    refusal=Refusal(
+                        "human_approval_required",
+                        {
+                            "door": "preflight",
+                            "family": family,
+                            "approved_by": approved_by,
+                            "created_by": (
+                                _created_by(approved_by) if approved_by else None
+                            ),
+                            "why": (
+                                'an `approval_mode="human"` family needs an approver '
+                                "the registry RECOGNISES as a person; INTERFACE.md line "
+                                "58 names the failure by name -- *a `created_by_actor` "
+                                "string convention that nothing validates*"
+                            ),
+                        },
+                    ),
+                    **base,
+                )
+            return Preflight(verdict="allowed", approved_by=approved_by, **base)
+
+        if fam.min_auto_tier is not None:
+            below = self.policy(namespace).tier_order.below(tier, fam.min_auto_tier)
+            if below is None:
+                return Preflight(
+                    verdict="refused",
+                    refusal=Refusal(
+                        "tier_below_action_policy",
+                        {
+                            "state": "unknown",
+                            "why": self._why_unknown_tier(namespace, tier),
+                            "min_auto_tier": fam.min_auto_tier,
+                            "tier": tier,
+                        },
+                    ),
+                    **base,
+                )
+            if below:
+                return Preflight(
+                    verdict="refused",
+                    refusal=Refusal(
+                        "tier_below_action_policy",
+                        {
+                            # `state` distinguishes a REAL below-the-floor refusal from
+                            # the three unknown ones. Added by round 1, and without it a
+                            # caller cannot tell *your model is too cheap for this* from
+                            # *we cannot tell how cheap your model is*.
+                            "state": "false",
+                            "tier": tier,
+                            "min_auto_tier": fam.min_auto_tier,
+                            "why": (
+                                f"tier {tier!r} is below this family's floor "
+                                f"{fam.min_auto_tier!r}"
+                            ),
+                        },
+                    ),
+                    **base,
+                )
+        return Preflight(
+            verdict="allowed",
+            approved_by=f"auto:{self.policy(namespace).auto_policy_name}",
+            **base,
+        )
+
+    # ================================================ ACTIONS.md 6.2 record_invocation
+    def _invocations_absent(self, detail: dict) -> Refusal | None:
+        """ACTIONS.md 8 rule 8-1. **Never an empty report.**
+
+        An empty ``InvocationReport`` reads as *"nothing has ever run"*, which is Rule
+        U's forbidden empty in the one call a caller would believe -- the same argument
+        ``proposals_not_stored`` makes, and the fifth capability refusal of that shape.
+
+        ``preflight`` and ``projection`` touch no invocation and are unaffected;
+        *"every invocation call"* was undefined until round 1 asked which four.
+        """
+        if self.caps.stores_invocations:
+            return None
+        return Refusal(
+            "action_store_absent",
+            {**detail, "why": self.caps.reason("stores_invocations")},
+        )
+
+    def _invocation_warnings(self) -> tuple[str, ...]:
+        """ACTIONS.md 8.2. Stamped by ``record_invocation`` ITSELF and not carried
+        forward from anywhere -- EDGES.md 6.2 records ``retract_edge`` getting exactly
+        that wrong, and it is the second time this repository has seen the bug.
+
+        And stamped at the WRITE call site only, never on ``invocations``: row 3d's
+        lesson, verbatim -- *a signal that never turns off is noise*.
+        """
+        if self.caps.action_transaction_scope != "savepoint":
+            return ()
+        return (
+            "not_durable_until_host_commits:"
+            + self.caps.reason("action_transaction_scope"),
+        )
+
+    def _invocation(self, rec, *, compensated_by: str | None = None) -> Invocation:
+        """The stored row, read back as ACTIONS.md 3.1's shape.
+
+        ``history`` comes through ``append_event``'s existing path with an
+        ``invocation_id`` (3.5) rather than off the record, because putting it on
+        ``InvocationRecord`` would give one concept two homes and would make a backend
+        that stores invocations but not events undescribable.
+        """
+        history: tuple[ProvenanceEvent, ...] = ()
+        history_why: str | None = None
+        reviewed_at: datetime | None = None
+        for flag in ("stores_invocation_events", "stores_events"):
+            if not getattr(self.caps, flag):
+                history_why = self.caps.reason(flag)
+                break
+        else:
+            rows = self.adapter.read_events(
+                rec.namespace, invocation_id=rec.invocation_id
+            )
+            history = tuple(
+                ProvenanceEvent(
+                    at=r.at, actor=r.actor, event=r.event, detail=dict(r.detail or {})
+                )
+                for r in rows
+            )
+            for r in rows:
+                if r.event == "invocation_reviewed":
+                    reviewed_at = r.at
+        return Invocation(
+            invocation_id=rec.invocation_id,
+            family=rec.family,
+            namespace=rec.namespace,
+            inputs=dict(rec.inputs or {}),
+            declared_effects=tuple(
+                Effect.from_dict(e) for e in (rec.declared_effects or ())
+            ),
+            observed_effects=tuple(
+                Effect.from_dict(e) for e in (rec.observed_effects or ())
+            ),
+            declared_policy=dict(rec.declared_policy or {}),
+            family_version=rec.family_version,
+            outcome="compensated" if compensated_by else rec.outcome,
+            gate_verdict=rec.gate_verdict,
+            provenance=InvocationProvenance(
+                created_at=rec.created_at,
+                created_by_actor=rec.created_by_actor,
+                created_by=rec.created_by,
+                model_tier=rec.model_tier,
+                confidence=rec.confidence,
+                approved_by=rec.approved_by,
+                approved_at=rec.approved_at,
+                source_version=rec.source_version,
+                history=history,
+                history_why=history_why,
+            ),
+            refusal=(
+                Refusal(rec.refusal_reason, {"recorded": True})
+                if rec.refusal_reason
+                else None
+            ),
+            compensates=rec.compensates,
+            compensated_by=compensated_by,
+            reviewed_at=reviewed_at,
+            warnings=tuple(rec.warnings or ()),
+            attr_schema_version=rec.attr_schema_version,
+        )
+
+    def _compensated_by(self, invocation_id: str, namespace: str) -> str | None:
+        """The BACKWARD pointer, derived. ACTIONS.md 9.
+
+        The store holds only the forward pointer, because the compensating invocation is
+        written *after* the one it compensates and a store never rewrites a row
+        (INTERFACE.md 5.8). One fact stored one way and read the other; stated because
+        the asymmetry is real and a reader who saw only the surface would look for a
+        field the store does not have.
+        """
+        page = self.adapter.find_invocations(namespace=namespace, limit=_LEDGER_LIMIT)
+        for rec in page.records:
+            if rec.compensates == invocation_id:
+                return rec.invocation_id
+        return None
+
+    def record_invocation(
+        self,
+        family: str,
+        inputs: dict,
+        *,
+        namespace: str = "default",
+        actor: str,
+        outcome: str,
+        tier: str | None = None,
+        observed_effects: Sequence[Effect] = (),
+        gate_verdict: str = "not_asked",
+        approved_by: str | None = None,
+        confidence: float | None = None,
+        evidence: Sequence[Evidence] = (),
+        source_version: str | None = None,
+        refusal: Refusal | None = None,
+        compensates: str | None = None,
+        judged: Preflight | None = None,
+    ) -> Invocation | Refusal:
+        """ACTIONS.md 6.2 -- what happened. The ledger, and it files a report.
+
+        **It does not refuse on ``effect_undeclared``, on a stale precondition, or on a
+        ``gate_verdict`` of ``refused``.** All three are recorded, warned where 2.5 says
+        to warn, and enumerable. If this call refused a report because the host observed
+        an effect the family had not declared, the registry would be **destroying the
+        only evidence that the undeclared effect happened** -- and refusing to record
+        what already occurred is the worst available answer, which is the failure shape
+        of a ``register_consumer`` that quietly no-ops.
+
+        **The TOCTOU gap is named rather than closed.** Between ``preflight`` returning
+        ``allowed`` and this call filing a report the world may change; this does **not**
+        re-evaluate the preconditions, because re-evaluating would mean refusing to
+        record something that already happened, and recording a stale ``allowed`` is at
+        least *true about what the host was told*. What closes the gap is not a lock: the
+        record carries the verdict it acted on and the timestamp it acted at, so a
+        divergence is reconstructible after the fact. A locking protocol would put this
+        registry in the execution path, which is 1's first non-goal.
+        """
+        if outcome not in OUTCOMES:
+            raise ValueError(f"outcome must be one of {list(OUTCOMES)}; got {outcome!r}")
+        if gate_verdict not in GATE_VERDICTS:
+            raise ValueError(
+                f"gate_verdict must be one of {list(GATE_VERDICTS)}; got {gate_verdict!r}"
+            )
+        if outcome == "refused" and refusal is None:
+            # Rule 3-4. A refused invocation with no reason is an unexplained *"no"* in
+            # the ledger whose whole purpose is explaining.
+            raise ValueError(
+                "outcome='refused' REQUIRES a refusal whose reason is INTERFACE.md "
+                "5.12's closed vocabulary (ACTIONS.md 3.4)"
+            )
+        absent = self._invocations_absent({"family": family, "namespace": namespace})
+        if absent is not None:
+            return absent
+        fam, _ = self._action_family(family, namespace)
+        if fam is None:
+            return Refusal(
+                "action_family_unknown", {"family": family, "namespace": namespace}
+            )
+        if not fam.declared:
+            return Refusal(
+                "attributes_schema_violation",
+                {
+                    "family": family,
+                    "namespace": namespace,
+                    "why": (
+                        'this `kind="action"` entry declares no `reversibility` or '
+                        "`approval_mode`, so it is not yet usable as an action family "
+                        "(ACTIONS.md 2.2 rule 2.2-1)"
+                    ),
+                },
+            )
+        bad = self._input_refusal(fam, inputs)
+        if bad is not None:
+            return bad
+
+        warnings: list[str] = []
+        # **What the GATE judged is what is recorded, and it is resolved FIRST**, because
+        # every rule below reads a policy. Round 3 found the `judged` block running AFTER
+        # the approval logic, so an approval the gate had already granted was nulled by a
+        # family amended since -- rule 3-3's own field, telling round 1's lie inverted.
+        version = fam.version
+        effects_of_record = fam.effects
+        policy_of_record = {
+            "approval_mode": fam.approval_mode,
+            "min_auto_tier": fam.min_auto_tier,
+            "reversibility": fam.reversibility,
+            "preconditions": [c.kind for c in fam.preconditions],
+            "tier_order": list(self.policy(namespace).tier_order.tiers),
+        }
+        if judged is not None:
+            if judged.family_version != version:
+                warnings.append(f"declaration_amended:{judged.family_version}:{version}")
+            effects_of_record = tuple(judged.declared_effects)
+            policy_of_record = {
+                "approval_mode": judged.approval_mode,
+                "min_auto_tier": judged.tier_floor,
+                # Round 3: this key was the CURRENT family's while its three neighbours
+                # were the gate's -- one dict, two moments, and no marker.
+                "reversibility": judged.reversibility,
+                "preconditions": [r.condition.kind for r in judged.preconditions],
+                "tier_order": list(self.policy(namespace).tier_order.tiers),
+            }
+            version = judged.family_version
+
+        # ACTIONS.md 3.2 / 5.2 -- **never FABRICATED and never DISCARDED**, judged against
+        # the POLICY OF RECORD so an approval the gate granted survives a later
+        # amendment. The first draft filled `"auto:<policy>"` on every applied
+        # invocation, so an `irreversible`/`human` family recorded `outcome="applied"`,
+        # `gate_verdict="not_asked"`, `approved_by="auto:action_policy"`, actor
+        # `ai:reaper`, no human and no warning -- an approval nobody performed, written
+        # into `delete_person`'s ledger. A null plus a named warning is the honest third
+        # answer the first draft did not look for.
+        if (
+            outcome == "applied"
+            and policy_of_record.get("approval_mode") == "human"
+            and not is_person(approved_by)
+        ):
+            approved_by = None
+        if outcome == "applied" and gate_verdict != "allowed":
+            approved_by = None
+        if outcome == "applied" and not approved_by:
+            warnings.append("approval_unrecorded")
+
+        # ACTIONS.md 3.3 -- the registry COMPARES the two and reports, and does not
+        # adjudicate. `observed ⊊ declared` warns NOTHING, deliberately: a permission is
+        # not a promise, and warning on an unused permission would train hosts to declare
+        # narrowly and amend often, which is worse than declaring broadly and being
+        # measured.
+        declared = {effect_identity(e) for e in effects_of_record}
+        # An input-determined declaration (rule 2.5-10) is satisfied only by an observed
+        # effect whose namespace is one the invocation's OWN INPUTS carry -- so the
+        # correct multi-publisher ingest stops warning and the wrong-publisher one still
+        # does. Round 2 measured the alternative at 2,394 of 2,399 correct invocations.
+        open_ns = {
+            effect_identity(e)
+            for e in effects_of_record
+            if e.op in ("add_edge", "retract_edge") and e.namespace is None
+        }
+        input_ns = {getattr(ref, "namespace", None) for ref in inputs.values()}
+        input_ns |= {
+            getattr(getattr(ref, "type", None), "namespace", None)
+            for ref in inputs.values()
+        }
+        for effect in observed_effects:
+            if effect_identity(effect) in declared:
+                continue
+            if (
+                effect.op in ("add_edge", "retract_edge")
+                and (effect.op, None, effect.family, effect.kind) in open_ns
+                and effect.namespace in input_ns
+            ):
+                continue
+            warnings.append(f"effect_undeclared:{effect.op}:{effect_target(effect)}")
+
+        # ACTIONS.md 2.7 -- the NAME-level schema governing THIS family's inputs, keyed
+        # `(namespace, "action", <family name>)`. R10's mechanism, live from the start
+        # rather than inert: every family's inputs have a different shape, which is the
+        # case R10 exists for. Refuses only in `enforce` mode, as PACKAGE.md 5.3 says.
+        schema, violations = self._check_attributes(
+            namespace, "action", family, {k: str(v) for k, v in inputs.items()}
+        )
+        if violations and schema and schema.mode == "enforce":
+            return Refusal(
+                "attributes_schema_violation",
+                {
+                    "family": family,
+                    "violations": violations,
+                    "schema_version": schema.version,
+                    "why": "the supplied inputs fail this family's payload_schema",
+                },
+            )
+        warnings.extend(self._invocation_warnings())
+
+        now = self._now()
+        record = InvocationRecord(
+            invocation_id=_uuid(),
+            namespace=namespace,
+            family=family,
+            inputs={name: ref_key(ref) for name, ref in inputs.items()},
+            declared_effects=tuple(e.to_dict() for e in effects_of_record),
+            observed_effects=tuple(e.to_dict() for e in observed_effects),
+            declared_policy=policy_of_record,
+            family_version=version,
+            outcome=outcome,
+            refusal_reason=refusal.reason if refusal is not None else None,
+            gate_verdict=gate_verdict,
+            compensates=compensates,
+            created_at=now,
+            created_by_actor=actor,
+            # DERIVED from the actor, never passed. INTERFACE.md 2.1: *"the registry
+            # reads it off the actor, the way it already reads `ai:` and `seed:`"*, and
+            # `derived:<rule>` lands `created_by="derived"` -- which is how UC3's
+            # deterministic reconciliation produces its result. Round 1 found
+            # `record_invocation`'s printed signature carrying no `created_by` while the
+            # provenance shape required one, and the probe kit inventing a parameter.
+            created_by=_created_by(actor),
+            model_tier=tier,
+            confidence=confidence,
+            approved_by=approved_by,
+            approved_at=now if approved_by else None,
+            source_version=source_version,
+            attr_schema_version=schema.version if schema is not None else None,
+            warnings=tuple(warnings),
+        )
+        for warning in record.warnings:
+            if warning.split(":", 1)[0] not in WARNING_VALUES:  # pragma: no cover
+                raise ValueError(
+                    f"{warning!r} is not in INTERFACE.md 5.4's closed vocabulary"
+                )
+        with self.adapter.transaction():
+            stored = self.adapter.put_invocation(record)
+            if self.caps.stores_events and self.caps.stores_invocation_events:
+                self._append_event(
+                    namespace,
+                    "invocation_recorded",
+                    actor,
+                    kind="action",
+                    name=family,
+                    invocation_id=stored.invocation_id,
+                    detail={
+                        "outcome": outcome,
+                        "gate_verdict": gate_verdict,
+                        "family_version": version,
+                    },
+                )
+                # **A compensation is a new INVOCATION, and the original's own
+                # `observed_effects` stay exactly what they were, because they
+                # happened.** The store never rewrites a row, so the original's
+                # `outcome="compensated"` is DERIVED at read time from this forward
+                # pointer -- not written back over a provenance-bearing record
+                # (INTERFACE.md 5.8).
+                if compensates:
+                    self._append_event(
+                        namespace,
+                        "invocation_compensated",
+                        actor,
+                        kind="action",
+                        name=family,
+                        invocation_id=compensates,
+                        detail={"compensated_by": stored.invocation_id},
+                    )
+        for ev in evidence:
+            # Evidence rides the event path with an `invocation_id` (3.5), which is
+            # where a provenance history already lives. It is NOT a column on the
+            # record: one concept, one home.
+            if self.caps.stores_events and self.caps.stores_invocation_events:
+                self._append_event(
+                    namespace,
+                    "invocation_recorded",
+                    actor,
+                    kind="action",
+                    name=family,
+                    invocation_id=stored.invocation_id,
+                    detail={"evidence": _evidence_to_dict(ev)},
+                )
+        return self._invocation(stored)
+
+    def review_invocation(
+        self, invocation_id: str, *, reviewed_by: str, namespace: str = "default"
+    ) -> Invocation | Refusal:
+        """Append the ``invocation_reviewed`` event ACTIONS.md 5.2's review queue drains.
+
+        **Deviation D-6b-3, recorded rather than smuggled in.** 5.2 says a ``review``-mode
+        invocation *"is enumerable by ``invocations(unreviewed=True)`` until an
+        ``invocation_reviewed`` event is appended"*, 3.5 mints the event value -- and
+        6's four calls contain nothing that appends one. The read is unreachable without
+        a writer, so the build row supplies one; it is a **fifth** call and the spec says
+        four, which is exactly the kind of gap 14 asks a build row to find by trying to
+        write the ids rather than by reading.
+
+        It is deliberately NOT folded into ``record_invocation``: a review is a second
+        act by a second person at a later time, and a parameter on the write call would
+        let the actor who ran the action mark their own invocation reviewed.
+        """
+        absent = self._invocations_absent({"invocation_id": invocation_id})
+        if absent is not None:
+            return absent
+        rec = self.adapter.get_invocation(invocation_id)
+        if rec is None:
+            # `unknown_invocation` was argued and NOT taken (7): no call in ACTIONS.md
+            # names an existing invocation by id, so the vocabulary has no value for it.
+            # This call does name one -- it is the deviation above -- and it reuses
+            # `action_family_unknown` rather than minting a twenty-ninth value in a build
+            # row, with the mismatch recorded as a question rather than decided here.
+            return Refusal(
+                "action_family_unknown",
+                {
+                    "invocation_id": invocation_id,
+                    "why": (
+                        f"no invocation {invocation_id!r} is stored; see 6B-RUN.md's "
+                        f"D-6b-3 for why this call exists and why it reuses this value"
+                    ),
+                },
+            )
+        if not (self.caps.stores_events and self.caps.stores_invocation_events):
+            return Refusal(
+                "cannot_record_override",
+                {
+                    "invocation_id": invocation_id,
+                    "why": (
+                        "a review is an event and this backend cannot keep one, so "
+                        "marking it reviewed would be a claim nothing records: "
+                        + self.caps.reason(
+                            "stores_events"
+                            if not self.caps.stores_events
+                            else "stores_invocation_events"
+                        )
+                    ),
+                },
+            )
+        self._append_event(
+            rec.namespace,
+            "invocation_reviewed",
+            reviewed_by,
+            kind="action",
+            name=rec.family,
+            invocation_id=invocation_id,
+            detail={"reviewed_by": reviewed_by},
+        )
+        return self._invocation(
+            rec, compensated_by=self._compensated_by(invocation_id, rec.namespace)
+        )
+
+    # ==================================================== ACTIONS.md 6.3 invocations
+    def invocations(
+        self,
+        *,
+        family: str | None = None,
+        namespace: str | None = None,
+        actor: str | None = None,
+        outcome: str | None = None,
+        gate_verdict: str | None = None,
+        effect_undeclared: bool | None = None,
+        unreviewed: bool | None = None,
+        since: datetime | None = None,
+        limit: int = 100,
+    ) -> InvocationReport | Refusal:
+        """ACTIONS.md 6.3 -- the read, and **every filtered answer is a FLOOR**.
+
+        ``complete`` is ``False`` whenever a filter suppressed rows or ``limit``
+        truncated the answer, which is INTERFACE.md 5.6's rule for ``TypeListing``
+        applied to a third object. *(The first draft stamped it ``True`` through a dead
+        sub-expression -- ``(not filtered or True)`` -- in the one query 4 asks an
+        operator to act on.)*
+
+        **It does not page, and that is ruling R25/R47/R58's decision rather than this
+        call's.** ``limit`` bounds the answer and ``complete=False`` says the bound was
+        hit; the keyset cursor exists on the primitive so the facade can bound its own
+        reads honestly, and is deliberately not exposed. R58 rules that the facade pages
+        in **Phase 3**, under one rule for ``known``, and that the ledger is answered
+        explicitly rather than by analogy -- so anticipating it here would be a build row
+        taking a routed decision.
+        """
+        absent = self._invocations_absent({"family": family, "namespace": namespace})
+        if absent is not None:
+            return absent
+
+        # **`unreviewed` is HALF pushed down, and saying which half is the honest form.**
+        # *Has this invocation been reviewed?* is a fact about the row and pushes down.
+        # *Is the family in `review` mode?* is a fact about ANOTHER row's attributes, and
+        # is answered here over a set of families this registry has already materialised.
+        page = self.adapter.find_invocations(
+            family=family,
+            namespace=namespace,
+            actor=actor,
+            outcome=outcome,
+            gate_verdict=gate_verdict,
+            effect_undeclared=effect_undeclared,
+            unreviewed=unreviewed,
+            since=since,
+            limit=limit,
+        )
+        rows = list(page.records)
+        review_modes: dict[tuple[str, str], bool] = {}
+        if unreviewed is not None:
+            kept = []
+            for rec in rows:
+                key = (rec.namespace, rec.family)
+                if key not in review_modes:
+                    fam, _ = self._action_family(rec.family, rec.namespace)
+                    review_modes[key] = bool(
+                        fam is not None and fam.approval_mode == "review"
+                    )
+                if review_modes[key] is unreviewed:
+                    kept.append(rec)
+            rows = kept
+
+        filtered = any(
+            value is not None
+            for value in (
+                family,
+                namespace,
+                actor,
+                outcome,
+                gate_verdict,
+                effect_undeclared,
+                unreviewed,
+                since,
+            )
+        )
+        why: str | None = None
+        if not page.complete:
+            why = page.why_incomplete or f"the answer was bounded at limit={limit}"
+            # **The unindexed sentence belongs HERE and only here**, and putting it on
+            # every read was this build's own first defect -- found by
+            # `check_capability_matrix.py` within one run. ACTIONS.md 8 says
+            # `indexes_invocations_by_family=False` leaves *"correctness unchanged -- the
+            # registry filters above the store"*, and that **a scan may hit `limit`, and
+            # THEN `complete=False` with this sentence.** Stamping it on a complete,
+            # unfiltered census says *incomplete* about an answer that is complete, which
+            # is Rule U pointing the wrong way: a `why` that never turns off is the same
+            # noise row 3d ruled against for the durability warning.
+            if family is not None and not self.caps.indexes_invocations_by_family:
+                why += "; " + self.caps.reason("indexes_invocations_by_family")
+        elif filtered:
+            why = "a filter suppressed rows; this is a floor, not a total"
+        return InvocationReport(
+            invocations=tuple(
+                self._invocation(
+                    rec,
+                    compensated_by=self._compensated_by(rec.invocation_id, rec.namespace),
+                )
+                for rec in rows
+            ),
+            # `known: int | None` and not `int`, because a backend entitled to say *"we
+            # did not count"* must have somewhere to say it, and `0` would falsify it.
+            known=len(rows) if page.known is not None else None,
+            complete=why is None,
+            why_incomplete=why,
+            # **Deliberately NOT `self._write_warnings()`**, which is what a directly
+            # constructed WRITE result carries. Rule 8-4: the durability sentence is
+            # stamped at the write call site and NOT on this read -- row 3d's lesson,
+            # verbatim: *a signal that never turns off is noise.* An `invocations()`
+            # that always warned about durability would be a warning about the ledger's
+            # existence rather than about anything a caller did.
+            warnings=(),
+        )
+
+    # ===================================================== ACTIONS.md 6.4 / 10 projection
+    def projection(
+        self,
+        surface: str,
+        *,
+        budget: int,
+        order: Sequence[str] | None = None,
+        reserved: int = 0,
+        namespace: str | None = None,
+    ) -> ProjectionReport | Refusal:
+        """ACTIONS.md 10.3 -- the tool-slot arithmetic, and what it refuses to answer.
+
+        **The registry never decides which families reach a surface.** That is the
+        host's, always, and 10.3 makes it structural rather than promised: with
+        ``order=None`` the call answers ``counts`` and nothing else. *The one question
+        this layer most obviously COULD have answered -- which 128? -- is the one it is
+        built to be unable to answer.*
+
+        ``surface`` is a LABEL recorded on the report, not a filter: a family does not
+        know which *page* a host assembles, and asking it to would put the host's routing
+        table in this registry.
+        """
+        listing = self.list_types("action", namespace=namespace)
+        pool = [
+            ActionFamily.from_attributes(
+                e.name, e.namespace, dict(e.attributes or {}), e.status
+            )
+            for e in listing.types
+            if e.status == "active"
+        ]
+        pool = [f for f in pool if f.declared]
+
+        # `counts` is RULE-INDEPENDENT: a family declaring two groups is counted in
+        # BOTH, whatever the order. Round 1 found `counts` changing with the order --
+        # `{alpha: 2, beta: 2}` unordered against `{alpha: 2, beta: 1}` under one order
+        # and the mirror image under the other -- which made 10.4's *"the useful half of
+        # this call is the counting"* rest on a guarantee that did not hold. No design
+        # test found it, because beacon's `ActionSpec.category` is a single string.
+        counts: dict[str, int] = {}
+        for fam in pool:
+            for group in fam.reachability:
+                if order is None or group in order:
+                    counts[group] = counts.get(group, 0) + 1
+
+        if order is None:
+            return ProjectionReport(
+                surface=surface,
+                budget=budget,
+                reserved=reserved,
+                counts=counts,
+                admitted={},
+                rule=ADMISSION_RULE,
+                order_source=None,
+                fits=(),
+                would_evict=(),
+                over_by=0,
+                consumers_at_risk=(),
+                known=len(pool),
+                complete=False,
+                why_incomplete=(
+                    "no order supplied; the registry does not choose which families "
+                    "reach a surface"
+                ),
+            )
+
+        # Round 2: `order` is a Sequence with no uniqueness rule, and a duplicated group
+        # was charged twice and appeared in BOTH `fits` and `would_evict` -- a pair rule
+        # 10-4 defines as disjoint. De-duplicated, first occurrence winning, because
+        # that is the position the caller's own order gives it (rule 10-10).
+        order = tuple(dict.fromkeys(order))
+        counts = {group: counts.get(group, 0) for group in order}
+
+        # **The typo judgement is made against EVERY registered family, not against the
+        # namespace-filtered pool** (rule 10-9): an empty NAMESPACE is a legitimate
+        # scope and answers with zeroes, where an unknown GROUP is a misspelling. Round
+        # 1 found the filtered version refusing a real projection over an empty
+        # namespace -- and round 2 found the rule misfiring on a host that has no
+        # surfaces at all, so it requires that SOME family somewhere declares one. Four
+        # ingestion families with `reachability=()` are not a typo; they are the
+        # venture's own customer.
+        everywhere = [
+            ActionFamily.from_attributes(
+                e.name, e.namespace, dict(e.attributes or {}), e.status
+            )
+            for e in self.list_types("action").types
+        ]
+        declares_any_surface = any(f.reachability for f in everywhere if f.declared)
+        if declares_any_surface and not any(
+            group in f.reachability for f in everywhere if f.declared for group in order
+        ):
+            return Refusal(
+                "action_family_unknown",
+                {
+                    "order": list(order),
+                    "surface": surface,
+                    "why": (
+                        "no registered family anywhere carries any of these groups, so "
+                        "this projection is over an entirely unknown vocabulary -- and "
+                        "an empty report for a typo is mechanism C committed by the call "
+                        "that exists to surface it (ACTIONS.md 10.3)"
+                    ),
+                },
+            )
+
+        # `admitted` is the RULE's charge: a family occupies ONE slot, in the first group
+        # of `order` it declares. `counts` and `admitted` differ exactly when a family
+        # declares two of the ordered groups.
+        admitted: dict[str, int] = {group: 0 for group in order}
+        grouped: dict[str, list] = {group: [] for group in order}
+        selected = 0
+        for fam in pool:
+            for group in order:
+                if group in fam.reachability:
+                    admitted[group] += 1
+                    grouped[group].append(fam)
+                    selected += 1
+                    break
+
+        capacity = budget - reserved
+        used = 0
+        fits: list[str] = []
+        evict: list[str] = []
+        for group in order:
+            if not evict and used + admitted[group] <= capacity:
+                used += admitted[group]
+                fits.append(group)
+            else:
+                evict.append(group)
+        over_by = max(0, (used + sum(admitted[g] for g in evict)) - capacity)
+
+        # ACTIONS.md 10.5 -- Cause C one level along, with no new mechanism and no new
+        # call: for every family in `would_evict`, read its `predicates` and ask
+        # `consumers` who gates on them.
+        at_risk: list[str] = []
+        for group in evict:
+            for fam in grouped[group]:
+                rec = self.adapter.get_type(fam.namespace, fam.name, kind="action")
+                for predicate in (rec.predicates if rec is not None else ()) or ():
+                    report = self._consumer_report(rec)
+                    at_risk.extend(
+                        c.id for c in report.gates_on if c.gate == predicate
+                    )
+
+        unknown_groups = [group for group in order if counts[group] == 0]
+        return ProjectionReport(
+            surface=surface,
+            budget=budget,
+            reserved=reserved,
+            counts=counts,
+            admitted=admitted,
+            rule=ADMISSION_RULE,
+            order_source="caller",
+            fits=tuple(fits),
+            would_evict=tuple(evict),
+            over_by=over_by,
+            consumers_at_risk=tuple(dict.fromkeys(at_risk)),
+            # `known` is what this report SELECTED, not the size of the registry.
+            known=selected,
+            # Rule 10-5: `consumers_at_risk` inherits `ConsumerReport.complete == False`
+            # (INTERFACE.md 5.1), which is ALWAYS false in v0 -- so this can never be a
+            # complete casualty list, and an EMPTY one is that same `False` wearing a
+            # different name.
+            complete=False,
+            why_incomplete=(
+                "consumers_at_risk inherits ConsumerReport.complete == False "
+                "(INTERFACE.md 5.1); it is known casualties, never all of them"
+                + (
+                    f"; groups no registered family carries: {unknown_groups}"
+                    if unknown_groups
+                    else ""
+                )
+            ),
         )

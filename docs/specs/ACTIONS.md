@@ -765,6 +765,8 @@ class InvocationRecord:
     inputs:              dict            # JSON-serialisable. InputRef, 2.3
     declared_effects:    tuple           # JSON-serialisable. Effect, 2.5
     observed_effects:    tuple
+    declared_policy:     dict            # 3.1 -- the POLICY the gate judged. Rule 3-8
+    family_version:      int             # 3.1 -- the declaration generation. Rule 3-7
     outcome:             str
     refusal_reason:      str | None
     gate_verdict:        str
@@ -810,6 +812,8 @@ class InvocationPage:
     why_incomplete: str | None
     next_after:     tuple[datetime, str] | None
 ```
+
+> **`declared_policy` and `family_version` were missing from this block until row 6b's build, which is the SAME defect round 3 fixed one screen up.** §19.4 records that *"the whole of round 2's gate-to-record fix was missing from the printed shapes"* — `Invocation.declared_policy`, `Invocation.family_version`, `Preflight.family_version` and `record_invocation`'s `judged` — and lists four places it corrected. The **adapter** record was not one of them, so a third-party backend built from §9 alone had two columns fewer than rules 3-7 and 3-8 require, and the ledger it produced could not answer *"was Haiku permitted to run this unattended in March?"* at all. Found mechanically, by `check_spec_drift.py` reading this block for the first time — which is §14's whole argument arriving as evidence rather than as a plan.
 
 **A `Page`, not a 2-tuple, and the reason is `known`.** §6.3 requires `InvocationReport.known` to be `int | None` because *a backend entitled to say "we did not count" must have somewhere to say it*. A `(page, truncated)` tuple gives the backend nowhere, so the façade could only ever report `len(rows)` — the falsification §6.3 forbids — or `None` by fiat regardless of what the backend knew. **Every other paging primitive in the package already returns this shape** (`EdgePage`, `TypePage`, `ProposalPage`, all with the same five fields); the 2-tuple was a round-1 finding and the fix is to stop being different.
 

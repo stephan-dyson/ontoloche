@@ -51,8 +51,10 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "docs" / "specs" / "INTERFACE.md"
 PACKAGE = ROOT / "docs" / "specs" / "PACKAGE.md"
 EDGES = ROOT / "docs" / "specs" / "EDGES.md"
+ACTIONS = ROOT / "docs" / "specs" / "ACTIONS.md"
 sys.path.insert(0, str(ROOT))
 
+from open_ontology import actions as actions_module  # noqa: E402
 from open_ontology import adapter as adapter_module  # noqa: E402
 from open_ontology import edges as edges_module  # noqa: E402
 from open_ontology import attributes as attributes_module  # noqa: E402
@@ -136,6 +138,11 @@ PACKAGE_SHAPES = {
     "EdgeRecord": (adapter_module, "EdgeRecord"),
     "EdgeQuery": (adapter_module, "EdgeQuery"),
     "EdgePage": (adapter_module, "EdgePage"),
+    # Row 6b, ACTIONS.md 9 -- the two shapes a third-party INVOCATION backend builds
+    # from. Listed the day they landed, for beacon finding U4's reason: the drift moves
+    # into the half nobody is checking, so there is no half nobody is checking.
+    "InvocationRecord": (adapter_module, "InvocationRecord"),
+    "InvocationPage": (adapter_module, "InvocationPage"),
     "FieldSpec": (attributes_module, "FieldSpec"),
     "AttributeSchema": (attributes_module, "AttributeSchema"),
     # 6.4 prints the two harness shapes a third-party author builds. They were
@@ -173,6 +180,89 @@ EDGES_SHAPES = {
 
 #: Same rule as the other two omit maps. An entry is a decision on the record.
 EDGES_OMITS: dict[str, set[str]] = {}
+
+#: `ACTIONS.md`'s printed shapes, against `open_ontology/actions.py`. **Row 6b, and
+#: nothing held them for three adversarial rounds -- which is why they drifted in every
+#: one of the three.**
+#:
+#: §14 measured the cost of that precisely: round 1 found five drifts between the
+#: document and its own probe kit -- `Precondition.namespace`, `Invocation.compensates`,
+#: `InvocationProvenance.evidence` and two call signatures -- *inside the section that
+#: argues field names were kept ugly BECAUSE that is the drift this checker was written
+#: to catch*. All five were fixed, and **round 3 found five more of the same kind plus
+#: three whole fields missing** -- `Invocation.declared_policy`,
+#: `Invocation.family_version`, `Preflight.family_version` and `record_invocation`'s
+#: `judged` parameter, which are the ENTIRETY of round 2's gate-to-record fix, present
+#: in rules 3-7 and 3-8 and in the probe and absent from every printed block. *A
+#: mechanism specified only in its own rule table is a mechanism the build row cannot
+#: build.*
+#:
+#: §14's own conclusion is the instruction this dict carries out: extend the checker to
+#: this file **in the same change that lands the code**, which is now.
+ACTIONS_SHAPES = {
+    "EdgeRef": (actions_module, "EdgeRef"),
+    "InputSpec": (actions_module, "InputSpec"),
+    "Precondition": (actions_module, "Precondition"),
+    "Effect": (actions_module, "Effect"),
+    "Invocation": (actions_module, "Invocation"),
+    "InvocationProvenance": (actions_module, "InvocationProvenance"),
+    "PreconditionResult": (actions_module, "PreconditionResult"),
+    "Preflight": (actions_module, "Preflight"),
+    "InvocationReport": (actions_module, "InvocationReport"),
+    "ProjectionReport": (actions_module, "ProjectionReport"),
+}
+
+#: ACTIONS.md 9 prints its two ADAPTER shapes as real ``@dataclass`` blocks, the way
+#: PACKAGE.md 3.3 does, so they are read with that parser rather than the ``Name:`` one.
+#:
+#: **They are checked here AS WELL AS against PACKAGE.md 3.3, and the duplication is
+#: deliberate.** Two documents print the same record; a shape held against only one of
+#: them is a shape that can drift in the other -- which is exactly how EDGES.md 5.1's
+#: `model_tier` went missing for a row while PACKAGE.md and the code agreed with each
+#: other, and a third document asserting a change nobody made is invisible to a two-way
+#: diff.
+ACTIONS_CLASS_SHAPES = {
+    "InvocationRecord": (adapter_module, "InvocationRecord"),
+    "InvocationPage": (adapter_module, "InvocationPage"),
+}
+
+#: Same rule as the other three omit maps. An entry is a decision on the record.
+ACTIONS_OMITS: dict[str, set[str]] = {}
+
+#: `ACTIONS.md`'s four printed CALL signatures, against `Registry`. **Row 6b, and the
+#: gap is the one EDGE_CALLS closed one row earlier**: `INTERFACE.md`'s fourteen calls
+#: have been held against the code since row 3c, `PACKAGE.md`'s primitives since row 4b,
+#: `EDGES.md`'s calls since row 4c -- and this document printed four with nothing
+#: checking them at all. Round 3 measured what that costs: `record_invocation`'s
+#: `judged` parameter, the whole of round 2's gate-to-record fix, was in a rule table
+#: and in the probe kit and in **no printed block**, and 6.4 and 10.3 printed two
+#: different `projection` signatures two hundred lines apart.
+ACTION_CALLS = (
+    "preflight",
+    "record_invocation",
+    "invocations",
+    "projection",
+)
+
+#: ACTIONS.md's CLOSED VOCABULARIES, held against `actions.py`'s tuples -- contents, not
+#: counts, because this document states them as printed alternatives rather than as
+#: number words.
+#:
+#: ``{tuple name: (the printed shape, the field whose alternatives carry it)}``. Each is
+#: read out of the shape block the document already prints, so the vocabulary has ONE
+#: home in the specification and one in the code, and the gate holds them together. Row
+#: #6 reached ROADMAP.md's kill row twice through a vocabulary rule the document and the
+#: implementation disagreed about, so this is not bookkeeping.
+ACTION_VOCABULARIES = {
+    "EFFECT_OPS": ("Effect", "op"),
+    "PRECONDITION_KINDS": ("Precondition", "kind"),
+    "OUTCOMES": ("Invocation", "outcome"),
+    "GATE_VERDICTS": ("Invocation", "gate_verdict"),
+    "REVERSIBILITY": ("Preflight", "reversibility"),
+    "APPROVAL_MODES": ("Preflight", "approval_mode"),
+    "EVALUATORS": ("PreconditionResult", "evaluated_by"),
+    "REF_SHAPES": ("InputSpec", "ref"),
+}
 
 _FENCE = re.compile(r"```(?:python)?\n(.*?)```", re.S)
 _CLASS = re.compile(r"^class ([A-Z]\w*)[:(]", re.M)
@@ -409,6 +499,35 @@ R31_SECTIONS = {
     "4.4": "### 4.4",
 }
 
+#: `ACTIONS.md` sections that must carry an R31 rule table. **Row 6b, and §14 says in
+#: those words why this dict did not exist a row earlier:**
+#:
+#: > These ids are PLANNED and nothing claims them yet... `check_spec_drift.py`'s
+#: > `R31_SECTIONS` currently lists three `EDGES.md` sections, and its
+#: > `_check_rule_coverage` fails a rule whose named id *"no test in the suite claims"*.
+#: > **Pointing it at this document today would fail fifty-eight times.** So `ACTIONS.md`
+#: > is deliberately not added in this change -- the extension lands in the build row, in
+#: > the same change that lands the tests, which is the only order in which the gate is
+#: > ever telling the truth. Stated because the alternative failure is worse than the
+#: > obvious one: **a checker wired up early gets silenced, and a silenced checker is how
+#: > `gate_unregistered` went eighteen-said-nineteen-meant for a row.**
+#:
+#: All eight, not a subset: the eight tables were RELOCATED by that row's round 1 so that
+#: `_section` -- which reads from a heading to the next heading of any level -- can reach
+#: them, and thirty of forty-seven rules were unreachable before it did. That work is why
+#: this dict can name whole sections rather than the subsections `R31_INTERFACE_SECTIONS`
+#: had to settle for.
+R31_ACTIONS_SECTIONS = {
+    "2.2": "### 2.2",
+    "2.4": "### 2.4",
+    "2.5": "### 2.5",
+    "3": "## 3. Invocations",
+    "5.2": "### 5.2",
+    "6": "## 6. The calls",
+    "8": "## 8. Capability flags",
+    "10": "## 10. The tool-slot ceiling",
+}
+
 _R31_ROW = re.compile(r"^\| (\d[\d.]*-\d+) \|(.*)\|\s*$", re.M)
 _CONTRACT_ID = re.compile(r"`(C\d+-\d+)`")
 
@@ -428,6 +547,7 @@ def _check_rule_coverage(implemented: set[str]) -> list[str]:
     for document, path, sections in (
         ("EDGES", EDGES, R31_SECTIONS),
         ("INTERFACE", SPEC, R31_INTERFACE_SECTIONS),
+        ("ACTIONS", ACTIONS, R31_ACTIONS_SECTIONS),
     ):
         if not path.exists():  # pragma: no cover - an installed wheel has no docs/
             continue
@@ -553,6 +673,87 @@ def _check_primitive_signatures(package_text: str) -> list[str]:
             problems.append(
                 f"PACKAGE 3.4 {name}(): the document prints {extra!r}; the protocol "
                 f"does not take it"
+            )
+    return problems
+
+
+_SHAPE_FIELD_LINES = re.compile(r"^\s{4}(\w+)\s*:(.*(?:\n\s{8,}#.*)*)", re.M)
+
+
+def _printed_alternatives(blocks: list[str], shape: str, field_name: str) -> set[str] | None:
+    """The quoted alternatives ACTIONS.md prints for one field of one shape.
+
+    The document writes a closed vocabulary as ``kind: "a" | "b" | "c"``, sometimes
+    continued on an indented comment line, which is exactly how a reader learns it. This
+    reads that back so the reader's source and the code's tuple cannot disagree.
+    """
+    for block in blocks:
+        for chunk in re.split(r"\n(?=\S)", block):
+            if not chunk.lstrip().startswith(f"{shape}:"):
+                continue
+            for name, rest in _SHAPE_FIELD_LINES.findall(chunk):
+                if name != field_name:
+                    continue
+                found = set(re.findall(r'"([a-z_]+)"', rest))
+                return found or None
+    return None
+
+
+def _check_action_vocabularies(blocks: list[str], actions_text: str) -> list[str]:
+    """Every closed vocabulary ACTIONS.md prints equals the tuple `actions.py` holds."""
+    problems: list[str] = []
+    for tuple_name, (shape, field_name) in ACTION_VOCABULARIES.items():
+        actual = set(getattr(actions_module, tuple_name))
+        printed = _printed_alternatives(blocks, shape, field_name)
+        if printed is None:
+            problems.append(
+                f"ACTIONS {shape}.{field_name}: the document prints no closed "
+                f"vocabulary there and actions.{tuple_name} holds {sorted(actual)}"
+            )
+            continue
+        for name in sorted(printed - actual):
+            problems.append(
+                f"ACTIONS {shape}.{field_name}: {name!r} is printed and absent from "
+                f"actions.{tuple_name}"
+            )
+        for name in sorted(actual - printed):
+            problems.append(
+                f"ACTIONS {shape}.{field_name}: {name!r} is in actions.{tuple_name} and "
+                f"is not printed -- a closed vocabulary nothing derives is one that "
+                f"quietly opens (ruling R3)"
+            )
+
+    # The six governance calls, which 2.5 prints as a middot-separated line rather than
+    # as a field. They are the rule the kill row runs through -- *an action that can
+    # `merge_types` is ROADMAP.md's kill row wearing a verb* -- so the line and the tuple
+    # are held together like any other closed vocabulary.
+    m = re.search(
+        r"\*\*The six calls that may NOT be an effect.*?\*\*\n\n(.+?)\n", actions_text, re.S
+    )
+    if m is None:
+        problems.append("ACTIONS 2.5: could not find the six governance calls")
+    else:
+        printed = set(re.findall(r"`([a-z_]+)`", m.group(1)))
+        actual = set(actions_module.GOVERNANCE_CALLS)
+        for name in sorted(printed ^ actual):
+            problems.append(
+                f"ACTIONS 2.5: {name!r} is in one of the document's six governance calls "
+                f"and actions.GOVERNANCE_CALLS and not the other"
+            )
+
+    # Rule 2.5-8's ALLOWLIST, printed in the `Effect` block's own comment. Round 2
+    # reached the kill row by OMITTING `kind` from a blocklist, so the allowlist's
+    # membership is the thing to hold.
+    m = re.search(r"ALLOWLIST:\s*([a-z_ |]+)", actions_text)
+    if m is None:
+        problems.append("ACTIONS 2.5: could not find the `propose_type` effect allowlist")
+    else:
+        printed = {part.strip() for part in m.group(1).split("|") if part.strip()}
+        actual = set(actions_module.PROPOSABLE_KINDS)
+        for name in sorted(printed ^ actual):
+            problems.append(
+                f"ACTIONS 2.5-8: {name!r} is in the printed allowlist or in "
+                f"actions.PROPOSABLE_KINDS and not the other"
             )
     return problems
 
@@ -689,6 +890,84 @@ def main() -> int:
                     f"EDGES {printed}.{name}: printed by EDGES.md, absent from the code"
                 )
 
+    # --- ACTIONS.md's printed shapes and closed vocabularies. Row 6b.
+    if ACTIONS.exists():
+        actions_text = ACTIONS.read_text(encoding="utf-8")
+        actions_blocks = spec_blocks(actions_text)
+        for call in ACTION_CALLS:
+            method = getattr(registry_module.Registry, call, None)
+            if method is None:
+                problems.append(
+                    f"ACTIONS {call}(): the spec declares it; Registry has no such method"
+                )
+                continue
+            import inspect
+
+            actual = set(inspect.signature(method).parameters) - {"self"}
+            printed_params = call_params(actions_blocks, call)
+            if printed_params is None:
+                problems.append(f"ACTIONS {call}(): no signature printed in the spec")
+                continue
+            for name in sorted(actual - printed_params):
+                problems.append(
+                    f"ACTIONS {call}(): the implementation takes {name!r} and the spec's "
+                    f"signature does not -- a reader implementing from the spec cannot "
+                    f"reach it"
+                )
+            for name in sorted(printed_params - actual):
+                problems.append(
+                    f"ACTIONS {call}(): the spec declares {name!r}; the code does not "
+                    f"take it"
+                )
+        for printed, (module, attribute) in ACTIONS_SHAPES.items():
+            cls = getattr(module, attribute, None)
+            if cls is None or not hasattr(cls, "__dataclass_fields__"):
+                problems.append(
+                    f"ACTIONS {printed}: {module.__name__} has no dataclass {attribute}"
+                )
+                continue
+            fields = shape_fields(actions_blocks, printed)
+            if fields is None:
+                problems.append(
+                    f"ACTIONS {printed}: listed as a printed shape and ACTIONS.md prints "
+                    f"no `{printed}:` block -- a reader has nothing to build from"
+                )
+                continue
+            actual = set(cls.__dataclass_fields__)
+            allowed = ACTIONS_OMITS.get(printed, set())
+            for name in sorted(actual - fields - allowed):
+                problems.append(
+                    f"ACTIONS {printed}.{name}: the code has it and ACTIONS.md's printed "
+                    f"shape does not -- which is exactly how the whole of round 2's "
+                    f"gate-to-record fix went missing from every printed block"
+                )
+            for name in sorted(fields - actual):
+                problems.append(
+                    f"ACTIONS {printed}.{name}: printed by ACTIONS.md, absent from the code"
+                )
+        for printed, (module, attribute) in ACTIONS_CLASS_SHAPES.items():
+            cls = getattr(module, attribute)
+            fields = package_shape_fields(actions_blocks, printed)
+            if fields is None:
+                problems.append(
+                    f"ACTIONS {printed}: listed as a printed shape and ACTIONS.md prints "
+                    f"no `class {printed}:` block -- an adapter author has nothing to "
+                    f"build from"
+                )
+                continue
+            actual = set(cls.__dataclass_fields__)
+            for name in sorted(actual - fields):
+                problems.append(
+                    f"ACTIONS {printed}.{name}: the code has it and ACTIONS.md 9's "
+                    f"printed shape does not"
+                )
+            for name in sorted(fields - actual):
+                problems.append(
+                    f"ACTIONS {printed}.{name}: printed by ACTIONS.md 9, absent from the "
+                    f"code"
+                )
+        problems.extend(_check_action_vocabularies(actions_blocks, actions_text))
+
     problems.extend(_check_primitive_signatures(PACKAGE.read_text(encoding="utf-8")))
     problems.extend(_check_closed_vocabularies(SPEC.read_text(encoding="utf-8")))
     problems.extend(_check_warning_vocabulary(SPEC.read_text(encoding="utf-8")))
@@ -725,9 +1004,18 @@ def main() -> int:
         f"StorageAdapter.\n"
         f"docs/specs/EDGES.md: every printed shape and call signature matches the "
         f"implementation ({len(EDGES_SHAPES)} shapes, {len(EDGE_CALLS)} calls).\n"
+        f"docs/specs/ACTIONS.md: every printed shape matches open_ontology/actions.py "
+        f"({len(ACTIONS_SHAPES) + len(ACTIONS_CLASS_SHAPES)} shapes), every printed call "
+        f"signature matches Registry "
+        f"({len(ACTION_CALLS)} calls), and every closed vocabulary it prints matches the "
+        f"tuple that holds it ({len(ACTION_VOCABULARIES) + 2}).\n"
         f"EDGES.md: every numbered rule in "
         f"{', '.join(sorted(R31_SECTIONS))} carries a contract id or a tagged "
         f"reason (ruling R31, standing constraint 8).\n"
+        f"ACTIONS.md: every numbered rule in "
+        f"{', '.join(sorted(R31_ACTIONS_SECTIONS))} carries a contract id or a tagged "
+        f"reason -- 58 planned ids, 4 prose-only tags, and the gate reads this document "
+        f"for the first time in the change that lands them.\n"
         f"INTERFACE.md: every numbered rule in "
         f"{', '.join(sorted(R31_INTERFACE_SECTIONS))} does too -- row 4d is the first "
         f"row to change rules in this document since R31 landed, and constraint 8 binds "

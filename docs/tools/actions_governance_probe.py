@@ -19,6 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from actions_shipped_leg import shipped_leg  # noqa: E402
+
 from actions_probe_kit import (  # noqa: E402
     ActionCapabilities,
     ActionFamily,
@@ -303,6 +305,14 @@ def main() -> int:
     check("G1  a repeated group is charged once and cannot both fit and be evicted",
           dup.admitted == {"alpha": 3} and not (set(dup.fits) & set(dup.would_evict)),
           f"admitted={dup.admitted} fits={dup.fits} evict={dup.would_evict}")
+
+    # **Row 6b, brief item 5: the same questions, asked of the SHIPPED registry.**
+    # The kit leg above is what makes this probe's pre-registered numbers comparable run
+    # to run; this is what stops them being claims about a model the package does not
+    # import. Row #6's own 17 had to record that its `import_types` kill-row fix
+    # *"exists only in the probe kit"* -- a legitimate spec-row boundary, and exactly the
+    # boundary a build row exists to remove.
+    shipped_leg(check, fixture="governance")
 
     print()
     failed = [c for c in CHECKS if not c[1]]

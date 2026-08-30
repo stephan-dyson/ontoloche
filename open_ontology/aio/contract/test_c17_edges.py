@@ -94,7 +94,11 @@ async def test_c17_01_eighteen_primitives_and_no_edge_store_refuses_rather_than_
     from open_ontology.aio.adapter import AsyncStorageAdapter
 
     primitives = {n for n in vars(AsyncStorageAdapter) if not n.startswith("_")}
-    assert len(primitives) == 18, "fifteen until row 4b; EDGES.md 7.1 added three"
+    assert len(primitives) == 21, (
+        "fifteen until row 4b; EDGES.md 7.1 added three and ACTIONS.md 9 added three "
+        "more in row 6b -- and the count is the evidence BOTH decisions were right, "
+        "because neither an edge family nor an action family needed a primitive at all"
+    )
     assert {"put_edge", "get_edge", "find_edges"} <= primitives
 
     caps = await adapter.capabilities()
