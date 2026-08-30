@@ -98,6 +98,21 @@ CALLS = (
     "record_use",
 )
 
+#: `EDGES.md`'s four printed CALL signatures, against `Registry`. **Row 4c, and the gap
+#: is the same one deviation D-4b-2 recorded for a primitive:** `INTERFACE.md`'s fourteen
+#: calls have been held against the code since row 3c and `PACKAGE.md`'s eighteen
+#: primitives since row 4b's third adversarial round, and `EDGES.md` printed its calls
+#: with nothing checking them at all -- in the one document whose surface is not in
+#: `INTERFACE.md` §5. Row 4c adds a fourth (`amend_edge`, ruling R37) and changes a
+#: third's report shape (`neighbors`, ruling R38), which is exactly when an unchecked
+#: printed signature drifts.
+EDGE_CALLS = (
+    "add_edge",
+    "retract_edge",
+    "amend_edge",
+    "neighbors",
+)
+
 #: Fields the spec deliberately declines to print, with the reason. Empty is the goal;
 #: an entry here is a decision on the record, not a way to silence the check.
 SPEC_OMITS: dict[str, set[str]] = {}
@@ -589,6 +604,31 @@ def main() -> int:
     # --- EDGES.md's printed shapes, against open_ontology/edges.py. Row 4b, round 2.
     if EDGES.exists():
         edges_blocks = spec_blocks(EDGES.read_text(encoding="utf-8"))
+        # --- and its printed CALL signatures, against `Registry`. Row 4c.
+        for call in EDGE_CALLS:
+            method = getattr(registry_module.Registry, call, None)
+            if method is None:
+                problems.append(
+                    f"EDGES {call}(): the spec declares it; Registry has no such method"
+                )
+                continue
+            import inspect
+
+            actual = set(inspect.signature(method).parameters) - {"self"}
+            printed = call_params(edges_blocks, call)
+            if printed is None:
+                problems.append(f"EDGES {call}(): no signature printed in the spec")
+                continue
+            for name in sorted(actual - printed):
+                problems.append(
+                    f"EDGES {call}(): the implementation takes {name!r} and the spec's "
+                    f"signature does not -- a reader implementing from the spec cannot "
+                    f"reach it"
+                )
+            for name in sorted(printed - actual):
+                problems.append(
+                    f"EDGES {call}(): the spec declares {name!r}; the code does not take it"
+                )
         for printed, attribute in EDGES_SHAPES.items():
             cls = getattr(edges_module, attribute, None)
             if cls is None or not hasattr(cls, "__dataclass_fields__"):
@@ -647,8 +687,8 @@ def main() -> int:
         f"types.WARNING_VALUES ({len(types_module.WARNING_VALUES)} values).\n"
         f"docs/specs/PACKAGE.md 3.4: every printed primitive signature matches "
         f"StorageAdapter.\n"
-        f"docs/specs/EDGES.md: every printed shape matches open_ontology/edges.py "
-        f"({len(EDGES_SHAPES)} shapes).\n"
+        f"docs/specs/EDGES.md: every printed shape and call signature matches the "
+        f"implementation ({len(EDGES_SHAPES)} shapes, {len(EDGE_CALLS)} calls).\n"
         f"EDGES.md: every numbered rule in "
         f"{', '.join(sorted(R31_SECTIONS))} carries a contract id or a tagged "
         f"reason (ruling R31, standing constraint 8)."
