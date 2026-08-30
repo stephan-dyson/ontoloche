@@ -26,7 +26,7 @@ The three are chosen so that **no two share a failure mode**. Each column is som
 
 ## UC1 — Tenshen: the single-writer app registry
 
-**What it is [Observed].** `work_link_types` in `C:\Users\steph\projects\beacon` — a registry of relationship labels for `WorkLink` rows, seeded with five, grown at runtime by an AI classifier that proposes a new type only when confident none fit; `created_by: seed | ai | user`; usage counted. Seven entity-type vocabularies coexist in the codebase, five of them capability predicates (`FINDINGS-0.1`).
+**What it is [Observed].** `work_link_types` in the design partner's codebase — a registry of relationship labels for `WorkLink` rows, seeded with five, grown at runtime by an AI classifier that proposes a new type only when confident none fit; `created_by: seed | ai | user`; usage counted. Seven entity-type vocabularies coexist in the codebase, five of them capability predicates (`FINDINGS-0.1`).
 
 **What it tests.** Cause C (a consumer silently drops a type it does not know); predicates as distinct from types; the "one service, one table, not a rewrite" migration (PACKAGE §7); async transaction sharing (row 3b). It is the venture's **first rot experiment** (beacon spec §12): if this curated vocabulary stays clean as families grow, that is evidence for the core [Assumed] bet.
 
