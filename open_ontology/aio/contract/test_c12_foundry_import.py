@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C12 -- the Foundry import mapping (7). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping, and the fourth door into the kill row (9). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``AsyncRegistry.import_types``, a method beyond the twelve, because no 5.x
@@ -17,6 +17,7 @@ call performs it -- deviation D-8 in docs/runs/2A-RUN.md.
 
 from __future__ import annotations
 import pytest
+from open_ontology.types import Refusal, ResolveContext
 from open_ontology.aio.contract._support import seed
 
 
@@ -174,3 +175,148 @@ async def test_c12_07_source_version_survives_the_import(registry):
     )
     assert out[0].provenance.source_version == "2017-10-04"
     assert (await registry.provenance("tree_census_record")).source_version == "2017-10-04"
+
+async def test_c12_08_an_imported_alias_cannot_collapse_two_predicate_identities(registry):
+    """**`ROADMAP.md`'s kill row, FOURTH trip -- found by `check_merge_guard.py`'s own
+    caller enumeration, which is the artefact row 4c was told to build instead of a
+    fourth patch.**
+
+    The three before it: `0e89037` (`merge_types`, an unknowable extent compared equal),
+    `fcb05b3` (`merge_types`, two EMPTY extents compared byte-identical), `05b8e04`
+    (`retire(successor=)`, the collapse reached by a call carrying none of the merge's
+    guards). The supervisor's diagnosis after the third was *a guard written for one
+    call, over a fact that more than one call can change* -- and the ruling was that the
+    fix owed is a checker that enumerates the **callers**.
+
+    It found this on its first run. **[Observed, row 4c]**, reproduced end to end
+    against the shipped registry:
+
+    * `commentable` and `searchable` are two live predicates whose extents are
+      non-empty and genuinely different (`{note}` and `{doc}`);
+    * `merge_types` refuses that pair **non-overridably**, under every acknowledgement;
+    * `commentable` is retired -- an ordinary, permitted governance act, no successor;
+    * `import_types` writes `aliases: ["commentable"]` onto `searchable` with **no
+      refusal, no warning and no acknowledgement**;
+    * `resolve_type("commentable")` goes from `proposal / None / 0.4762` to **`existing
+      / searchable / 1.0`**, a confidence `INTERFACE.md` §5.3 calls a registry
+      GUARANTEE, while the two extents stay different.
+
+    **Why `alias_collision` did not see it.** That guard refuses an alias that is a
+    **live** entry's name, because it exists to stop *two active entries holding one
+    word between them* (§5.9b). A retired name is not a live entry -- but **a retired
+    predicate name still resolves, and a retired predicate still has an extent.** The
+    guard was written for a collision; the failure is a collapse. Same write, different
+    question.
+
+    The diagnosis widens once more: the fourth caller reaches the collapse through a
+    different **field** (`aliases` rather than `successor`) as well as through a
+    different call, so both fields carry §5.10's identity guards now.
+    """
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "searchable", kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable"])
+    await seed(registry, "doc", predicates=["searchable"])
+    if not registry.caps.indexes_membership:
+        # Rule U makes the answer here the same for a different reason -- an extent that
+        # cannot be computed is not an identical extent -- so the assertion below still
+        # holds and the fixture's premise does not. Asserted rather than skipped.
+        pass
+
+    refused = await registry.merge_types(
+        "commentable", "searchable", "they look alike", merged_by="user:sd",
+        acknowledge=[
+            "definitions_diverge", "no_consumer_evidence", "retired_operand",
+            "predicate_merge", "kind_mismatch",
+        ],
+    )
+    assert isinstance(refused, Refusal) and refused.reason == "predicate_merge", refused
+    assert refused.detail["overridable"] is False
+
+    retired = await registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        pytest.skip(
+            "PACKAGE.md 3.6 -- this backend cannot record a forced retirement, so the "
+            f"fixture's first step is unreachable here: {retired.reason}"
+        )
+
+    entry = (await registry.import_types(
+        [
+            {
+                "name": "searchable",
+                "kind": "predicate",
+                "definition": "a capability",
+                "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    ))[0]
+    assert "import_refused:predicate_merge" in entry.warnings, (
+        "the alias door reaches the same collapse merge_types refuses non-overridably, "
+        "and it must be refused there too -- this is the kill row's fourth trip"
+    )
+    assert "commentable" not in (entry.aliases or ()), "refused, and nothing written"
+
+    resolution = await registry.resolve_type(
+        "commentable", ResolveContext(), tier="unspecified"
+    )
+    assert not (
+        resolution.outcome == "existing" and resolution.type == "searchable"
+    ), (
+        "`resolve_type('commentable')` must not answer `searchable` at confidence 1.0 -- "
+        "that IS the merge, whichever call wrote the alias"
+    )
+
+@pytest.mark.requires_capability("stores_aliases")
+async def test_c12_09_an_imported_alias_between_identical_extents_is_still_written(registry):
+    """The other half of `C12-08`, and the half a careless fix deletes.
+
+    **The guard is narrowed, not banned.** `INTERFACE.md` §5.10 refusal #2 permits a
+    predicate merge when the two extents are **non-empty and byte-identical** -- that is
+    the whole content of `C10-09`, which narrowed the guard rather than closing the
+    operation. An `import_types` alias between two predicates in exactly that state is a
+    legal write, and a fix that refused every predicate alias would pass a test suite
+    that only asserted refusals while deleting an operation the specification allows.
+
+    A non-predicate alias is likewise untouched: the identity guards are about what a
+    collapse would ASSERT, and two entities sharing a word is `alias_collision`'s
+    question, not this one's.
+    """
+    if not registry.caps.indexes_membership:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend declares indexes_membership=False, so every "
+            "extent is unknowable and Rule U refuses the write for a different reason. "
+            "`C12-08` asserts that half; this one needs a computable extent as "
+            "scaffolding, not as its subject"
+        )
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "searchable", kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable", "searchable"])
+
+    retired = await registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        pytest.skip(
+            "PACKAGE.md 3.6 -- this backend cannot record a forced retirement: "
+            f"{retired.reason}"
+        )
+
+    entry = (await registry.import_types(
+        [
+            {
+                "name": "searchable",
+                "kind": "predicate",
+                "definition": "a capability",
+                "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    ))[0]
+    assert not any(w.startswith("import_refused:") for w in entry.warnings), entry.warnings
+    assert "commentable" in entry.aliases, (
+        "two predicates with non-empty identical extents may be collapsed -- C10-09 "
+        "narrowed the guard, and a fix that banned the operation would pass a checker "
+        "that only tested refusals"
+    )

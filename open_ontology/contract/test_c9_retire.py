@@ -1,4 +1,4 @@
-"""C9 -- ``retire`` and ``reinstate`` (17). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (19). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -736,3 +736,75 @@ def test_c9_18_retire_with_a_successor_takes_the_merges_identity_guards(registry
     same = registry.retire("linkable", reason="genuinely the same set",
                            retired_by="user:sd", successor="shareable")
     assert isinstance(same, TypeEntry), same
+
+
+def test_c9_19_a_non_overridable_guard_is_never_reached_through_an_overridable_one(
+    adapter, make_registry
+):
+    """Row 4c, found by ``docs/tools/check_merge_guard.py``. **Row 3c's lesson, applied
+    to the second caller.**
+
+    `merge_types` moved its `cannot_record_override` check to *after* its four
+    non-overridable refusals in row 3c, and INTERFACE.md §5.10 states why: *"a caller
+    trying to acknowledge past the kill row must be told **predicate_merge,
+    non-overridable**, not that the audit log is missing."* Answering with the wrong
+    reason for the right outcome sends the caller to do something that cannot work.
+
+    **`retire` had the same defect the other way round.** Its overridable consumer
+    guards ran first, so on a backend that cannot index membership, retiring one
+    predicate with another as its successor was refused **`no_consumer_evidence`** --
+    which the refusal itself advertises as overridable with `force=True` -- while the
+    true answer was `predicate_merge`, which is not overridable at all and never will
+    be. The outcome was safe: the forced call then met the identity guard. What was
+    wrong was the story, and the story is what a caller acts on.
+
+    This is the third instance of one class in this repository, and naming it is the
+    point: **a non-overridable guard reached through an overridable one.** The kill
+    row's first trip was its most dangerous form -- the merge *fell through* to an
+    overridable guard and went ahead. This is its mild form, and the mild form is what a
+    checker catches before the dangerous one recurs.
+    """
+    blind = make_registry(
+        DegradedAdapter(
+            adapter,
+            indexes_membership=False,
+            why={
+                "indexes_membership": "this store has no type-predicate table, so an "
+                "extent cannot be computed"
+            },
+        ),
+        approval_policy="auto",
+    )
+    seed(blind, "commentable", kind="predicate", definition="a capability")
+    seed(blind, "searchable", kind="predicate", definition="a capability")
+    seed(blind, "note", predicates=["commentable"])
+    seed(blind, "doc", predicates=["searchable"])
+
+    refusal = blind.retire(
+        "commentable", "folded into searchable", retired_by="user:sd",
+        successor="searchable",
+    )
+    assert isinstance(refusal, Refusal), refusal
+    assert refusal.reason == "predicate_merge", (
+        "the identity guards run BEFORE the consumer guards, so a caller is told the "
+        "refusal that will not move rather than the one that advertises an override"
+    )
+    assert refusal.detail["overridable"] is False
+    assert refusal.detail["extents_knowable"] is False
+
+    forced = blind.retire(
+        "commentable", "folded into searchable", retired_by="user:sd",
+        successor="searchable", force=True,
+    )
+    assert isinstance(forced, Refusal) and forced.reason == "predicate_merge", (
+        "and `force=True` does not move it either -- force overrides what could be "
+        "SEEN, never what would become TRUE"
+    )
+
+    # The consumer guards still work, and still come second: a retirement with NO
+    # successor has no identity question to answer, so the unknowable-extent guard is
+    # the one that fires. A reorder that swallowed it would pass every assertion above.
+    plain = blind.retire("searchable", "nobody uses it", retired_by="user:sd")
+    assert isinstance(plain, Refusal), plain
+    assert plain.reason == "no_consumer_evidence"
+    assert plain.detail["overridable"] is True
