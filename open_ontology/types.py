@@ -346,6 +346,25 @@ WARNING_VALUES = (
     # does not narrow the guard, it BANS `propose_type` on every paging backend, at
     # exactly the scale (UC3) where paging happens. `C10-09`'s lesson one call along.
     "alias_check_incomplete",
+    # ACTIONS.md 3.1, row 6b's FIRST adversarial round -- the thirty-third. `Invocation`,
+    # when the host reports a `gate_verdict` of `allowed` or `refused` and does NOT hand
+    # back the `Preflight` it acted on.
+    #
+    # Rule 3-7 copies the declaration and the policy the GATE judged, *"so amending the
+    # family does not re-describe an existing invocation's blast radius"* -- and
+    # `record_invocation(judged=...)` is how the gate's judgement gets there. It is
+    # OPTIONAL, and its absence was silent: the same invocation, with the family widened
+    # between the two calls, filed `declaration_amended:1:2` plus an `effect_undeclared`
+    # with `judged=` and a **clean row** without it. [Observed] byte-identical on both
+    # reference backends.
+    #
+    # A host that never asked the gate (`gate_verdict="not_asked"`) is not doing this and
+    # is not warned: there was no judgement to hand back. A host that DID ask and did not
+    # hand it back has left the registry unable to tell whether the declaration moved,
+    # and Rule U's answer to *we cannot tell* is a stated absence rather than a clean
+    # record. It is a WARNING and never a refusal, for 5.4's own reason and for 2.5's:
+    # refusing to record what already occurred is the worst available answer.
+    "declaration_unjudged",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

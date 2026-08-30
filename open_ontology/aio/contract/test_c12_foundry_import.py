@@ -17,7 +17,7 @@ call performs it -- deviation D-8 in docs/runs/2A-RUN.md.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import Evidence, Refusal, ResolveContext, TypeEntry
+from open_ontology.types import Consumer, Evidence, Refusal, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -520,3 +520,167 @@ async def test_c12_13_a_legal_import_is_not_banned_by_a_backend_that_pages(adapt
     # The truncation is REPORTED, exactly once.
     said = [w for w in entry.warnings if w.startswith("alias_check_incomplete:")]
     assert len(said) == 1, f"reported once, not zero and not twice: {entry.warnings}"
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+async def test_c12_14_the_ninth_trip_a_row_that_does_not_exist_yet_has_no_consumers_to_read(
+    adapter, make_registry
+):
+    """**The kill row's NINTH trip**, found by row 6b's first adversarial lens -- which is
+    the review ruling **R53** and the seventh-trip countersignature say those guards
+    never got.
+
+    `_alias_identity_breach` compared consumer sets by reading the row being aliased ONTO
+    -- and `import_types` routinely creates that row **in the same call that writes the
+    alias**. With no row to read, the shipped guard fell back to comparing the *other*
+    row against **itself**, so 5.10's refusal #1 was equal by construction and **could
+    not fire**. Row 6b's extraction found the fallback, named it, and raised it as a
+    question; the lens then walked it, on the kill row's own noun:
+
+    1. `commentable` and `gamma` are predicates whose written extents are **non-empty and
+       identical**, so refusal **#2 passes honestly** -- this is not a #2 evasion;
+    2. `commentable` declares `meta_p` and a consumer gates on `meta_p`, so
+       `commentable.gates_on == ['svc:meta']` and `gamma`'s is empty. **The gate is not
+       the aliased word**, so the alias cannot equalise them;
+    3. `commentable` is retired -- *an ordinary, permitted governance act*, the fourth
+       trip's own words;
+    4. `import_types` creates `gamma` carrying `aliases: ["commentable"]`. **Written,
+       with no refusal and no warning about the collapse**;
+    5. `resolve_type("commentable")` -> **`gamma` at confidence 1.0**, which
+       `INTERFACE.md` 5.3 calls a **guarantee** -- on a pair `merge_types` refuses
+       `different_consumer_sets` **non-overridably** under all five acknowledgements, and
+       that `retire(successor=)` refuses too.
+
+    **[Observed]** on both fully-capable legs and on the async mirror, with the full suite
+    green and `check_merge_guard.py` exiting 0 -- the **fifth consecutive** trip whose
+    question that checker's fixtures could not pose.
+
+    **The fix is a computed set, not a refusal, and the distinction is this row's own
+    most-repeated lesson.** *A guard with nothing to compare has not said the collapse is
+    safe* is `successor_unregistered`'s rule (trip 7) and would have been the obvious
+    transposition -- and it is **wrong here**, because there IS something to compare: the
+    incoming row declares its own `predicates`, so the consumer set it will have the
+    moment it is written is a **fact**. Refusing instead would ban `import_types` from
+    writing any aliased new row on any backend, which is `C10-09`'s lesson and `C3-13`'s
+    and `C12-13`'s: *never turn "we could not finish looking" into a refusal* -- and
+    worse, this would turn **"we did not look"** into one.
+    """
+    registry = await make_registry(adapter)
+    await registry.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    await seed(registry, "meta_p", kind="predicate")
+    await seed(registry, "commentable", kind="predicate", predicates=["meta_p"])
+    for member in ("aaa_note", "bbb_memo"):
+        await seed(registry, member, predicates=["commentable"])
+
+    # The two extents are non-empty and IDENTICAL, so refusal #2 has nothing to say --
+    # which is what makes this a #1 walk rather than another #2 walk.
+    assert (await registry._written_extent("default", "commentable", include_retired=True))[0] == (
+        "aaa_note",
+        "bbb_memo",
+    )
+    assert {c.id for c in (await registry.consumers("commentable")).gates_on} == {"svc:meta"}
+
+    retired = await registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        pytest.skip(
+            "PACKAGE.md 3.6 -- this backend cannot record a forced retirement, so the "
+            f"fixture's first step is unreachable here: {retired.reason}"
+        )
+
+    entry = (await registry.import_types(
+        [
+            {
+                "name": "gamma",
+                "kind": "predicate",
+                "definition": "a capability, imported with an alias",
+                "predicates": [],
+                "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    ))[0]
+    assert "import_refused:different_consumer_sets" in entry.warnings, entry.warnings
+    assert "commentable" not in (entry.aliases or ()), "refused and wrote the alias anyway"
+
+    resolution = await registry.resolve_type(
+        "commentable", ResolveContext(source="the C12-14 fixture"), tier="opus"
+    )
+    assert resolution.outcome != "existing", (
+        "the ninth trip: a capability predicate merged as a duplicate, at the confidence "
+        "INTERFACE.md 5.3 calls a guarantee"
+    )
+
+    # **The control, and it is what makes this a KILL-ROW walk rather than a style
+    # complaint: one registry may not answer two ways about one claim.** Asked directly,
+    # `merge_types` refuses this exact pair NON-OVERRIDABLY under all five
+    # acknowledgements. It is asked on a second store because the fix means `gamma` was
+    # never written on the first -- which is the point.
+    control = await make_registry(adapter)
+    await control.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    await seed(control, "meta_p", kind="predicate")
+    await seed(control, "commentable", kind="predicate", predicates=["meta_p"])
+    await seed(control, "gamma", kind="predicate")
+    for member in ("aaa_note", "bbb_memo"):
+        await seed(control, member, predicates=["commentable", "gamma"])
+    refusal = await control.merge_types(
+        "commentable",
+        "gamma",
+        "the same claim, asked directly",
+        merged_by="user:sd",
+        acknowledge=[
+            "definitions_diverge",
+            "no_consumer_evidence",
+            "retired_operand",
+            "predicate_merge",
+            "kind_mismatch",
+        ],
+    )
+    assert isinstance(refusal, Refusal), f"the control merge was ALLOWED: {refusal!r}"
+    assert refusal.reason == "different_consumer_sets", refusal
+    assert refusal.detail["overridable"] is False
+
+@pytest.mark.requires_capability("stores_aliases")
+async def test_c12_15_a_new_row_whose_consumers_agree_is_still_aliased(adapter, make_registry):
+    """`C12-14`'s narrowing, and it is the half a careless fix deletes.
+
+    The guard is **narrowed, not banned**: an import that creates a row whose computed
+    consumer set MATCHES the word it is aliasing is still written. Every guard fix in this
+    repository ships with this assertion beside it -- `C10-09`, `C12-09`, `C10-19`,
+    `C4-14` -- because *refusing everything passes a checker that only tests refusals and
+    deletes a legal operation*.
+    """
+    registry = await make_registry(adapter)
+    await registry.register_consumer(
+        Consumer(id="svc:c", gate="commentable", on_unknown="drop", owner="ops")
+    )
+    await seed(registry, "commentable", kind="predicate")
+    await seed(registry, "note", kind="entity", predicates=["commentable"])
+    retired = await registry.retire("note", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        pytest.skip(
+            "PACKAGE.md 3.6 -- this backend cannot record a forced retirement: "
+            f"{retired.reason}"
+        )
+
+    entry = (await registry.import_types(
+        [
+            {
+                "name": "memo",
+                "kind": "entity",
+                "definition": "a note by another name",
+                # The SAME declared predicates, so the computed gate set is the same one.
+                "predicates": ["commentable"],
+                "aliases": ["note"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="entity",
+    ))[0]
+    assert not [w for w in entry.warnings if w.startswith("import_refused:")], entry.warnings
+    assert "note" in (entry.aliases or ()), "the legal alias must still be written"

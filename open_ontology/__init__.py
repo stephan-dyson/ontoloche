@@ -22,6 +22,20 @@ from .adapter import (
     UsageRecord,
 )
 from .attributes import AttributeCensus, AttributeSchema, FieldSpec
+from .actions import (
+    ActionFamily,
+    Effect,
+    EdgeRef,
+    InputSpec,
+    Invocation,
+    InvocationProvenance,
+    InvocationReport,
+    Precondition,
+    PreconditionResult,
+    Preflight,
+    ProjectionReport,
+    action_attributes,
+)
 from .edges import (
     Edge,
     EdgeFamily,
@@ -64,6 +78,22 @@ from .types import (
 )
 
 __all__ = [
+    # ACTIONS.md v0's shapes, row 6b. Exported for the reason EDGES.md's are: a host
+    # that has to BUILD a family should not have to know which private module it lives
+    # in. Row 6b's first adversarial round found `from open_ontology import Effect`
+    # raising ImportError while every EDGES shape was re-exported.
+    "ActionFamily",
+    "Effect",
+    "EdgeRef",
+    "InputSpec",
+    "Invocation",
+    "InvocationProvenance",
+    "InvocationReport",
+    "Precondition",
+    "PreconditionResult",
+    "Preflight",
+    "ProjectionReport",
+    "action_attributes",
     "Registry",
     "Citation",
     "Consumer",

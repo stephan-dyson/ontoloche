@@ -65,6 +65,7 @@ __all__ = [
     "GATE_VERDICTS",
     "EVALUATORS",
     "REF_SHAPES",
+    "ACTION_PAYLOAD_KIND",
     "ADMISSION_RULE",
     "family_declaration_problem",
     "declared_family",
@@ -167,6 +168,29 @@ EVALUATORS = ("list_types", "predicates", "neighbors")
 #: ACTIONS.md 2.3. Three reference shapes, and the third is this document's.
 REF_SHAPES = ("type", "instance", "edge")
 
+#: ACTIONS.md 2.7, ruling **R10**, row 6b -- the ``AttributeSchema.kind`` an invocation's
+#: INPUTS schema is keyed under, and it is **not** ``"action"``.
+#:
+#: 2.7 as written says `payload_schema` names a schema keyed
+#: ``(namespace, "action", <family name>)`` -- which is exactly the key R10 already gave
+#: the name-level schema governing that family's OWN eight declaration keys. One key,
+#: two dicts, and contortion **ACT1** predicted the collision in the abstract:
+#: *"it works because the two objects never share a store, which is a fact OUTSIDE the
+#: mechanism."* **They do share one**, `oo_attr_schema`, under one key.
+#:
+#: **[Observed, row 6b's first adversarial round]** registering
+#: ``AttributeSchema(namespace="beacon", kind="action", name="q_fam", mode="enforce")``
+#: made ``propose_type(kind="action", name="q_fam")`` refuse
+#: ``attributes_schema_violation`` -- *the family became unregisterable by the act of
+#: governing its own inputs*, and 2.7's headline is *"this one is not inert"*.
+#:
+#: This is `edges.EDGE_PAYLOAD_KIND` one kind along, deviation **D-4c-1** reproduced by
+#: the row that inherited the mechanism. A schema kind of its own separates the two
+#: spaces with no new table, no new primitive and no possible collision, and it makes
+#: ``attribute_census(kind="action_payload")`` the same enumeration for invocation inputs
+#: that PACKAGE.md 5.5 gives type attributes.
+ACTION_PAYLOAD_KIND = "action_payload"
+
 #: ACTIONS.md 10.4. The ONE admission rule the registry computes, labelled so a caller
 #: can see that it is one. Ruling **R42**: it stays one host's convention for v0 --
 #: ``counts`` is rule-independent and a host with a different rule computes from it.
@@ -207,13 +231,29 @@ class EdgeRef:
 InputRef = TypeRef | InstanceRef | EdgeRef
 
 
-def ref_shape(ref: Any) -> str:
-    """Which of ACTIONS.md 2.3's three shapes this reference is."""
+def ref_shape(ref: Any) -> str | None:
+    """Which of ACTIONS.md 2.3's three shapes this reference is, or ``None``.
+
+    **``None`` and not ``"type"``, and the difference is a kill-row door.** The first
+    cut returned ``"type"`` for anything that was not an ``EdgeRef`` or an
+    ``InstanceRef`` -- so a bare string, a dict or a tuple was accepted as a type ref,
+    ``ref_kind`` found no ``kind`` on it, the general ``predicate`` exclusion never saw
+    it, and ``preflight`` answered ``verdict="allowed"`` for
+    ``merge_capabilities(commentable, searchable)``. **That is row #6's own R1-B1 walk,
+    alive through a different ref SHAPE** -- and 2.3's rule is *"the exclusion is general
+    or it is nothing."*
+
+    It is the same mistake ``is_person`` records one section along, in the same shape: a
+    permissive fallback for an unrecognised value. **Rule U: unknown is not a type ref**,
+    exactly as unknown is not a person. Found by row 6b's first adversarial round.
+    """
     if isinstance(ref, EdgeRef):
         return "edge"
     if isinstance(ref, InstanceRef):
         return "instance"
-    return "type"
+    if isinstance(ref, TypeRef):
+        return "type"
+    return None
 
 
 def ref_kind(ref: Any) -> str | None:

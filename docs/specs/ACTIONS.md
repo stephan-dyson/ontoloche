@@ -98,7 +98,7 @@ Eight keys, all in `TypeEntry.attributes`, all governed by one `AttributeSchema`
 Two candidate second rules were considered and **not** taken, because two is where an exception list becomes a grammar:
 
 - *`effects == []` ⇒ `reversibility` must be `reversible`.* Tempting and wrong: an action with no declared **protocol** effects may still change host state (§2.5's `host_state`), so the antecedent does not imply the consequent. The real check is at record time and it is `effect_undeclared` (§7).
-- *`approval_mode="auto"` ⇒ `min_auto_tier is not None`.* Almost right, and left out deliberately: a deployment running a single model tier has nothing to compare against, and forcing it to invent a tier string is how `model_tier`'s opaque-string posture (`INTERFACE.md` §2.7) gets quietly turned into a required ordering nobody defined. It is a **warning**, not a rule — §5.2.
+- *`approval_mode="auto"` ⇒ `min_auto_tier is not None`.* Almost right, and left out deliberately: a deployment running a single model tier has nothing to compare against, and forcing it to invent a tier string is how `model_tier`'s opaque-string posture (`INTERFACE.md` §2.7) gets quietly turned into a required ordering nobody defined. It is **not a rule** — and §5.2 is where what it IS gets decided: **not a warning either**, deliberately, because minting a vocabulary entry for a correct configuration is how a closed vocabulary starts describing correct behaviour. What a caller gets is Rule U on the report: `Preflight.tier_floor=None` plus a `tier_floor_why`. *(This line read "it is a **warning**" and §5.2 read "it is **not** a warning value, deliberately" — two sentences one screen apart saying opposite things about one field, with the code emitting neither. Found by row 6b's first adversarial round; nothing catches a prose contradiction, which is §14's own point.)*
 
 > **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
 
@@ -511,6 +511,21 @@ So, concretely, for the one host that exists:
 
 ## 6. The calls — four, and none of them in `INTERFACE.md` §5
 
+> **The build row found a FIFTH, and it is recorded here rather than left in a run
+> document.** §5.2 says a `review`-mode invocation *"is enumerable by
+> `invocations(unreviewed=True)` **until an `invocation_reviewed` event is appended**"*
+> and §3.5 mints the event value — **and none of the four calls below appends one**, so
+> the queue `review` mode creates could never drain. `review_invocation(invocation_id, *,
+> reviewed_by, namespace)` is that writer. It is deliberately **not** a parameter on
+> `record_invocation`: a review is a second act by a second person at a later time, and a
+> parameter on the write call would let the actor who ran the action mark their own
+> invocation reviewed. It refuses `action_store_absent` with no store and
+> `cannot_record_override` on a backend that cannot keep the event — *a review nothing
+> records is not a review*. Deviation **D-6b-3** in [`6B-RUN.md`](../runs/6B-RUN.md);
+> `C19-50` exercises it. **The count in this heading is four because that is what the
+> specification designed; the implementation needs five, and saying so here is the
+> correction rather than the heading being quietly rewritten.**
+
 > **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
 
 | # | rule | exercised by |
@@ -760,8 +775,8 @@ Under `"savepoint"`, a `record_invocation` result carries `not_durable_until_hos
 @dataclass(frozen=True)
 class InvocationRecord:
     invocation_id:       str
-    family:              str
     namespace:           str
+    family:              str
     inputs:              dict            # JSON-serialisable. InputRef, 2.3
     declared_effects:    tuple           # JSON-serialisable. Effect, 2.5
     observed_effects:    tuple
@@ -783,7 +798,7 @@ class InvocationRecord:
     warnings:            tuple[str, ...]
 
 # 19
-def put_invocation(self, record: InvocationRecord) -> None: ...
+def put_invocation(self, rec: InvocationRecord) -> InvocationRecord: ...
 
 # 20
 def get_invocation(self, invocation_id: str) -> InvocationRecord | None: ...
@@ -800,7 +815,8 @@ def find_invocations(
     gate_verdict: str | None = None,             # 4's override query
     effect_undeclared: bool | None = None,       # 2.5's blast-radius query
     unreviewed: bool | None = None,              # 5.2's review queue
-    after: tuple[datetime, str] | None = None,   # keyset: (created_at, invocation_id)
+    after: str | None = None,                    # OPAQUE cursor; the keyset it encodes
+                                                 #   is (created_at, invocation_id)
     limit: int = 100,
 ) -> InvocationPage: ...
 
@@ -810,10 +826,12 @@ class InvocationPage:
     known:          int | None      # None = the BACKEND cannot count. Rule U
     complete:       bool
     why_incomplete: str | None
-    next_after:     tuple[datetime, str] | None
+    next_after:     str | None      # OPAQUE, exactly as `TypePage`'s and `EdgePage`'s are
 ```
 
 > **`declared_policy` and `family_version` were missing from this block until row 6b's build, which is the SAME defect round 3 fixed one screen up.** §19.4 records that *"the whole of round 2's gate-to-record fix was missing from the printed shapes"* — `Invocation.declared_policy`, `Invocation.family_version`, `Preflight.family_version` and `record_invocation`'s `judged` — and lists four places it corrected. The **adapter** record was not one of them, so a third-party backend built from §9 alone had two columns fewer than rules 3-7 and 3-8 require, and the ledger it produced could not answer *"was Haiku permitted to run this unattended in March?"* at all. Found mechanically, by `check_spec_drift.py` reading this block for the first time — which is §14's whole argument arriving as evidence rather than as a plan.
+
+> **Three of this block's printed signatures had drifted, and nothing was holding them** — found by row 6b's first adversarial round, and the finding is *where* rather than *what*. `check_spec_drift.py` reads this document's printed SHAPES and the four façade CALL signatures; `PACKAGE.md` §3.4's block holds the twenty-one PRIMITIVE signatures against the Protocol; **§9's three printed primitives were in neither half**. `put_invocation` was printed returning `None` (it returns the record as stored, so a backend can tell what did not round-trip), `after` and `next_after` were printed as a `(datetime, str)` tuple where every other paging primitive in this package carries an **opaque string**, and `InvocationRecord` printed `family` before `namespace` while the code — and every other `*Record` — has `namespace` first, so `InvocationRecord("id-1", "add_task_stakeholder", "beacon")` built silently and wrongly. **Row 6b extends the checker to hold §9's primitives against `StorageAdapter` in the same change that corrects them**, which is §14's rule applied to the one block of this document it had not reached.
 
 **A `Page`, not a 2-tuple, and the reason is `known`.** §6.3 requires `InvocationReport.known` to be `int | None` because *a backend entitled to say "we did not count" must have somewhere to say it*. A `(page, truncated)` tuple gives the backend nowhere, so the façade could only ever report `len(rows)` — the falsification §6.3 forbids — or `None` by fiat regardless of what the backend knew. **Every other paging primitive in the package already returns this shape** (`EdgePage`, `TypePage`, `ProposalPage`, all with the same five fields); the 2-tuple was a round-1 finding and the fix is to stop being different.
 
