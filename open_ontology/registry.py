@@ -928,9 +928,18 @@ class Registry:
         consumer_rows = self.adapter.find_consumers(namespace)
         out: list[PredicateEntry] = []
         for rec in page.records:
-            if wanted is not None and rec.name not in wanted:
+            # **Ruling R54, row 4d: the filter resolves the IDENTITY, not the written
+            # word.** A member declares `commentable`; `commentable` is merged into
+            # `searchable`; `predicates(of=member)` then compared the survivor's name to
+            # a list holding the absorbed one and answered **`known=0`** -- INTERFACE.md
+            # 5.2's own named failure mode, *an empty answer reading as a confident
+            # zero*, in the call that reports what a type can do. The closure is walked
+            # only when a filter was actually asked for.
+            if wanted is not None and not (set(self._identity_names(rec)) & wanted):
                 continue
-            extent, extent_size, why = self._extent(namespace, rec.name, include_retired)
+            extent, extent_size, why = self._extent(
+                namespace, rec.name, include_retired, identity=True
+            )
             history, history_why = self._events(namespace, rec.kind, rec.name)
             out.append(
                 PredicateEntry(
@@ -977,12 +986,65 @@ class Registry:
         )
 
     def _extent(
-        self, namespace: str, predicate: str, include_retired: bool
+        self,
+        namespace: str,
+        predicate: str,
+        include_retired: bool,
+        *,
+        identity: bool = False,
     ) -> tuple[tuple[str, ...], int | None, str | None]:
+        """The types that satisfy a predicate. **Ruling R54, row 4d, adds ``identity``.**
+
+        ``identity=False`` -- the default, and every guard's reading -- answers *which
+        types declared THIS WORD*. ``identity=True`` answers *which types declared any
+        word this predicate's identity now spans*, which is the whole of R54.
+
+        **Why one function answers two questions, and why the default is the narrow one.**
+        `INTERFACE.md` §2.1 rules that a reference resolves to the identity it now
+        belongs to, so after `merge(commentable → searchable)` a caller asking
+        `predicates(of=note)` or `list_types(predicate=searchable)` must be told about
+        the type that declared `commentable`: answering `known=0` there is §5.2's own
+        named failure mode, *an empty answer reading as a confident zero*.
+
+        **The guards must NOT ask that question, and the reason is circular reasoning
+        rather than cost.** Every identity guard in this registry compares two extents to
+        decide whether collapsing two words asserts something false. If the comparison
+        resolved identities, the merge under examination would be exactly what joined the
+        two names into one identity, so the two closures would be equal **by
+        construction** -- the guard would agree with itself and refuse nothing, and
+        `check_merge_guard.py`'s stale axis would go quiet on a store it was built to
+        fail. The guards ask whether two words denote the same set **of their own
+        accord**; the read asks what satisfies a capability. Two questions, one store,
+        and R54 is careful to be only the second.
+
+        *(This is why the ruling sequenced R54 behind a staleness axis in the checker:
+        `_extent` is the expression all six kill-row trips run through, and 4C-RUN §6.5
+        records that changing what the guards compare, unreviewed, in the same commit as
+        five other guard changes, is how trips 2, 5 and 6 happened.)*
+
+        **Rule U over the closure too.** A closure that could not be followed to the end
+        -- a cycle, a chain past `_IDENTITY_CHAIN_CAP`, a backend that cannot page its
+        retired rows -- means the identity was not resolved, so the extent is returned
+        with ``extent_size=None`` and the closure's own `why`. Never a count over a
+        partial identity, which would be a confident number about an unfinished question.
+        """
         if not self.caps.indexes_membership:
             # Never extent_size=0 -- that reads as "nothing is commentable", which is
             # INTERFACE.md 5.2's named failure.
             return (), None, self.caps.reason("indexes_membership")
+
+        words: tuple[str, ...] = (predicate,)
+        why: str | None = None
+        if identity:
+            closure, closure_complete, closure_why = self._identity_closure(
+                TypeRef(namespace, "predicate", predicate), {}
+            )
+            words = tuple(dict.fromkeys(ref.name for ref in closure))
+            if not closure_complete:
+                why = closure_why or (
+                    f"the identity {predicate!r} belongs to could not be resolved to the "
+                    f"end, so the types declaring the words beyond it were not searched"
+                )
 
         # **Paged to exhaustion, and NOT doing so was the kill row's fifth trip.**
         # This read one page and returned it. Every guard that compares two extents --
@@ -1002,39 +1064,46 @@ class Registry:
         # `why_extent_incomplete` the whole time -- the guards discarded the one signal
         # the read path publishes.
         names: list[str] = []
-        why: str | None = None
-        after: str | None = None
-        cursors: set[str] = set()
-        while True:
-            page = self.adapter.find_types(
-                TypeQuery(
-                    namespace=namespace,
-                    predicate=predicate,
-                    include_retired=include_retired,
-                    after=after,
+        seen: set[str] = set()
+        for word in words:
+            after: str | None = None
+            cursors: set[str] = set()
+            while True:
+                page = self.adapter.find_types(
+                    TypeQuery(
+                        namespace=namespace,
+                        predicate=word,
+                        include_retired=include_retired,
+                        after=after,
+                    )
                 )
-            )
-            names.extend(r.name for r in page.records)
-            if page.known is None:
-                # A backend that cannot count a page has not told us the page is whole.
-                why = page.why_incomplete or self.caps.reason("indexes_membership")
-                break
-            if not page.complete and page.next_after is None:
-                # Truncated with no way to read the rest -- the residual case.
-                why = page.why_incomplete or self.caps.reason("indexes_membership")
-                break
-            after = page.next_after
-            if after is None:
-                break
-            if after in cursors:
-                # C0-10's question, asked of the extent scan.
-                why = (
-                    "this backend returned a pagination cursor it had already returned, "
-                    "so a predicate's extent cannot be read to exhaustion "
-                    "(PACKAGE.md 3.4 primitive 6)"
-                )
-                break
-            cursors.add(after)
+                # Deduplicated across the closure's words: a type that declared BOTH the
+                # absorbed name and the survivor is one member of one extent, not two.
+                # With `identity=False` there is one word and this is a no-op.
+                for record in page.records:
+                    if record.name not in seen:
+                        seen.add(record.name)
+                        names.append(record.name)
+                if page.known is None:
+                    # A backend that cannot count a page has not told us the page is whole.
+                    why = why or page.why_incomplete or self.caps.reason("indexes_membership")
+                    break
+                if not page.complete and page.next_after is None:
+                    # Truncated with no way to read the rest -- the residual case.
+                    why = why or page.why_incomplete or self.caps.reason("indexes_membership")
+                    break
+                after = page.next_after
+                if after is None:
+                    break
+                if after in cursors:
+                    # C0-10's question, asked of the extent scan.
+                    why = why or (
+                        "this backend returned a pagination cursor it had already "
+                        "returned, so a predicate's extent cannot be read to exhaustion "
+                        "(PACKAGE.md 3.4 primitive 6)"
+                    )
+                    break
+                cursors.add(after)
         if why is not None:
             return tuple(names), None, why
         return tuple(names), len(names), None
@@ -2209,20 +2278,89 @@ class Registry:
                 why_incomplete=self.caps.reason("indexes_membership"),
             )
 
-        page = self.adapter.find_types(
-            TypeQuery(
-                namespace=namespace,
-                kind=kind,
-                status=status,
-                predicate=predicate,
-                created_by=created_by,
-                include_retired=include_retired,
+        # **Ruling R54, row 4d: `predicate=` names an IDENTITY, not a written word.**
+        # After `merge(commentable -> searchable)`, `list_types(predicate="searchable")`
+        # missed every type that had declared `commentable` -- silently, and with a
+        # `known` that counted only what it found. INTERFACE.md 2.1 rules that a
+        # reference resolves to the identity it now belongs to, and answering *"nothing
+        # is searchable"* about types the registry can see is 5.2's named failure in the
+        # call whose absence means *"nobody could find the existing types"*.
+        #
+        # **An identity is per `(namespace, kind)`** (2.1, 2.6): the same word in two
+        # namespaces is two identities, which is what scoping exists to preserve. So the
+        # closure is resolved **inside a namespace**, never across one, and the default
+        # `namespace=None` -- the ordinary call, and the one R54's example uses -- is
+        # answered by asking which namespaces hold a `kind="predicate"` row of this name
+        # and resolving each one's identity there. That is **one bounded lookup**, not
+        # the unbounded census ruling R13 declined to page in v0: a `name_in` of one
+        # word returns at most one row per namespace.
+        #
+        # The written word is always queried, in whatever scope the caller asked for, so
+        # a type declaring a predicate that names no row at all (EDGES.md 2.7's rule --
+        # a dangling reference is a fact, not an error) is still found. The identity only
+        # ever ADDS.
+        queries: list[tuple[str | None, str | None]] = [(namespace, predicate)]
+        closure_complete, closure_why = True, None
+        if predicate is not None:
+            if namespace is not None:
+                closure, closure_complete, closure_why = self._identity_closure(
+                    TypeRef(namespace, "predicate", predicate), {}
+                )
+                queries.extend(
+                    (namespace, ref.name) for ref in closure if ref.name != predicate
+                )
+            else:
+                holders = self.adapter.find_types(
+                    TypeQuery(kind="predicate", name_in=(predicate,), include_retired=True)
+                )
+                if not holders.complete:
+                    closure_complete = False
+                    closure_why = holders.why_incomplete
+                for holder in holders.records:
+                    closure, one_complete, one_why = self._identity_closure(
+                        TypeRef(holder.namespace, "predicate", predicate), {}
+                    )
+                    if not one_complete:
+                        closure_complete = False
+                        closure_why = closure_why or one_why
+                    queries.extend(
+                        (holder.namespace, ref.name)
+                        for ref in closure
+                        if ref.name != predicate
+                    )
+
+        records: list = []
+        seen_records: set[tuple[str, str, str]] = set()
+        page_known_ok = True
+        page_complete = True
+        page_why: str | None = None
+        for scope, word in dict.fromkeys(queries):
+            page = self.adapter.find_types(
+                TypeQuery(
+                    namespace=scope,
+                    kind=kind,
+                    status=status,
+                    predicate=word,
+                    created_by=created_by,
+                    include_retired=include_retired,
+                )
             )
-        )
+            for record in page.records:
+                key = (record.namespace, record.kind, record.name)
+                if key not in seen_records:
+                    seen_records.add(key)
+                    records.append(record)
+            page_known_ok = page_known_ok and page.known is not None
+            page_complete = page_complete and bool(page.complete)
+            page_why = page_why or page.why_incomplete
+        if not closure_complete:
+            page_complete = False
+            page_why = page_why or closure_why
+
         consumer_rows_by_ns: dict[str, list[ConsumerRecord]] = {}
         entries: list[TypeEntry] = []
         excluded_unknown = 0
-        for rec in page.records:
+        for rec in records:
             if rec.namespace not in consumer_rows_by_ns:
                 consumer_rows_by_ns[rec.namespace] = self.adapter.find_consumers(rec.namespace)
             entry = self._entry(rec, consumers=consumer_rows_by_ns[rec.namespace])
@@ -2258,14 +2396,13 @@ class Registry:
         why: str | None = None
         if applied:
             why = "filters suppressed rows: " + ", ".join(applied)
-        elif not page.complete:
-            why = page.why_incomplete
-
-        known = len(entries) if page.known is not None else None
+        elif not page_complete:
+            why = page_why
+        known = len(entries) if page_known_ok else None
         return TypeListing(
             types=tuple(entries),
             known=known,
-            complete=bool(page.complete and not applied),
+            complete=bool(page_complete and not applied),
             why_incomplete=why,
             excluded_unknown=excluded_unknown if orphaned is not None else None,
         )
