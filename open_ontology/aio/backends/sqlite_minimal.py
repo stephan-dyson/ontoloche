@@ -17,6 +17,7 @@ from open_ontology.adapter import (
     EdgeQuery,
     EdgeRecord,
     EventRecord,
+    InvocationRecord,
     ProposalQuery,
     ProposalRecord,
 )
@@ -78,6 +79,12 @@ class AsyncMinimalSQLiteAdapter(AsyncSQLiteAdapter):
             stores_edge_events=False,
             indexes_edges_by_family=False,
             stores_edge_attributes=False,
+            # ACTIONS.md 8 -- the sync twin's declaration, and for the same reason: this
+            # store has no `oo_invocation` at all. The other two are vacuous rather than
+            # declined (8.1, C0-01's carve-out shape).
+            stores_invocations=False,
+            stores_invocation_events=False,
+            indexes_invocations_by_family=False,
             why={**MINIMAL_WHY, **self._why()},
             transaction_scope="savepoint" if self._borrowed else "owned",
             attribute_projections=frozenset(MINIMAL_TYPE_PROJECTIONS.values()),
@@ -115,6 +122,7 @@ class AsyncMinimalSQLiteAdapter(AsyncSQLiteAdapter):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
+        invocation_id: str | None = None,
     ) -> list[EventRecord]:
         raise NotSupported(MINIMAL_WHY["stores_events"])
 
@@ -127,3 +135,22 @@ class AsyncMinimalSQLiteAdapter(AsyncSQLiteAdapter):
 
     async def find_edges(self, q: EdgeQuery):
         raise NotSupported(MINIMAL_WHY["stores_edges"])
+
+    # ------------------------------------------------------------------ 19 to 21
+    #
+    # **This file is hand-written, and that is exactly why the async leg failed while
+    # the sync leg passed** (row 6b). The sync `MinimalSQLiteAdapter` declines the
+    # invocation store by overriding these three; this mirror is not generated from it,
+    # so until this block existed the async leg fell through to the base class and hit
+    # `no such table: oo_invocation` -- a raw driver error out of a call whose contract
+    # is `NotSupported` with the backend's own sentence. Found by `C19-39`, whose subject
+    # IS the declined capability and which therefore runs on this leg rather than
+    # skipping. 3B-ASYNC.md D-A12's cost, paid once more.
+    async def put_invocation(self, rec: InvocationRecord) -> InvocationRecord:
+        raise NotSupported(MINIMAL_WHY["stores_invocations"])
+
+    async def get_invocation(self, invocation_id: str) -> InvocationRecord | None:
+        raise NotSupported(MINIMAL_WHY["stores_invocations"])
+
+    async def find_invocations(self, **kwargs):
+        raise NotSupported(MINIMAL_WHY["stores_invocations"])

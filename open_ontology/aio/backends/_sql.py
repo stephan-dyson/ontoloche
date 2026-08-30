@@ -30,6 +30,7 @@ from open_ontology.aio.adapter import (
     ConsumerRecord,
     EdgeRecord,
     EventRecord,
+    InvocationRecord,
     ProposalRecord,
     TypeRecord,
     UsageRecord,
@@ -41,6 +42,7 @@ from open_ontology.aio.adapter import (
     Capabilities,
     EdgePage,
     EdgeQuery,
+    InvocationPage,
     ProposalPage,
     ProposalQuery,
     TypePage,
@@ -65,6 +67,7 @@ from open_ontology.backends._sql import (
     Dialect,
     EDGE_COLUMNS,
     EVENT_COLUMNS,
+    INVOCATION_COLUMNS,
     PROPOSAL_COLUMNS,
     SqlStore,
     TYPE_COLUMNS,
@@ -180,10 +183,21 @@ class AsyncBaseSqlAdapter:
             stores_edge_events=True,
             indexes_edges_by_family=True,
             stores_edge_attributes=True,
+            # ACTIONS.md 8, store version 5. All three True on this class: `oo_invocation`
+            # is a real table with a family index, and `oo_event` has an `invocation_id`.
+            # `action_transaction_scope` is DERIVED rather than declared, for the reason
+            # the edge scope above is: `oo_invocation` lives in the same schema on the
+            # same connection as `oo_type`, so 8.2's binding rule says the two MUST be
+            # equal, and deriving it is how the rule cannot be broken by forgetting.
+            stores_invocations=True,
+            stores_invocation_events=True,
+            indexes_invocations_by_family=True,
             why=dict(self._why()),
             transaction_scope="savepoint" if self._borrowed else "owned",
             edge_transaction_scope="savepoint" if self._borrowed else "owned",
             edge_store_shares_connection=True,
+            action_transaction_scope="savepoint" if self._borrowed else "owned",
+            action_store_shares_connection=True,
         )
 
     #: Ruling R5: a savepoint scope is DECLARED, never silent. The sentence is the one
@@ -217,11 +231,23 @@ class AsyncBaseSqlAdapter:
         "clean return is atomic and becomes durable only when the host commits"
     )
 
+    #: ACTIONS.md 8.2, the third store's sentence. Its own text rather than the edge
+    #: one's, because *"who commits an invocation write"* is a different question the
+    #: moment the two stores are two connections -- and a `why` that names the wrong
+    #: object is the shape of `why` a caller stops reading.
+    BORROWED_ACTION_WHY = (
+        "the invocation store is this adapter's own store on the connection it was "
+        "lent: recording an invocation is bracketed in a SAVEPOINT and never committed "
+        "here, so a clean return is atomic and becomes durable only when the host "
+        "commits"
+    )
+
     def _why(self) -> dict[str, str]:
         why: dict[str, str] = {}
         if self._borrowed:
             why["transaction_scope"] = self.BORROWED_WHY
             why["edge_transaction_scope"] = self.BORROWED_EDGE_WHY
+            why["action_transaction_scope"] = self.BORROWED_ACTION_WHY
         if not self._owns_schema:
             why["owns_schema"] = self.HOST_SCHEMA_WHY
         return why
@@ -310,6 +336,13 @@ class AsyncBaseSqlAdapter:
         # absence -- which it says by overriding this method, exactly as
         # `sqlite_minimal` already does.
         required["oo_edge"] = EDGE_COLUMNS
+        # Store version 5, ACTIONS.md 9.2. Same unconditional reasoning as `oo_edge`
+        # above: THIS class's `capabilities()` declares `stores_invocations=True` for
+        # every adapter built on it, so a host schema it sits over must have the table. A
+        # backend that declines the invocation store has no such table and must not be
+        # failed for the absence (PACKAGE.md 3.2) -- which it says by overriding this
+        # method, exactly as `sqlite_minimal` already does.
+        required["oo_invocation"] = INVOCATION_COLUMNS
         required["oo_attr_schema"] = tuple(
             c.strip() for c in self._ATTR_SCHEMA_COLS.split(",")
         )
@@ -830,6 +863,7 @@ class AsyncBaseSqlAdapter:
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
+        invocation_id: str | None = None,
     ) -> list[EventRecord]:
         ph = self.d.ph
         cols = ", ".join(EVENT_COLUMNS)
@@ -850,6 +884,13 @@ class AsyncBaseSqlAdapter:
         if edge_id is not None:
             where.append(f"edge_id = {ph}")
             params.append(edge_id)
+        # Store version 5, ACTIONS.md 3.5 / 9.1. Additive and defaulted for the reason
+        # `edge_id` is: a caller that never passes it sees exactly the pre-6b behaviour,
+        # and `read_events(namespace)` with no filter still returns invocation events,
+        # because they are events.
+        if invocation_id is not None:
+            where.append(f"invocation_id = {ph}")
+            params.append(invocation_id)
         rows = await self._fetchall(
             f"SELECT {cols} FROM oo_event WHERE {' AND '.join(where)} "
             f"ORDER BY {self.d.event_order}",
@@ -1076,6 +1117,136 @@ class AsyncBaseSqlAdapter:
             )
             seen.update(r[0] for r in rows)
         return len(seen)
+
+    # -------------------------------------------------- 19 to 21, invocations
+    #
+    # ACTIONS.md 9. The whole invocation surface of this class is these three methods.
+    # What is NOT here is the point: no gate, no verdict logic, no notion of an effect
+    # being undeclared -- the `effect_undeclared` filter below is a predicate over a
+    # STORED warnings list, not a judgement about one. An adapter that knew what a gate
+    # verdict MEANS would be the boundary PACKAGE.md 3.1 forbids and C0-04 polices.
+
+    # 19
+    async def put_invocation(self, rec: InvocationRecord) -> InvocationRecord:
+        now = datetime.now(UTC)
+        stamped = InvocationRecord(
+            **{**rec.__dict__, "created_at": rec.created_at or now}
+        )
+        cols = ", ".join(INVOCATION_COLUMNS)
+        marks = self.m.marks(len(INVOCATION_COLUMNS))
+        async with self.transaction():
+            # **`expect_absent` is not a parameter here, and the absence is a decision.**
+            # `invocation_id` is minted ABOVE the store (PACKAGE.md 4.2), so a collision
+            # is not a case a caller can reach; and an invocation ledger is append-only
+            # by construction, so there is no amend path for an upsert to serve. A plain
+            # INSERT is the honest statement: this row is new, and a duplicate id is a
+            # constraint violation rather than a silent overwrite of a
+            # provenance-bearing record (INTERFACE.md 5.8).
+            try:
+                await self._execute(
+                    f"INSERT INTO oo_invocation ({cols}) VALUES ({marks})",
+                    self.m.invocation_values(stamped),
+                )
+            except self._integrity_errors as exc:
+                raise AlreadyExists(
+                    f"invocation {rec.invocation_id!r} is already stored"
+                ) from exc
+            stored = await self.get_invocation(rec.invocation_id)
+        assert stored is not None
+        return stored
+
+    # 20
+    async def get_invocation(self, invocation_id: str) -> InvocationRecord | None:
+        ph = self.d.ph
+        cols = ", ".join(INVOCATION_COLUMNS)
+        row = await self._fetchone(
+            f"SELECT {cols} FROM oo_invocation WHERE invocation_id = {ph}",
+            (invocation_id,),
+        )
+        return None if row is None else self.m.invocation_from_row(row)
+
+    # 21
+    async def find_invocations(
+        self,
+        *,
+        family: str | None = None,
+        namespace: str | None = None,
+        actor: str | None = None,
+        outcome: str | None = None,
+        since: datetime | None = None,
+        gate_verdict: str | None = None,
+        effect_undeclared: bool | None = None,
+        unreviewed: bool | None = None,
+        after: str | None = None,
+        limit: int = 100,
+    ) -> InvocationPage:
+        ph = self.d.ph
+        cols = ", ".join(INVOCATION_COLUMNS)
+        where: list[str] = []
+        params: list[Any] = []
+        for column, value in (
+            ("family", family),
+            ("namespace", namespace),
+            ("created_by_actor", actor),
+            ("outcome", outcome),
+            ("gate_verdict", gate_verdict),
+        ):
+            if value is not None:
+                where.append(f"{column} = {ph}")
+                params.append(value)
+        if since is not None:
+            where.append(f"created_at >= {ph}")
+            params.append(self.d.enc_ts(since))
+        if effect_undeclared is not None:
+            # **Pushed down, and the push-down is why ACTIONS.md 4's claim is a claim.**
+            # This filter and the two beside it were on the facade and on no primitive,
+            # so *"the registry filters above the store"* meant reading a `limit`-bounded
+            # page and filtering it afterwards -- which returned ZERO overrides from a
+            # 2,399-row ledger that had one. A floor of zero is indistinguishable from a
+            # clean deployment. It is a LIKE over the stored warnings text rather than a
+            # judgement: the adapter matches a string it never interprets (3.1).
+            clause = self.d.warning_prefix_clause("warnings_json")
+            params.append("effect_undeclared:%")
+            where.append(clause if effect_undeclared else f"NOT ({clause})")
+        if unreviewed is not None:
+            # **Half of this one pushes down and half cannot, and saying which is the
+            # honest form.** *Has this invocation been reviewed?* is a fact about this
+            # row -- the `invocation_reviewed` event -- and pushes down as far as
+            # "no such event exists". *Is the family in `review` mode?* is a fact about
+            # ANOTHER row's attributes, and the registry answers it above the store over
+            # a set of families it has already materialised. The report says
+            # `complete=False` either way.
+            exists = (
+                f"EXISTS (SELECT 1 FROM oo_event e WHERE "
+                f"e.invocation_id = oo_invocation.invocation_id AND "
+                f"e.event = {ph})"
+            )
+            params.append("invocation_reviewed")
+            where.append(f"NOT {exists}" if unreviewed else exists)
+        if after is not None:
+            at, invocation_id = decode_edge_cursor(after)
+            where.append(f"(created_at, invocation_id) > ({ph}, {ph})")
+            params.extend([self.d.enc_ts(at), invocation_id])
+        sql = (
+            f"SELECT {cols} FROM oo_invocation"
+            + ((" WHERE " + " AND ".join(where)) if where else "")
+            + f" ORDER BY created_at, invocation_id LIMIT {int(limit) + 1}"
+        )
+        rows = [self.m.invocation_from_row(r) for r in await self._fetchall(sql, params)]
+        more = len(rows) > limit
+        if more:
+            rows = rows[:limit]
+        return InvocationPage(
+            records=tuple(rows),
+            known=len(rows),
+            complete=not more,
+            why_incomplete="a page limit was applied" if more else None,
+            next_after=(
+                encode_edge_cursor(rows[-1].created_at, rows[-1].invocation_id)
+                if more and rows
+                else None
+            ),
+        )
 
     # ------------------------------------------------- optional attribute extension
     #: ``name`` is store version 2 (ruling R10). The empty string is the per-kind

@@ -17,6 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from actions_shipped_leg import shipped_leg  # noqa: E402
+
 from actions_probe_kit import (  # noqa: E402
     ActionCapabilities,
     ActionFamily,
@@ -265,6 +267,14 @@ def main() -> int:
     rep = reg.invocations(gate_verdict="refused", outcome="applied")
     check("       every override is enumerable", len(rep.invocations) == 1,
           f"{len(rep.invocations)} override(s)")
+
+    # **Row 6b, brief item 5: the same questions, asked of the SHIPPED registry.**
+    # The kit leg above is what makes this probe's pre-registered numbers comparable run
+    # to run; this is what stops them being claims about a model the package does not
+    # import. Row #6's own 17 had to record that its `import_types` kill-row fix
+    # *"exists only in the probe kit"* -- a legitimate spec-row boundary, and exactly the
+    # boundary a build row exists to remove.
+    shipped_leg(check, fixture="cms")
 
     print()
     failed = [c for c in CHECKS if not c[1]]

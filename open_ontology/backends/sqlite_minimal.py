@@ -29,6 +29,12 @@ absent                       consequence
                              an empty neighbour report reads as "this node has no
                              neighbours", which is Rule U's forbidden empty in the one
                              call that would be believed
+``oo_invocation``            ``stores_invocations=False``. ACTIONS.md 8: every invocation
+                             call returns ``action_store_absent``, never an empty report
+                             -- an empty invocation report reads as "nothing has ever
+                             run", which is the same forbidden empty one object along.
+                             (Naming the report class here would trip C0-04, exactly as
+                             naming the neighbour report class one row above would)
 ``oo_type.attributes_json``  ``stores_attributes=False``, and this is the interesting
                              one: the column is gone, but ``oo_type.primary_key_json``
                              is a real typed column this schema owns, so
@@ -40,7 +46,9 @@ absent                       consequence
 *(Row 4b makes it **five** tables where the reference schema has ten: `oo_edge` is the
 tenth, and this backend does not have it. `stores_edges=False` is the honest
 declaration and is what a type-only registry -- including every adapter written against
-the fifteen-primitive protocol -- says.)*
+the fifteen-primitive protocol -- says. **Row 6b makes it five where the reference
+schema has eleven**: `oo_invocation` is the eleventh, and `stores_invocations=False`
+says the same thing about verbs that `stores_edges=False` says about relationships.)*
 
 **And the schema belongs to the host** (``owns_schema=False``): ``migrate()`` is
 verify-only, exactly as it is for beacon's Alembic-owned ``work_link_types``.
@@ -60,6 +68,7 @@ import sqlite3
 from typing import Any
 
 from ..adapter import (
+    InvocationRecord,
     Capabilities,
     EdgeQuery,
     EdgeRecord,
@@ -213,6 +222,14 @@ MINIMAL_WHY = {
         "this store is a type registry only: no table holds relationships, so there is "
         "nothing to write an edge to and nothing for a neighbour walk to read"
     ),
+    # ACTIONS.md 8's first row, verbatim in shape: "this backend is a type registry
+    # only; no table holds invocations". The other two action flags get no sentence and
+    # need none -- with no invocation store they are vacuous rather than declined
+    # (8.1, C0-01's carve-out shape).
+    "stores_invocations": (
+        "this store is a type registry only: no table holds invocations, so there is "
+        "nothing to record a use of a verb in and nothing for the ledger to read"
+    ),
 }
 
 
@@ -270,6 +287,14 @@ class MinimalSQLiteAdapter(SQLiteAdapter):
             stores_edge_events=False,
             indexes_edges_by_family=False,
             stores_edge_attributes=False,
+            # ACTIONS.md 8. False, and the two that follow it are vacuous rather than
+            # declined -- see MINIMAL_WHY and 8.1. This is the leg that proves the
+            # optional invocation store can be declined HONESTLY rather than only in a
+            # wrapper: `oo_invocation` is absent from the host's SQL, not hidden behind
+            # a Python `if`, which is beacon finding U2's whole point two rows later.
+            stores_invocations=False,
+            stores_invocation_events=False,
+            indexes_invocations_by_family=False,
             why={**MINIMAL_WHY, **self._why()},
             transaction_scope="savepoint" if self._borrowed else "owned",
             # ...and the one key this schema DOES own, as a typed column. U3.
@@ -320,6 +345,7 @@ class MinimalSQLiteAdapter(SQLiteAdapter):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
+        invocation_id: str | None = None,
     ) -> list[EventRecord]:
         raise self._no_events()
 
@@ -335,3 +361,16 @@ class MinimalSQLiteAdapter(SQLiteAdapter):
 
     def find_edges(self, q: EdgeQuery):
         raise self._no_edges()
+
+    # ------------------------------------------------------------------ 19 to 21
+    def _no_invocations(self):
+        return NotSupported(MINIMAL_WHY["stores_invocations"])
+
+    def put_invocation(self, rec: InvocationRecord) -> InvocationRecord:
+        raise self._no_invocations()
+
+    def get_invocation(self, invocation_id: str) -> InvocationRecord | None:
+        raise self._no_invocations()
+
+    def find_invocations(self, **kwargs):
+        raise self._no_invocations()

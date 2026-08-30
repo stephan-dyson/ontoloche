@@ -128,6 +128,26 @@ FORBIDDEN = (
     "EdgeFamily",
     "NeighborEdge",
     "NeighborReport",
+    # Row 6b, ACTIONS.md 9. Nine more, on the same argument one kind along: 2.1's whole
+    # architectural bet is that a family is a `TypeEntry` and an invocation is a stored
+    # row, so the STORE holds `(family, inputs, effects, outcome)` with a blob of
+    # provenance and a `gate_verdict` string it never judges. `InvocationRecord`,
+    # `InvocationQuery` and `InvocationPage` are storage shapes and live in
+    # `adapter.py`; `\bInvocation\b` does not match them. The rich shapes -- the ones
+    # with typed references, a three-valued precondition result and a computed warnings
+    # list -- live in `open_ontology/actions.py`, and an adapter that knew about
+    # `Preflight` would know what a GATE VERDICT MEANS, which is the one thing PACKAGE.md
+    # 3.1 forbids it to know.
+    "Invocation",
+    "InvocationProvenance",
+    "InvocationReport",
+    "Preflight",
+    "PreconditionResult",
+    "Precondition",
+    "InputSpec",
+    "Effect",
+    "ActionFamily",
+    "ProjectionReport",
 )
 
 

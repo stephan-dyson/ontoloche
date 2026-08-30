@@ -39,12 +39,15 @@ __all__ = [
     "EdgeRecord",
     "EdgeQuery",
     "EdgePage",
+    "InvocationRecord",
+    "InvocationPage",
     "StorageAdapter",
     "AttributeStore",
     "AttrSchemaRecord",
     "AttrObservedRecord",
     "CAPABILITY_FLAGS",
     "EDGE_CAPABILITY_FLAGS",
+    "ACTION_CAPABILITY_FLAGS",
     "TRANSACTION_SCOPES",
 ]
 
@@ -70,6 +73,28 @@ CAPABILITY_FLAGS = (
     "stores_edge_events",
     "indexes_edges_by_family",
     "stores_edge_attributes",
+    # ACTIONS.md 8, row 6b. Three flags, and they are ORDINARY capability flags for the
+    # reason the edge four are: `check_capability_matrix.py` declines one flag at a time
+    # off this tuple, C0-01 requires a `why` off this tuple, and a degraded double
+    # validates its kwargs against this tuple. A flag that lived somewhere else would be
+    # a flag none of those three reached -- the shape of hole row 3c measured when six of
+    # eight optional flags turned out to be undeclinable.
+    "stores_invocations",
+    "stores_invocation_events",
+    "indexes_invocations_by_family",
+)
+
+#: ACTIONS.md 8's three, named separately for the places that must talk about the
+#: invocation store alone. `stores_invocations=False` means there is no invocation store,
+#: and the other two are then **vacuous rather than declined** -- asking a type-only
+#: registry to explain why it does not index invocations by family teaches an adapter
+#: author to write sentences nobody reads, which is how a `why` dict stops being a
+#: mechanism. C0-01's carve-out shape, applied to a third group; ACTIONS.md 8.1 says so
+#: in those words.
+ACTION_CAPABILITY_FLAGS = (
+    "stores_invocations",
+    "stores_invocation_events",
+    "indexes_invocations_by_family",
 )
 
 #: EDGES.md 6's four, named separately for the places that must talk about the edge
@@ -123,6 +148,15 @@ class Capabilities:
     stores_edge_events: bool = False
     indexes_edges_by_family: bool = False
     stores_edge_attributes: bool = False
+    #: ACTIONS.md 8, row 6b -- and the default is **False** for the same load-bearing
+    #: reason `stores_edges` is. An adapter written against the eighteen-primitive
+    #: protocol has no invocation store; defaulting True would make every such adapter
+    #: claim one, and this package would then call the write primitive on an object that
+    #: does not have it. The `action_store_absent` refusal is the honest answer for a
+    #: backend that predates this row, and it is what the default produces.
+    stores_invocations: bool = False
+    stores_invocation_events: bool = False
+    indexes_invocations_by_family: bool = False
     why: dict[str, str] = field(default_factory=dict)
     #: Ruling R5 / PACKAGE.md 3.5. ``"owned"`` -- this adapter owns the connection and
     #: ``transaction()`` commits at depth 0. ``"savepoint"`` -- the connection is the
@@ -156,6 +190,21 @@ class Capabilities:
     #: True there; a host-owned edge table beside a package-owned registry sets it False
     #: and may then declare two different scopes.
     edge_store_shares_connection: bool = True
+    #: ACTIONS.md 8.2, ruling R5 inherited a second time. The invocation store may be a
+    #: DIFFERENT store from the type store -- a host-owned audit table beside a
+    #: package-owned registry is the obvious shape -- so it gets its own declaration,
+    #: with the same binding rule `scope_conflict()` already enforces for edges. **With a
+    #: third store there are now two independent pairs and `scope_conflict()` returns ONE
+    #: sentence**; which one it names when both conflict is unspecified, recorded as Q42
+    #: and ruled **R46**: the one-sentence return stays, because a list return changes a
+    #: shipped signature for a case no backend has produced.
+    action_transaction_scope: Literal["owned", "savepoint"] = "owned"
+    #: The PREMISE of that rule, declared up front rather than discovered. EDGES.md 6's
+    #: printed block omitted its own twin while PACKAGE.md printed it and the code
+    #: carried it -- *a rule whose premise is unstated is a rule an adapter author can
+    #: miss by reading* -- and that omission cost an adversarial round. Repeating the
+    #: finding one row later would be worse than the original.
+    action_store_shares_connection: bool = True
 
     def missing_why(self) -> tuple[str, ...]:
         """Flags that are False with no sentence explaining it. Invariant C0-01.
@@ -173,6 +222,11 @@ class Capabilities:
             # family teaches an adapter author to write three sentences nobody reads,
             # which is how a `why` dict stops being the mechanism 3.2 says it is.
             skip = {"stores_edge_events", "indexes_edges_by_family", "stores_edge_attributes"}
+        if not self.stores_invocations:
+            # ACTIONS.md 8.1, C0-01's carve-out shape applied to a third group: with no
+            # invocation store the other two are VACUOUS, not declined -- *"why do you
+            # not index invocations by family?"* has no answer beyond the first sentence.
+            skip |= {"stores_invocation_events", "indexes_invocations_by_family"}
         missing = [
             f
             for f in CAPABILITY_FLAGS
@@ -191,6 +245,15 @@ class Capabilities:
             "edge_transaction_scope", ""
         ).strip():
             missing.append("edge_transaction_scope")
+        # ACTIONS.md 8.2, and NOT a duplicate of the two lines above for the reason the
+        # edge one is not a duplicate of the type one: the rule permits the scopes to
+        # differ when they are different connections, and *"who commits an invocation
+        # write"* is a different question from *"who commits a type write"* the moment
+        # the answers differ.
+        if self.action_transaction_scope == "savepoint" and not self.why.get(
+            "action_transaction_scope", ""
+        ).strip():
+            missing.append("action_transaction_scope")
         return tuple(missing)
 
     def scope_conflict(self) -> str | None:
@@ -204,17 +267,32 @@ class Capabilities:
         it the way it reports every other declaration problem, and so a `Capabilities`
         stays a plain frozen record that a test can construct in any shape it likes.
         """
-        if not self.edge_store_shares_connection:
-            return None
-        if self.edge_transaction_scope == self.transaction_scope:
-            return None
-        return (
-            f"edge_transaction_scope={self.edge_transaction_scope!r} and "
-            f"transaction_scope={self.transaction_scope!r} on ONE connection "
-            f"(edge_store_shares_connection=True): half the writes cannot be the "
-            f"host's to commit and half this adapter's, on one transaction "
-            f"(EDGES.md 6.2)"
-        )
+        if self.edge_store_shares_connection and (
+            self.edge_transaction_scope != self.transaction_scope
+        ):
+            return (
+                f"edge_transaction_scope={self.edge_transaction_scope!r} and "
+                f"transaction_scope={self.transaction_scope!r} on ONE connection "
+                f"(edge_store_shares_connection=True): half the writes cannot be the "
+                f"host's to commit and half this adapter's, on one transaction "
+                f"(EDGES.md 6.2)"
+            )
+        # ACTIONS.md 8.2, the SECOND independent pair. The edge pair is reported first
+        # when both conflict, and which one it names is **unspecified** rather than
+        # decided here -- Q42, ruled **R46**: a list return would change a shipped
+        # method's signature for a case no backend has produced. It is recorded as an
+        # open question rather than left as an accident of statement order.
+        if self.action_store_shares_connection and (
+            self.action_transaction_scope != self.transaction_scope
+        ):
+            return (
+                f"action_transaction_scope={self.action_transaction_scope!r} and "
+                f"transaction_scope={self.transaction_scope!r} on ONE connection "
+                f"(action_store_shares_connection=True): half the writes cannot be the "
+                f"host's to commit and half this adapter's, on one transaction "
+                f"(ACTIONS.md 8.2)"
+            )
+        return None
 
     def stores_edge_attribute(self, key: str) -> bool:
         """Does THIS edge payload key survive a round trip? -- EDGES.md 6.3, U3's shape."""
@@ -348,10 +426,12 @@ class EventRecord:
     edge_id: str | None = None
     #: ACTIONS.md 3.5 -- the invocation this event concerns, if any. Same shape and
     #: same reason as the line above, one object along: `EventRecord` had no slot for
-    #: an invocation, so an invocation event had nowhere to go and
-    #: `InvocationProvenance.history` would have been permanently empty with a
-    #: fabricated `why`. Additive, defaulted, and set by no v0 code path, because row
-    #: #6 is a spec. The three event values that go with it are
+    #: an invocation, so an invocation event had nowhere to go and an invocation's
+    #: provenance history would have been permanently empty with a fabricated `why`.
+    #: (Naming the provenance class here would trip C0-04, exactly as naming the edge
+    #: class one field above would -- row 6b extended that list the day it landed the
+    #: shapes, and this line is the first thing it caught.) Additive, defaulted, and
+    #: set by no v0 code path, because row #6 is a spec. The three event values are
     #: `invocation_recorded`, `invocation_reviewed` and `invocation_compensated` --
     #: stored, never judged (PACKAGE 3.1).
     #:
@@ -495,6 +575,88 @@ class EdgePage:
     next_after: str | None = None
 
 
+@dataclass(frozen=True)
+class InvocationRecord:
+    """One stored use of one verb. ACTIONS.md 9.
+
+    ``invocation_id`` is generated ABOVE the store, exactly as ``proposal_id``,
+    ``event_id`` and ``edge_id`` are (PACKAGE.md 4.2), so there is no uniqueness flag for
+    it to need -- a key this package mints is unique by construction, and a flag would
+    assert nothing.
+
+    **Both effect lists are on the record and neither is optional.** ACTIONS.md 8 argues
+    the absence of a `stores_invocation_effects` flag from exactly this: an invocation
+    whose ``declared_effects`` did not round-trip cannot answer 3.3's comparison, which
+    is the mechanism. Same for ``inputs`` -- an invocation without its inputs is not a
+    degraded record, it is not a record, so there is one flag rather than two because
+    there is no partial case.
+
+    **Evidence and history are NOT here.** They go through ``append_event``'s existing
+    path with ``invocation_id`` set (ACTIONS.md 3.5), which is where a provenance history
+    already lives. Putting them on this record would give one concept two homes and would
+    make a backend that stores invocations but not events undescribable.
+    """
+
+    invocation_id: str
+    #: the FAMILY's namespace -- never the inputs'. EDGES.md 2.2's rule, inherited
+    namespace: str
+    family: str
+    #: JSON-serialisable. The typed reference shapes live in `open_ontology/actions.py`
+    #: and are forbidden here by PACKAGE.md 3.1, which C0-04 enforces by source
+    #: inspection
+    inputs: dict[str, Any] = field(default_factory=dict)
+    declared_effects: tuple = ()
+    observed_effects: tuple = ()
+    #: the policy the gate judged, copied for the reason the effects are (rule 3-8)
+    declared_policy: dict[str, Any] = field(default_factory=dict)
+    family_version: int = 1
+    #: STORED, never judged (PACKAGE.md 3.1). The adapter holds the string
+    outcome: str = "applied"
+    refusal_reason: str | None = None
+    #: three values, and `not_asked` is one of them -- STORED, never judged
+    gate_verdict: str = "not_asked"
+    #: the FORWARD pointer only. The store never rewrites a row (INTERFACE.md 5.8), and
+    #: the compensating invocation is written AFTER the one it compensates, so the
+    #: backward pointer is DERIVED by the facade. Stated because the asymmetry is real
+    #: and a reader who saw only the surface would look for a field this does not have
+    compensates: str | None = None
+    created_at: datetime | None = None
+    created_by_actor: str = ""
+    created_by: str = "user"
+    model_tier: str | None = None
+    confidence: float | None = None
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    source_version: str | None = None
+    attr_schema_version: int | None = None
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class InvocationPage:
+    """ACTIONS.md 9 -- a Page, not a 2-tuple, and the reason is ``known``.
+
+    The read seam requires ``known`` to be ``int | None`` because *a backend entitled to
+    say "we did not count" must have somewhere to say it*. A ``(page, truncated)`` tuple
+    gives the backend nowhere, so the facade could only ever report ``len(rows)`` -- the
+    falsification that rule forbids -- or ``None`` by fiat regardless of what the backend
+    knew. Every other paging primitive in this package already returns this shape; the
+    2-tuple was a round-1 finding and the fix is to stop being different.
+    """
+
+    records: tuple[InvocationRecord, ...]
+    #: ``None`` = the BACKEND cannot count. NOT ``0``. Rule U
+    known: int | None
+    complete: bool
+    why_incomplete: str | None = None
+    #: keyset: ``(created_at, invocation_id)``. The registry does NOT expose this
+    #: (ruling **R25**/**R58** route paging to Phase 3); the primitive has one so the
+    #: facade can bound its own reads honestly. An offset page over an append-only table
+    #: shifts under a concurrent write, and an invocation ledger is append-only by
+    #: construction
+    next_after: str | None = None
+
+
 # -------------------------------------------------------------------------- protocol
 
 
@@ -572,16 +734,60 @@ class StorageAdapter(Protocol):
         name: str | None = None,
         proposal_id: str | None = None,
         edge_id: str | None = None,
-        # NOTE: there is deliberately NO `invocation_id` filter here yet.
-        # `ACTIONS.md` 9.1 specifies it and the BUILD row lands it, together with
-        # the six implementations and the `oo_event` column -- because row #6's
-        # first fix pass added it to this Protocol alone, `runtime_checkable`
-        # kept `isinstance` green, `check_spec_drift.py` compares the printed
-        # signature against this Protocol rather than the backends, and every
-        # shipped adapter raised `TypeError` on the keyword. That is deviation
-        # D-4b-2 (PACKAGE.md 3.4) reproduced inside the fix that quotes it, and
-        # row #6's second adversarial round found it.
+        # **Row 6b lands this, and the ORDER is the whole lesson.** ACTIONS.md 9.1
+        # specifies the filter and says the build row owes *"one keyword, one
+        # `oo_event` column, six implementations"* -- because row #6's first fix
+        # pass added it to this Protocol ALONE: `runtime_checkable` matches on
+        # method NAMES so `isinstance` stayed True, `check_spec_drift.py` compares
+        # the printed signature against this Protocol rather than against the
+        # backends, and every shipped adapter raised `TypeError` on the keyword.
+        # That is deviation D-4b-2 reproduced inside the fix that quotes it, and
+        # row #6's second adversarial round took the amendment back out. It lands
+        # here in the change that lands the six implementations and the column,
+        # which is the only order in which the Protocol is telling the truth.
+        invocation_id: str | None = None,
     ) -> list[EventRecord]: ...
+
+    # ------------------------------------------------------------------ 19 to 21
+    # ACTIONS.md 9. Three, not eight -- and as in EDGES.md 7.1 that number is the
+    # strongest available evidence that 2.1's decision was right: **families need no new
+    # primitive, because put_type/get_type/find_types already serve them.**
+    #
+    # On the protocol rather than in a separate optional extension, with the
+    # `stores_proposals=False` treatment: the methods exist, `stores_invocations=False`
+    # raises `NotSupported`, and this package checks the capability first and never calls
+    # them. An adapter written before this row declares `stores_invocations=False` by
+    # default and every invocation call returns `action_store_absent`.
+
+    # 19
+    def put_invocation(self, rec: InvocationRecord) -> InvocationRecord: ...
+
+    # 20
+    def get_invocation(self, invocation_id: str) -> InvocationRecord | None: ...
+
+    # 21
+    def find_invocations(
+        self,
+        *,
+        family: str | None = None,
+        namespace: str | None = None,
+        actor: str | None = None,
+        outcome: str | None = None,
+        since: datetime | None = None,
+        # **The last three are round 2's, and their omission was ACTIONS.md 4's whole
+        # argument failing quietly.** They are the three reads a governance layer exists
+        # to serve -- the override query, the blast-radius query and the review queue --
+        # and they were on the facade and on NO primitive, so *"the registry filters
+        # above the store"* meant *read a page, then filter it*: on a pinned
+        # 2,399-dataset ledger with one override at row 1,200 the query returned **zero
+        # rows**, `complete=False`. A floor of zero is not a conservative measurement; it
+        # is the wrong one, and it is indistinguishable from a clean deployment.
+        gate_verdict: str | None = None,
+        effect_undeclared: bool | None = None,
+        unreviewed: bool | None = None,
+        after: str | None = None,
+        limit: int = 100,
+    ) -> InvocationPage: ...
 
     # ------------------------------------------------------------------ 16 to 18
     # EDGES.md 7.1. Three, not eight -- and the count is the evidence that making a
