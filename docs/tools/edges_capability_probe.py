@@ -41,7 +41,7 @@ TAG = TypeRef(NS, "entity", "deficiency_tag")
 SURVEY = TypeRef(NS, "entity", "survey")
 SAMPLE = (
     pathlib.Path(__file__).resolve().parents[2]
-    / "open_ontology" / "contract" / "fixtures" / "cms_sample_400.csv"
+    / "ontoloche" / "contract" / "fixtures" / "cms_sample_400.csv"
 )
 
 CITES = Family(

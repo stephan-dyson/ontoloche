@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "open-ontology"
+name = "ontoloche"
 version = "0.0.0"
 description = "A registry of types, with a proposal->approval loop around every addition."
 readme = "README.md"
@@ -24,14 +24,14 @@ aio = ["aiosqlite>=0.19"]
 contract-aio = ["pytest>=8", "pytest-asyncio>=0.23", "aiosqlite>=0.19"]
 
 [tool.setuptools.packages.find]
-include = ["open_ontology*"]
+include = ["ontoloche*"]
 
 [tool.setuptools.package-data]
-"open_ontology.backends" = ["migrations/sqlite/*.sql", "migrations/postgres/*.sql"]
-"open_ontology.contract" = ["fixtures/*.csv"]
+"ontoloche.backends" = ["migrations/sqlite/*.sql", "migrations/postgres/*.sql"]
+"ontoloche.contract" = ["fixtures/*.csv"]
 
 [tool.pytest.ini_options]
-testpaths = ["open_ontology/contract", "open_ontology/aio/contract"]
+testpaths = ["ontoloche/contract", "ontoloche/aio/contract"]
 # Deliverable 3b, deviation D-A2. pytest-asyncio resolves its `asyncio` marker during
 # collection, so a marker a conftest adds later is too late; auto mode is the supported
 # way to run a suite of plain `async def test_*` functions. A third party running the

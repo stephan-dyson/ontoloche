@@ -1,4 +1,4 @@
-# PACKAGE — the `open_ontology` package, its storage-adapter protocol, and the contract suite that defines conformance
+# PACKAGE — the `ontoloche` package, its storage-adapter protocol, and the contract suite that defines conformance
 
 **Version:** `v0` — **unstable.** Every module name, class name, primitive signature, table shape and test id here may change without a deprecation path. Standing constraint 4.
 **Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 2 preparation. Deliverable **#2** of the Tenshen-rebuild ordering. **Deliverable #3 has since landed** — the package, both backends and the 113-test suite are real and green (§8.4, §8b.5, §11); the sections written before it say so where it matters. *(Header corrected by row 3c; it still read "No code yet".)*
@@ -36,10 +36,10 @@ The contract suite is not a test of the package. **It is the definition of confo
 
 ### 2.1 Distribution and module layout
 
-Distribution name `open-ontology`; import name `open_ontology`. **[Assumed]** the PyPI name is available; not checked, and not worth checking before #3.
+Distribution name `ontoloche`; import name `ontoloche` — the two coincide since the 2026-08-30 rename (they were `open-ontology` / `open_ontology` before). **[Assumed]** the PyPI name is available; not checked, and not worth checking before #3.
 
 ```
-open_ontology/
+ontoloche/
     __init__.py            # the public surface, re-exported. Nothing else is public.
     registry.py            # Registry — the façade. The INTERFACE §5 calls, as methods.
     types.py               # TypeEntry, Provenance, Evidence, Citation, Consumer, Proposal,
@@ -61,7 +61,7 @@ open_ontology/
             postgres/0001_init.sql
     contract/
         __init__.py        # run_contract_suite(adapter_factory) + the pytest plugin
-        __main__.py        # python -m open_ontology.contract --adapter pkg.mod:Class
+        __main__.py        # python -m ontoloche.contract --adapter pkg.mod:Class
         conftest.py        # the adapter_factory fixture, parametrised over backends
         test_*.py          # the suite (§6)
         fixtures/
@@ -71,7 +71,7 @@ open_ontology/
 ### 2.2 The public import surface
 
 ```python
-from open_ontology import Registry
+from ontoloche import Registry
 ```
 
 `Registry` is **one façade object** carrying the `INTERFACE.md` §5 calls as methods, with signatures identical to §5 minus the implicit `self`.
@@ -111,9 +111,9 @@ Private, meaning it may change between two commits with no note and **the contra
 
 | Extra | Adds | Why exactly one |
 |---|---|---|
-| `open-ontology` (base) | — | SQLite is stdlib; the default backend must not cost a wheel |
-| `open-ontology[postgres]` | `psycopg>=3.1,<4` | one driver per backend, no pool, no C extra by default |
-| `open-ontology[contract]` | `pytest>=8` | the suite ships *inside* the package because it is the definition of conformance (§6) — a third-party backend must be able to run it |
+| `ontoloche` (base) | — | SQLite is stdlib; the default backend must not cost a wheel |
+| `ontoloche[postgres]` | `psycopg>=3.1,<4` | one driver per backend, no pool, no C extra by default |
+| `ontoloche[contract]` | `pytest>=8` | the suite ships *inside* the package because it is the definition of conformance (§6) — a third-party backend must be able to run it |
 
 **[Observed]**, PyPI metadata for `psycopg`, retrieved 2026-08-28: latest `3.3.4`, `requires_python >=3.10`, extras `c` / `binary` / `pool` / `test` / `dev` / `docs`. We depend on the plain wheel; deployments that want `psycopg[binary]` or `psycopg[c]` install it themselves. `psycopg2` is **not** supported — it is a different driver with a different parameter style, and supporting both doubles the SQL layer for no gain.
 
@@ -128,7 +128,7 @@ Private, meaning it may change between two commits with no note and **the contra
 
 ### 2.5 What is *not* in the package, deliberately
 
-- No logging configuration; the package logs to `logging.getLogger("open_ontology")` and configures nothing.
+- No logging configuration; the package logs to `logging.getLogger("ontoloche")` and configures nothing.
 - No retry, no backoff, no connection pool. The adapter is handed a connection or a factory; connection lifecycle belongs to the deployment.
 - No `Registry.close()` that closes the caller's connection. The adapter owns only what it opened.
 
@@ -962,7 +962,7 @@ Everything above assumes `attributes` is one opaque JSON document the adapter ne
 | `postgres` | the full reference backend, the reference deployment (§4.4) | two unlike stores, one observable answer |
 | `sqlite_minimal` | **a real SQLite store with four of the nine tables absent** — no `oo_proposal`, no `oo_event`, no `oo_type_predicate`, and an `oo_type` with no `attributes_json` but with a typed `primary_key_json` the host owns. Five flags declined at once (`stores_proposals`, `stores_events`, `stores_attributes`, `indexes_membership`, `owns_schema`), plus `attribute_projections={"primary_key"}` | §7.4 calls a backend of exactly this shape conformant *"as a third backend"*, and until row 3d **nothing here checked it against a real store**: degradation was simulated by wrapping a fully capable adapter in `DegradedAdapter`, which is a test double reporting on itself |
 
-`open_ontology/backends/sqlite_minimal.py`, and its hand-written async twin. The missing tables are missing **from the SQL**, not behind a Python `if`; the host's DDL lives in the same module (`create_host_schema`) precisely so `migrate()`'s verify-only promise stays testable — nothing the adapter does can create those tables.
+`ontoloche/backends/sqlite_minimal.py`, and its hand-written async twin. The missing tables are missing **from the SQL**, not behind a Python `if`; the host's DDL lives in the same module (`create_host_schema`) precisely so `migrate()`'s verify-only promise stays testable — nothing the adapter does can create those tables.
 
 **A degraded leg cannot exercise every contract id, and the run says which.** That is the coverage report (§6.4, ruling **R12**), and it is the other half of this leg: a third leg that passed 66 fewer assertions in silence would be worse than no third leg.
 
@@ -973,15 +973,15 @@ Two rules that keep the definition honest:
 1. **Capability-honest tests.** A test whose subject is a declared-`False` capability asserts the *honest unknown* — `None` plus a non-empty `why` drawn from `Capabilities.why` — not a value. A backend that cannot count usage passes `C7-01` by returning `count=None`; it fails by returning `0`. This is what makes conformance achievable for unlike backends without weakening it.
 2. **Two capabilities are not negotiable.** `enforces_unique_name` and `transactional` must be `True` (§3.5). Everything else may be `False`.
 
-**Running it.** `pytest --pyargs open_ontology.contract`, or against a foreign backend `python -m open_ontology.contract --adapter beacon.ontology:WorkLinkTypeAdapter`. **Add `--borrowed pkg.mod:make_harness` if your adapter declares `transaction_scope="savepoint"`, and `--schema-harness pkg.mod:make_schema_harness` if it declares `owns_schema=False`** — without them those declarations are taken on trust and the run says so (§6.4).
+**Running it.** `pytest --pyargs ontoloche.contract`, or against a foreign backend `python -m ontoloche.contract --adapter beacon.ontology:WorkLinkTypeAdapter`. **Add `--borrowed pkg.mod:make_harness` if your adapter declares `transaction_scope="savepoint"`, and `--schema-harness pkg.mod:make_schema_harness` if it declares `owns_schema=False`** — without them those declarations are taken on trust and the run says so (§6.4).
 
 *(This paragraph amended by row 3c, 2026-08-28, after an adversarial review round found the conformance machinery did not enforce what this section claims.)*
 
-**`nonbinding` now exempts, where before it only annotated.** §5.5 says a backend *"may not be failed for"* `C15-02`. Registering `@pytest.mark.nonbinding` never made that true: the runner passed every test, so a backend that honestly declines the optional `AttributeStore` protocol — behaviour §5.5 explicitly permits — got `complete=False`, failed `C15-02`'s assertion, and was reported as failing the suite. **Verified before it was fixed:** a wrapper that omits `AttributeStore` returns `AttributeCensus(entries=(), known=None, complete=False, why="this backend has no attribute census storage")` and fails that test. `run_contract_suite` and `python -m open_ontology.contract` now pass `-m "not nonbinding"` by default, with `--include-nonbinding` to run them anyway. **A conformance verdict is the default run; the flag is for curiosity.**
+**`nonbinding` now exempts, where before it only annotated.** §5.5 says a backend *"may not be failed for"* `C15-02`. Registering `@pytest.mark.nonbinding` never made that true: the runner passed every test, so a backend that honestly declines the optional `AttributeStore` protocol — behaviour §5.5 explicitly permits — got `complete=False`, failed `C15-02`'s assertion, and was reported as failing the suite. **Verified before it was fixed:** a wrapper that omits `AttributeStore` returns `AttributeCensus(entries=(), known=None, complete=False, why="this backend has no attribute census storage")` and fails that test. `run_contract_suite` and `python -m ontoloche.contract` now pass `-m "not nonbinding"` by default, with `--include-nonbinding` to run them anyway. **A conformance verdict is the default run; the flag is for curiosity.**
 
 **Resolver-dependent tests are binding here and not there.** `C3-08`, `C3-09` and `C4-06` carry a `resolver_dependent` marker. Against the two reference backends they run and must pass — they pin real behaviour of the resolver this package ships. Against a foreign adapter (`--adapter`, or `run_contract_suite`) they are **skipped with a reason naming §2.6 and question **Q4****, because a third-party backend paired with its own resolver — §2.6's own production path — was otherwise failing mandatory conformance tests for a reason that is neither its storage nor its choice. Skipped, never silent: `-rs` prints exactly what was not run and why.
 
-**Every run states what it covered.** §6.1 requires *both* reference backends *in one run*, and a bare `pytest --pyargs open_ontology.contract` with no `OO_POSTGRES_DSN` exits `0` having exercised SQLite alone — a skip is easy to miss beside a wall of passes. The suite now prints, at the end of every run:
+**Every run states what it covered.** §6.1 requires *both* reference backends *in one run*, and a bare `pytest --pyargs ontoloche.contract` with no `OO_POSTGRES_DSN` exits `0` having exercised SQLite alone — a skip is easy to miss beside a wall of passes. The suite now prints, at the end of every run:
 
 ```
 CONFORMANCE (PACKAGE.md 6.1)
@@ -1332,9 +1332,9 @@ and, when a reference backend did not execute, **`NOT a conformance run -- postg
 
 **C18 — the three use cases through the shipped edge store (10).** Row 4b. Mechanisms **4** and the `ROADMAP.md` kill row.
 
-Row #4's design tests were walked by a throwaway kit in `docs/tools/` that this package does not import, and §17.5 of that document says plainly what that is worth: *"prose-plus-probe review has a floor, and this document has reached it. The next signal with real information is a real consumer over a real store."* This group is the smallest available version of that — the same three fixtures and the same **pre-registered** numbers, driven through `open_ontology.Registry` on all three legs.
+Row #4's design tests were walked by a throwaway kit in `docs/tools/` that this package does not import, and §17.5 of that document says plainly what that is worth: *"prose-plus-probe review has a floor, and this document has reached it. The next signal with real information is a real consumer over a real store."* This group is the smallest available version of that — the same three fixtures and the same **pre-registered** numbers, driven through `ontoloche.Registry` on all three legs.
 
-**Both fixtures are checked in, and that is a rule rather than a convenience.** A contract test may not depend on a network — `--pyargs open_ontology.contract` promises a third-party author a suite that runs — and §8.4 and `EDGES.md` §11.3 record the same defect twice: a query with a `limit` and no `order` returns an arbitrary window, and two runs of the NYC probe printed different numbers. UC3's sample is pinned by [`pin_nyc_edge_sample.py`](../tools/pin_nyc_edge_sample.py) and carries each dataset's own `data_updated_at`, so `EdgeProvenance.source_version` has something true to say.
+**Both fixtures are checked in, and that is a rule rather than a convenience.** A contract test may not depend on a network — `--pyargs ontoloche.contract` promises a third-party author a suite that runs — and §8.4 and `EDGES.md` §11.3 record the same defect twice: a query with a `limit` and no `order` returns an arbitrary window, and two runs of the NYC probe printed different numbers. UC3's sample is pinned by [`pin_nyc_edge_sample.py`](../tools/pin_nyc_edge_sample.py) and carries each dataset's own `data_updated_at`, so `EdgeProvenance.source_version` has something true to say.
 
 | id | asserts | mech |
 |---|---|---|
@@ -1514,7 +1514,7 @@ Same move as `ConsumerReport.complete=False` (`INTERFACE.md` §5.1), and for the
 
 Four things about it are deliberate:
 
-1. **The reasons are the tests', not the report's.** `open_ontology/contract/_coverage.py` aggregates skip reasons and invents none. The `requires_capability` fixture already named the flag and quoted the backend's own `why`; this prints it.
+1. **The reasons are the tests', not the report's.** `ontoloche/contract/_coverage.py` aggregates skip reasons and invents none. The `requires_capability` fixture already named the flag and quoted the backend's own `why`; this prints it.
 2. **It is grouped by reason, wrapped, and never truncated.** The informative half of a `requires_capability` reason is the backend's `why`, which is at the *end* of the sentence — the first version clipped the line and cut off exactly that.
 3. **The arithmetic must close.** Exercised + not-exercisable + backend-independent = §6.2's enumeration, on every leg. It did not on the first run: `C4-09` is parametrised over malformed names *as well as* over backends, so its node ids read `[sqlite-name0]`, matched no leg by substring, and **three contract ids went missing from every leg's count**. Found by the report's own arithmetic failing to add up — which is the argument for the report in one sentence.
 4. **A failing leg says `NOT CONFORMANT` and names the ids.** The report is not a way to be conformant with failures in it. Three cases count as failing, and the last two were added by the second adversarial round after being reproduced against the real class:
@@ -1530,7 +1530,7 @@ Four things about it are deliberate:
 
    - **The `DECLARATIONS UNVERIFIED` verdict was dead code for a whole class of adapter, and that was itself a finding** *(third adversarial round)*. It read the declaration off the plain `adapter_factory` — and ruling R5's shape is an adapter that is `"owned"` when it opens its own connection and `"savepoint"` only when one is lent to it, which is exactly what beacon will build. Such a factory honestly declares `"owned"`, the predicate never matched, and **a savepoint adapter with the precondition check deleted reached a clean `CONFORMANT`.** The verdict now reads the declaration of the adapter the harness actually hands over, and treats *"no harness supplied"* as its own unverified declaration: silence about a mode is not evidence the mode is absent.
 
-   **The two harnesses, importable from `open_ontology.contract.harness`:**
+   **The two harnesses, importable from `ontoloche.contract.harness`:**
 
 ```python
 @dataclass(frozen=True)
@@ -1732,7 +1732,7 @@ Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Au
 
 Standing constraint 0 argues *for* fixing this, not against: the data is public CMS data, and *"a test that cannot be run on public data is a test this project does not run."*
 
-**Task for deliverable #3:** check the 400-row public sample in at `open_ontology/contract/fixtures/cms_sample_400.csv` (~80 KB), and add a `make_sample_state.py` that regenerates it from the public file so the provenance is checkable. Until it exists, the C13 group is `skipif`-gated on the fixture and **the CMS design test is therefore not yet runnable — it is specified, not passing.** Said plainly so nobody reads §8.2 as a result.
+**Task for deliverable #3:** check the 400-row public sample in at `ontoloche/contract/fixtures/cms_sample_400.csv` (~80 KB), and add a `make_sample_state.py` that regenerates it from the public file so the provenance is checkable. Until it exists, the C13 group is `skipif`-gated on the fixture and **the CMS design test is therefore not yet runnable — it is specified, not passing.** Said plainly so nobody reads §8.2 as a result.
 
 > **DONE, deliverable #3, 2026-08-28.** The fixture is checked in (**152,927 bytes**, not ~80 KB — the `Deficiency Description` column is long) and `tools/make_sample_state.py` regenerates it. The source file re-downloaded that day is **165,336,194 bytes, byte-for-byte the size the ground truth records**, so the fixture is the sample 0.5 actually cut. The C13 group runs and §8.2 is now a result: every [Observed] count matches, and the one [Inferred] count was **computed** — 7 distinct severity codes, B C D E F G J — rather than asserted against run D's quotation. See [`2A-RUN.md`](../runs/2A-RUN.md) §3.
 

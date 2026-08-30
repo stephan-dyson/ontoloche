@@ -6,7 +6,7 @@ Drives the three datasets pinned by ``USE-CASES.md`` UC3 and ``3C-VALIDATION.md`
 
 Two engines, deliberately:
 
-* the **real** ``open_ontology.Registry`` on SQLite for anything about types --
+* the **real** ``ontoloche.Registry`` on SQLite for anything about types --
   in particular T3.12, that an ``equivalent_to`` edge does NOT weaken
   ``merge_types``' non-overridable ``cross_namespace_merge`` refusal. That claim
   is about the shipped registry, so it is checked against the shipped registry.
@@ -39,8 +39,8 @@ from docs.tools.edges_probe_kit import (  # noqa: E402
     TypeRef,
     prov,
 )
-from open_ontology import Evidence, NamespacePolicy, Registry  # noqa: E402
-from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
+from ontoloche import Evidence, NamespacePolicy, Registry  # noqa: E402
+from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
 
 # Pinned so the test is reproducible. 3C-VALIDATION.md §1.
 A, B, C = "uvpi-gqnh", "erm2-nwe9", "693u-uax6"

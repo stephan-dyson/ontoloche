@@ -4,7 +4,7 @@ Row #6 is a spec and ships no action store. But the lesson of rows 3c, 3d, 3e
 and 4b is blunt -- *nothing of substance came from reading* -- so the three
 design tests in ``ACTIONS.md`` 11-13 are walked by executing the spec against
 real rows rather than by reasoning about it. This module is that execution: it
-lives in ``docs/tools`` and not in ``open_ontology``, the package does not
+lives in ``docs/tools`` and not in ``ontoloche``, the package does not
 import it, and the contract suite does not know it exists.
 
 What it implements, and nothing more:
@@ -30,7 +30,7 @@ Edges are NOT re-implemented: ``edges_probe_kit`` is imported, so an
 ``edge_exists`` precondition is answered by the same ``neighbors`` row #4 wrote
 and by nothing this file invented.
 
-The refusal and warning vocabularies are imported from ``open_ontology.types``
+The refusal and warning vocabularies are imported from ``ontoloche.types``
 rather than re-declared, so a probe that invented a value fails here rather
 than in a reviewer's head. The shapes deliberately match the SHIPPED ones --
 ``Refusal(reason, detail, refused=True)`` in the package's own field order --
@@ -55,7 +55,7 @@ from edges_probe_kit import (  # noqa: E402
     NodeRef,
     TypeRef,
 )
-from open_ontology.types import REFUSAL_REASONS, WARNING_VALUES  # noqa: E402
+from ontoloche.types import REFUSAL_REASONS, WARNING_VALUES  # noqa: E402
 
 NOW = datetime(2026, 8, 29, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -348,7 +348,7 @@ class DeclarationRefused(Exception):
 
 @dataclass(frozen=True)
 class Refusal:
-    """The SHIPPED field order (``open_ontology.types.Refusal``), deliberately."""
+    """The SHIPPED field order (``ontoloche.types.Refusal``), deliberately."""
 
     reason: str
     detail: dict = field(default_factory=dict)

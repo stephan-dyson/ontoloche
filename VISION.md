@@ -2,7 +2,7 @@
 
 **Status:** Draft v0.1 — first pass, written 2026-08-27, to be refined over the coming weeks
 **Author:** Stephan Dyson
-**Working name:** none yet (directory name is a placeholder)
+**Name:** ontoloche ("on-tuh-LOH-chee", the -che after Apache)
 
 > **How to read this.** Claims are marked by how much they are worth. **[Observed]** — seen directly, first-hand. **[Inferred]** — a reasonable read of observed things, not yet confirmed. **[Assumed]** — believed, not tested, and the thing most likely to be wrong. Keeping these separate is the single discipline that matters in a document this early, because conviction is easy and evidence is not.
 

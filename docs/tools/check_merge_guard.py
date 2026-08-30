@@ -107,21 +107,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from open_ontology import Registry  # noqa: E402
-from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
-from open_ontology.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
-from open_ontology.contract.doubles import DegradedAdapter  # noqa: E402
-from open_ontology._resolve import _norm, identity_key  # noqa: E402
-from open_ontology.registry import NAME_RE  # noqa: E402
-from open_ontology.policy import NamespacePolicy  # noqa: E402
-from open_ontology.types import (  # noqa: E402
+from ontoloche import Registry  # noqa: E402
+from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
+from ontoloche.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
+from ontoloche.contract.doubles import DegradedAdapter  # noqa: E402
+from ontoloche._resolve import _norm, identity_key  # noqa: E402
+from ontoloche.registry import NAME_RE  # noqa: E402
+from ontoloche.policy import NamespacePolicy  # noqa: E402
+from ontoloche.types import (  # noqa: E402
     Evidence,
     Refusal,
     ResolveContext,
     TypeEntry,
 )
 
-REGISTRY_SOURCE = ROOT / "open_ontology" / "registry.py"
+REGISTRY_SOURCE = ROOT / "ontoloche" / "registry.py"
 
 #: The three fields on a stored `TypeRecord` that re-point what a name RESOLVES to.
 #:
@@ -829,7 +829,7 @@ def _legs():
     legs = [("sqlite", sqlite, True), ("sqlite_minimal", minimal, False)]
     dsn = os.environ.get("OO_POSTGRES_DSN")
     if dsn:
-        from open_ontology.backends.postgres import PostgresAdapter
+        from ontoloche.backends.postgres import PostgresAdapter
 
         def postgres():
             adapter = PostgresAdapter(dsn, schema="oo_" + uuid.uuid4().hex[:12])

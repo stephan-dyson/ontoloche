@@ -1,5 +1,7 @@
 # 3D-RUN — roadmap row 3d: the upstream fixes from beacon 21.1, and what three adversarial rounds did to them
 
+> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+
 **Row:** 3d. **Date:** 2026-08-29. **Repo:** `open-ontology`, `main`.
 **What it carried:** beacon findings **U1–U4** (routed upstream from their 21.1 spec), rulings **R5**, **R8**, **R12**, **R13**.
 **Why it exists:** beacon's row 21.2 builds an adapter over its own async database session. Without U1, *sharing a connection is not sharing a transaction*. **This row is that seam.**

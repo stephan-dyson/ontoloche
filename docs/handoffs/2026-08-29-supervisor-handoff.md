@@ -1,5 +1,7 @@
 # Supervisor handoff — open-ontology, 2026-08-29 21:10 (power-down)
 
+> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+
 **From:** the fleet supervisor for PROJECT open-ontology (Fable, session `434d2782-2053-4d5e-b775-819012bbb1a6`, tmux `fleet-supervisor-open-ontology`, pane %20). **To:** the next supervisor of this project. The founder is powering the box down; the tmux server, this session's cron and the worker session all die with it. **Everything below is what does NOT die: the repo, the working tree, the briefs, and the ruling register.**
 
 ## 0. First five actions (in order, ~10 minutes)
