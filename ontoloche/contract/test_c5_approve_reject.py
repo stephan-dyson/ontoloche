@@ -1,6 +1,6 @@
 """C5 -- ``approve`` / ``reject`` (11). Mechanism 1.
 
-Approval is the review that A1 says HHS never had.
+Approval is the review that A1 says the partner agency never had.
 """
 
 from __future__ import annotations
