@@ -1,0 +1,54 @@
+# Phase 3 decisions, ruled ahead of the row (R58–R60) — paging, tenancy, conditions
+
+Supervisor rulings under the founder's make-assumptions directive, written 2026-08-30 after row 4c landed. **All three are founder-visible** — R25 and R24 were flagged that way when they were routed here, and R41 gates what the conditions language can say — and each carries a default the founder may reverse. They are ruled now, before Phase 3 opens, because rows 4b, 4c and #6 each hit one of them and routed it forward, and the kill row's fifth trip turned one of them (paging) from a Phase 3 nicety into a correctness question. **They decide the shape Phase 3's spec row must satisfy; they do not open the row, design the ingestion loop, or pre-empt `VISION.md` §7's first deliverable (Q48, the founder's).**
+
+**Evidence read for these:** [`R13`](2026-08-29-3c-rulings-R6-R12.md) (the façade stays unbounded in v0 because Rule K has no answer for what `known` means on a page) · [`R24`, `R25`](2026-08-29-edges-rulings-R17-R26.md) · [`Q38`](2026-08-29-6-questions-Q35-Q48.md), [`R41`](2026-08-29-6-rulings-R40-R47.md) · [`R57`/Q60](2026-08-30-4c-rulings-R48-R57.md) · [`EDGES.md`](../specs/EDGES.md) §4.2 (**[Observed]** `erm2-nwe9`: 22,294,072 rows, **9,738,128** with `agency = NYPD` — one unpaged hop is a result nobody can hold; the assembly bound is a circuit breaker, *not paging*) · [`PACKAGE.md`](../specs/PACKAGE.md) §3.3 / §10 (adapters page correctly and are tested by `C0-10`; the façade never asks for a page except `_active_page`, which pages to exhaustion) · [`ACTIONS.md`](../specs/ACTIONS.md) §2.4-9 (ACT4), §12 (Q43: the ledger is a third object, not a third listing) · the fifth and sixth kill-row trips ([`2026-08-29-3c-rulings-R6-R12.md`](2026-08-29-3c-rulings-R6-R12.md), bottom).
+
+---
+
+## R58 (R25 + R13 + Q21 + Q31 + Q43 + Q60) — the façade PAGES in Phase 3, under ONE rule for `known`, and every read that feeds a guard is a different object that reads to exhaustion. *Founder-visible.*
+
+**The question R13 left open is answered:** on a page, **`known` counts what the report materialised** (the page's length — a plain `int`, as `INTERFACE.md` §3 already says for every report that materialises a list), **`complete` is about the SET**, and a third field — a cursor, `next_after`, the shape `EdgePage` / `TypePage` already carry at the adapter — says whether there is more and how to get it. The three states a caller can be in are then honest and distinguishable, and two of them already exist in shipped code:
+
+| the report says | it means |
+|---|---|
+| `complete=True` | this is the set |
+| `complete=False`, `next_after` present | this is a page; the set continues; ask again |
+| `complete=False`, `next_after` absent, `why_incomplete` set | this is a **truncated** answer; the rest cannot be read from this surface — the assembly bound, a store that capped, a walk cut short |
+
+The third row is exactly the distinction row 4c's fifth trip forced on `_extent` (an honest page is paged to exhaustion; a truncated answer folds its `why` into `knowable`). It is now the façade's rule too, and it is why paging is a **correctness** decision: a caller who cannot tell a page from a truncation will treat one as the other, which is the confident false negative `EDGES.md` §2.2 calls unacceptable.
+
+**Scope.** Three surfaces page, because three surfaces list: `list_types` (R13), `neighbors` (R25) and the invocation ledger (Q43 — a third *object*, ACTIONS §12 is right, but the `known` rule is the same and a second rule would be a second vocabulary). Nothing else pages; `resolve_type`, `consumers`, `predicates` and the governance calls return reports, not listings.
+
+**Two things this ruling protects, and they are the evidence for it:**
+1. **A guard never reads a page.** Every read that feeds an identity guard or a refusal — `_extent`, `_active_page`, the alias scan, `neighbors`' per-level assembly, the successor chain — is an **internal exhaustive read**: it loops the adapter's cursor to `None` or reports the read as *truncated* (never *partial*) to the guard. Phase 3's caller-facing page and the internal exhaustive read **must not share a code path that can discard a cursor**; the fifth trip is what happens when they do. `check_merge_guard.py`'s `partial` / `truncated` states are the gate on this and stay.
+2. **The assembly bound stays, and becomes the page-size ceiling.** `max_edges` (R36, per-registry) bounds one page; a caller who wants the next 500 of 9.7M asks with the cursor. The circuit breaker is not removed by paging — it is what stops one page from being 9.7M rows — and disabling it remains a deliberate act (`max_edges=None`).
+
+**`direction` per hop (R57 / Q60) is decided with this, as R57 said.** A paged `neighbors` emits edges the caller can no longer see in one report, so each `NeighborEdge` must carry the facts that were previously visible from the whole: **`hop` (depth reached at) and the direction the walk traversed it** — additive fields, default-populated, alongside `via_successor` (R38's shape). With those on the edge, `direction="both"` can express the flagship two-hop query's projection (`task --blocks--> task --stakeholder--> person`: `in` at hop 1, `out` at hop 2) without a per-hop *parameter*, which is the smaller change. A per-hop parameter is not ruled out; it is not ruled in until a consumer's design test needs it.
+
+**What is deliberately NOT decided here:** the cursor's encoding (opaque string at the façade, exactly as at the adapter — the row decides its contents), whether `TypeListing` gains `next_after` or Phase 3 introduces a distinct page shape, and the page size default. Those are the Phase 3 spec row's, with the three design tests (constraint 7) run through `erm2-nwe9`'s 9.7M-degree node as the pre-registered case. **Revised by:** a consumer that needs the *set* and cannot page (none is known; the ingestion loop is a pager by nature).
+
+## R59 (R24 + Q38) — the protocol stays tenant-blind through Phase 3; tenancy is the HOST's predicate, and Phase 3 makes that predicate EXPRESSIBLE (R60) rather than adding a dimension. *Founder-visible; decided with beacon 2B's evidence.*
+
+R24 stands as written — `namespace` scopes a vocabulary, not a tenant; a host-owned backend applies its tenancy predicate inside its adapter. Q38's finding (a fixed-namespace **effect** declaration warns on 2,394 of 2,399 correct invocations) is real and is **not** evidence that the protocol needs a tenant dimension; it is evidence that the only way v0 lets a host say *"this effect is scoped to the invoking tenant"* is by naming a namespace, and a namespace is the wrong word for it. That is a **condition** the declaration cannot express — the same shape as ACT4 and contortion 11 — so it belongs to R60, where a tenancy predicate becomes one value-level condition among others at the host boundary. **Two obligations follow, both on evidence rather than design:**
+1. Beacon 2B's `BorrowedHarness` (R14) carries a **two-tenant fixture** for edges *and* one action family, proving the adapter-side filter holds on both — the finding R24 says would be routed upstream if it cannot. This is the evidence that decides Q38, as Q38 itself said.
+2. Phase 3's ingestion loop runs under a host tenancy predicate from its first design test; if the loop cannot be made safe that way, this ruling is reversed and a dimension is added — **as a Phase 4 (multi-organisation) change**, which is where R24 already said it would surface.
+
+**Default if the founder is silent:** keep R24 (the recorded default of Q38). **Revised by:** the two-tenant fixture failing in 2B, or Phase 4.
+
+## R60 (R41 + R22 + Q35 + Q44) — Phase 3 specifies ONE condition language, `Condition`, with a closed operator vocabulary and a THREE-VALUED result; the ingestion loop is its first consumer; nothing is built before the spec row. *Founder-visible: it decides what a gate can say.*
+
+R41 ruled that value-level conditions and ledger conditions are one decision; this ruling says what the decision is. Four surfaces now reach for the same missing thing — `Consumer.gate` (contortion 11), edge gates (R22), `Precondition` (ACT4, prose-only rule 2.4-9), and the ledger's query (ACT8 / Q44) — and each would otherwise grow its own. **The shape, at the level a spec row must satisfy:**
+- A `Condition` is a **closed** vocabulary of operators (R3 applies: adding one is a §-row change with a contract id) over **attribute values** of one record — a type's declared attributes, an edge's payload, an invocation's `observed_effects` — never over another call's result (a condition that calls `consumers` is a gate that hides a walk).
+- Its evaluation is **three-valued**: holds / fails / **unknowable** — Rule U, exactly as `PreconditionResult.holds` and `TierOrder.below` already are, and as the kill row taught six times on the one guard that was two-valued. A condition over an attribute the census cannot see is unknowable, not false.
+- It is **declared on the entry** (family / consumer / action) like every other governed fact, so it rides the proposal → approval loop and is enumerable; it is **evaluated by the registry**, not the host, so two hosts cannot disagree about what a gate meant.
+- The **tenancy predicate** (R59) is expressible as one at the host boundary; the **ledger query** (Q44) uses the same operators over `Invocation` fields.
+
+**Sequencing.** This is a *spec* deliverable (`INTERFACE.md` §10b / `EDGES.md` §4.3 / `ACTIONS.md` §2.4 amended in one change, with the three design tests driven through real NYC / CMS / beacon data by runnable probes, constraint 7) and lands **before** any code uses it — the ingestion loop is the consumer that forces it and the first to call it. Building `Consumer.gate`'s value-level case alone, ahead of the language, is refused here for the same reason R41 refused two languages. **Revised by:** a design test showing one of the four surfaces genuinely needs an operator the others cannot use.
+
+---
+
+## What these three do to the roadmap
+- Row 4d (in flight) is unaffected: it touches no listing surface and adds no condition.
+- The ACTIONS build row (6b) builds `ACTIONS.md` v0 as specified — with `Precondition` ACT4 still prose-only — and does **not** anticipate R60.
+- Phase 3's first row is a **spec** row whose brief cites R58–R60 as constraints, with `erm2-nwe9`'s 9.7M-degree node and a two-tenant fixture as pre-registered design tests. Opening it is the founder's (Q48, `VISION.md` §7).
