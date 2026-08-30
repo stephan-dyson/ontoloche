@@ -18,6 +18,8 @@ A family is a `TypeEntry` (EDGES §2.3), so R11's `reinstate` applies to it with
 
 The field is additive and symmetric with `Provenance`. The gate is a product decision about beacon's `infer_person_relationships` (Haiku, auto-apply ≥ 0.7) — 0.5's failure shape one level down — and belongs to the beacon program; relayed as an observation, not a requirement.
 
+**FOUNDER RULING 2026-08-30 13:2x (beacon item 35, relayed by the general fleet supervisor; verbatim *"go with recommendation (a+log+safety raise)"*).** R20 stands as ruled and is refined on the beacon side, not here: (a) auto-apply stays for beacon's weekly `infer_person_relationships` job at >= 0.7 -- no tier gate in the protocol, no proposal table, consistent with 21.1 s12 R3; (b) **every auto-applied edge is logged with the model identity and its confidence** (plus the pair and the job run) so a wrong batch can be reverted in one documented query -- which is exactly what `EdgeProvenance.model_tier` + `confidence` (this ruling) exist to carry; (c) **safety raise: edges produced on the literal-Haiku path auto-apply only at >= 0.85**, the light-tier path keeps 0.7, and the threshold lives in one place. Owner of (a)-(c): beacon (a 21.x row filed by phase21-approve-and-build). **open-ontology owes nothing:** the provenance fields are shipped (row 4b); the threshold is a host job parameter and is *not* exposed as a protocol constant -- a per-model threshold in `EDGES.md` would be the tier gate this ruling declined, one level up. Recorded so a reader of R20 sees the product decision that closed its open half.
+
 ## R21 (Q16) — `Provenance.source_version`: YES, row 3e
 
 Additive, defaults `None`; two shapes for one concept is the drift the drift-check exists to catch.
