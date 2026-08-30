@@ -3,7 +3,7 @@
 **Version:** `v0` — **unstable.** Every name, field and return shape here may change without a deprecation path. Standing constraint 4: an interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.
 **Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 1. Deliverable #1 of the Tenshen-rebuild ordering.
 **Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumption **A1**. If A1 is wrong, this document is wrong in the way §11 describes.
-**Evidence inputs:** [`FINDINGS-0.1-tenshen-archaeology.md`](../findings/FINDINGS-0.1-tenshen-archaeology.md) (forced `consumers` and `predicate`) · [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) (forced model tier and external-doc evidence) · [`0.3-prior-art.md`](../findings/0.3-prior-art.md) (forced the status vocabulary and the refusal to copy `register_*`) · [`WALKTHROUGH.md`](../WALKTHROUGH.md) (the flow this must serve).
+**Evidence inputs:** `FINDINGS-0.1-tenshen-archaeology.md` (forced `consumers` and `predicate`) · `0.5-RESULTS.md` (forced model tier and external-doc evidence) · `0.3-prior-art.md` (forced the status vocabulary and the refusal to copy `register_*`) · [`WALKTHROUGH.md`](../WALKTHROUGH.md) (the flow this must serve).
 **Claim tags:** **[Observed]** seen directly · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 
 ---
@@ -1077,7 +1077,7 @@ Note the collision with **§2.7**: auto-approval is refused below `min_auto_appr
 
 ## 10. The CMS design test — facility, citation, tag
 
-**CMS wins any conflict with Tenshen** (brief; `ROADMAP.md` "Rule of the ordering"). The entities are the pre-registered ground truth from [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) plus the fourth entity the Opus run added and [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) recorded as **better than the ground truth**.
+**CMS wins any conflict with Tenshen** (brief; `ROADMAP.md` "Rule of the ordering"). The entities are the pre-registered ground truth from `0.5-ground-truth-PREREGISTERED.md` plus the fourth entity the Opus run added and `0.5-RESULTS.md` recorded as **better than the ground truth**.
 
 | Entity | `kind` | `name` | Key (in `attributes`) | Notable evidence |
 |---|---|---|---|---|

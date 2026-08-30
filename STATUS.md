@@ -4,12 +4,7 @@
 
 | Roadmap item | Status |
 |---|---|
-| 0.1 Tenshen archaeology | ✅ done |
-| 0.2 Partner-agency pollution question | 🟡 assumed (A1) — partner conversation refines |
-| 0.2b What contractors produce | 🟡 assumed (A2) — partner conversation refines |
-| 0.3 Prior art | ✅ done |
-| 0.4 Ingestion question | 🟡 assumed (A3) — partner conversation refines |
-| 0.5 Proposal-quality test | ✅ done |
+| Phase 0 discovery (internal; records not in the public repo) | ✅ closed 2026-08-28 — 0.2/0.2b/0.4 by assumption A1–A3 ([decisions](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md)) |
 | #1 `docs/specs/INTERFACE.md` v0 | ✅ done |
 | #2 `docs/specs/PACKAGE.md` v0 | ✅ done |
 | #3 Phase 2A reference implementation | ✅ done — 229 tests green, both backends |

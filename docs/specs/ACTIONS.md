@@ -1090,7 +1090,7 @@ await session.commit()
 
 ## 12. Design test 2 — UC2 CMS: `flag_facility_for_review`, and the value the precondition cannot see
 
-**CMS wins any conflict with Tenshen** (`ROADMAP.md`, rule of the ordering). Data: the checked-in 400-row Montana sample, `ontoloche/contract/fixtures/cms_sample_400.csv`, cut from the public CMS file by [`make_sample.py`](../tools/make_sample.py). Counts pre-registered in [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md).
+**CMS wins any conflict with Tenshen** (`ROADMAP.md`, rule of the ordering). Data: the checked-in 400-row Montana sample, `ontoloche/contract/fixtures/cms_sample_400.csv`, cut from the public CMS file by [`make_sample.py`](../tools/make_sample.py). Counts pre-registered in `0.5-ground-truth-PREREGISTERED.md`.
 
 **The action.** `flag_facility_for_review(facility)` — one input, an `InstanceRef` to a `cms:entity:facility`; the intended precondition is *"this facility has at least one citation whose `Scope Severity Code` is in the Immediate-Jeopardy band `{J, K, L}`"*; the intended effect is an edge, not a property.
 
