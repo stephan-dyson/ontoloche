@@ -1080,7 +1080,7 @@ Mirroring `INTERFACE.md` §11.
 | **`equivalent_to` is used as a merge precondition anywhere** | §3.2 has failed in practice | The family should be withdrawn. An edge that becomes a licence is worse than no edge, because the refusal it erodes is the answer to the kill row |
 | **A consumer reads a depth-2 report as an equivalence class** | §4.4's `at_depth` is insufficient | Either `neighbors` refuses `depth=2` for non-transitive families, or the family declares `transitive: bool` and the report enforces it. Both are surface changes and neither is taken now |
 | **Beacon's Slice 0 does not land** | `endpoint_kinds` is unenforceable on the one host that exists | The declaration stays honest (warnings, not claims) and buys nothing operationally. It is not removed — CMS and NYC both register their types |
-| **The office says two teams meaning different things by one word IS the main complaint** (A1 wrong) | `INTERFACE.md` §11's first row fires | `equivalent_to` gets *more* load-bearing, not less, and its non-transitivity becomes the thing to defend hardest |
+| **The partner agency says two teams meaning different things by one word IS the main complaint** (A1 wrong) | `INTERFACE.md` §11's first row fires | `equivalent_to` gets *more* load-bearing, not less, and its non-transitivity becomes the thing to defend hardest |
 | **`Reference` in beacon's grounding contract stays three fields** | §9.3's loss is permanent | Slice 2 delivers a `relations` slot that cannot carry `at_depth` or `complete`, so the narrator sees reachability with no way to tell it from entailment. **This is the most consequential open item for the Tenshen rebuild** |
 
 **Weaknesses named now so they are not discovered later:**

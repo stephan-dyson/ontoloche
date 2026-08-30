@@ -7,7 +7,7 @@
 
 ## Why this document exists
 
-**[Observed]** Two people in one office spend about an hour a day each moving CSV and Excel files into Foundry by hand. **[Observed]** The organisation relies on Palantir-sourced contractors to build ingest, pipelines and transforms, because not enough people internally can. **[Inferred]** Those two facts are the same fact: getting a pipeline built means starting a procurement, so hand-uploading is *rational avoidance*, not a skills gap.
+**[Observed]** A small number of staff in one public-sector organisation spend about an hour a day each moving CSV and Excel files into Foundry by hand. **[Observed]** The organisation relies on vendor-sourced contractors to build ingest, pipelines and transforms, because not enough people internally can. **[Inferred]** Those two facts are the same fact: getting a pipeline built means starting a procurement, so hand-uploading is *rational avoidance*, not a skills gap.
 
 This walkthrough is the concrete test of whether the thing we are proposing would actually help that person. **If it takes a developer at any step, it has failed** — a tool that needs a contractor to set up has reproduced the problem it claims to solve.
 
@@ -168,7 +168,7 @@ Worth stating plainly, because each is a place a real tool would have lost her:
 |---|---|---|
 | **Step 2's proposal is wrong often enough to erode trust** | A user who must correct four things in five stops reviewing and starts rubber-stamping — worse than no proposal, because errors now carry her approval | Run step 2 against 10 real messy files. **Measure the correction rate before building anything else.** **[Assumed]** it is low; entirely unvalidated |
 | **Step 5's impact list is incomplete** | An impact list that misses a consumer is *more* dangerous than none — it promises safety it cannot deliver | Only claim consumers the registry can enumerate mechanically. **Never infer one.** Show "3 known, may be others" rather than "3" |
-| **Dana's real files are far messier** | Merged cells, headers on row 4, three tables in one sheet, inconsistent facility names | **Use public CMS data — no office file ever leaves the building.** See "The test data problem, solved" below |
+| **Dana's real files are far messier** | Merged cells, headers on row 4, three tables in one sheet, inconsistent facility names | **Use public CMS data — no partner file is ever used.** See "The test data problem, solved" below |
 | **"Facility" and "Inspector" resolution is the hard part** | *"I already know 38 of these"* requires reliable entity resolution across spelling variants and name changes. This is a genuinely hard, well-studied problem | Do not hide it. Where confidence is low, **ask** — a fourth question is cheaper than a wrong merge |
 | **Step 4's action needs a real integration** | Sending mail in a government environment means auth, audit, retention, and approval to send at all | Deliberately out of scope until Phase 3. **The compose-and-authorise shape is the claim; the transport is not** |
 | **She has no permission to install anything** | Every step assumes a running system she can reach | Not a product problem, an adoption problem — but it decides whether the wedge is self-serve or must enter through an existing procurement |
@@ -184,9 +184,9 @@ Worth stating plainly, because each is a place a real tool would have lost her:
 
 ## The test data problem, solved — and it is public
 
-**Nothing from the office can be used to test this. Ever.** Federal data does not leave the building; there is no version of "bring back a few files" that is acceptable, and a venture whose evidence base is built on the founder's day-job access is compromised regardless of how careful he was. **[Observed]** — the founder ruled this out flatly, and he is right.
+**Nothing from the partner organisation can be used to test this. Ever.** Data of that kind does not leave the organisation that holds it; there is no version of "bring back a few files" that is acceptable, and a venture whose evidence base is built on the founder's professional access is compromised regardless of how careful he was. **[Observed]** — the founder ruled this out flatly, and he is right.
 
-**It turns out the office files are not needed.** CMS publishes the walkthrough's exact scenario as open data.
+**It turns out those files are not needed.** CMS publishes the walkthrough's exact scenario as open data.
 
 **`NH_HealthCitations_Aug2026.csv`** — nursing-home health citations, from the [CMS Provider Data Catalog](https://data.cms.gov/provider-data/dataset/r5ix-sfxw). **Verified 2026-08-27:** 157 MB, direct CSV download, updated 2026-08-01, ~15,000 certified facilities. Its real columns:
 
@@ -209,10 +209,10 @@ Citation under IIDR | Location | Processing Date
 | **Entity resolution, unavoidable** | `"BURNS NURSING HOME, INC."` — all-caps, inconsistent punctuation, across ~15,000 facilities, with `CCN` as the true key | This is the *"I already know 38 of these"* claim from step 2, tested against real name variation instead of a friendly example |
 | **Inconsistent quoting** | Some fields quoted, some bare, within the same row | Baseline parser robustness |
 
-**Why this is better than office files, not merely a legal substitute:**
+**Why this is better than partner files, not merely a legal substitute:**
 
-1. **Zero risk** — no data leaves anywhere, no employment or procurement-ethics exposure, and the venture's evidence base stays clean of the founder's day-job access. `ROADMAP.md` §0.2 already flags conflict-of-interest as a thing to settle; this removes it from the technical work entirely.
-2. **Same domain, same producers.** It is federal health-inspection data published by the same agency family, generated by the same survey processes and the same conventions as the internal files. **[Inferred]** that its messiness is representative of them.
+1. **Zero risk** — no data leaves anywhere, and the venture's evidence base stays clean of the founder's professional access. This removes the question from the technical work entirely.
+2. **Same domain, comparable producers.** It is federal health-inspection data generated by the same kind of survey process and the same conventions as the internal files. **[Inferred]** that its messiness is representative of them.
 3. **Reproducible by anyone.** An open-source project whose central usability claim rests on files nobody else can see has no claim at all. This one can be re-run by any reader.
 
 **The honest gap:** this file has **no `Inspector` column** — real citations are not attributed to a named surveyor in the public release. So it tests entity resolution on **Facilities** but not on **People**, and step 4's "email the responsible inspector" has no counterpart here. A second public source would be needed for the person half, or that half stays untested until a real deployment.
@@ -223,4 +223,4 @@ Citation under IIDR | Location | Processing Date
 
 **Airbyte moves the bytes; dbt reshapes the columns; neither knows what a *Facility* is — and the person who does know is the one currently locked out of the tools.** This walkthrough is a claim that the gap between "rows landed" and "typed, connected, actionable" can be crossed by proposal-and-confirmation rather than by a contractor, and step 5 is the claim that it can be crossed *repeatedly* without the result rotting.
 
-**Both claims are [Assumed]. Neither has been tested. Step 2's correction rate is the cheapest way to find out — and thanks to CMS publishing the exact scenario as open data, it can be tested by anyone, today, without a single file leaving an office.**
+**Both claims are [Assumed]. Neither has been tested. Step 2's correction rate is the cheapest way to find out — and thanks to CMS publishing the exact scenario as open data, it can be tested by anyone, today, without a single non-public file being touched.**

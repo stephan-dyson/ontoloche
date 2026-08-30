@@ -41,13 +41,13 @@ That last row is why this phase is not optional. If the cause is semantic collis
 
 **Finding:** [`docs/findings/FINDINGS-0.1-tenshen-archaeology.md`](docs/findings/FINDINGS-0.1-tenshen-archaeology.md)
 
-**Scope, stated first:** this examined **Tenshen**, not Foundry. The four mechanisms below are hypotheses about *HHS*; a single-owner codebase with no teams cannot test them, and **nothing in this finding challenges them.** They are tested at §0.2.
+**Scope, stated first:** this examined **Tenshen**, not Foundry. The four mechanisms below are hypotheses about *the partner agency*; a single-owner codebase with no teams cannot test them, and **nothing in this finding challenges them.** They are tested at §0.2.
 
 **Headline:** Tenshen's disease is not the one the table describes. Of the seven vocabularies, **five are not pollution at all** — they are *capability predicates* ("what is commentable", "what is searchable"), each locally correct, and **merging them would destroy true information**. **Two** are genuine semantic collision (mechanism 4 — present, inside one codebase, with no teams involved). And the only *documented production incident* was caused by a **fifth mechanism the table does not name**: a producer emitted a new type, every consumer gates on its own private allowlist, and the feature died **silently** in the consumer that had not been updated.
 
-**Consequence:** `consumers(type)` — "who gates on this?" — and `predicate` are **added**; the evidence forced both, and HHS cannot make them unnecessary. `merge_types` is guarded. **But which call is the *centre* is NOT settled by this finding** — that is Tenshen's disease, and 0.2 may contest it. See §1.
+**Consequence:** `consumers(type)` — "who gates on this?" — and `predicate` are **added**; the evidence forced both, and the partner agency cannot make them unnecessary. `merge_types` is guarded. **But which call is the *centre* is NOT settled by this finding** — that is Tenshen's disease, and 0.2 may contest it. See §1.
 
-**The more important structural result:** if 0.2 finds HHS has a *different* disease, Phase 2's "two implementations against one interface" stops being a nice-to-have and becomes the load-bearing part of the plan — an interface forced to serve two genuinely unlike consumers is exactly the N=1 cure §2 exists for. **Two different diseases is a good outcome, not a problem.**
+**The more important structural result:** if 0.2 finds the partner agency has a *different* disease, Phase 2's "two implementations against one interface" stops being a nice-to-have and becomes the load-bearing part of the plan — an interface forced to serve two genuinely unlike consumers is exactly the N=1 cure §2 exists for. **Two different diseases is a good outcome, not a problem.**
 
 **Not a kill criterion trip:** collision is present but not dominant (2 of 7) and not across teams.
 
@@ -72,27 +72,25 @@ Seven disagreeing entity-type vocabularies exist in a codebase under full contro
 
 </details>
 
-### 0.2 — The HHS pollution question *(one conversation)* — **ANSWERED BY ASSUMPTION A1, 2026-08-28**
+### 0.2 — The partner-agency pollution question *(one conversation)* — **ANSWERED BY ASSUMPTION A1, 2026-08-28**
 
-**[Assumed]** no-review + never-retired dominant (contractor rotation), collision minor, silent-drop present. Phase 1 is written against this; the office visit refines it. Kill criterion not tripped by assumption.
+**[Assumed]** no-review + never-retired dominant (contractor rotation), collision minor, silent-drop present. Phase 1 is written against this; the partner conversation refines it. Kill criterion not tripped by assumption.
 
 **Re-prioritised by finding 0.1.** Ask in this order — the original pollution question is now third, because 0.1 showed it was not the mechanism that caused harm:
 
 1. **"When someone adds a new object type, how do they find out what breaks?"** — tests Cause C (silent per-consumer drop), the mechanism that actually shipped a bug in Tenshen and the one no existing tool answers.
-2. **"Do two teams use the same word for different things?"** — tests Cause B (semantic collision). Present in Tenshen *without* teams, so multi-team HHS is the harder case and this is the kill-criterion probe.
+2. **"Do two teams use the same word for different things?"** — tests Cause B (semantic collision). Present in Tenshen *without* teams, so a multi-team partner agency is the harder case and this is the kill-criterion probe.
 3. `VISION.md` §11 Q3, verbatim: **why did the ontology get polluted, who could edit it, and what was missing?**
 
 **Exit criterion:** either it confirms 0.1's causes, or it names a different one. Both outcomes are useful; only the *absence* of an answer blocks Phase 1.
 
-**Watch for the disconfirming answer:** if HHS reports plain duplicate-type sprawl with no predicate structure and no silent-drop problem, then Tenshen was **not** representative and Phase 1 should be re-centred *back* toward `resolve_type`/`merge_types`. 0.1 is N=1; it earns a re-centering, not a certainty.
-
-**Settle first:** employment terms, conflict-of-interest rules, and procurement ethics if that office could ever be a customer. Be straight that the questions are orientation, because they are.
+**Watch for the disconfirming answer:** if the partner agency reports plain duplicate-type sprawl with no predicate structure and no silent-drop problem, then Tenshen was **not** representative and Phase 1 should be re-centred *back* toward `resolve_type`/`merge_types`. 0.1 is N=1; it earns a re-centering, not a certainty.
 
 ### 0.2b — What are the contractors actually doing? *(one conversation, highest value in Phase 0)* — **ANSWERED BY ASSUMPTION A2, 2026-08-28**
 
 **[Assumed]** all four produced; ontology mapping is the largest share, roughly half. Venture thesis holds provisionally.
 
-**[Observed]** the organisation relies on Palantir-sourced contractors to build ingest, pipelines and transforms. **[Inferred]** that most of those hours go to *mapping raw data into the ontology* rather than to moving bytes — which is the layer Airbyte and dbt do not cover (`VISION.md` §4b).
+**[Observed]** the organisation relies on vendor-sourced contractors to build ingest, pipelines and transforms. **[Inferred]** that most of those hours go to *mapping raw data into the ontology* rather than to moving bytes — which is the layer Airbyte and dbt do not cover (`VISION.md` §4b).
 
 **Ask:** what does a contractor engagement actually produce — connectors, transforms, ontology definitions, actions, or all four? **Roughly what share is the ontology mapping?**
 
@@ -146,7 +144,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 **Tests the single weakest assumption in the whole venture:** that step 2 of [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — the system *proposing* a reading of a file rather than handing the user a schema editor — is right often enough that a domain expert keeps reviewing instead of rubber-stamping. **If the correction rate is high, the product does not work, and no amount of engineering fixes it.**
 
-**No office file can ever be used for this.** Federal data does not leave the building, and a venture resting on the founder's day-job access is compromised regardless of care taken. **The public equivalent is better anyway** — same domain, same agency family, reproducible by any reader, zero conflict-of-interest surface.
+**No partner file can ever be used for this.** Data of that kind does not leave the organisation that holds it, and a venture resting on the founder's professional access is compromised regardless of care taken. **The public equivalent is better anyway** — same domain, comparable publishers, reproducible by any reader, zero exposure.
 
 **Data, counted over all 419,479 rows 2026-08-28:** [`NH_HealthCitations_Aug2026.csv`](https://data.cms.gov/provider-data/dataset/r5ix-sfxw) — CMS nursing-home health citations. 165,336,194 bytes, 23 columns, **14,627 facilities**, updated 2026-08-01. Confirmed pathologies: a boolean-sounding column holding **six** status strings with no yes/no among them; **1.28%** of rows (5,338 of 416,948) with a correction date *preceding* the survey date; a `Location` column **99.988% redundant** with four others; and 104 facility names shared across multiple CCNs, so name-based resolution merges distinct facilities. Ground truth is pre-registered in [`docs/findings/0.5-ground-truth-PREREGISTERED.md`](docs/findings/0.5-ground-truth-PREREGISTERED.md).
 
@@ -160,7 +158,7 @@ Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology
 
 </details>
 
-**PHASE 0 EXIT — PASSED BY ASSUMPTION 2026-08-28.** 0.1, 0.3 and 0.5 done on evidence; 0.2, 0.2b, 0.4 assumed (A1–A3) pending the office visits. **0.3 closed 2026-08-28** — its verdict is Phase 1's first prior-art input. Two 0.5 gaps also remain open and are scheduled below: T4 entity resolution on the name-collision slice, and the People half.
+**PHASE 0 EXIT — PASSED BY ASSUMPTION 2026-08-28.** 0.1, 0.3 and 0.5 done on evidence; 0.2, 0.2b, 0.4 assumed (A1–A3) pending the partner conversations. **0.3 closed 2026-08-28** — its verdict is Phase 1's first prior-art input. Two 0.5 gaps also remain open and are scheduled below: T4 entity resolution on the name-collision slice, and the People half.
 
 ---
 
@@ -196,7 +194,7 @@ provenance(type)                  -> who, when, on what evidence
 merge_types(from, into, reason)   -> MUST refuse when the two have different consumer sets [demoted + guarded]
 ```
 
-**`consumers` is required, and provisionally carries the thesis.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught. **That is Tenshen's disease.** Whether it is also HHS's is unknown until §0.2; if HHS reports plain duplicate sprawl, `resolve_type` reclaims the centre and this ordering flips. ~~Do not write Phase 1 until 0.2 reports~~ **Gate lifted 2026-08-28 (founder).** Phase 1 is written against A1: **no single call is the centre — the proposal→approval loop is**, with `consumers`, `resolve_type`, lifecycle (`usage`/orphaned/retire) and `propose_type` all first-class. The document header carries *"written against the 2026-08-28 assumptions; see docs/decisions/"*.
+**`consumers` is required, and provisionally carries the thesis.** Finding 0.1 showed the only documented incident was a type that existed but was silently dropped by one consumer — no duplicate, no pollution, nothing `resolve_type` or `merge_types` could have caught. **That is Tenshen's disease.** Whether it is also the partner agency's is unknown until §0.2; if the partner agency reports plain duplicate sprawl, `resolve_type` reclaims the centre and this ordering flips. ~~Do not write Phase 1 until 0.2 reports~~ **Gate lifted 2026-08-28 (founder).** Phase 1 is written against A1: **no single call is the centre — the proposal→approval loop is**, with `consumers`, `resolve_type`, lifecycle (`usage`/orphaned/retire) and `propose_type` all first-class. The document header carries *"written against the 2026-08-28 assumptions; see docs/decisions/"*.
 
 **`predicate` is first-class because five of Tenshen's seven vocabularies are predicates, not vocabularies.** A registry that cannot represent "commentable" as distinct from "the type list" will flatten them and assert falsehoods.
 
@@ -338,7 +336,7 @@ Postgres-backed, built against messy CSV-shaped data. **Not** built against Tens
 
 **Why after Phase 2, not before:** ingestion without a curation engine fills an ontology faster — building the pollution machine before the filter. `VISION.md` §5 states this directly.
 
-**Exit criterion:** the two people lose the hour a day, and what lands is queryable rather than a pile.
+**Exit criterion:** the staff doing manual uploads lose the hour a day, and what lands is queryable rather than a pile.
 
 ---
 
@@ -366,8 +364,8 @@ Written now, while it is cheap to be honest.
 
 ## Standing constraints
 
-0. **No data from the founder's employer is ever used — not to test, not to demo, not to describe in detail.** Not a caution, a hard line. It protects his employment, keeps the venture's evidence base defensible, and removes any characterisation of the work as trading on his access. **Public equivalents exist and are better** (§0.5): reproducible by any reader, which an open-source project's central claims must be. A test that cannot be run on public data is a test this project does not run.
-1. **Do not quit to build this.** The current job is simultaneously the research lab, the customer-discovery channel, and the funding source. What burns savings is building for a long stretch before contact with a user.
+0. **No data from any non-public source the founder has professional access to is ever used — not to test, not to demo, not to describe in detail.** Not a caution, a hard line. It protects the founder's professional obligations, keeps the venture's evidence base defensible, and removes any characterisation of the work as trading on his access. **Public equivalents exist and are better** (§0.5): reproducible by any reader, which an open-source project's central claims must be. A test that cannot be run on public data is a test this project does not run.
+1. **Sequence the work so that contact with a real user comes before any large capital commitment; ship something small into a real workflow first.**
 2. **Do not build the general thing before the specific thing works.** Every scaffold in `VISION.md` §8 — 79 stars, two commits — is someone who started with the framework.
 3. **The arrow points from Tenshen to open-ontology as evidence, never the reverse as a dependency** — ~~until Phase 3 works for a real outside user~~ **until Phase 2A passes its contract tests with CMS public data as the primary consumer** (A5, **confirmed by the founder 2026-08-28**: Tenshen will be rebuilt on top of open-ontology). Recorded in the Tenshen spec's §12; that section's three reasons still bind.
 4. **Version everything `v0` and say it is unstable.** An interface labelled unstable is cheap to replace; one two codebases quietly assume is permanent is not.
