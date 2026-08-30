@@ -165,8 +165,16 @@ def test_c3_10_a_retired_name_is_named_in_the_resolution_not_silently_omitted(re
     because nothing scored it. Added by row 3c after an adversarial review round
     reproduced it live.
     """
+    # **`capture` is seeded, then retired** (row 4d, round 1). This fixture used to name
+    # a successor it never created, which `retire` now refuses `successor_unregistered`
+    # -- an identity guard that cannot be EVALUATED has not said the collapse is safe.
+    # The subject is unchanged and sharper: a retired name whose successor is not LIVE is
+    # still named in the resolution rather than silently omitted, and the state is now
+    # one a governed vocabulary can actually be in.
+    seed(registry, "capture", definition="the word that replaced it")
     seed(registry, "watch", definition="a thing a user watches")
     registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")
+    registry.retire("capture", "and then that one went too", retired_by="user:sd")
 
     resolution = registry.resolve_type(
         "watch", ResolveContext(definition_hint="something else entirely"), tier="opus"

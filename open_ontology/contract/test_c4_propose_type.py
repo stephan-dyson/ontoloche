@@ -1,4 +1,4 @@
-"""C4 -- ``propose_type`` (11). Mechanism 1: no review.
+"""C4 -- ``propose_type`` (12). Mechanism 1: no review.
 
 The call that makes an addition a *request* rather than a fact. It refuses exactly two
 things and warns about everything else -- refusing a near-duplicate is how you flatten a
@@ -12,8 +12,9 @@ from datetime import UTC, datetime
 import pytest
 
 from ..policy import NamespacePolicy
-from ..types import CREATED_BY, Citation, Evidence, Proposal, TypeEntry
+from ..types import CREATED_BY, Citation, Evidence, Proposal, Refusal, TypeEntry
 from ._support import DOC_EVIDENCE_URL, seed
+from .doubles import DegradedAdapter
 
 DATA_EVIDENCE = Evidence(
     kind="data",
@@ -121,6 +122,9 @@ def test_c4_07_auto_approval_is_legible_never_blank(adapter, make_registry):
 
 @pytest.mark.requires_capability("indexes_membership")
 def test_c4_08_a_retired_name_is_not_silently_reusable(registry, adapter):
+    # `capture` is seeded because `retire` now refuses a successor that names no entry
+    # (`successor_unregistered`, row 4d round 1). The subject is untouched.
+    seed(registry, "capture", definition="the word that replaced it")
     seed(registry, "watch", definition="a thing a user watches")
     registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")
 
@@ -253,3 +257,74 @@ def test_c4_11_declaring_a_predicate_whose_identity_moved_is_warned(adapter, mak
     assert not [
         w for w in dangling.warnings if w.startswith("declared_predicate_merged")
     ]
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_proposals")
+def test_c4_12_a_word_is_re_checked_at_the_write_and_a_partial_look_says_so(
+    adapter, make_registry
+):
+    """**Two halves of one guard, both found by row 4d's first adversarial round.**
+
+    **(a) The word was free when the proposal was made and may not be when it is
+    written.** `propose_type` asks `_alias_holder`; `_write_approved` writes the row —
+    sometimes days later — and re-checked nothing. **Ruling R40 forces every
+    `kind="predicate"` down that two-step path**, so the guard was structurally
+    unavailable for the one kind the kill row is about, and R40's own human-review window
+    is exactly the window in which the check goes stale.
+
+    **(b) A look that did not finish has not said the word is free.** The collision scan
+    read `_active_page` and discarded the sentence saying the backend had capped the
+    query, so a truncated look read as *"free"*. **Rule U's third operand — *partial is
+    not equal*, the FIFTH trip — missing from a guard the SIXTH trip's own commit
+    shipped.**
+
+    **And (b) is a WARNING rather than a refusal, which is the finding inside the
+    finding.** The first fix refused, and `C3-13` — whose whole subject is a backend that
+    caps an unlimited query — went red: refusing there does not *narrow* the guard, it
+    **bans `propose_type` on every paging backend**, at exactly the scale UC3 describes.
+    `C10-09`'s lesson, one call along. So the fact is reported rather than suppressed,
+    which is §5.4's own rule.
+    """
+    registry = make_registry(adapter)  # manual review: there IS a window
+    seed(registry, "searchable", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["searchable"])
+
+    pending = registry.propose_type(
+        "commentable", "a capability", [Evidence(kind="data", summary="a sample")],
+        "user:sd", kind="predicate",
+    )
+    assert isinstance(pending, Proposal), (
+        "R40: a predicate proposal is PENDING, whatever the policy says"
+    )
+
+    # ...and now, while it waits for a human, the word is spoken for.
+    registry.import_types(
+        [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["commentable"], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+
+    approved = registry.approve(pending.id, "user:sd")
+    assert isinstance(approved, Refusal), (
+        "approving now would leave two live entries holding one word -- 5.9b, and the "
+        "guard `propose_type` ran is a guard about a world that has moved"
+    )
+    assert approved.reason == "alias_collision"
+    assert approved.detail["overridable"] is False
+
+    # --- (b) the partial look ------------------------------------------------
+    for i in range(8):
+        seed(registry, f"filler_{i}", definition="a filler")
+    capped = make_registry(DegradedAdapter(adapter, page_cap=3))
+    out = capped.propose_type(
+        "another_word", "a capability", [Evidence(kind="data", summary="a sample")],
+        "user:sd", kind="predicate",
+    )
+    assert not isinstance(out, Refusal), (
+        "refusing here does not narrow the guard, it BANS the call on every paging "
+        "backend -- C10-09's lesson, and C3-13's own subject"
+    )
+    assert any(w.startswith("alias_check_incomplete:") for w in out.warnings), (
+        "the scan read a page the backend had already said was partial; reporting that "
+        "is Rule U, and swallowing it is how a truncated look reads as `free`"
+    )

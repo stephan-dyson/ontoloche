@@ -235,18 +235,14 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "names the field; kept here because a person deciding *\"reader, not writer\"* "
         "is exactly the judgement Part A exists to force",
     ),
-    "_declared_predicate_moved": CallerVerdict(
-        False,
-        "**READS** a retired predicate's `successor`, and scans the namespace's active "
-        "rows for one holding a word as an ALIAS, to answer ruling **R55**'s question at "
-        "the write door: *which identity did this declaration land in?* It returns a "
-        "name that becomes a warning string, and it writes no row. **Flagged by the "
-        "over-broad scan the minute row 4d added it, which is Part A doing exactly its "
-        "job** -- a new function that so much as names an identity field fails this "
-        "check until a person writes down what it means, whether it is a writer or not. "
-        "*(The false positive costs this paragraph; a false negative costs the kill "
-        "row.)*",
-    ),
+    # **`_declared_predicate_moved` was here for one commit, and Part A took it back
+    # out.** Row 4d's item 4 added it naming `successor` as a constant, so the scan
+    # flagged it UNKNOWN and the suite went red until a person wrote down that it is a
+    # READER. Round 1 then rewrote it to follow `_identity_closure` instead of one hop,
+    # it stopped naming the field at all, and Part A's OTHER half -- *a stale entry here
+    # is a guard somebody thinks is being checked and is not* -- failed until the entry
+    # came out again. Both halves earned their keep inside one row, so the churn is
+    # recorded rather than tidied away.
     "_search_namespaces": CallerVerdict(
         False,
         "**READS** `rec.successor` to build the sentence R6's cross-namespace lookup "
@@ -659,6 +655,24 @@ STATES = (
 )
 
 
+#: Every Postgres adapter this run created, so :func:`_drop_postgres_schemas` can drop
+#: the schema each one owns. See the note in ``_legs``.
+_POSTGRES_SCHEMAS: list = []
+
+
+def _drop_postgres_schemas() -> None:
+    """Drop every schema this run created. Called from ``main`` in a ``finally``."""
+    for adapter in _POSTGRES_SCHEMAS:
+        try:
+            adapter._execute(f'DROP SCHEMA IF EXISTS "{adapter.schema}" CASCADE')
+            close = getattr(adapter, "close", None)
+            if close:
+                close()
+        except Exception:  # pragma: no cover - cleanup must not mask a verdict
+            pass
+    _POSTGRES_SCHEMAS.clear()
+
+
 def _legs():
     """``(name, build a fresh Registry, is membership indexable here?)``, three of them."""
 
@@ -687,6 +701,14 @@ def _legs():
         def postgres():
             adapter = PostgresAdapter(dsn, schema="oo_" + uuid.uuid4().hex[:12])
             adapter.migrate()
+            # **Recorded so it can be DROPPED, and not doing so bit this row.** Every
+            # fixture in this file builds a fresh store, and on the Postgres leg that is
+            # a fresh SCHEMA -- one per (caller x state x leg), five axes deep. Nothing
+            # dropped them, so the database accumulated **19,220** `oo_*` schemas across
+            # this row's runs, and the catalog bloat crashed the backend with three
+            # SEGFAULTs during `CREATE TABLE`, each followed by ~4.5 minutes of recovery.
+            # A checker that has to be run to be believed must be cheap enough to run.
+            _POSTGRES_SCHEMAS.append(adapter)
             return Registry(adapter)
 
         legs.append(("postgres", postgres, True))
@@ -1467,15 +1489,23 @@ def check_one_word() -> tuple[list[str], list[str], list[str]]:
             out = capped.propose_type(
                 "commentable", "a capability", EVIDENCE, "user:sd", kind="predicate"
             )
-            if not isinstance(out, Refusal):
+            # **The warning, not a refusal -- and this row asserted the wrong answer
+            # until the suite said so.** The first fix refused here, and `C3-13` (whose
+            # whole subject is a backend that caps an unlimited query) went red: refusing
+            # does not narrow the guard, it BANS `propose_type` on every paging backend,
+            # at exactly the scale UC3 describes. `C10-09`'s lesson, one call along. So
+            # what is owed is Rule U REPORTED -- the caller is told the look did not
+            # finish -- and this row asks for that.
+            said = "alias_check_incomplete" in " ".join(getattr(out, "warnings", ()) or ())
+            if not isinstance(out, Refusal) and not said:
                 problems.append(
                     f"{leg} / propose (capped) / one word: `propose_type` accepted a word "
-                    f"a live entry already answers to, because the collision scan read a "
-                    f"page the backend had ALREADY SAID was partial and read the absence "
-                    f"as an answer. The full read refuses `alias_collision` "
-                    f"non-overridably. Rule U's third operand -- partial is not equal -- "
-                    f"missing from a guard shipped by the commit whose subject is the "
-                    f"fourth"
+                    f"a live entry already answers to and said NOTHING, because the "
+                    f"collision scan read a page the backend had ALREADY SAID was partial "
+                    f"and read the absence as an answer. The full read refuses "
+                    f"`alias_collision` non-overridably. Rule U's third operand -- partial "
+                    f"is not equal -- missing from a guard shipped by the commit whose "
+                    f"subject is the fourth"
                 )
                 lines.append(f"  {leg:15s} {'propose (capped)':17s} {'one word':24s} FAILED")
             else:
@@ -1667,4 +1697,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        code = main()
+    finally:
+        # The verdict is printed either way; the schemas go either way too.
+        _drop_postgres_schemas()
+    raise SystemExit(code)

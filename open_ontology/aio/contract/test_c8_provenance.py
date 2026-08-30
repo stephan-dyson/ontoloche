@@ -38,6 +38,10 @@ async def test_c8_02_history_is_append_only(registry, clock):
     assert [e.event for e in before] == ["proposed", "approved"]
 
     clock.advance(timedelta(minutes=5))
+    # `capture` is seeded because `retire` now refuses a successor that names no entry
+    # (`successor_unregistered`, row 4d round 1). The successor is scaffolding here; the
+    # subject is that history is append-only.
+    await seed(registry, "capture", definition="the word that replaced it")
     await registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")
 
     after = list((await registry.provenance("watch")).history)

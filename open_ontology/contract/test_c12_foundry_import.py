@@ -1,4 +1,4 @@
-"""C12 -- the Foundry import mapping, and the fourth door into the kill row (11). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping, and the fourth door into the kill row (12). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``Registry.import_types``, a method beyond the twelve, because no 5.x
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from ..types import Refusal, ResolveContext
+from ..types import Evidence, Refusal, ResolveContext, TypeEntry
 from ._support import seed
 
 FOUNDRY_ROWS = [
@@ -439,3 +439,48 @@ def test_c12_11_an_imported_row_declaring_a_moved_predicate_is_warned(
     # same seam: the fact is now VISIBLE as well as announced.
     listing = registry.list_types(predicate="searchable", namespace="default")
     assert {"note", "memo", "card"} & {t.name for t in listing.types} == {"note", "memo"}
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+def test_c12_12_an_imported_row_whose_name_is_spoken_for_is_refused(adapter, make_registry):
+    """**The row's own NAME is a word too, and this door never asked.** Row 4d, round 1.
+
+    `import_types`' alias block runs only `if incoming:` — only when the imported row
+    carries aliases of its own. So a row whose **name** a live entry already answers to,
+    carrying no aliases, was written with no refusal and no warning, and two active
+    entries came to hold one word between them.
+
+    `propose_type` refuses that exact act (`alias_collision`, non-overridable, row 4c's
+    Door-4 fix). The sibling write door did not ask, which is the third trip's diagnosis
+    on a fourth axis: **a guard written for one call, over a fact more than one call can
+    change.** `C16-06`'s whole-store invariant, in one ordinary import row.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    seed(registry, "searchable", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["searchable"])
+    registry.import_types(
+        [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["commentable"], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+
+    # The control: `propose_type` refuses this, and has since row 4c.
+    refused = registry.propose_type(
+        "commentable", "a capability", [Evidence(kind="data", summary="a sample")],
+        "user:sd", kind="predicate",
+    )
+    assert isinstance(refused, Refusal) and refused.reason == "alias_collision"
+
+    entry = registry.import_types(
+        [{"name": "commentable", "kind": "predicate", "definition": "a capability",
+          "status": "active"}],
+        namespace="default", kind="predicate",
+    )[0]
+    assert "import_refused:alias_collision" in entry.warnings, (
+        "the sibling write door must give the same answer to the same act"
+    )
+    live = registry.list_types(namespace="default").types
+    holders = [t.name for t in live if t.name == "commentable" or "commentable" in (t.aliases or ())]
+    assert holders == ["searchable"], (
+        f"two live entries answering to one word is mechanism 4 itself: {holders}"
+    )

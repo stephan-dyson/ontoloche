@@ -66,8 +66,15 @@ def exercised(adapter, make_registry, clock):
     registry.record_use("task")
     clock.advance(timedelta(minutes=1))
 
+    # `capture` is seeded because `retire` now refuses a successor that names no entry
+    # (`successor_unregistered`, row 4d round 1). The subject is the whole-store
+    # invariants after a merge; the successor is scaffolding.
+    # ...and it is named `recording` rather than `capture` because `C16-03` seeds
+    # `capture` itself and asserts that seeding it writes NEW events. A shared fixture is
+    # a shared fixture.
+    seed(seeder, "recording", definition="the word that replaced it")
     seed(seeder, "watch", definition="a thing a user watches")
-    registry.retire("watch", "superseded by `capture`", retired_by="user:sd", successor="capture")
+    registry.retire("watch", "superseded by `recording`", retired_by="user:sd", successor="recording")
 
     # merge_types' consumer-set guard reads the extent of each consumer's gate, so a
     # backend that cannot index membership has no consumer evidence and refuses --

@@ -65,7 +65,7 @@ def _type(name="facility", **kw) -> TypeRecord:
     base.update(kw)
     return TypeRecord(**base)
 
-def _shared_store_pair(backend, tmp_path):
+def _shared_store_pair(backend, tmp_path, request):
     """Two adapter instances over ONE store, so two writers can actually race.
 
     ``:memory:`` gives every SQLite connection its own database, so a shared store has
@@ -89,6 +89,15 @@ def _shared_store_pair(backend, tmp_path):
         schema = "oo_race_" + uuid.uuid4().hex[:12]
         first = PostgresAdapter(dsn, schema=schema)
         first.migrate()
+        # **Dropped at teardown, and not dropping it was a real leak** (row 4d, round 1).
+        # `adapter_factory` in `conftest.py` has always dropped the schema it creates;
+        # this fixture builds its own and dropped nothing, so every run of the suite left
+        # one more `oo_race_*` schema behind. Registered with the request so it goes even
+        # when the test FAILS -- a teardown that only runs on success is the shape of leak
+        # this one was.
+        request.addfinalizer(
+            lambda: first._execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        )
         return first, PostgresAdapter(dsn, schema=schema)
 
     if backend == "sqlite_minimal":
@@ -152,7 +161,7 @@ def _race(fn_a, fn_b):
     return out["a"], out["b"]
 
 
-def test_c0_08_g1_and_g2_hold_against_two_real_concurrent_writers(backend, tmp_path):
+def test_c0_08_g1_and_g2_hold_against_two_real_concurrent_writers(backend, tmp_path, request):
     """**G1 and G2, raced.** PACKAGE.md 3.5: G1 must come from a real constraint, "not
     from a read-then-write check", and G2 is what turns ``already_decided`` into an
     idempotent refusal rather than a double-approve.
@@ -170,7 +179,7 @@ def test_c0_08_g1_and_g2_hold_against_two_real_concurrent_writers(backend, tmp_p
     UPDATE`` on the proposal read -- and the observable answer must be the same, which
     is the claim worth having.
     """
-    first, second = _shared_store_pair(backend, tmp_path)
+    first, second = _shared_store_pair(backend, tmp_path, request)
 
     # --- G1: two writers, one absent name. Exactly one insert may win.
     rec = _type(name="facility")

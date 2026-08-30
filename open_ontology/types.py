@@ -79,6 +79,15 @@ NOT_A_TYPE_REASONS = (
 # in the same change -- which is how the fifteenth got here (R4, row 3c) and how the
 # last three did (EDGES.md v0, row #4).
 REFUSAL_REASONS = (
+    # INTERFACE.md 5.9, row 4d's first adversarial round -- the twenty-ninth.
+    # `retire(successor=)` where the successor names NO entry. Every identity guard on
+    # that call is nested inside *"if the successor row exists"*, so naming a successor
+    # before it is registered skipped all three -- and the word was then created by an
+    # ordinary propose+approve, after which `resolve_type` cashes the redirect at
+    # confidence 1.0. **A guard that could not be EVALUATED has not said the collapse is
+    # safe**: Rule U, at the one call 5.3 calls a guarantee. Non-overridable, `force`
+    # included, exactly as the guards it stands in for are.
+    "successor_unregistered",
     "different_consumer_sets",
     "predicate_merge",
     "kind_mismatch",
@@ -307,6 +316,21 @@ WARNING_VALUES = (
     # still resolves is correct behaviour, since 5.10 promises the old word still
     # resolves. The registry's job is to say which identity the declaration landed in.
     "declared_predicate_merged",
+    # INTERFACE.md 5.4, row 4d's first adversarial round -- the thirty-second.
+    # `Proposal`, and the `TypeEntry` an approval or an import writes, when the scan
+    # that asks *"does a live entry already answer to this word?"* read a page the
+    # backend had already said was PARTIAL.
+    #
+    # The guard threw that sentence away, so a truncated look read as *"the word is
+    # free"* and a second live entry was created for one word -- Rule U's third operand
+    # (*partial is not equal*, the FIFTH trip) missing from a guard shipped by the commit
+    # whose subject was the fourth. **[Observed]** on `DegradedAdapter(page_cap=3)` over
+    # ten active rows, where the full read refuses `alias_collision` non-overridably.
+    #
+    # It is a WARNING and not a refusal, and the first cut got that wrong: refusing there
+    # does not narrow the guard, it BANS `propose_type` on every paging backend, at
+    # exactly the scale (UC3) where paging happens. `C10-09`'s lesson one call along.
+    "alias_check_incomplete",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
