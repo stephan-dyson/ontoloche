@@ -372,6 +372,29 @@ def _check_warning_vocabulary(spec_text: str) -> list[str]:
 # the suite, which is two of the three sides. The third side is what the adversarial
 # loop is for, and `EDGES.md` §17.5 is honest about what that is worth.
 
+#: `INTERFACE.md` sections that must carry an R31 rule table. **Added by row 4d**, which
+#: is the first row to change rules in this document since ruling R31 landed -- standing
+#: constraint 8 binds every spec, and until this row the gate only read `EDGES.md`.
+#:
+#: **They are SUBSECTIONS, and that is the honest choice rather than a dodge.** R31's
+#: mechanism requires a section's rule numbers to run 1..N with no gap, so a table under
+#: `### 5.3` would be claiming to enumerate every rule in `resolve_type` -- a document
+#: this row did not write and has no standing to renumber. A subsection per change
+#: enumerates exactly the rules that changed, with no gap and no false claim of coverage.
+#: **The residual, stated rather than implied:** the rest of §5.2, §5.3, §5.4 and §5.6
+#: remains outside the gate. Bringing a whole section under it is a row's worth of work
+#: and belongs to the row that next changes that section wholesale.
+R31_INTERFACE_SECTIONS = {
+    # Ruling R54 -- `predicates`' extent and `of=` filter resolve the identity.
+    "5.2.1": "#### 5.2.1",
+    # The Q56 default -- `resolve_type` re-verifies a predicate identity at the read.
+    "5.3.2": "#### 5.3.2",
+    # Ruling R55 -- the write door names the identity a declaration landed in.
+    "5.4.1": "#### 5.4.1",
+    # Ruling R54 again, at `list_types`' `predicate=` filter.
+    "5.6.1": "#### 5.6.1",
+}
+
 #: `EDGES.md` sections that must carry an R31 rule table, and the heading that opens
 #: each. Adding a section here is how a later row brings its own rules under the gate.
 R31_SECTIONS = {
@@ -402,13 +425,26 @@ def _section(text: str, heading: str) -> str:
 def _check_rule_coverage(implemented: set[str]) -> list[str]:
     """Every numbered rule in the R31 sections has an id or a tagged reason."""
     problems: list[str] = []
-    if not EDGES.exists():  # pragma: no cover - an installed wheel has no docs/
-        return problems
-    text = EDGES.read_text(encoding="utf-8")
-    for label, heading in R31_SECTIONS.items():
+    for document, path, sections in (
+        ("EDGES", EDGES, R31_SECTIONS),
+        ("INTERFACE", SPEC, R31_INTERFACE_SECTIONS),
+    ):
+        if not path.exists():  # pragma: no cover - an installed wheel has no docs/
+            continue
+        problems.extend(
+            _check_one_document(path.read_text(encoding="utf-8"), document, sections, implemented)
+        )
+    return problems
+
+
+def _check_one_document(
+    text: str, document: str, sections: dict[str, str], implemented: set[str]
+) -> list[str]:
+    problems: list[str] = []
+    for label, heading in sections.items():
         body = _section(text, heading)
         if not body:
-            problems.append(f"EDGES {label}: the section heading {heading!r} is not there")
+            problems.append(f"{document} {label}: the section heading {heading!r} is not there")
             continue
         rows = [
             (number, cells)
@@ -417,7 +453,7 @@ def _check_rule_coverage(implemented: set[str]) -> list[str]:
         ]
         if not rows:
             problems.append(
-                f"EDGES {label}: no rule table (ruling R31 / standing constraint 8 -- "
+                f"{document} {label}: no rule table (ruling R31 / standing constraint 8 -- "
                 f"every numbered rule ships with a contract id or a `prose-only:` tag)"
             )
             continue
@@ -430,7 +466,7 @@ def _check_rule_coverage(implemented: set[str]) -> list[str]:
                 for cid in ids:
                     if cid not in implemented:
                         problems.append(
-                            f"EDGES {number}: names {cid}, and no test in the suite "
+                            f"{document} {number}: names {cid}, and no test in the suite "
                             f"claims that id"
                         )
                 continue
@@ -438,20 +474,20 @@ def _check_rule_coverage(implemented: set[str]) -> list[str]:
                 reason = exercised.split("prose-only:", 1)[1].strip(" `")
                 if len(reason) < 20:
                     problems.append(
-                        f"EDGES {number}: tagged `prose-only:` with no reason -- R31 "
+                        f"{document} {number}: tagged `prose-only:` with no reason -- R31 "
                         f"requires the reason, because a tag without one is the "
                         f"silencing mechanism the ruling exists to prevent"
                     )
                 continue
             problems.append(
-                f"EDGES {number}: neither a contract id nor a `prose-only:` tag "
+                f"{document} {number}: neither a contract id nor a `prose-only:` tag "
                 f"(ruling R31 / standing constraint 8). Its `exercised by` cell reads "
                 f"{exercised[:60]!r}"
             )
         expected = list(range(1, len(seen) + 1))
         if seen != expected:
             problems.append(
-                f"EDGES {label}: the rule numbers are {seen}, not {expected} -- a gap "
+                f"{document} {label}: the rule numbers are {seen}, not {expected} -- a gap "
                 f"is a rule somebody deleted from the table and left in the prose"
             )
     return problems
@@ -691,7 +727,11 @@ def main() -> int:
         f"implementation ({len(EDGES_SHAPES)} shapes, {len(EDGE_CALLS)} calls).\n"
         f"EDGES.md: every numbered rule in "
         f"{', '.join(sorted(R31_SECTIONS))} carries a contract id or a tagged "
-        f"reason (ruling R31, standing constraint 8)."
+        f"reason (ruling R31, standing constraint 8).\n"
+        f"INTERFACE.md: every numbered rule in "
+        f"{', '.join(sorted(R31_INTERFACE_SECTIONS))} does too -- row 4d is the first "
+        f"row to change rules in this document since R31 landed, and constraint 8 binds "
+        f"every spec rather than one."
     )
     return 0
 

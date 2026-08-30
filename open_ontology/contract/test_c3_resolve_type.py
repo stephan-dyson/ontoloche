@@ -512,3 +512,13 @@ def test_c3_14_a_redirect_whose_identity_claim_went_stale_says_so(registry):
     plain = registry.resolve_type("capture", ResolveContext(), tier="opus")
     assert plain.outcome == "existing" and plain.type is not None
     assert "identity_stale" not in plain.type.warnings
+
+    # **A near miss is not an identity claim (§5.3.2-5).** Nobody wrote that these two
+    # words denote one thing; the scorer merely rated them alike. Re-verifying every
+    # `existing` outcome would read two extents for a coincidence of spelling and would
+    # attach a merge's warning to a word no merge ever touched.
+    near = registry.resolve_type("commentables", ResolveContext(), tier="opus")
+    if near.outcome == "existing" and near.type is not None:
+        assert "identity_stale" not in near.type.warnings, (
+            "the resolver scored a near miss; that is not an identity anybody claimed"
+        )

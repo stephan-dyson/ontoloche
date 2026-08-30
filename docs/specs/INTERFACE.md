@@ -338,7 +338,16 @@ PredicateEntry:
 > **The identity guards deliberately do NOT ask this question, and the reason is circularity rather than cost.** Every guard in §5.10 compares two extents to decide whether collapsing two words asserts something false. If that comparison resolved identities, the merge under examination would be exactly what joined the two names — so the two closures would be equal **by construction**, the guard would agree with itself and refuse nothing, and `ROADMAP.md`'s kill row would reopen through the fix meant to close a different hole. The guards ask whether two words denote the same set **of their own accord**; this call asks what satisfies a capability. `check_merge_guard.py`'s **stale** axis is the mechanical form of that distinction, and it is why ruling R54 was sequenced behind it: `_extent` is the expression all six kill-row trips run through.
 
 
----
+#### 5.2.1 The identity reading — rules *(ruling **R54**, row 4d)*
+
+Standing constraint 8 / ruling **R31**: every numbered rule ships with a contract id that exercises it or a `prose-only:` tag with a reason. **This table enumerates the rules row 4d added to §5.2 and no others** — the rest of the section predates the constraint and is not claimed here, which is the honest form of a coverage claim rather than a gap somebody has to notice.
+
+| rule | what it says | exercised by |
+|---|---|---|
+| 5.2.1-1 | A predicate's `extent` holds every type that declared **any word the identity spans**, deduplicated — a type that declared both the absorbed word and the survivor is one member, not two | `C2-06` |
+| 5.2.1-2 | `of=` matches through the **member's** identity: a type that declared an absorbed word satisfies the survivor, and `known` counts it. Answering `known=0` there is this section's own failure mode | `C2-06` |
+| 5.2.1-3 | A closure that could not be followed to the end returns `extent_size: None` with the closure's own `why` — **never a count over an unfinished question.** Rule U, one level above the extent page it already applied to | `C2-06` |
+| 5.2.1-4 | The identity guards of §5.10 keep the **written-word** reading. Resolving identities there would make the merge under examination its own justification, and the two closures equal by construction | `C10-09`, `C10-13`, `C10-14` |
 
 ### 5.3 `resolve_type` — existing, proposal, none… or not a type at all
 
@@ -437,7 +446,21 @@ Resolution:
 
 **`confidence: None` ≠ `confidence: 0.0`.** `None` means no scorer ran. Rule U.
 
+#### 5.3.2 Staleness at the read — rules *(the **Q56 default**, row 4d)*
+
+Standing constraint 8 / ruling **R31**. **This table enumerates the rules row 4d added to §5.3 and no others**; §5.3.1's nine rules are ruling R6's and predate the constraint.
+
+| rule | what it says | exercised by |
+|---|---|---|
+| 5.3.2-1 | An **exact** hit answered through an **alias** or a **successor**, where the word asked about and the entry handed back are both `kind="predicate"`, re-reads both extents — paged to exhaustion, a truncated read folded into *unknowable*, exactly as §5.10's refusal #2 does | `C3-14`, `C10-14` |
+| 5.3.2-2 | Extents that no longer demonstrably agree — **or cannot be known to agree** — make the returned entry carry `identity_stale`, with `reason` naming which claim went stale | `C3-14`, `C10-14` |
+| 5.3.2-3 | `outcome`, `type` and `confidence: 1.0` are **unchanged**. The fact is reported, never suppressed; refusing or lowering the confidence is **Q56**'s open half | `C3-14`, `C10-14` |
+| 5.3.2-4 | A still-agreeing pair carries **no** warning, and a hit where either side is not a predicate reads **no** extent at all | `C3-14`, `C10-14` |
+| 5.3.2-5 | A **near miss** is not an identity claim and is not re-verified — nobody wrote that the two words denote one thing. Only an exact alias, or a successor, counts | `C3-14` |
+| 5.3.2-6 | The comparison is between the two **written words**, never their identity closures — after **R54** the closures of two merged names are equal by construction, so asking that question could never answer `stale` | `C10-14` |
+
 ---
+
 
 ### 5.4 `propose_type` — an addition, not yet a fact
 
@@ -547,6 +570,18 @@ Proposal:
 
 *(Enumerated by row 3c; §5.4 previously listed three inline and the rest arrived scattered across the document. The carrier column was added after a fourth review round pointed out that one flat list invites reading all of them as `Proposal.warnings`.)*
 
+#### 5.4.1 The declared-predicate warning — rules *(ruling **R55**, row 4d)*
+
+Standing constraint 8 / ruling **R31**. **This table enumerates the rules row 4d added to §5.4 and no others.**
+
+| rule | what it says | exercised by |
+|---|---|---|
+| 5.4.1-1 | A name in `predicates` whose identity has **moved** — merged away, retired with a live successor, or held as another live entry's alias — produces `declared_predicate_merged:<declared>:<identity>`, one per moved word | `C4-11`, `C12-11` |
+| 5.4.1-2 | It is a **warning and never a refusal**: the declaration stands and is written. §5.10 promises the old word still resolves, so declaring under it is correct behaviour, and §5.4's own rule is that this call refuses two things and warns about everything else | `C4-11`, `C12-11` |
+| 5.4.1-3 | A live, unmerged predicate carries nothing — and so does one naming **no row at all**, because a dangling declaration is a fact rather than an error (`EDGES.md` §2.7) and nothing about it has moved | `C4-11`, `C12-11` |
+| 5.4.1-4 | `import_types` carries the same value for the same reason, on the entry it writes | `C12-11` |
+| 5.4.1-5 | The alias half is a scan of the namespace's active rows, so a page the backend could not finish leaves the warning **absent** — an absent warning, never a claim that the word did not move | `prose-only:` an absent warning asserts nothing, so there is no observable difference for a test to pin; the rule is recorded so that a later row cannot read the absence as a guarantee, which is the confident negative Rule U forbids |
+
 ---
 
 ### 5.5 `approve` / `reject` — the other half of the loop
@@ -634,6 +669,17 @@ TypeListing:
 
 
 **Behaviour when uncertain.** `include_retired=False` is the default *and hides things*, so `TypeListing` always reports `known` over the returned set and `complete: false` whenever any filter suppressed rows. A caller that wants a true census passes `include_retired=True, status=None, namespace=None`.
+
+#### 5.6.1 The identity filter — rules *(ruling **R54**, row 4d)*
+
+Standing constraint 8 / ruling **R31**. **This table enumerates the rules row 4d added to §5.6 and no others.**
+
+| rule | what it says | exercised by |
+|---|---|---|
+| 5.6.1-1 | `predicate=` returns every type declaring **any word the identity spans**, and asking by the absorbed word or by the survivor gives the same set — they are one identity and this call may not have an opinion about which name the caller used | `C6-08` |
+| 5.6.1-2 | The closure is resolved **inside** a namespace and never across one. A second namespace's identical word is a different identity and is untouched; collapsing them would be §2.6's answer to mechanism 4 deleting itself | `C6-08` |
+| 5.6.1-3 | The default `namespace=None` gets the same answer, resolved per namespace through **one bounded `name_in` lookup** — at most one row per namespace — rather than the unbounded census ruling **R13** declined to page in v0 | `C6-08` |
+| 5.6.1-4 | The written word is always queried in whatever scope the caller asked for, so a type declaring a predicate that names no row at all is still found. **The identity only ever adds** | `C6-08` |
 
 ---
 

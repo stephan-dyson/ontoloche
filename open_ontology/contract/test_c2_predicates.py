@@ -166,3 +166,27 @@ def test_c2_06_the_extent_and_the_of_filter_resolve_the_identity(adapter, make_r
     by_note = registry.predicates(of="note")
     assert [p.name for p in by_note.predicates] == ["searchable"]
     assert set(by_note.predicates[0].extent) == {"note", "memo", "doc"}
+
+    # **Rule U over the CLOSURE, one level above the extent page it already applied to
+    # (§5.2.1-3).** Four retired PREDICATE rows and a cap of three: the scan that decides
+    # which words this identity spans is truncated with no cursor to the rest, so the
+    # identity was NOT resolved -- and a count over an unfinished question is exactly the
+    # confident number Rule U forbids. The extent query itself is untouched (three rows,
+    # not over the cap), which is what makes this row about the closure rather than about
+    # `C10-11`'s page.
+    #
+    # *(The first cut retired three ENTITIES and the assertion failed: the successor scan
+    # is per `(namespace, kind)`, so retiring entities cannot truncate a predicate's
+    # closure. A fixture that cannot pose its question is the fifth trip's lesson, and it
+    # is cheaper to learn here than in a guard.)*
+    for spare in ("alpha", "beta", "gamma"):
+        seed(registry, spare, kind="predicate", definition=f"a {spare} capability")
+        registry.retire(spare, "unused", retired_by="user:sd", force=True)
+    capped = make_registry(DegradedAdapter(adapter, page_cap=3), approval_policy="auto")
+    unresolved = capped.predicates(of="memo")
+    assert unresolved.predicates, "the predicate row itself is still readable"
+    assert unresolved.predicates[0].extent_size is None, (
+        "the identity could not be resolved to the end, so there is no number to give "
+        "-- never a count over an unfinished question"
+    )
+    assert unresolved.predicates[0].why_extent_incomplete, "and Rule U wants the reason"
