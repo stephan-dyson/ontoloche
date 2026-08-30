@@ -1,6 +1,6 @@
 # 3C — the use-case validation pass: UC3 (NYC Open Data) against INTERFACE v0 and PACKAGE v0
 
-> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+> **Package renamed** `open_ontology` → `ontoloche` at commit 802ddf0 (2026-08-30); the commands and paths quoted below are as recorded at the time.
 
 **Roadmap row:** 3c. **Date:** 2026-08-28. **Model:** Opus.
 **Why this row exists.** Founder direction 2026-08-28, [`ROADMAP.md`](../../ROADMAP.md) standing constraint 7: every spec is validated against the three fixtures in [`USE-CASES.md`](../USE-CASES.md) *and* survives an adversarial review loop before it is marked done. INTERFACE v0 and PACKAGE v0 were validated against **UC1 (Tenshen)** and **UC2 (CMS)** only. This row runs **UC3 (NYC Open Data)** against both, plus the adversarial loop, and records what changed.

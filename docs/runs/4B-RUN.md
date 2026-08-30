@@ -1,6 +1,6 @@
 # 4B-RUN — roadmap row 4b: EDGES v0 implemented, and what it cost the specification
 
-> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+> **Package renamed** `open_ontology` → `ontoloche` at commit 802ddf0 (2026-08-30); the commands and paths quoted below are as recorded at the time.
 
 **Row:** 4b. **Date:** 2026-08-29. **Repo:** [`open-ontology`](https://github.com/stephan-dyson/open-ontology), `main`.
 **What it carried:** [`docs/specs/EDGES.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/EDGES.md) v0 — the reference edge store, `neighbors`, and edge conformance — plus rulings **R17**–**R26** applied to it, and **R31** (standing constraint 8) folded in after the row started.

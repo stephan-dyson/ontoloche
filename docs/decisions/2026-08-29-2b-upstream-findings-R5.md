@@ -1,6 +1,6 @@
 # Rulings 2026-08-29 — five findings routed upstream from beacon 21.1, and R5 (savepoint transactions)
 
-> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+> **Package renamed** `open_ontology` → `ontoloche` at commit 802ddf0 (2026-08-30); the commands and paths quoted below are as recorded at the time.
 
 **Source:** beacon `spec-ontology-2b` landed roadmap row 21.1 (`docs/specs/2026-08-28-ontology-2b-work-link-types-backend-design.md`, beacon `6e87d61a`) and routed five findings to open-ontology as protocol/implementation defects, plus one ruling the beacon program says is ours: R5. Relayed by the general supervisor 2026-08-29 ~00:25; full text recovered from its transcript.
 **Verified before ruling (2026-08-29 00:35, open-ontology `main` at `b19e131`):** each finding checked against the landed code and doc; citations inline.

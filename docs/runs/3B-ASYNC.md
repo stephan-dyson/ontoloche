@@ -1,6 +1,6 @@
 # 3B-ASYNC — the async mirror, and the run record
 
-> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+> **Package renamed** `open_ontology` → `ontoloche` at commit 802ddf0 (2026-08-30); the commands and paths quoted below are as recorded at the time.
 
 **Status:** deliverable **#3b** landed 2026-08-28. `AsyncStorageAdapter`, `AsyncRegistry`,
 two async reference backends, and the same 109 contract tests executed against them.

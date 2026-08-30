@@ -1,6 +1,6 @@
 # 3E-RUN — roadmap row 3e: the v0.1 amendments, and what three adversarial rounds did to them
 
-> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+> **Package renamed** `open_ontology` → `ontoloche` at commit 802ddf0 (2026-08-30); the commands and paths quoted below are as recorded at the time.
 
 **Row:** 3e. **Date:** 2026-08-29. **Repo:** `open-ontology`, `main`.
 **What it carried:** rulings **R6**, **R10**, **R11** (from the 3c pass), plus **R17**, **R19** and **R21** folded in by the supervisor after the row started.

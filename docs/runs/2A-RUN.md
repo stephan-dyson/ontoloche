@@ -1,6 +1,6 @@
 # 2A-RUN — the Phase 2A run record
 
-> **Package renamed** `open_ontology` → `ontoloche` at commit <rename-sha> (2026-08-30); the commands and paths quoted below are as recorded at the time.
+> **Package renamed** `open_ontology` → `ontoloche` at commit 802ddf0 (2026-08-30); the commands and paths quoted below are as recorded at the time.
 
 **Status:** deliverable **#3** landed 2026-08-28. The reference implementation, the 109
 contract tests, and the CMS design test.
