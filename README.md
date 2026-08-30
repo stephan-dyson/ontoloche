@@ -1,6 +1,6 @@
 # ontoloche
 
-**ontoloche** ("on-tuh-LOH-chee" — the *-che* after Apache) — an open ontology and pipeline layer: typed entities, typed relationships, and governed actions that AI agents can safely call.
+**ontoloche** (the *-che* after Apache) — an open ontology and pipeline layer: typed entities, typed relationships, and governed actions that AI agents can safely call.
 
 **Status: Phase 2A shipped, plus its async mirror.** Phase 0 discovery is closed, Phase 1's interface contract is written, and the reference implementation exists: the `ontoloche` package, a fifteen-primitive storage adapter over SQLite and Postgres, and **145 contract tests that are the definition of conformance** — green on both backends, synchronously and asynchronously, in one run.
 
