@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (50). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (52). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -1564,7 +1564,21 @@ def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registr
     assert predecessor.edges[0].via_successor is None, (
         "this edge was written under the very name the caller walked from"
     )
-    assert f"endpoint_type_merged:{old}" in predecessor.warnings
+    assert f"endpoint_type_merged:{new}" in predecessor.warnings, (
+        "**the marker names the SURVIVOR whichever name you walk from, and there is one "
+        "of it per identity** (row 4c, round 2). It fired once per NAME in the closure, "
+        "so an identity that had absorbed N words produced N markers for one fact -- a "
+        "report growing with the vocabulary's history rather than with what the walk "
+        "found. Naming the survivor is also the thing a caller can act on: R38 resolves "
+        "the identity in order to SEARCH, and this is where it says what it resolved to"
+    )
+    assert (
+        sum(w.startswith("endpoint_type_merged") for w in predecessor.warnings) == 1
+    )
+    assert f"origin_type_retired:{old}" in predecessor.warnings, (
+        "and `merge_types` retired this word, which the walk now says out loud -- "
+        "mechanism 3 had no carrier here until round 2"
+    )
 
     # A walk from a type nobody merged says nothing about ITS OWN identity -- and does
     # say that the identity at the far end spans two names, because the walk resolved
@@ -1577,7 +1591,7 @@ def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registr
     assert f"endpoint_type_merged:{cit}" not in ordinary.warnings, (
         "the origin's own identity is not split, and the marker names a reference"
     )
-    assert f"endpoint_type_merged:{old}" in ordinary.warnings, (
+    assert f"endpoint_type_merged:{new}" in ordinary.warnings, (
         "the node this walk reached IS split, and a caller who has just been handed "
         "`facility_old#F1` is entitled to know it now denotes `facility_new`"
     )
@@ -2757,3 +2771,145 @@ def test_c17_50_an_unrelated_amendment_does_not_erase_the_payloads_warnings(regi
             "no-such-edge", "x", amended_by="user:sd", confidence=1.0
         )
         assert isinstance(missing, Refusal) and missing.reason == "unknown_edge"
+
+
+# ------------------------------------------ 4c round 2: the integrator's two BLOCKING
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_events")
+def test_c17_51_merging_an_edge_family_does_not_orphan_its_edges(registry):
+    """**Ruling R38, on the axis it was not applied to.** Row 4c, second adversarial
+    round, found by the lens that builds beacon's slice 1.
+
+    R38 makes an edge **endpoint** reference resolve to the identity it now belongs to.
+    It said nothing about **family names** — and `EDGES.md` §2.3's whole architectural
+    bet is that a family **is** a `TypeEntry` with `kind="edge"`, so it inherits
+    `propose_type`, `approve`, `retire` **and `merge_types`** for free.
+
+    **What that inheritance actually did:** a steward merges two duplicate families (the
+    ordinary governance act §2.3 promises works), a consumer asks for the **surviving**
+    name — the correct thing — and every edge written under the absorbed name is
+    orphaned. **[Observed]** `known=2, complete=True, warnings=()` with a real
+    stakeholder missing from the flagship two-hop query. That is verbatim the sentence
+    R38 exists to close — *"a merge silently orphans every edge ever written against the
+    merged-away name"* — surviving one axis over, **inside the row that closed it**.
+
+    Every R38 test merged `entity` types. `check_merge_guard.py` passed too, and its own
+    closing paragraph says why in advance: *"it checks the guards a caller HAS, not the
+    guards a caller might need for a collapse reached through a field nobody has thought
+    of."* The merge was correctly **permitted**; nothing checked that the read seam
+    **followed** it.
+    """
+    seed(registry, "task")
+    seed(registry, "person")
+    blocks(registry)
+    edge_family(registry, "stakeholder", definition="who has a stake in this task")
+    edge_family(registry, "task_stakeholder", definition="who has a stake in this task")
+    task_ref = TypeRef("default", "entity", "task")
+    person = TypeRef("default", "entity", "person")
+
+    registry.add_edge(
+        "blocks", InstanceRef(task_ref, "41"), InstanceRef(task_ref, "77"), "ai:weekly"
+    )
+    registry.add_edge(
+        "stakeholder", InstanceRef(task_ref, "77"), InstanceRef(person, "9"), "ai:weekly"
+    )
+    registry.add_edge(
+        "task_stakeholder", InstanceRef(task_ref, "77"), InstanceRef(person, "7"),
+        "ai:weekly",
+    )
+    merged = registry.merge_types(
+        "stakeholder", "task_stakeholder", "one family for one relation",
+        merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    # The consumer asks for the SURVIVING name -- what `resolve_type` tells it to use.
+    report = registry.neighbors(
+        InstanceRef(task_ref, "41"), ["blocks", "task_stakeholder"], 2,
+        namespace="default",
+    )
+    reached = {str(node) for node in report.nodes}
+    assert f"{person}#9" in reached, (
+        "the edge written under the absorbed family name is this task's stakeholder, and "
+        "a merge must not orphan it -- that is R38's own sentence, on the family axis"
+    )
+    assert f"{person}#7" in reached, "and the survivor's own edges are still there"
+    assert report.complete is True, "nothing was hidden, so nothing is claimed hidden"
+    assert "edge_family_merged:default:stakeholder" in report.warnings, (
+        "and the report says WHICH other family name it consulted -- a distinct value "
+        "from `endpoint_type_merged`, because one is about the node the walk started "
+        "from and the other about the relation it asked for"
+    )
+    absorbed = [
+        ne for ne in report.edges if str(ne.edge.dst) == f"{person}#9"
+    ]
+    assert absorbed and absorbed[0].via_successor is not None, (
+        "Rule K does not care which axis the following happened on: an edge found under "
+        "an absorbed FAMILY name was reached by following the chain just as surely as "
+        "one found under an absorbed endpoint name"
+    )
+    assert "stakeholder" in report.families_searched, (
+        "`families_searched` echoes what was ACTUALLY consulted (4.4), which after a "
+        "family merge is more than the caller named"
+    )
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_events")
+def test_c17_52_a_retired_origin_type_says_so_and_an_int_id_is_refused(registry):
+    """Two carriers the read seam did not have. Row 4c, second adversarial round.
+
+    **A retired origin type had no warning at all.** `EDGES.md` §4.3-3 warns for a
+    retired *family* and §4.3-10 for an *unregistered* origin type. A deliberately
+    retired origin — **mechanism 3**, a steward's explicit *"stop using this word"* — was
+    invisible in the one call a consumer runs against it, so the single act a vocabulary
+    performs to discourage a word said nothing to the surface that reads it.
+
+    **And an integer `InstanceRef.id` was a silent key mismatch on both legs.** §2.1
+    records the `str`/`int` cast as contortion **E4** and says in terms that it is
+    *"where a silent key mismatch lives"* — beacon's endpoint ids are `Integer`.
+    `str(InstanceRef(t, 41)) == str(InstanceRef(t, "41"))` while the two references
+    **compare unequal**; `add_edge` accepted the int; and `neighbors` with the int
+    returned `known=0, complete=True, warnings=()` on SQLite — Rule U's forbidden empty,
+    in the one call a caller would believe — and raised a raw psycopg
+    `UndefinedFunction` three frames below the façade on Postgres. One input, two
+    reference backends, two different wrong answers. §4.2 promises a caller's mistake
+    arrives as the documented error and `C17-32` pins that for `depth`, `node` and
+    `edge_families`; the field the one real host actually differs on was checked by
+    nothing.
+    """
+    seed(registry, "task")
+    seed(registry, "person")
+    blocks(registry)
+    task_ref = TypeRef("default", "entity", "task")
+    person = TypeRef("default", "entity", "person")
+    registry.add_edge(
+        "blocks", InstanceRef(person, "7"), InstanceRef(task_ref, "1"), "user:sd"
+    )
+
+    live = registry.neighbors(
+        InstanceRef(person, "7"), ["blocks"], 1, namespace="default"
+    )
+    assert not any(w.startswith("origin_type_retired") for w in live.warnings)
+
+    assert not isinstance(
+        registry.retire("person", "we use `human` now", retired_by="user:sd", force=True),
+        Refusal,
+    )
+    after = registry.neighbors(
+        InstanceRef(person, "7"), ["blocks"], 1, namespace="default"
+    )
+    assert after.known == 1, "its edges were not deleted, so they are still searched"
+    assert f"origin_type_retired:{person}" in after.warnings, (
+        "mechanism 3 is one of the four this project is designed against, and the act "
+        "that performs it was invisible here"
+    )
+    assert after.complete is True, "nothing was hidden -- this is context, not shortfall"
+
+    with pytest.raises(TypeError) as raised:
+        InstanceRef(task_ref, 41)
+    assert "opaque str" in str(raised.value), (
+        "the cast belongs to the caller (contortion E4), and a cast this package "
+        "performs silently is a cast nobody reviews"
+    )

@@ -3179,6 +3179,31 @@ class AsyncRegistry:
         cache[ref] = result
         return result
 
+    async def _merged_marker(self, closure: tuple[TypeRef, ...]) -> str:
+        """One marker per IDENTITY, not one per name in it. Row 4c, round 2.
+
+        `endpoint_type_merged:<ref>` fired once for every written name a closure spans,
+        because `_expand_frontier` appends the frontier member's own reference and the
+        `nodes` loop appends the reached node's -- and after a merge both are members of
+        one closure. An identity that absorbed N names produced N markers for one fact,
+        which is a report growing with the vocabulary's history rather than with what the
+        walk found.
+
+        The marker names the **survivor** where there is exactly one active member, since
+        that is the reference a caller can act on; otherwise the first by name, which is
+        arbitrary but stable. Either way it is ONE marker.
+        """
+        active = [
+            ref
+            for ref in closure
+            if (rec := await self.adapter.get_type(ref.namespace, ref.name, kind=ref.kind))
+            is not None
+            and rec.status == "active"
+        ]
+        if len(active) == 1:
+            return f"endpoint_type_merged:{active[0]}"
+        return f"endpoint_type_merged:{sorted(str(ref) for ref in closure)[0]}"
+
     async def _identity_forms(self, far: NodeRef, cache: dict) -> tuple[str, ...]:
         """Every written form of one reached node, so ``nodes`` counts it ONCE. **R38**.
 
@@ -3202,7 +3227,7 @@ class AsyncRegistry:
 
     async def _expand_frontier(
         self, nodes: Sequence[NodeRef], cache: dict
-    ) -> tuple[dict, bool, str | None, tuple[TypeRef, ...]]:
+    ) -> tuple[dict, bool, str | None, tuple[tuple[TypeRef, ...], ...]]:
         """One frontier, widened to the identities its members now belong to. **R38**.
 
         ``({adapter key -> the reference it was reached under, or None}, followed to the
@@ -3221,21 +3246,21 @@ class AsyncRegistry:
         out: dict = {}
         ok = True
         reason: str | None = None
-        widened: list[TypeRef] = []
+        widened: list[tuple[TypeRef, ...]] = []
         for member in nodes:
             written = type_of(member)
             closure, closed, closure_why = await self._identity_closure(written, cache)
             if not closed:
                 ok = False
                 reason = reason or closure_why
-            if len(closure) > 1 and written not in widened:
+            if len(closure) > 1 and closure not in widened:
                 # EDGES.md rule 4.3-14 says the warning fires for *"the origin's type --
                 # **or a frontier node's**"*, and it fired only for the origin (row 4c,
                 # round 1). The chain WAS followed at the frontier and every edge was
                 # correctly marked, but the report never said the identity spanned two
                 # names -- so a caller reading `warnings` to decide whether to look
                 # further was told nothing at exactly the hop `C17-44` exists to cover.
-                widened.append(written)
+                widened.append(closure)
             for ref in closure:
                 stand_in = (
                     InstanceRef(ref, member.id)
@@ -3243,8 +3268,20 @@ class AsyncRegistry:
                     else ref
                 )
                 key = node_key(stand_in)
-                if key not in out:
-                    out[key] = None if ref == written else str(stand_in)
+                value = None if ref == written else str(stand_in)
+                # **A WRITTEN reference always wins, and `if key not in out` was the
+                # hole round 1's fix left open** (row 4c, round 2). When two written
+                # names of one merged identity are BOTH in the frontier, whichever is
+                # expanded first writes the *derived* form for the other, and the later
+                # member's own written form never overwrote it. **[Observed]** at depth
+                # 2: an edge whose `src` is literally `assignee#7` came back with
+                # `via_successor="default:entity:assignee#7"` -- naming the reference the
+                # walk WAS given, which is the exact negation of Rule K's sentence.
+                #
+                # Round 1 fixed this at the read site (`a or b` cannot tell absent from
+                # present-and-written) and the same confusion survived at the write site.
+                if key not in out or value is None:
+                    out[key] = value
         return out, ok, reason, tuple(widened)
 
     async def add_edge(
@@ -3773,10 +3810,24 @@ class AsyncRegistry:
             # matters: it is a statement about THIS call, so it is always recomputed --
             # which is exactly the distinction `retract_edge` already draws.
             payload_changing = "attributes" in changing
+            # **Three prefixes are statements about THIS call and are always recomputed;
+            # two are statements about the PAYLOAD and move only when it does.** Round 1
+            # drew that line and put `edge_family_retired:` and
+            # `endpoint_type_unregistered:` on neither side, so both were carried
+            # forward verbatim -- which meant an amendment on a retired family never
+            # stamped one, and, worse, **an amendment after `reinstate` came back
+            # asserting the family was retired when it was live**. A live row claiming a
+            # withdrawn family is the confident false statement `_edge_write_warnings`'
+            # own docstring exists to prevent, one value along. Row 4c, round 2.
+            recomputed = (
+                "not_durable_until_host_commits:",
+                "edge_family_retired:",
+                "endpoint_type_unregistered:",
+            )
             warnings = [
                 w
                 for w in rec.warnings
-                if not w.startswith("not_durable_until_host_commits:")
+                if not w.startswith(recomputed)
                 and not (
                     payload_changing
                     and (
@@ -3853,6 +3904,20 @@ class AsyncRegistry:
                 }
 
             payload = self.caps.surviving_edge_attributes(payload_after)
+            # Re-stamped from the store as it stands NOW, on this call's own behalf --
+            # `_edge_write_warnings`' rule, applied to the two values round 1 left
+            # carried forward.
+            if fam is not None and fam.status == "retired":
+                warnings.append(f"edge_family_retired:{rec.family}")
+            for end in (before.src, before.dst):
+                node_type = type_of(end)
+                if (
+                    await self.adapter.get_type(
+                        node_type.namespace, node_type.name, kind=node_type.kind
+                    )
+                    is None
+                ):
+                    warnings.append(f"endpoint_type_unregistered:{node_type}")
             warnings.extend(
                 w for w in self._edge_write_warnings() if w not in warnings
             )
@@ -4001,6 +4066,10 @@ class AsyncRegistry:
         warnings: list[str] = []
         complete = True
         why: str | None = None
+        # Memoised for the whole call: one paged read of the retired rows per
+        # (namespace, kind) touched, walked in memory thereafter. Hoisted above the
+        # family branch by row 4c round 2, because family NAMES resolve through it too.
+        identity_cache: dict = {}
 
         # --- which families, and the `None` case spans every namespace (EDGES.md 4.1)
         if edge_families is None:
@@ -4014,6 +4083,9 @@ class AsyncRegistry:
             searched_keys: set[tuple[str, str]] | None = None
             query_namespace: str | None = None
             query_families: tuple[str, ...] | None = None
+            # `None` searches every family there is, so nothing was reached by following
+            # a family name -- there was no name to follow from.
+            family_via: dict[tuple[str, str], str] = {}
             if not families_complete:
                 complete = False
                 why = (
@@ -4022,14 +4094,49 @@ class AsyncRegistry:
                     + (families_why or "no reason given by the backend")
                 )
         else:
+            # **A family NAME resolves through the identity closure too, and ruling
+            # R38 followed it for endpoint types and not for family names** (row 4c,
+            # round 2, found by the lens that builds beacon's slice 1).
+            #
+            # EDGES.md 2.3's whole architectural bet is that a family **is** a
+            # `TypeEntry` with `kind="edge"`, so it inherits `propose_type`, `approve`,
+            # `retire` -- **and `merge_types`** -- for free. What that inheritance
+            # actually did was orphan every edge written under an absorbed family name:
+            # **[Observed]** a steward merging two duplicate families and a consumer
+            # asking for the SURVIVING name got `known=2, complete=True, warnings=()`
+            # with a real stakeholder missing. That is verbatim the sentence R38 exists
+            # to close -- *"a merge silently orphans every edge ever written against the
+            # merged-away name"* -- surviving one axis over, inside the row that claims
+            # to have closed it, and every R38 test merged ENTITY types.
+            #
+            # The names are unioned into the query, so an edge written under an absorbed
+            # family is found; `_edge_passes` marks it exactly as an absorbed endpoint is.
             resolved: list[EdgeFamily] = []
             unknown: list[str] = []
+            family_via: dict[tuple[str, str], str] = {}
             for name in dict.fromkeys(edge_families):
                 fam = await self._edge_family(name, namespace)
                 if fam is None:
                     unknown.append(name)
-                else:
-                    resolved.append(fam)
+                    continue
+                resolved.append(fam)
+                closure, closed, closure_why = await self._identity_closure(
+                    TypeRef(namespace, "edge", name), identity_cache
+                )
+                if not closed:
+                    complete = False
+                    why = why or closure_why
+                for ref in closure:
+                    if ref.name == name:
+                        continue
+                    other = await self._edge_family(ref.name, namespace)
+                    if other is None:
+                        continue
+                    resolved.append(other)
+                    family_via[(other.namespace, other.name)] = name
+                    marker = f"edge_family_merged:{namespace}:{ref.name}"
+                    if marker not in warnings:
+                        warnings.append(marker)
             if unknown:
                 # EDGES.md 4.3: the WHOLE call, not a partial answer. A caller that
                 # names a family and gets a report back is entitled to believe the
@@ -4038,7 +4145,9 @@ class AsyncRegistry:
                 return Refusal(
                     "edge_family_unknown", {"families": unknown, "namespace": namespace}
                 )
-            searched = tuple(edge_families)
+            # `families_searched` echoes what was ACTUALLY consulted (4.4), which after
+            # a family merge is more than the caller named.
+            searched = tuple(dict.fromkeys([*edge_families, *(f.name for f in resolved)]))
             symmetric = {(f.namespace, f.name) for f in resolved if f.symmetric}
             registered = {(f.namespace, f.name) for f in resolved}
             searched_keys = set(registered)
@@ -4070,7 +4179,6 @@ class AsyncRegistry:
         # 4b's version did that scan per node it asked about, which is one scan per
         # frontier member at depth 2 -- on the 9.7M-degree node 4.2 measures, that is the
         # cost model this seam exists to bound.
-        identity_cache: dict = {}
         origin_members, identity_complete, identity_why = await self._identity_closure(
             origin_type, identity_cache
         )
@@ -4084,14 +4192,24 @@ class AsyncRegistry:
             complete = False
             why = why or identity_why
 
-        if await self.adapter.get_type(
+        origin_record = await self.adapter.get_type(
             origin_type.namespace, origin_type.name, kind=origin_type.kind
-        ) is None:
+        )
+        if origin_record is None:
             # EDGES.md 4.3. Not an error: the registry has no node store, so it cannot
             # distinguish *a node with no edges* from *a node that does not exist*, and
             # raising would require inventing a fact. `UnknownType`'s reasoning does not
             # transpose, and 4.3 says which of the two project rules wins and why.
             warnings.append(f"origin_type_unregistered:{origin_type}")
+        elif origin_record.status == "retired":
+            # **A RETIRED origin had no carrier at all** (row 4c, round 2). 4.3-3 warns
+            # for a retired FAMILY and 4.3-10 for an UNREGISTERED origin type; a
+            # deliberately retired origin -- mechanism **3**, a steward's explicit *"stop
+            # using this word"* -- was invisible in the one call a consumer runs against
+            # it, so the single act the vocabulary performs to discourage a word said
+            # nothing to the surface that reads it. Not a refusal: its edges were not
+            # deleted, which is exactly `edge_family_retired`'s argument one object along.
+            warnings.append(f"origin_type_retired:{origin_type}")
 
         # `direction` is pushed to the adapter ONLY when nothing in scope is symmetric.
         # For a symmetric family there is no in and no out (EDGES.md 2.2), so filtering
@@ -4127,10 +4245,11 @@ class AsyncRegistry:
             if not level_closed:
                 complete = False
                 why = why or level_why
-            for widened_ref in level_widened:
+            for widened_closure in level_widened:
                 # Rule 4.3-14's *"or a frontier node's"*, which fired only for the origin
-                # until row 4c's first adversarial round.
-                marker = f"endpoint_type_merged:{widened_ref}"
+                # until row 4c's first adversarial round -- and once per NAME rather than
+                # once per identity until its second.
+                marker = await self._merged_marker(widened_closure)
                 if marker not in warnings:
                     warnings.append(marker)
             frontier_keys = tuple(expanded)
@@ -4197,6 +4316,12 @@ class AsyncRegistry:
                                 via = None
                                 break
                             via = via or expanded[end]
+                    if via is None:
+                        # An edge found under an absorbed FAMILY name was reached by
+                        # following the chain just as surely as one found under an
+                        # absorbed endpoint name, and Rule K does not care which axis
+                        # the following happened on.
+                        via = family_via.get((rec.namespace, rec.family))
                     reached_via[rec.edge_id] = via
                 if self.max_edges is not None and len(seen) + len(fresh) > self.max_edges:
                     # **Strictly greater, and the `=` in `>=` was a BLOCKING finding**
@@ -4306,6 +4431,7 @@ class AsyncRegistry:
         for ne in edges:
             reached: NodeRef | None = None
             for far in (ne.edge.src, ne.edge.dst):
+                closure, _, _ = await self._identity_closure(type_of(far), identity_cache)
                 forms = await self._identity_forms(far, identity_cache)
                 if len(forms) > 1:
                     # **One rule, not two: any reference whose identity this walk
@@ -4317,7 +4443,7 @@ class AsyncRegistry:
                     # walk resolved the identity, which is exactly where it has the
                     # evidence; the list is deduplicated and bounded by distinct TYPES,
                     # not by nodes.
-                    marker = f"endpoint_type_merged:{type_of(far)}"
+                    marker = await self._merged_marker(closure)
                     if marker not in warnings:
                         warnings.append(marker)
                 if any(form in seen_nodes for form in forms):
@@ -4533,19 +4659,58 @@ class AsyncRegistry:
             # contract is *"an import cannot return a Refusal -- it returns entries"*.
             # The guard's question is per-kind anyway, and a query answers it without
             # asking the adapter to choose.
-            page = await self.adapter.find_types(
-                TypeQuery(namespace=namespace, name_in=(alias,), include_retired=True)
-            )
-            others = [rec for rec in page.records if rec.name == alias]
-            if not others and not page.complete:
-                # Rule U on the look itself: it has not said the word is free, only that
-                # it could not say. An identity guard that cannot look refuses.
+            # **Paged to exhaustion, and the Rule-U check is on the LOOK rather than on
+            # its result** (row 4c, round 2). The first version of this guard -- written
+            # in round 1, as the FIFTH trip's own fix -- read one page and asked
+            # `if not others and not page.complete`, which fires when the page is EMPTY
+            # and never when it is merely SHORT. **[Observed]** with `commentable`
+            # registered under two kinds and a backend capping at one row: the full read
+            # refuses `kind_mismatch` (§5.10 refusal #3, non-overridable) and the capped
+            # read wrote the alias with no refusal and no warning at all.
+            #
+            # That is the fifth trip's class -- *a partial read compared as if it were
+            # whole* -- reintroduced by the fifth trip's fix, two functions away, in the
+            # same hour. It is recorded rather than quietly repaired because it is the
+            # third instance of *"a fix introduces the next defect"* in this row alone.
+            others: list = []
+            after: str | None = None
+            cursors: set[str] = set()
+            partial_why: str | None = None
+            while True:
+                page = await self.adapter.find_types(
+                    TypeQuery(
+                        namespace=namespace,
+                        name_in=(alias,),
+                        include_retired=True,
+                        after=after,
+                    )
+                )
+                others.extend(rec for rec in page.records if rec.name == alias)
+                if not page.complete and page.next_after is None:
+                    partial_why = page.why_incomplete or (
+                        "the backend could not answer the query"
+                    )
+                    break
+                after = page.next_after
+                if after is None:
+                    break
+                if after in cursors:
+                    partial_why = (
+                        "this backend returned a pagination cursor it had already "
+                        "returned (PACKAGE.md 3.4 primitive 6)"
+                    )
+                    break
+                cursors.add(after)
+            if partial_why is not None:
+                # A partial look has not said the word is free; it has only said it could
+                # not say. Guard #3 is non-overridable, so refusing on a short page is the
+                # conservative answer -- and the conservative answer is the only one an
+                # identity guard is allowed to give.
                 return (
                     "predicate_merge" if kind == "predicate" else "kind_mismatch",
                     f"whether {alias!r} already names an entry could not be determined, "
                     f"so importing it as an alias of {namespace}:{kind}:{name} cannot be "
-                    f"shown to be safe: "
-                    + (page.why_incomplete or "the backend could not answer the query"),
+                    f"shown to be safe: " + partial_why,
                 )
             for other in others:
                 if other.name == name and other.kind == kind:

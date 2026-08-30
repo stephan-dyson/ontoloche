@@ -153,6 +153,26 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "of a proposal with a successor because the brief named it as a caller; there is "
         "no such thing, and this line is the record that somebody checked.)*",
     ),
+    "resolve_type": CallerVerdict(
+        False,
+        "**READS** a retired row's `successor` to redirect at confidence 1.0 -- it is "
+        "the call whose behaviour makes every other entry in this table matter, and it "
+        "writes nothing. Flagged by the over-broad scan (row 4c round 2) because it "
+        "names the field; kept here because a person deciding *\"reader, not writer\"* "
+        "is exactly the judgement Part A exists to force",
+    ),
+    "_search_namespaces": CallerVerdict(
+        False,
+        "**READS** `rec.successor` to build the sentence R6's cross-namespace lookup "
+        "returns when a word is burned elsewhere. A message about a successor is not a "
+        "successor",
+    ),
+    "_lifecycle_collisions": CallerVerdict(
+        False,
+        "**READS** `detail[\"successor\"]` and `detail[\"into\"]` out of the EVENT log "
+        "to walk the chain both ways for `reinstate`'s guards. It reads history; it "
+        "writes no row",
+    ),
     "_entry": CallerVerdict(
         False,
         "the READ path -- it copies `aliases` off a stored record into the returned "
@@ -182,44 +202,48 @@ def identity_writers() -> dict[str, set[str]]:
             parents[id(child)] = node
 
     found: dict[str, set[str]] = {}
+
+    # **Deliberately OVER-BROAD, and that is a decision** (row 4c, second adversarial
+    # round). The first version enumerated four syntactic shapes -- a keyword argument, a
+    # dict literal key, a subscript assignment, a `setattr` -- and a reviewer wrote nine
+    # realistic ways to write an identity field and got **five past it**, including
+    # `d["aliases"] += (alias,)`, which is one refactor away from the dict-literal shape
+    # three real callers already use. The checker then exited 0 with the kill row live,
+    # which falsifies its own central promise.
+    #
+    # Enumerating shapes is the same artefact as the guard it checks: something a person
+    # must remember to extend. So the rule is now **any mention of an identity field's
+    # NAME as a constant or a keyword, anywhere in a function** -- a false positive costs
+    # one documented line in `KNOWN_CALLERS`, and a false negative costs the kill row.
+    # `_enclosing_function` attributes it, and `KNOWN_CALLERS` is where a person says
+    # what it means.
     for node in ast.walk(tree):
-        # `TypeRecord(..., successor=x)` / `replace(rec, aliases=y)`
         if isinstance(node, ast.keyword) and node.arg in IDENTITY_FIELDS:
             found.setdefault(_enclosing_function(node, parents), set()).add(node.arg)
-        # `TypeRecord(**{**rec.__dict__, "successor": x})` -- the shape three of the
-        # callers actually use, and the one a keyword-only scan would miss entirely.
-        if isinstance(node, ast.Dict):
-            for key in node.keys:
-                if isinstance(key, ast.Constant) and key.value in IDENTITY_FIELDS:
-                    found.setdefault(
-                        _enclosing_function(node, parents), set()
-                    ).add(key.value)
-        # `d["successor"] = other` -- ONE refactor away from the dict-literal shape three
-        # real callers already use, and invisible to the two branches above. Row 4c's
-        # first adversarial round wrote four collapsing callers and this scan saw one.
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Subscript)
-                    and isinstance(target.slice, ast.Constant)
-                    and target.slice.value in IDENTITY_FIELDS
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node.value in IDENTITY_FIELDS
+        ):
+            found.setdefault(_enclosing_function(node, parents), set()).add(node.value)
+        # `rec.aliases = ...` / `object.__setattr__(rec, "aliases", ...)` reach the branch
+        # above through the constant; a plain attribute assignment does not.
+        if isinstance(node, (ast.Assign, ast.AugAssign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            stack = list(targets)
+            while stack:
+                target = stack.pop()
+                if isinstance(target, (ast.Tuple, ast.List)):
+                    stack.extend(target.elts)
+                elif isinstance(target, ast.Starred):
+                    stack.append(target.value)
+                elif (
+                    isinstance(target, ast.Attribute)
+                    and target.attr in IDENTITY_FIELDS
                 ):
                     found.setdefault(
                         _enclosing_function(node, parents), set()
-                    ).add(target.slice.value)
-        # `object.__setattr__(rec, "aliases", ...)` / `setattr(rec, "successor", ...)` --
-        # the frozen-dataclass escape hatch, which this package uses elsewhere.
-        if isinstance(node, ast.Call):
-            name = getattr(node.func, "attr", getattr(node.func, "id", None))
-            if name in ("setattr", "__setattr__") and len(node.args) >= 2:
-                attribute = node.args[1]
-                if (
-                    isinstance(attribute, ast.Constant)
-                    and attribute.value in IDENTITY_FIELDS
-                ):
-                    found.setdefault(
-                        _enclosing_function(node, parents), set()
-                    ).add(attribute.value)
+                    ).add(target.attr)
     return found
 
 
