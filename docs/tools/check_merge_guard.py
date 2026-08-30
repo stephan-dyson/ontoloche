@@ -408,6 +408,126 @@ def check_callers() -> list[str]:
     return problems
 
 
+
+
+# ---------------------------------------------------------------------------
+# Part A2 -- **does every collapsing caller reach the SHARED guard?** Row 6b, ruling R53.
+#
+# Part A asks *"is there a caller nobody has judged?"* and Part B asks *"does the guard
+# give the right answer in every state?"*, and between them they missed the question this
+# row's extraction makes askable for the first time: **is a caller that a person has
+# judged CAN collapse actually running the guards at all?**
+#
+# Before the extraction that question had no mechanical form -- the three refusals were
+# three copies of an expression, and "does this function contain a copy" is not something
+# an AST can ask without enumerating shapes, which is the artefact row 4c's round 2
+# proved is the same artefact as the guard. **After the extraction it is one name.** A
+# caller marked `collapses=True` that never reaches `_identity_breach` is a caller that
+# has quietly stopped being guarded, and that is exactly how the kill row was reached
+# through `import_types` (trip four) and `retire(successor=)` (trip three): not by a
+# guard being wrong, but by a caller having none.
+#
+# **Reached, not called directly** -- the graph is walked, because three of the five reach
+# it through a helper (`_alias_identity_breach`, `_lifecycle_collisions`, `_alias_holder`)
+# and demanding a direct call would force every caller to inline the lookup, which is the
+# duplication R53 exists to remove.
+#
+# **The residual, stated rather than implied**, in the shape ruling R52 asks for: this
+# proves a caller can REACH the guard, not that it reaches it on every path through
+# itself. A caller with an early return that skips the guard passes here and fails Part B
+# -- which is why both halves run, and why the fifth and sixth trips are the record that
+# neither substitutes for the other.
+
+#: The one function INTERFACE.md 5.10's three identity refusals now live in.
+SHARED_GUARD = "_identity_breach"
+
+#: ...and the name row 6b gave the guards' reading of a predicate's extent (ruling R64).
+#: `_extent`'s `identity` is a REQUIRED keyword since this row, so no caller can take a
+#: reading by accident; this is the name the guards' reading has.
+WRITTEN_EXTENT = "_written_extent"
+
+
+def _call_graph() -> dict[str, set[str]]:
+    """``{function -> the method names it calls}``, over `registry.py`'s AST."""
+    tree = ast.parse(REGISTRY_SOURCE.read_text(encoding="utf-8"))
+    parents: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)] = node
+    graph: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+        if name is None:
+            continue
+        graph.setdefault(_enclosing_function(node, parents), set()).add(name)
+    return graph
+
+
+def _path_to(graph: dict[str, set[str]], start: str, target: str) -> list[str] | None:
+    """The shortest call path from ``start`` to ``target``, or ``None``.
+
+    **The PATH and not a boolean, deliberately.** `reinstate` reaches the guards only
+    through `_alias_identity_breach` -- the alias door -- and a reader who saw `True`
+    would not know that. Printing the route makes the enumeration's real subject visible,
+    which is `KNOWN_CALLERS`' own lesson: *a person's judgement, written down and wrong,
+    is one a reviewer can find.*
+    """
+    seen, frontier = {start}, [[start]]
+    while frontier:
+        trail = frontier.pop(0)
+        for called in sorted(graph.get(trail[-1], ())):
+            if called == target:
+                return trail + [called]
+            if called not in seen:
+                seen.add(called)
+                frontier.append(trail + [called])
+    return None
+
+
+def _reaches(graph: dict[str, set[str]], start: str, target: str) -> bool:
+    return _path_to(graph, start, target) is not None
+
+
+def check_shared_guard() -> list[str]:
+    """Every `collapses=True` caller reaches the shared guard; nothing else needs to."""
+    problems: list[str] = []
+    graph = _call_graph()
+
+    if SHARED_GUARD not in graph:
+        problems.append(
+            f"SHARED GUARD: `registry.py` has no function `{SHARED_GUARD}`. Ruling R53 "
+            f"put INTERFACE.md §5.10's refusals #1, #2 and #3 in ONE place; if that place "
+            f"is gone the three are copies again, and the kill row has been reached "
+            f"through eight of the gaps between copies"
+        )
+        return problems
+
+    if not _reaches(graph, SHARED_GUARD, WRITTEN_EXTENT):
+        problems.append(
+            f"SHARED GUARD: `{SHARED_GUARD}` does not reach `{WRITTEN_EXTENT}`. Ruling "
+            f"R64 named the guards' reading -- the WRITTEN word's members, not the "
+            f"identity closure's -- because reading the closure makes the guard agree "
+            f"with itself: the merge under examination is exactly what joined the two "
+            f"names into one identity (D-4d-1, `C10-14`)"
+        )
+
+    for function, verdict in sorted(KNOWN_CALLERS.items()):
+        if not verdict.collapses:
+            continue
+        if not _reaches(graph, function, SHARED_GUARD):
+            problems.append(
+                f"SHARED GUARD: `{function}` is recorded as a caller that CAN collapse "
+                f"two identities into one, and nothing on any path out of it reaches "
+                f"`{SHARED_GUARD}`. That is not a guard giving the wrong answer -- it is "
+                f"a caller having none, which is how the kill row was reached through "
+                f"`retire(successor=)` (trip three) and `import_types` (trip four). "
+                f"Either it runs §5.10's guards, or KNOWN_CALLERS is wrong about it"
+            )
+    return problems
+
+
 # ---------------------------------------------------------------------------
 # Part B -- the states, against the shipped registry
 
@@ -1748,6 +1868,22 @@ def main() -> int:
             mark = "UNKNOWN"
         print(f"  {function:18s} writes {','.join(sorted(writers[function])):18s} {mark}")
     caller_problems = check_callers()
+
+    # Part A2 -- row 6b. Printed with Part A because it is the same question one step on:
+    # A asks whether a caller has been JUDGED, A2 asks whether a caller judged to collapse
+    # actually reaches the guards.
+    print()
+    print(
+        f"  and do the collapsing callers REACH `{SHARED_GUARD}`? "
+        f"(ruling R53's extraction, made checkable):"
+    )
+    graph = _call_graph()
+    for function, verdict in sorted(KNOWN_CALLERS.items()):
+        if verdict.collapses:
+            trail = _path_to(graph, function, SHARED_GUARD)
+            mark = " -> ".join(trail[1:]) if trail else "DOES NOT REACH IT"
+            print(f"    {function:22s} {mark}")
+    caller_problems += check_shared_guard()
 
     print("\nPart B -- the guard's answer for every state, on every leg:")
     if not os.environ.get("OO_POSTGRES_DSN"):
