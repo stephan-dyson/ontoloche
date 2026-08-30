@@ -106,6 +106,24 @@ The first cut filed all three degraded doubles as *unknowable*, and asserted tha
 
 ---
 
+## 2b. Five existing ids had to change, and this is the notice the brief requires
+
+**The brief's rule:** *"Every existing kill-row id must still pass unchanged; if one must change, say why in `4D-RUN.md` before changing it."* No kill-row id changed. **Five ordinary ids did**, all for one reason, and this section was written before any of them was touched.
+
+`retire(successor=)` now refuses **`successor_unregistered`** when the successor names no entry (round 1, lens A's BLOCKING 1 — every identity guard on that call is nested inside *"if the successor row exists"*, so naming a successor before it is registered skipped all three, and `resolve_type` then cashed the redirect at 1.0 as soon as the word arrived). Five fixtures name a successor they never create:
+
+| id | the fixture | what changed, and why it is a fixture defect rather than a rule defect |
+|---|---|---|
+| `C3-10` | `retire("watch", successor="capture")`, `capture` never seeded | **Its subject is preserved exactly and gets sharper.** The test asserts a retired name is *named in the resolution rather than silently omitted*, with its `retire_reason` and its successor in `reason` — and it happened to reach *"the successor is not live"* by never creating it. It now seeds `capture`, retires `watch` toward it, and then retires `capture` too. Same five assertions, same subject, and the state is now one a governed vocabulary can actually be in |
+| `C4-08` | the same | seeds `capture`. The subject — *a retired name is not silently reusable* — is untouched: `propose_type` still returns the tombstone |
+| `C8-02` | the same | seeds `capture`. The subject is *history is append-only*; the successor is scaffolding |
+| `C16-02` | the same | seeds `capture`. The subject is the whole-store invariants after a merge |
+| `C9-15` | reached it through the `_support.seed` helper | already seeded `capture`; it failed on the **`C3-13` cause** below, not this one |
+
+**And `C3-13` failed for a different reason, which changed the fix rather than the test.** Its whole subject is a backend that caps an unlimited query, and the first cut of lens A's BLOCKING 5 made `propose_type` **refuse** when the collision scan could not finish. That does not narrow the guard, it **bans the call on every paging backend** — at exactly the scale (UC3: one namespace, dozens of agencies, thousands of active types) where paging happens. `C10-09`'s own lesson, one call along. So the partial look **warns** (`alias_check_incomplete:<why>`) rather than refusing, at all four doors, which is §5.4's own rule — this call refuses two things and warns about everything else — and the shape `reinstate_alias_check_unavailable` already had for the same question one call away. **`C3-13` is unchanged.**
+
+---
+
 ## 3. Deviations — every place the implementation could not follow the ruling as written
 
 R54 says *"the fix is one line in `_extent`"*. It is not, and the reason it is not is the most useful thing this row learned. Every deviation below is recorded rather than designed away, which is standing constraint 7's rule.
