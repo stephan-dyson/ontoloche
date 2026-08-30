@@ -10,17 +10,17 @@
 
 | | before (row #6) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 196 | **222** |
-| sync suite, one run, three legs | `484 passed, 122 skipped` (606 collected) | **`541 passed, 144 skipped`** |
-| async suite, one run, three legs | `520 passed, 122 skipped` (642 collected) | **`576 passed, 144 skipped`** |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 196 | **226** |
+| sync suite, one run, three legs | `484 passed, 122 skipped` (606 collected) | **`549 passed, 148 skipped`** |
+| async suite, one run, three legs | `520 passed, 122 skipped` (642 collected) | **`584 passed, 148 skipped`** |
 | `warnings` values ([`INTERFACE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) §5.4) | 25 | **29** |
 | `Refusal.reason` values (§5.12) | 28 | **28** — and that is a result, not an omission. §3 |
 | mechanical gates in the suite | 4 | **5** — [`check_merge_guard.py`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/check_merge_guard.py) |
 | `EDGES.md` sections under R31's rule gate | 3 (§2.4.1, §4.3, §4.4) | **5** (+ §2.5, §5.2) |
 | `EDGES.md` printed call signatures held against the code | **0** | **4** |
-| `ROADMAP.md` kill-row trips | 3, all found by human reviewers | **5** — the fourth by this row's checker, the **fifth by this row's adversarial loop, while that checker exited 0**. §6.4 |
+| `ROADMAP.md` kill-row trips | 3, all found by human reviewers | **6** — the fourth by this row's checker, the **fifth and sixth by this row's loop, while that checker exited 0 for both**. §6.4, §6.6 |
 
-**The floor held.** Row #6's floor was 196 ids and a sync suite that must never go below it; every commit in this row ran both suites on all three legs before it landed, and the count moved 196 → 203 → 206 → 209 → 210 → 211 → 214 → 220 → 222.
+**The floor held.** Row #6's floor was 196 ids and a sync suite that must never go below it; every commit in this row ran both suites on all three legs before it landed, and the count moved 196 → 203 → 206 → 209 → 210 → 211 → 214 → 220 → 222 → 226.
 
 ---
 
@@ -233,6 +233,39 @@ Every extent state × every collapsing caller × every leg: **known-different** 
 
 **Three more defects in the checker itself, all found by the loop:** its only overridability assertion was a `NameError` (`reason` where the local is `reasons`), so the one thing its docstring promises could never have fired; five rows printed **REFUSED** for a probe whose fixture could not be built on that leg — ruling **R12**'s own rule, *a verdict without its coverage line is not a verdict*, broken inside the checker built to enforce it; and Part A's AST scan saw one of four realistic write shapes, so a caller written with `d["successor"] = x` rather than a dict literal was invisible. All three fixed, with five further mutations watched failing.
 
+### 6.5 The third round — **7 BLOCKING, 4 MAJOR, 1 MINOR**, and the sixth trip
+
+One lens was told to reach the kill row and break the gates that say it cannot. It did, **through four independent doors**, and the trip is the first that is *different in kind*: trips 1–5 were all *the guard did not look properly*; this one is *the guard looked correctly, and then the fact changed*. Every identity guard compares extents at **write** time and `resolve_type` grants confidence 1.0 at **read** time, and four things move in between. **Rule U's fourth operand: STALE is not equal.** Door 1 needs only two individually-legal merges and one new type. Full record: [`2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md).
+
+The other lens asked whether ruling **R38** — which `INTERFACE.md` §2.1 carries **for both documents** — was applied everywhere or only where someone had looked. **It was applied in two calls.** `Consumer.gate`, `usage`/`record_use` and `add_edge`'s family name all went on comparing the written string, and two of the three produced *confident false negatives* in the calls §5.9 guards a retirement with: a live gating consumer filed under `would_drop` with no warning while `retire` succeeded with no refusal, and 500 recorded uses leaving the survivor reading `count=0, orphaned=True, "no use of this type has been recorded"` — in the call §5.7 names *"the sensor for the venture's core bet"*.
+
+**One finding was deliberately NOT fixed, and saying why is the point.** `_extent` and `predicates` still split along the written word. That expression is the one **all six trips run through**, and changing its semantics unreviewed, at the loop's cap, in the same commit as five other guard changes, is *precisely* how trips 2, 5 and 6 happened. It is **Q56**, with a recommendation.
+
+---
+
+## 6.6 Convergence — honestly, and the loop did **not** converge
+
+**Stop rule (standing constraint 7, and the brief's):** two consecutive clean rounds, or three rounds plus an honest convergence note. **Three rounds ran; none was clean; this is the note.**
+
+| round | lenses | BLOCKING | MAJOR | MINOR | ids after |
+|---|---|---|---|---|---|
+| 1 | break the shipped registry · code against the three specs | **8** | 7 | 7 | 220 |
+| 2 | *who integrates next week* (beacon slice 1) · attack round 1's fixes | **4** | 5 | 3 | 222 |
+| 3 | is the identity rule applied everywhere · reach the kill row | **7** | 4 | 1 | 226 |
+
+**The findings did not shrink, and the second column is the one to read.** Nineteen BLOCKING across three rounds, on work that had four green mechanical gates before the loop started and five before it ended.
+
+**Three things this loop established that no gate in this repository measures:**
+
+1. **The defects were where the work was new, and essentially nowhere else.** Round 1 found a defect in the guard this row had just written. Round 2 found a defect *in round 1's fix*, and found the row's flagship ruling applied to one axis and not another. Round 3 found the ruling applied to two calls out of six, and a kill-row door in `merge_types`' own alias write. **Across all three rounds, not one finding was in code this row did not touch.** That is a real and reassuring result about the rest of the package, and a damning one about the value of self-review on fresh code.
+2. **A checker only asks the questions its fixtures can pose.** `check_merge_guard.py` was built *by this row* to close the kill-row class, found the fourth trip on its first run — and then **exited 0 through the fifth and the sixth**, because its three legs answer a predicate-extent query in one page and its states were all *extent* states, never *consumer-set* or *staleness* states. Its fixtures were written by the same person, in the same hour, with the same blind spot as the guard. **§6.3 must not be read as an argument that the loop is now optional; §6.4 and this section are the correction.**
+3. **A person's judgement, written down and wrong, is findable — and that is the enumeration's real value.** `KNOWN_CALLERS` recorded `reinstate` as *"a SPLIT, not a collapse … it cannot make two identities into one."* It can. A reviewer found that sentence and disproved it in four calls. Had the caller list been implicit rather than written, there would have been nothing to disprove.
+
+**What the loop would have found next, [Assumed].** Rounds 2 and 3 each began by attacking the previous round's fixes and each succeeded. A fourth round would attack round 3's five guard changes, and this row's own evidence says it would find something. **Stopping here is the cap, not a verdict that the work is clean** — and `4C-RUN.md` is the record that it was stopped rather than finished.
+
+**The one thing that changed monotonically:** every round's findings became *narrower*. Round 1's were about whether the code did what the row intended; round 3's were about whether a **ruling** was applied consistently, which is a question about the specification rather than about the implementation. That is the shape of convergence without its arrival, and it is why **Q56** is a ruling request rather than a bug report.
+
+
 ---
 
 ## 7. What the build taught
@@ -268,6 +301,17 @@ Every extent state × every collapsing caller × every leg: **known-different** 
 **Q54 — Should `check_merge_guard.py`'s `IDENTITY_FIELDS` be derived rather than declared?** Part A scans for writes of `successor` and `aliases` — a two-element tuple a person maintains, which is the shape the checker exists to replace, one level up. A third identity field added without touching that tuple would be invisible. *Recommendation: accept for v0 and record the residual.* Deriving it means knowing which `TypeRecord` fields `resolve_type` reads, which is a dataflow question a checker of this size should not answer; the honest mitigation is that this is stated in the file rather than implied.
 
 **Q55 — `import_types` is now the fourth call with identity guards. Is the guard set worth extracting?** `merge_types`, `retire` and `import_types` each carry their own copy of §5.10's #2 and #3, in three shapes (a `Refusal`, a `Refusal`, an `import_refused:` warning). Three copies of one rule is how the first three trips happened. *Recommendation: yes, but not here.* Extraction is a refactor with no new behaviour, and this row's evidence is that the checker — not the shared function — is what catches the next caller. Recorded for the ACTIONS build row, which adds a fifth surface.
+
+**Q56 — Should an identity claim be verified where it is MADE, or only where it is WRITTEN?** *(Founder-visible. This is the sixth trip's root cause and the only question here that closes a class rather than a case.)* Every identity guard in this registry compares predicate extents at **write** time — `merge_types`, `retire(successor=)`, `import_types`, `reinstate`, `propose_type` — and `resolve_type` grants confidence 1.0 at **read** time. Four things move in between: a row is created under the aliased word, a `status` flips, an extent grows, an alias is transferred by a later merge. Row 4c closed all four **doors**; it did not close the **gap**, because closing the gap means verifying the claim at `resolve_type`'s 1.0, which changes a shipped guarantee (`INTERFACE.md` §5.3) and costs an extent computation per alias hit. *Recommendation: **rule it, do not let a seventh trip decide it.*** The cheap half — `resolve_type` returning the redirect with a warning rather than silently at 1.0 when the two extents no longer agree — is Rule U and is affordable; the expensive half (refusing) is a product decision about what the registry declines to answer.
+
+**Q57 — Do `_extent` and `predicates()` resolve the identity, or the written word?** *(Deliberately not taken in row 4c; see §6.5.)* After a merge, `list_types(predicate=survivor)` misses every type that declared the absorbed name, and `predicates(of=…)` returns `known=0` — §5.2's own named failure mode. The fix is one line in `_extent`; **the reason it was not taken is that `_extent` is the expression all six kill-row trips run through**, and changing what the guards compare, unreviewed, at the loop's cap, is how trips 2, 5 and 6 happened. *Recommendation: take it in a row of its own, with `check_merge_guard.py` extended to a **staleness** axis first, so the change lands under a gate that can see it.*
+
+**Q58 — Should `propose_type` and `import_types` warn when a declared predicate resolves to another identity?** Neither validates its `predicates` list against anything. A type declaring an absorbed predicate is legal, silent, and invisible to the survivor's extent. *Recommendation: yes, a warning, in the same change as Q57* — it is the same fact reported at the write door rather than the read one, and it is cheap.
+
+**Q59 — Is `retract_edge`'s `status` write an identity write?** `check_merge_guard.py` now scans `status` as a third identity field and flags `retract_edge`, which writes `status="retracted"` onto an **edge**. An edge has no aliases and no successor and `resolve_type` never scores one, so the answer is no — but the scan cannot tell two record shapes apart without a judgement in it, so the entry is documented rather than excluded. *Recommendation: leave it. A scan that guesses which record a field belongs to is a scan with a judgement in it, and the judgement belongs in `KNOWN_CALLERS` where a reviewer can find it.*
+
+**Q60 — Does `direction` want to be per-hop?** *(Raised by the beacon-integrator lens, round 2.)* `EDGES.md` §4.2 justifies the depth cap of 2 with beacon's flagship query — *"who is blocking anything due this week?"*, `task --blocks--> task --stakeholder--> person`. That query needs `in` at hop 1 and `out` at hop 2. `direction="both"` reaches the right answer and **cannot express it**: §9.3's own projection emits a person who is blocking you and one who is not in byte-identical shapes. *Recommendation: not for v0 — record it against Phase 3's paging decision (R13/R25), because both are about a read seam that cannot say enough about what it returned.*
+
 
 ---
 
