@@ -26,6 +26,14 @@ commit        where                       what
                                           naming a RETIRED predicate makes that word
                                           resolve to a live one at confidence 1.0, with no
                                           refusal and no warning
+``a3f9e6e``   row 4c r3, FOUR doors       the SIXTH trip, and the first that is
+                                          *different in kind*: the guard looked correctly
+                                          and then the fact CHANGED. Two individually
+                                          legal merges and one new type make
+                                          ``resolve_type`` answer at 1.0 over a pair this
+                                          registry refuses non-overridably when asked
+                                          directly. **Rule U's fourth operand: STALE is
+                                          not equal**
 ============  ==========================  =================================================
 
 The supervisor's diagnosis after the third, which this file is built to hold:
@@ -57,7 +65,19 @@ state                   how it arises                                required an
 **empty**               both extents empty, membership indexed       REFUSED
 **unknowable**          ``indexes_membership=False``                 REFUSED
 **kind mismatch**       the two sides are different ``kind``s        REFUSED
+**partial**             an honest page whose FIRST page matches      REFUSED
+**truncated**           a capped answer with no cursor to the rest   REFUSED
+**stale**               they AGREED when the identity was written,   REFUSED, and the
+                        and the vocabulary then grew                 READ says so
 ======================  ===========================================  ==================
+
+**Part B has a second axis, and the sixth trip is why.** Every state above is a state
+two extents are in *at the moment one guard looks*. The **stale** axis is a state the
+STORE is in: an identity written when two extents agreed, over a vocabulary that then
+grew. It cannot be posed by seeding two predicates and calling one function -- it needs
+two individually legal merges and one ordinary new type -- so it has its own fixture and
+its own probes, and it asks ``resolve_type`` as well as the three collapsing callers,
+because **the read is where a stale claim is cashed**. See ``check_staleness`` below.
 
 The **known-equal** row is not filler and it is the one a careless fix breaks: the guard
 is *narrowed*, not *banned*. A registry that refused every predicate collapse would pass
@@ -92,7 +112,12 @@ from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
 from open_ontology.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
 from open_ontology.contract.doubles import DegradedAdapter  # noqa: E402
 from open_ontology.policy import NamespacePolicy  # noqa: E402
-from open_ontology.types import Evidence, Refusal, TypeEntry  # noqa: E402
+from open_ontology.types import (  # noqa: E402
+    Evidence,
+    Refusal,
+    ResolveContext,
+    TypeEntry,
+)
 
 REGISTRY_SOURCE = ROOT / "open_ontology" / "registry.py"
 
@@ -758,6 +783,334 @@ def check_states() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ---------------------------------------------------------------------------
+# Part B, second axis -- STALENESS. The state no fixture above can pose.
+#
+# **The sixth trip is the first that is different in kind** (2026-08-30, row 4c's third
+# adversarial round, commit ``a3f9e6e``). Trips 1-5 were all one sentence: *the guard did
+# not look properly* -- at an unknowable extent, at an empty one, at all, through a
+# different field, at a partial page. This one is: **the guard looked correctly, and then
+# the fact changed.** Every identity guard compares extents at WRITE time; `resolve_type`
+# grants confidence 1.0 at READ time; and the vocabulary moves in between.
+#
+# **Door 1 is the recipe, and it needs nothing unusual at all** -- two individually legal
+# merges and one new type:
+#
+#   1. `commentable`, `searchable` and `taggable` all have the same non-empty extent;
+#   2. `merge(commentable -> searchable)` -- legal, extents identical. `searchable`
+#      absorbs `commentable` as an alias and `commentable` retires with `searchable` as
+#      its successor;
+#   3. a new type declares `searchable` and `taggable` -- **ordinary vocabulary growth,
+#      no governance act at all**. Now `searchable` has a member `commentable` does not;
+#   4. the identity written at step 2 is still answered at confidence 1.0, and the two
+#      extents it was written over no longer agree.
+#
+# **The fixture is written from the trip record, not from the fix.** That is the FIFTH
+# trip's lesson, stated in `4C-RUN.md` 6.4: *a checker only asks the questions its
+# fixtures can pose, and this one's fixtures were built by the same person, in the same
+# hour, with the same blind spot as the guard*. So the steps above are Door 1 verbatim,
+# and what each caller answers is asserted rather than assumed -- including the answers
+# that are **allowed**, because a row that only ever expects REFUSED is a row a registry
+# passes by refusing everything.
+#
+# **Three members and one late arrival, so the paging doubles bite.** `DegradedAdapter`'s
+# `page_cap` only caps a query it would return MORE rows than -- so a two-member extent
+# never pages, and the `partial`/`truncated` doubles would have run over a fixture that
+# cannot express what they are for. Three members before the merge and a fourth after it
+# puts both extents over a `page_cap=2`, so the two backends of the FIFTH trip get a real
+# question on this axis too.
+
+#: The member types seeded before the first merge -- every one of them declares all three
+#: predicates, so the merge at step 2 is over genuinely identical, genuinely non-empty
+#: extents and is exactly as legal as `C10-09` requires it to stay.
+_STALE_MEMBERS = ("aaa_note", "bbb_memo", "ccc_card")
+
+#: The type declared AFTER the merge, against the survivor and the third predicate. This
+#: is the whole of *"and then the fact changed"*: no acknowledgement, no override, no
+#: governance act at all -- somebody added a type.
+_STALE_LATE_MEMBER = "zzz_doc"
+
+
+def _stale(registry: Registry) -> str | None:
+    """Door 1's store: an identity written over agreeing extents that then diverged.
+
+    ``None``, or a ``_NOT_REACHABLE`` sentence. A backend that cannot compute an extent
+    refuses step 2 -- correctly, under Rule U -- so it cannot hold a stale identity at
+    all, and that is printed as NOT REACHABLE rather than folded into the passes.
+    """
+    for name in ("commentable", "searchable", "taggable"):
+        _seed(registry, name, kind="predicate", definition="a capability")
+    for member in _STALE_MEMBERS:
+        _seed(registry, member, predicates=["commentable", "searchable", "taggable"])
+    merged = registry.merge_types(
+        "commentable",
+        "searchable",
+        "identical non-empty extents",
+        merged_by="user:sd",
+        acknowledge=ALL_ACKNOWLEDGEMENTS,
+    )
+    if isinstance(merged, Refusal):
+        return _NOT_REACHABLE + (
+            f"this backend refuses the LEGAL merge the fixture is built on "
+            f"({merged.reason}), so no identity can be written here over two agreeing "
+            f"extents and the stale state is unreachable"
+        )
+    _seed(registry, _STALE_LATE_MEMBER, predicates=["searchable", "taggable"])
+    return None
+
+
+def _stale_probe_resolve(registry: Registry, *, knowable: bool) -> str | None:
+    """**The read is where a stale claim is cashed, and this is the row that matters.**
+
+    `resolve_type("commentable")` answers `searchable` at confidence 1.0 -- which
+    `INTERFACE.md` 5.3 calls a registry **guarantee** -- over two extents that agreed
+    when the identity was written and do not now. The redirect itself is correct and
+    stays: 5.10 promises the old word still resolves. What was missing is any signal that
+    the claim has gone stale.
+    """
+    resolution = registry.resolve_type(
+        "commentable", ResolveContext(), tier="unspecified"
+    )
+    if resolution.outcome != "existing" or resolution.type is None:
+        return (
+            f"resolve_type('commentable') answered {resolution.outcome!r} -- 5.10 "
+            f"promises the old word still resolves after a merge, so this fixture's "
+            f"premise has broken rather than its subject"
+        )
+    if resolution.type.name != "searchable":
+        return (
+            f"resolve_type('commentable') answered {resolution.type.name!r}, not the "
+            f"survivor 'searchable' -- the fixture is not in the state it claims"
+        )
+    if resolution.confidence != 1.0:
+        return (
+            f"resolve_type('commentable') answered at confidence "
+            f"{resolution.confidence!r}; 5.3 calls the successor redirect a guarantee at "
+            f"1.0, and lowering it is the FOUNDER's half of Q56 rather than this row's"
+        )
+    if "identity_stale" not in resolution.type.warnings:
+        return (
+            f"resolve_type('commentable') answered 'searchable' at confidence 1.0 "
+            f"carrying {list(resolution.type.warnings)} -- and the two predicate extents "
+            f"that claim stands on no longer agree"
+            + ("" if knowable else " (and cannot be known to agree on this backend)")
+            + ". The claim was TRUE WHEN IT WAS MADE and the vocabulary moved: Rule U's "
+            "fourth operand, unwarned, in the call 5.3 calls a guarantee"
+        )
+    return None
+
+
+def _stale_probe_merge(registry: Registry, *, knowable: bool) -> str | None:
+    """Door 1's second merge: `searchable` and `taggable` DO agree -- the alias does not."""
+    result = registry.merge_types(
+        "searchable",
+        "taggable",
+        "the checker's stale fixture",
+        merged_by="user:sd",
+        acknowledge=ALL_ACKNOWLEDGEMENTS,
+    )
+    if not isinstance(result, Refusal):
+        return (
+            "merge_types('searchable' -> 'taggable') COLLAPSED under every "
+            "acknowledgement. Those two extents agree -- but `searchable` carries "
+            "`commentable`'s alias and `commentable` does not, so the write re-points a "
+            "word at an identity nothing ever compared it to, and "
+            "`resolve_type('commentable')` answers `taggable` at 1.0 on a pair this "
+            "registry refuses NON-OVERRIDABLY when asked directly. The kill row, through "
+            "Door 1"
+        )
+    if result.detail.get("overridable") is not False:
+        return (
+            f"merge_types' {result.reason!r} on the stale fixture does not declare itself "
+            f"non-overridable; a guard that can be acknowledged past is a warning wearing "
+            f"a refusal's name"
+        )
+    if result.reason not in {"predicate_merge", "kind_mismatch"}:
+        return (
+            f"merge_types refused {result.reason!r} -- an identity guard reached through "
+            f"some other refusal is the same class of defect as `retire`'s ordering bug "
+            f"(`C9-19`): the outcome is safe and the story is wrong"
+        )
+    return None
+
+
+def _stale_probe_retire(registry: Registry, *, knowable: bool) -> str | None:
+    """`retire('searchable', successor='taggable')` -- and the answer is NOT symmetrical.
+
+    On a leg that can read both extents to the end this collapse is **legal**: those two
+    predicates genuinely agree now, and `retire` writes no alias, so `commentable` is left
+    resolving to a retired word and falls back to `proposal`. The row asserts both halves
+    -- that the guard stays narrowed rather than banned, **and** that the collapse it
+    declined to refuse does not reach `commentable` anyway. Where the extents cannot be
+    read to the end (the three doubles) Rule U binds and the same call must be REFUSED.
+    """
+    result = registry.retire(
+        "searchable",
+        "the checker's stale fixture",
+        retired_by="user:sd",
+        successor="taggable",
+        force=True,
+    )
+    identity_reasons = {"predicate_merge", "kind_mismatch", "different_consumer_sets"}
+    if not knowable:
+        if not isinstance(result, Refusal):
+            return (
+                "retire(successor=) COLLAPSED `searchable` into `taggable` with "
+                "force=True on a backend that cannot read either extent to the end -- "
+                "Rule U: an extent that could not be computed is not an identical extent, "
+                "and `force` overrides what could be SEEN, never what would become TRUE"
+            )
+        if result.detail.get("overridable") is not False:
+            return (
+                f"retire(successor=)'s {result.reason!r} does not declare itself "
+                f"non-overridable"
+            )
+        return None
+    if isinstance(result, Refusal) and result.reason in identity_reasons:
+        return (
+            f"retire(successor=) refused {result.reason!r} a pair whose extents are "
+            f"non-empty and identical RIGHT NOW -- the guard is narrowed, not banned "
+            f"(`C10-09`'s whole content), and a registry that refuses every predicate "
+            f"collapse passes a checker that only tests refusals"
+        )
+    after = registry.resolve_type("commentable", ResolveContext(), tier="unspecified")
+    if after.type is not None and after.type.name == "taggable" and after.confidence == 1.0:
+        return (
+            "retire('searchable', successor='taggable') left "
+            "`resolve_type('commentable')` answering `taggable` at confidence 1.0 -- the "
+            "pair `merge_types` refuses non-overridably, reached by retiring the word in "
+            "the middle. Door 1 with a different second act"
+        )
+    return None
+
+
+def _stale_probe_import(registry: Registry, *, knowable: bool) -> str | None:
+    """The alias `merge_types` wrote onto the survivor, re-offered to a third predicate."""
+    entries = registry.import_types(
+        [
+            {
+                "name": "taggable",
+                "kind": "predicate",
+                "definition": "a capability",
+                "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    )
+    entry = entries[0]
+    if not any(w.startswith("import_refused:") for w in entry.warnings):
+        return (
+            "import_types wrote `commentable` as an alias of `taggable` with no refusal. "
+            "That alias was LEGAL on `searchable` when it was written and is not legal "
+            "here -- `commentable`'s extent has not grown and `taggable`'s has -- so "
+            "`resolve_type('commentable')` now answers `taggable` at 1.0 on a pair "
+            "`merge_types` refuses non-overridably"
+        )
+    if "commentable" in (entry.aliases or ()):
+        return "import_types refused and wrote the alias anyway"
+    return None
+
+
+def _stale_probe_reinstate(registry: Registry, *, knowable: bool) -> str | None:
+    """The fourth collapsing caller, asked the stale question the other way round.
+
+    `reinstate('commentable')` would put a live entry back under a word the survivor
+    already answers to -- two active entries holding one word between them, which is
+    `C16-06`'s whole-store invariant and mechanism **4** itself. It is in
+    ``KNOWN_CALLERS`` as a collapsing caller (a verdict a reviewer had to correct from
+    ``False`` during the sixth trip) and it had no probe at all until this axis.
+    """
+    result = registry.reinstate(
+        "commentable", "the checker's stale fixture", reinstated_by="user:sd"
+    )
+    if not isinstance(result, Refusal):
+        return (
+            "reinstate('commentable') re-activated a word `searchable` already answers to "
+            "as an alias, so two ACTIVE entries now hold one word between them -- "
+            "`C16-06`'s whole-store invariant, reached by the caller whose "
+            "`KNOWN_CALLERS` verdict once said it could not"
+        )
+    if result.detail.get("overridable") is not False:
+        return f"reinstate's {result.reason!r} does not declare itself non-overridable"
+    return None
+
+
+#: Four collapsing callers and the READ. `resolve_type` is here and nowhere else in this
+#: file's probes, because it is the only one of the five that writes nothing -- and the
+#: sixth trip is the record that a claim nobody re-checks is cashed at the read.
+STALE_PROBES = {
+    "resolve_type": _stale_probe_resolve,
+    "merge_types": _stale_probe_merge,
+    "retire": _stale_probe_retire,
+    "import_types": _stale_probe_import,
+    "reinstate": _stale_probe_reinstate,
+}
+
+
+def check_staleness() -> tuple[list[str], list[str], list[str]]:
+    """The stale axis, on every leg and on all three doubles."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+    for leg, build, knowable in _legs():
+        shapes: list[tuple[str, object, bool]] = [("stale", None, knowable)]
+        if knowable:
+            shapes.extend(
+                [
+                    (
+                        "stale (unknowable)",
+                        lambda a: DegradedAdapter(a, indexes_membership=False),
+                        False,
+                    ),
+                    (
+                        # **`partial` is KNOWABLE here, and getting that wrong was this
+                        # axis's own first defect.** The first cut filed all three
+                        # doubles as unknowable and the run said otherwise: an honest
+                        # PAGE has a cursor to the rest, `_extent` loops to exhaustion
+                        # (the FIFTH trip's fix), so both extents are read in full and
+                        # `retire`'s collapse is as legal here as on the bare leg. The
+                        # row asserting REFUSED was asserting the wrong answer -- the
+                        # fifth trip's own lesson, one level up, and caught only by
+                        # running the checker rather than by reading it.
+                        "stale (partial)",
+                        lambda a: DegradedAdapter(a, page_cap=2, page_cursor=True),
+                        True,
+                    ),
+                    ("stale (truncated)", lambda a: DegradedAdapter(a, page_cap=2), False),
+                ]
+            )
+        for shape, wrap, shape_knowable in shapes:
+            for caller, probe in STALE_PROBES.items():
+                registry = build()
+                built = _stale(registry)
+                if built is not None:
+                    unreachable.append(
+                        f"{leg} / {caller} / {shape}: " + built[len(_NOT_REACHABLE):]
+                    )
+                    lines.append(f"  {leg:15s} {caller:13s} {shape:28s} NOT REACHABLE")
+                    continue
+                if wrap is not None:
+                    registry = Registry(
+                        wrap(registry.adapter),
+                        policies={"default": NamespacePolicy(approval_policy="auto")},
+                    )
+                try:
+                    failure = probe(registry, knowable=shape_knowable)
+                except Exception as error:  # pragma: no cover - a fixture that broke
+                    failure = f"the probe raised {type(error).__name__}: {error}"
+                if failure:
+                    problems.append(f"{leg} / {caller} / {shape}: {failure}")
+                    lines.append(f"  {leg:15s} {caller:13s} {shape:28s} FAILED")
+                else:
+                    lines.append(
+                        f"  {leg:15s} {caller:13s} {shape:28s} "
+                        + ("answered" if caller == "resolve_type" else "guarded")
+                    )
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -777,6 +1130,19 @@ def main() -> int:
     state_problems, lines, unreachable = check_states()
     for line in lines:
         print(line)
+
+    # **The second axis, and the sixth trip is why it is a section of its own.** Every
+    # state above is a state two extents are in when a guard looks; this is a state the
+    # STORE is in, built by two individually legal merges and one ordinary new type. It
+    # asks `resolve_type` as well as the four collapsing callers, because the read is
+    # where a stale claim is cashed.
+    print()
+    print("  and the STALE axis -- an identity written over extents that then diverged:")
+    stale_problems, stale_lines, stale_unreachable = check_staleness()
+    for line in stale_lines:
+        print(line)
+    unreachable.extend(stale_unreachable)
+    state_problems.extend(stale_problems)
     if unreachable:
         # Ruling R12, applied to this checker: **a verdict without its coverage line is
         # not a verdict.** A row whose fixture could not be built on a leg is printed and
