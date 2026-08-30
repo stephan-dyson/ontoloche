@@ -111,6 +111,7 @@ from open_ontology import Registry  # noqa: E402
 from open_ontology.backends.sqlite import SQLiteAdapter  # noqa: E402
 from open_ontology.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
 from open_ontology.contract.doubles import DegradedAdapter  # noqa: E402
+from open_ontology._resolve import _norm  # noqa: E402
 from open_ontology.policy import NamespacePolicy  # noqa: E402
 from open_ontology.types import (  # noqa: E402
     Evidence,
@@ -1123,6 +1124,460 @@ def check_staleness() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ---------------------------------------------------------------------------
+# Part B, third axis -- SPELLING. The kill row's SEVENTH trip.
+#
+# **Trips 1-5 were "the guard did not look properly". Trip 6 was "the guard looked
+# correctly, and then the fact changed". Trip 7 is "the guard and the resolver disagree
+# about what THE SAME WORD is."** (2026-08-30, row 4d's first adversarial round.)
+#
+# Every alias guard in this registry finds its collision by an exact byte comparison --
+# `rec.name == alias`, `alias in rec.aliases`, `candidate in entry.aliases`. The shipped
+# `DeterministicResolver` scores `_norm(candidate)` against `_norm(alias)`, where `_norm`
+# lowercases and collapses every run of non-`[a-z0-9]` to `_`. So `'Commentable'` is a
+# word the guards have never heard of and the resolver rates **1.0**:
+#
+#   1. `commentable` {aaa_note} and `searchable` {aaa_note, bbb_memo} -- two live
+#      predicates whose extents genuinely differ. `merge_types` refuses that pair
+#      NON-OVERRIDABLY under all five acknowledgements;
+#   2. `commentable` is retired -- an ordinary, permitted governance act;
+#   3. `import_types` writing `aliases: ["commentable"]` is **refused**,
+#      `predicate_merge` -- row 4c's fourth-trip guard, working;
+#   4. `import_types` writing `aliases: ["Commentable"]` is **written, no refusal, no
+#      warning**;
+#   5. `resolve_type("commentable")` answers **`searchable` at confidence 1.0** -- which
+#      INTERFACE.md 5.3 calls a guarantee -- with the two extents still different and
+#      **no `identity_stale`**, because row 4d's own staleness gate is the same byte
+#      comparison.
+#
+# **The non-canonical spelling is the REAL one.** `import_types` is UC1's Foundry
+# migration path and UC3's Socrata shape, and a real export's field labels arrive as
+# `"Status"` and `"Processing Date"`, not as `snake_case`.
+#
+# **This axis exists because the other two could not pose the question.** Every fixture
+# in this file spells every word exactly one way, so the checker exited 0 through trip 7
+# as it did through trips 5 and 6 -- three consecutive trips, and the same sentence each
+# time: *a checker only asks the questions its fixtures can pose*. The alphabet was the
+# blind spot this time.
+#
+# It compares against **the resolver's own `_norm`**, imported rather than copied,
+# because the defect is precisely that two definitions of *the same word* exist in one
+# codebase and disagree.
+
+#: Spellings `DeterministicResolver._norm` maps onto `commentable`, so the shipped
+#: resolver scores each of them 1.0 against it: case, a trailing space, and a punctuation
+#: run that normalises away -- three ways one word arrives from a foreign system.
+#: **A verdict that changes with the spelling is the defect.**
+_SPELLINGS = ("Commentable", "COMMENTABLE", "commentable ", "commentable-")
+
+
+def _spelling_store(registry: Registry) -> str | None:
+    """Two live predicates whose extents differ, with the left one retired.
+
+    The pair `merge_types` refuses non-overridably, left in the state the FOURTH trip was
+    made of: a retired predicate name that still resolves and still has an extent.
+    """
+    _seed(registry, "commentable", kind="predicate", definition="a capability")
+    _seed(registry, "searchable", kind="predicate", definition="a capability")
+    _seed(registry, "aaa_note", predicates=["commentable", "searchable"])
+    _seed(registry, "bbb_memo", predicates=["searchable"])
+    direct = registry.merge_types(
+        "commentable", "searchable", "the checker's spelling fixture",
+        merged_by="user:sd", acknowledge=ALL_ACKNOWLEDGEMENTS,
+    )
+    if not isinstance(direct, Refusal):
+        return _NOT_REACHABLE + (
+            "this backend does not refuse the pair the fixture is built on, so there is "
+            "no refusal for a spelling to walk past"
+        )
+    retired = registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        return _NOT_REACHABLE + (
+            f"this backend cannot record the forced retirement the fixture needs: "
+            f"{retired.reason}"
+        )
+    return None
+
+
+def _spelling_probe_import(registry: Registry, spelling: str) -> str | None:
+    """The WRITE door: the same word, spelled the way a foreign system spells it."""
+    entries = registry.import_types(
+        [{
+            "name": "searchable", "kind": "predicate", "definition": "a capability",
+            "aliases": [spelling], "status": "active",
+        }],
+        namespace="default", kind="predicate",
+    )
+    entry = entries[0]
+    if not any(w.startswith("import_refused:") for w in entry.warnings):
+        resolution = registry.resolve_type("commentable", ResolveContext(), tier="unspecified")
+        answered = resolution.type.name if resolution.type is not None else resolution.outcome
+        return (
+            f"import_types wrote {spelling!r} as an alias of `searchable` with NO refusal, "
+            f"while the identical import spelled `commentable` is refused "
+            f"`predicate_merge` -- the guard compares bytes and the resolver compares "
+            f"normalised words, so one word gets two verdicts. "
+            f"`resolve_type('commentable')` now answers {answered!r} at "
+            f"{resolution.confidence!r}"
+            + (f" carrying {list(resolution.type.warnings)}" if resolution.type is not None else "")
+            + ", on a pair `merge_types` refuses non-overridably. The kill row, through "
+            "the spelling door"
+        )
+    if spelling in (entry.aliases or ()):
+        return f"import_types refused {spelling!r} and wrote the alias anyway"
+    return None
+
+
+def _spelling_probe_read(registry: Registry, spelling: str) -> str | None:
+    """The READ door: a stale identity asked about under a variant spelling.
+
+    Row 4d's staleness gate is `candidate in entry.aliases` -- an exact-string test on a
+    redirect the resolver reached by NORMALISING.
+    """
+    resolution = registry.resolve_type(spelling, ResolveContext(), tier="unspecified")
+    if resolution.type is None or resolution.type.name != "searchable":
+        # The resolver did not reach the redirect under this spelling, so there is no
+        # identity claim to re-verify and nothing to warn about.
+        return None
+    if resolution.confidence != 1.0:
+        return None
+    if "identity_stale" not in resolution.type.warnings:
+        return (
+            f"resolve_type({spelling!r}) answered 'searchable' at confidence 1.0 -- the "
+            f"same identity claim `resolve_type('commentable')` warns about -- carrying "
+            f"{list(resolution.type.warnings)}. The staleness gate goes quiet on exactly "
+            f"the spelling a foreign system sends"
+        )
+    return None
+
+
+def check_spellings() -> tuple[list[str], list[str], list[str]]:
+    """The spelling axis, on every leg that can pose it."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+    for leg, build, _knowable in _legs():
+        for spelling in _SPELLINGS:
+            for caller, label, store, probe in (
+                ("import_types", f"write {spelling!r}", _spelling_store, _spelling_probe_import),
+                ("resolve_type", f"read {spelling!r}", _stale, _spelling_probe_read),
+            ):
+                registry = build()
+                built = store(registry)
+                if built is not None:
+                    unreachable.append(f"{leg} / {caller} / {label}: " + built[len(_NOT_REACHABLE):])
+                    lines.append(f"  {leg:15s} {caller:13s} {label:28s} NOT REACHABLE")
+                    continue
+                try:
+                    failure = probe(registry, spelling)
+                except Exception as error:  # pragma: no cover
+                    failure = f"the probe raised {type(error).__name__}: {error}"
+                if failure:
+                    problems.append(f"{leg} / {caller} / {label}: {failure}")
+                    lines.append(f"  {leg:15s} {caller:13s} {label:28s} FAILED")
+                else:
+                    lines.append(f"  {leg:15s} {caller:13s} {label:28s} guarded")
+    return problems, lines, unreachable
+
+
+# ---------------------------------------------------------------------------
+# Part B, fourth axis -- ONE WORD, ONE LIVE IDENTITY.
+#
+# **`C16-06`'s whole-store invariant, asked of every write door rather than of one
+# fixture.** INTERFACE.md 5.9b's `alias_collision` exists to stop *two active entries
+# holding one word between them*, which is mechanism 4 itself. Row 4c's third round
+# closed the door it found -- `propose_type` matching `name` and never `aliases` -- and
+# row 4d's first adversarial round found the same question unasked at four more:
+#
+#   * `import_types` runs its alias block only `if incoming:`, so a row whose NAME is
+#     spoken for, carrying no aliases of its own, is written with no refusal;
+#   * `propose_type` asks at PROPOSE time and `_write_approved` writes the row at
+#     APPROVE time, re-checking nothing -- and ruling **R40** forces every
+#     `kind="predicate"` down that two-step path, so the guard is structurally
+#     unavailable for the one kind the kill row is about;
+#   * `reinstate` runs the extent guards over its dormant aliases and never asks whether
+#     one of them is already held by a LIVE entry -- the question its sibling
+#     `import_types` asks with `_alias_clash` on the same field;
+#   * `_alias_holder` throws away `_active_page`'s `why`, so **a truncated page reads as
+#     "the word is free"** -- Rule U's third operand (*partial is not equal*, the fifth
+#     trip) missing from a guard shipped by the commit whose subject is the fourth.
+#
+# The invariant is checked over the WHOLE STORE after each door, under the resolver's own
+# key, because that is the property `C16-06` states and the one a caller can feel:
+# `resolve_type` answering one word with two different identities depending on nothing.
+
+
+def _one_word_holders(registry: Registry, namespace: str = "default") -> dict[str, list[str]]:
+    """``{word key -> the live entries that answer to it}``, `C16-06`'s own question.
+
+    Keyed by the RESOLVER's own normalisation, because the property a caller can feel is
+    *`resolve_type` answers one word with two different identities*, and the resolver is
+    what decides which words are one word.
+    """
+    holders: dict[str, list[str]] = {}
+    for entry in registry.list_types(namespace=namespace).types:
+        for word in (entry.name,) + tuple(entry.aliases or ()):
+            holders.setdefault(_norm(word), []).append(entry.name)
+    return {word: sorted(set(names)) for word, names in holders.items() if len(set(names)) > 1}
+
+
+def _alias_only_store(registry: Registry, spelling: str = "commentable") -> str | None:
+    """A live entry that answers to a word **no row of that name has ever held**.
+
+    `import_types` writes a foreign dump's aliases, and the word names nothing here, so
+    no identity guard has anything to compare and the alias is written -- which is
+    correct, and is the state every door below is asked about.
+
+    ``spelling`` is how the FOREIGN system spelled it. **Only aliases can be
+    non-canonical:** `propose_type` puts every `name` through `NAME_RE`, so `Commentable`
+    can never be a row's name -- a real and reassuring result, and the reason the
+    spelling hole is alias-side and read-side only. A dump's alias list is validated by
+    nothing.
+    """
+    _seed(registry, "searchable", kind="predicate", definition="a capability")
+    _seed(registry, "aaa_note", predicates=["searchable"])
+    entries = registry.import_types(
+        [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+          "aliases": [spelling], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+    if spelling not in (entries[0].aliases or ()):
+        return _NOT_REACHABLE + (
+            f"this backend did not store the alias the fixture is built on "
+            f"({list(entries[0].warnings)}), so no word is spoken for here"
+        )
+    return None
+
+
+def _door_propose(registry: Registry):
+    return registry.propose_type(
+        "commentable", "a capability", EVIDENCE, "user:sd", kind="predicate"
+    )
+
+
+def _door_import_name(registry: Registry):
+    return registry.import_types(
+        [{"name": "commentable", "kind": "predicate", "definition": "a capability",
+          "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+
+
+#: Doors that act on a store where the word is ALREADY spoken for, and the spelling the
+#: foreign system used for it. `propose_type` over a canonically-spelled alias is the
+#: CONTROL -- row 4c's third round closed that door and it must stay closed.
+ONE_WORD_DOORS = {
+    ("propose_type", "commentable"): _door_propose,
+    ("propose (variant)", "Commentable"): _door_propose,
+    ("import_types", "commentable"): _door_import_name,
+}
+
+
+def check_one_word() -> tuple[list[str], list[str], list[str]]:
+    """`C16-06`'s invariant, asked of every write door and of a truncated look."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    def report(leg, door, built, registry, extra=""):
+        if built is not None:
+            unreachable.append(f"{leg} / {door} / one word: " + built[len(_NOT_REACHABLE):])
+            lines.append(f"  {leg:15s} {door:17s} {'one word':24s} NOT REACHABLE")
+            return
+        shared = _one_word_holders(registry)
+        if shared:
+            problems.append(
+                f"{leg} / {door} / one word: after this door, {shared} -- two LIVE "
+                f"entries answer to one word, which is `C16-06`'s whole-store invariant "
+                f"and INTERFACE.md 5.9b's `alias_collision`, and it is mechanism 4 "
+                f"itself. `propose_type` refuses this exact act" + extra
+            )
+            lines.append(f"  {leg:15s} {door:17s} {'one word':24s} FAILED")
+        else:
+            lines.append(f"  {leg:15s} {door:17s} {'one word':24s} held")
+
+    for leg, build, _knowable in _legs():
+        for (door, spelling), act in ONE_WORD_DOORS.items():
+            registry = build()
+            built = _alias_only_store(registry, spelling)
+            result = None
+            if built is None:
+                result = act(registry)
+            # **The whole-store invariant is not enough at this door, and finding that
+            # out took one run.** Ruling R40 makes `propose_type(kind="predicate")`
+            # return a PENDING proposal, so on a backend that can hold one the invariant
+            # sees no second live row and the door reads `held` for the wrong reason --
+            # the collision arrives one call later, at `approve`. So the propose doors
+            # assert the REFUSAL as well: 5.9b's `alias_collision` is what the caller is
+            # owed, and it is owed at the door they knocked on.
+            if built is None and door.startswith("propose") and not isinstance(result, Refusal):
+                problems.append(
+                    f"{leg} / {door} / one word: `propose_type` did not refuse "
+                    f"`alias_collision` for a word the live entry `searchable` already "
+                    f"answers to as the alias {spelling!r} -- it returned a "
+                    f"{type(result).__name__}. The guard finds its collision by an exact "
+                    f"byte comparison and the resolver scores {spelling!r} and "
+                    f"'commentable' as ONE word at 1.0, so the two disagree about what "
+                    f"the same word IS"
+                )
+                lines.append(f"  {leg:15s} {door:17s} {'one word':24s} FAILED")
+                continue
+            report(leg, door, built, registry)
+
+        # **The APPROVE door needs its own ordering**: the word is free when the
+        # proposal is made and taken by the time it is approved, and `_write_approved`
+        # re-checks nothing. **Ruling R40 forces every `kind="predicate"` down this
+        # two-step path**, so the guard is structurally unavailable for the one kind the
+        # kill row is about -- and the human review window R40 exists to create is
+        # exactly the window in which the check goes stale.
+        registry = build()
+        pending = registry.propose_type(
+            "commentable", "a capability", EVIDENCE, "user:sd", kind="predicate"
+        )
+        if isinstance(pending, (Refusal, TypeEntry)):
+            unreachable.append(
+                f"{leg} / approve / one word: this backend cannot hold a pending "
+                f"proposal, so there is no window between the proposal and the write"
+            )
+            lines.append(f"  {leg:15s} {'approve':17s} {'one word':24s} NOT REACHABLE")
+        else:
+            built = _alias_only_store(registry)
+            if built is None:
+                registry.approve(pending.id, "user:sd")
+            report(
+                leg, "approve", built, registry,
+                extra=" -- and the word was FREE when the proposal was made",
+            )
+
+        # **A truncated look has not said the word is free.** Rule U's third operand
+        # (*partial is not equal*, the fifth trip), asked of the guard `propose_type`
+        # uses: `_alias_holder` reads `_active_page` and discards its `why`.
+        registry = build()
+        built = _alias_only_store(registry)
+        if built is not None:
+            unreachable.append(f"{leg} / propose (capped) / one word: " + built[len(_NOT_REACHABLE):])
+            lines.append(f"  {leg:15s} {'propose (capped)':17s} {'one word':24s} NOT REACHABLE")
+        else:
+            for i in range(8):
+                _seed(registry, f"filler_{i}", definition="a filler")
+            capped = Registry(
+                DegradedAdapter(registry.adapter, page_cap=3),
+                policies={"default": NamespacePolicy(approval_policy="auto")},
+            )
+            out = capped.propose_type(
+                "commentable", "a capability", EVIDENCE, "user:sd", kind="predicate"
+            )
+            if not isinstance(out, Refusal):
+                problems.append(
+                    f"{leg} / propose (capped) / one word: `propose_type` accepted a word "
+                    f"a live entry already answers to, because the collision scan read a "
+                    f"page the backend had ALREADY SAID was partial and read the absence "
+                    f"as an answer. The full read refuses `alias_collision` "
+                    f"non-overridably. Rule U's third operand -- partial is not equal -- "
+                    f"missing from a guard shipped by the commit whose subject is the "
+                    f"fourth"
+                )
+                lines.append(f"  {leg:15s} {'propose (capped)':17s} {'one word':24s} FAILED")
+            else:
+                lines.append(f"  {leg:15s} {'propose (capped)':17s} {'one word':24s} held")
+
+        # **`reinstate` re-activating a row whose dormant alias a live entry has since
+        # come to answer to** -- the question its sibling `import_types` asks with
+        # `_alias_clash` on the same field, and the one `reinstate` never asks.
+        registry = build()
+        _seed(registry, "searchable", kind="predicate", definition="a capability")
+        _seed(registry, "taggable", kind="predicate", definition="a capability")
+        _seed(registry, "aaa_note", predicates=["searchable", "taggable"])
+        parked = registry.import_types(
+            [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+              "aliases": ["commentable"], "status": "active"}],
+            namespace="default", kind="predicate",
+        )
+        retired = registry.retire("searchable", "parked", retired_by="user:sd", force=True)
+        if "commentable" not in (parked[0].aliases or ()) or isinstance(retired, Refusal):
+            unreachable.append(
+                f"{leg} / reinstate / one word: this backend cannot build the dormant "
+                f"alias the fixture needs"
+            )
+            lines.append(f"  {leg:15s} {'reinstate':17s} {'one word':24s} NOT REACHABLE")
+            continue
+        registry.import_types(
+            [{"name": "taggable", "kind": "predicate", "definition": "a capability",
+              "aliases": ["commentable"], "status": "active"}],
+            namespace="default", kind="predicate",
+        )
+        registry.reinstate("searchable", "unparked", reinstated_by="user:sd")
+        report(leg, "reinstate", None, registry, extra=" -- and its sibling `import_types` asks it")
+    return problems, lines, unreachable
+
+
+# ---------------------------------------------------------------------------
+# Part B, fifth axis -- A SUCCESSOR THAT DOES NOT EXIST YET.
+#
+# **Every identity guard on `retire(successor=)` is nested inside `if successor row is
+# not None`.** Naming a successor before it is registered skips all three -- guard #1
+# (`different_consumer_sets`, transferred by `C9-20`), #2 (`predicate_merge`) and #3
+# (`kind_mismatch`) -- and the word is then created by an ordinary `propose_type` +
+# `approve`. `resolve_type` cashes the redirect at confidence 1.0.
+#
+# It is the sixth trip's own shape applied to the guards the sixth trip's commit shipped:
+# **the guard looked, found nothing to compare, and then the fact arrived.** And the
+# `kind` case is worse than the predicate case, because Q56's default cannot warn about
+# it: a question about a `predicate` is answered with an `entity` at 1.0, which is
+# INTERFACE.md 5.10 refusal #3, non-overridable, walked past entirely.
+#
+# UC3's shape exactly: *"we are replacing `status` with `service_status`; the other
+# agency registers it next sprint"* is an ordinary staged migration in a
+# dozens-of-publishers catalogue.
+
+
+def check_forward_successor() -> tuple[list[str], list[str], list[str]]:
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+    for leg, build, knowable in _legs():
+        for label, later_kind, later_members in (
+            ("successor arrives later", "predicate", ["bbb_memo"]),
+            ("successor arrives, other kind", "entity", []),
+        ):
+            registry = build()
+            _seed(registry, "commentable", kind="predicate", definition="a capability")
+            _seed(registry, "aaa_note", predicates=["commentable"])
+            retired = registry.retire(
+                "commentable", "superseded by a word we have not registered yet",
+                retired_by="user:sd", successor="searchable",
+            )
+            if isinstance(retired, Refusal):
+                lines.append(f"  {leg:15s} {'retire':13s} {label:28s} REFUSED")
+                continue
+            _seed(registry, "searchable", kind=later_kind, definition="a capability")
+            for member in later_members:
+                _seed(registry, member, predicates=["searchable"])
+            resolution = registry.resolve_type(
+                "commentable", ResolveContext(), tier="unspecified"
+            )
+            if (
+                resolution.type is not None
+                and resolution.type.name == "searchable"
+                and resolution.confidence == 1.0
+            ):
+                problems.append(
+                    f"{leg} / retire / {label}: `retire('commentable', "
+                    f"successor='searchable')` was ALLOWED because `searchable` did not "
+                    f"exist yet, so guards #1, #2 and #3 had nothing to compare and none "
+                    f"of them ran. The word was then created by an ordinary proposal, and "
+                    f"`resolve_type('commentable')` now answers a "
+                    f"{resolution.type.kind!r} at confidence 1.0 carrying "
+                    f"{list(resolution.type.warnings)}. An identity guard that could not "
+                    f"be EVALUATED has not said the collapse is safe -- Rule U, at the one "
+                    f"call INTERFACE.md 5.3 calls a guarantee"
+                )
+                lines.append(f"  {leg:15s} {'retire':13s} {label:28s} FAILED")
+            else:
+                lines.append(f"  {leg:15s} {'retire':13s} {label:28s} guarded")
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -1155,6 +1610,28 @@ def main() -> int:
         print(line)
     unreachable.extend(stale_unreachable)
     state_problems.extend(stale_problems)
+
+    for title, run in (
+        (
+            "  and the SPELLING axis -- the guard and the resolver must agree what a word IS:",
+            check_spellings,
+        ),
+        (
+            "  and ONE WORD, ONE LIVE IDENTITY -- C16-06's invariant, at every write door:",
+            check_one_word,
+        ),
+        (
+            "  and a SUCCESSOR THAT DOES NOT EXIST YET -- a guard with nothing to compare:",
+            check_forward_successor,
+        ),
+    ):
+        print()
+        print(title)
+        axis_problems, axis_lines, axis_unreachable = run()
+        for line in axis_lines:
+            print(line)
+        unreachable.extend(axis_unreachable)
+        state_problems.extend(axis_problems)
     if unreachable:
         # Ruling R12, applied to this checker: **a verdict without its coverage line is
         # not a verdict.** A row whose fixture could not be built on a leg is printed and
