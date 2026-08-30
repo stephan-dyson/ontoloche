@@ -83,6 +83,27 @@ Edge:
     attr_schema_version: int | None # the payload schema in force when this was written. §2.5
 ```
 
+**The call that writes one, and it was printed nowhere until row 4c.**
+
+```python
+def add_edge(
+    family: str,
+    src: NodeRef,
+    dst: NodeRef,
+    created_by_actor: str,
+    *,
+    namespace: str = "default",
+    created_by: str = "user",              # INTERFACE §2.1's vocabulary, incl. R17
+    confidence: float | None = None,       # None = nothing scored it. NOT 0.0 — §5.1
+    evidence: list[Evidence] = (),
+    source_version: str | None = None,     # the SOURCE's own version. §5.3
+    model_tier: str | None = None,         # ruling R20
+    attributes: dict | None = None,        # the family's payload, validated per §2.5
+) -> Edge | Refusal: ...
+```
+
+> **This block exists because a gate found it missing** *(row 4c)*. `INTERFACE.md`'s fourteen call signatures have been held against `Registry` by [`check_spec_drift.py`](../tools/check_spec_drift.py) since row 3c and `PACKAGE.md`'s eighteen primitives since row 4b's third adversarial round; **this document's calls were held against nothing at all** — in the one document whose surface is not in `INTERFACE.md` §5. Row 4c extended the gate to `add_edge`, `retract_edge`, `amend_edge` and `neighbors`, and its first run reported *"EDGES `add_edge()`: no signature printed in the spec"*: the **primary write call of the whole document** had a data shape, a behaviour section and no signature, so a reader implementing from the document had to infer the argument list from prose. Exactly the class deviation **D-4b-2** recorded one layer down, found the same way — by a checker rather than by a reader.
+
 **`namespace` on the edge is the *family's* namespace, and the endpoints keep their own.** A `dot` consumer may write an `equivalent_to` edge (family registered in `default`) between a `dpr` type and an `oti_311` type. Three namespaces, one edge, no contradiction — because the field answers *"whose word is `equivalent_to`?"*, not *"whose data is this?"*. **Stated because the obvious alternative — deriving the edge's namespace from its endpoints — has no answer when the endpoints disagree, which in UC3 is the normal case.**
 
 **There is no `direction` field.** `src` and `dst` are ordered; whether the order carries meaning is the family's business (`symmetric`), not the edge's.
