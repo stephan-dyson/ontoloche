@@ -920,17 +920,61 @@ class Registry:
             # Never extent_size=0 -- that reads as "nothing is commentable", which is
             # INTERFACE.md 5.2's named failure.
             return (), None, self.caps.reason("indexes_membership")
-        page = self.adapter.find_types(
-            TypeQuery(namespace=namespace, predicate=predicate, include_retired=include_retired)
-        )
-        if page.known is None or not page.complete:
-            return (
-                tuple(r.name for r in page.records),
-                None,
-                page.why_incomplete or self.caps.reason("indexes_membership"),
+
+        # **Paged to exhaustion, and NOT doing so was the kill row's fifth trip.**
+        # This read one page and returned it. Every guard that compares two extents --
+        # `merge_types`' refusal #2, `retire(successor=)`'s, `_alias_identity_breach`'s --
+        # takes `set(self._extent(...)[0])` and throws element [2] away, so **two
+        # predicates whose FIRST PAGE of members is identical compared equal** and the
+        # registry performed the collapse it refuses non-overridably on the same store
+        # unpaged. [Observed, row 4c round 1] on `DegradedAdapter(page_cap=2,
+        # page_cursor=True)` -- this repository's own honest-paging double -- with true
+        # extents of four members and two: `merge_types` returned a `MergeResult` and
+        # `resolve_type("commentable")` answered `searchable` at confidence 1.0.
+        #
+        # **It is the same defect a third time, on a third operand.** Row 3c fixed
+        # *unknowable is not equal*; row #6 round 2 fixed *empty is not equal*; this is
+        # *PARTIAL is not equal*. The `why` this function already returns is the field
+        # that says the read was partial, and `predicates()` has been surfacing it as
+        # `why_extent_incomplete` the whole time -- the guards discarded the one signal
+        # the read path publishes.
+        names: list[str] = []
+        why: str | None = None
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = self.adapter.find_types(
+                TypeQuery(
+                    namespace=namespace,
+                    predicate=predicate,
+                    include_retired=include_retired,
+                    after=after,
+                )
             )
-        names = tuple(r.name for r in page.records)
-        return names, len(names), None
+            names.extend(r.name for r in page.records)
+            if page.known is None:
+                # A backend that cannot count a page has not told us the page is whole.
+                why = page.why_incomplete or self.caps.reason("indexes_membership")
+                break
+            if not page.complete and page.next_after is None:
+                # Truncated with no way to read the rest -- the residual case.
+                why = page.why_incomplete or self.caps.reason("indexes_membership")
+                break
+            after = page.next_after
+            if after is None:
+                break
+            if after in cursors:
+                # C0-10's question, asked of the extent scan.
+                why = (
+                    "this backend returned a pagination cursor it had already returned, "
+                    "so a predicate's extent cannot be read to exhaustion "
+                    "(PACKAGE.md 3.4 primitive 6)"
+                )
+                break
+            cursors.add(after)
+        if why is not None:
+            return tuple(names), None, why
+        return tuple(names), len(names), None
 
     # =========================================================== 5.3 resolve_type
     def resolve_type(
@@ -1828,7 +1872,21 @@ class Registry:
             attributes=dict(rec.attributes or {}),
             attr_schema_version=schema.version if schema else None,
             provenance=_prov_to_dict(provenance),
-            warnings=tuple(rec.warnings),
+            # **`predicate_requires_review` does not survive a real approval** (row 4c,
+            # round 1). It rode onto every approved predicate's `TypeEntry` and stayed
+            # there forever, so an entry a human had reviewed and an entry that went
+            # live unreviewed read **identically** -- which destroys the one signal
+            # Q50's whole argument rests on ("the fact is made enumerable meanwhile").
+            # A warning that is always present carries no information; this is the
+            # durability warning's own recorded failure (row 3d: *a signal that never
+            # turns off is noise*) in the vocabulary rather than in the transaction
+            # seam. It stays on the `Proposal`, where it means *this needs a human*,
+            # and on the `stores_proposals=False` write below, where it means *nobody
+            # could be asked*.
+            warnings=tuple(
+                w for w in rec.warnings
+                if not (store_proposal and w == "predicate_requires_review")
+            ),
             created_at=rec.proposed_at,
             updated_at=now,
         )
@@ -2049,7 +2107,19 @@ class Registry:
         # the CONSUMER guards, which are about what we could see, never the identity
         # guards, which are about what would become true. Pinned by `C9-18`.
         if successor is not None:
-            succ = self.adapter.get_type(namespace, successor)
+            # `kind=` is passed for the reason `_alias_identity_breach` uses `name_in`:
+            # `get_type` with no kind RAISES on a word registered under two kinds
+            # (PACKAGE.md 4.1, `C0-11`), and an identity guard must never be the thing
+            # that blows up. A successor of ANOTHER kind is then looked up by name and
+            # refused by guard #3 below, which is where that answer belongs.
+            succ = self.adapter.get_type(namespace, successor, kind=rec.kind)
+            if succ is None:
+                cross = self.adapter.find_types(
+                    TypeQuery(
+                        namespace=namespace, name_in=(successor,), include_retired=True
+                    )
+                )
+                succ = next((r for r in cross.records if r.name == successor), None)
             if succ is not None:
                 if succ.kind != rec.kind:
                     return Refusal(
@@ -2066,9 +2136,21 @@ class Registry:
                         },
                     )
                 if rec.kind == "predicate":
-                    knowable = self.caps.indexes_membership
-                    left = set(self._extent(namespace, rec.name, True)[0])
-                    right = set(self._extent(namespace, succ.name, True)[0])
+# **`knowable` folds in the READ's own verdict, not only the capability flag** (row
+                    # 4c round 1, the kill row's FIFTH trip). `_extent` returns a third
+                    # element that says the read was partial -- a paged backend, a page it
+                    # could not count, a cursor it repeated -- and every guard here used to
+                    # discard it, so two predicates whose first page matched compared equal.
+                    # Rule U, a third time: unknown is not equal, EMPTY is not equal, and
+                    # **PARTIAL is not equal** either.
+                    left_names, _, left_why = self._extent(namespace, rec.name, True)
+                    right_names, _, right_why = self._extent(namespace, succ.name, True)
+                    knowable = (
+                        self.caps.indexes_membership
+                        and left_why is None
+                        and right_why is None
+                    )
+                    left, right = set(left_names), set(right_names)
                     if not knowable or not left or left != right:
                         return Refusal(
                             "predicate_merge",
@@ -2585,9 +2667,15 @@ class Registry:
             # most destructive thing this interface can do", and that is exactly this
             # case with a predicate in it. Rule U again, on the other operand: EMPTY is
             # not EQUAL. Pinned by C10-09.
-            knowable = self.caps.indexes_membership
-            left_extent = set(self._extent(namespace, left.name, True)[0])
-            right_extent = set(self._extent(target_ns, right.name, True)[0])
+            # See `retire`'s note: `knowable` folds in the READ's verdict, because
+            # **a PARTIAL extent is not an identical extent** -- the kill row's fifth
+            # trip, and Rule U's third operand after *unknowable* and *empty*.
+            left_names, _, left_why = self._extent(namespace, left.name, True)
+            right_names, _, right_why = self._extent(target_ns, right.name, True)
+            knowable = (
+                self.caps.indexes_membership and left_why is None and right_why is None
+            )
+            left_extent, right_extent = set(left_names), set(right_names)
             demonstrably_same = bool(left_extent) and left_extent == right_extent
             if (
                 not knowable
@@ -2890,7 +2978,7 @@ class Registry:
                 out.append(
                     self._refused_import(
                         namespace, name, edge_breach.detail.get("why", ""),
-                        reason=edge_breach.reason,
+                        reason=edge_breach.reason, kind=row.get("kind", kind),
                     )
                 )
                 continue
@@ -2949,7 +3037,8 @@ class Registry:
                         self._entry(standing, extra_warnings=(f"import_refused:{reason}",))
                         if standing is not None
                         else self._refused_import(
-                            namespace, name, sentence, reason=reason
+                            namespace, name, sentence, reason=reason,
+                            kind=row.get("kind", kind),
                         )
                     )
                     continue
@@ -2958,7 +3047,9 @@ class Registry:
                     out.append(
                         self._entry(standing, extra_warnings=("import_refused:alias_collision",))
                         if standing is not None
-                        else self._refused_import(namespace, name, clash)
+                        else self._refused_import(
+                            namespace, name, clash, kind=row.get("kind", kind)
+                        )
                     )
                     continue
 
@@ -2991,7 +3082,23 @@ class Registry:
                 aliases=tuple(row.get("aliases") or ()),
                 attributes=attributes,
                 provenance=_prov_to_dict(provenance),
-                warnings=(),
+                # **Ruling R40 reaches the import door too** (row 4c, round 1). R40's
+                # justification is that *two of the three kill-row trips began with a
+                # predicate that went live without a human*, and `import_types` put one
+                # live on a FULLY CAPABLE backend with no proposal, no review and no
+                # warning -- while `propose_type` honoured the ruling on both of its
+                # branches. It is the same fact as the `stores_proposals=False` write:
+                # nobody was asked, and saying so is what makes it enumerable.
+                #
+                # It is a warning and not a refusal for INTERFACE.md 2.5's reason: an
+                # import is a vocabulary arriving *already decided* by whoever ran the
+                # source system, and refusing it would make this call reject a customer's
+                # live vocabulary.
+                warnings=(
+                    ("predicate_requires_review",)
+                    if row.get("kind", kind) == "predicate"
+                    else ()
+                ),
                 retire_reason=retire_reason,
                 retired_by=imported_by if status == "retired" else None,
                 retired_at=now if status == "retired" else None,
@@ -3277,6 +3384,13 @@ class Registry:
         that stopped early reports `complete=False` with a `why`, and **never** claims to
         have followed an identity it did not finish resolving.
         """
+        # **Memoised per REFERENCE, not only per (namespace, kind)** (row 4c, round 1).
+        # `_successor_map` was memoised and this was not, so a frontier of 300 instances
+        # of one type issued 300 closures and ~300 `get_type` calls -- linear in NODE
+        # count where deviation D-4c-11 claims the cost is linear in the vocabulary. The
+        # closure is a property of the type, and every instance of a type shares it.
+        if ref in cache:
+            return cache[ref]
         members: list[TypeRef] = [ref]
         seen = {ref.name}
         complete = True
@@ -3329,14 +3443,38 @@ class Registry:
                     members.append(TypeRef(ref.namespace, ref.kind, other))
                     nxt.append(other)
             frontier = nxt
-        return tuple(members), complete, why
+        result = (tuple(members), complete, why)
+        cache[ref] = result
+        return result
+
+    def _identity_forms(self, far: NodeRef, cache: dict) -> tuple[str, ...]:
+        """Every written form of one reached node, so ``nodes`` counts it ONCE. **R38**.
+
+        **The walk de-duplicated the ORIGIN across its identity closure and not the
+        neighbours** (row 4c, first adversarial round), with an explicit argument for the
+        origin -- *reporting `assignee#1` as a neighbour of `owner#1` would say the
+        origin is its own neighbour*. The same statement is false at the far end: after a
+        merge, two edges to two written names of ONE identity reported two distinct
+        `nodes`, while EDGES.md 4.1 calls `nodes` *"distinct endpoints reached"* and 6.1
+        calls it deduplicated.
+
+        Cheap now that `_identity_closure` is memoised per reference: one closure per
+        distinct TYPE, not per node.
+        """
+        written = type_of(far)
+        closure, _, _ = self._identity_closure(written, cache)
+        return tuple(
+            str(InstanceRef(ref, far.id) if isinstance(far, InstanceRef) else ref)
+            for ref in closure
+        )
 
     def _expand_frontier(
         self, nodes: Sequence[NodeRef], cache: dict
-    ) -> tuple[dict, bool, str | None]:
+    ) -> tuple[dict, bool, str | None, tuple[TypeRef, ...]]:
         """One frontier, widened to the identities its members now belong to. **R38**.
 
-        ``{adapter key -> the reference it was reached under, or None}``. R38's rule
+        ``({adapter key -> the reference it was reached under, or None}, followed to the
+        end, why not, the references whose identity spans more than one written name)``. R38's rule
         applies at every hop and not only at the origin: an edge two hops out whose far
         endpoint was merged is orphaned in exactly the same way, and a rule that held for
         the first hop and not the second would be the *"one identity model per call"*
@@ -3351,12 +3489,21 @@ class Registry:
         out: dict = {}
         ok = True
         reason: str | None = None
+        widened: list[TypeRef] = []
         for member in nodes:
             written = type_of(member)
             closure, closed, closure_why = self._identity_closure(written, cache)
             if not closed:
                 ok = False
                 reason = reason or closure_why
+            if len(closure) > 1 and written not in widened:
+                # EDGES.md rule 4.3-14 says the warning fires for *"the origin's type --
+                # **or a frontier node's**"*, and it fired only for the origin (row 4c,
+                # round 1). The chain WAS followed at the frontier and every edge was
+                # correctly marked, but the report never said the identity spanned two
+                # names -- so a caller reading `warnings` to decide whether to look
+                # further was told nothing at exactly the hop `C17-44` exists to cover.
+                widened.append(written)
             for ref in closure:
                 stand_in = (
                     InstanceRef(ref, member.id)
@@ -3366,7 +3513,7 @@ class Registry:
                 key = node_key(stand_in)
                 if key not in out:
                     out[key] = None if ref == written else str(stand_in)
-        return out, ok, reason
+        return out, ok, reason, tuple(widened)
 
     def add_edge(
         self,
@@ -3824,9 +3971,16 @@ class Registry:
         refusal = self._edges_absent({"edge_id": edge_id})
         if refusal is not None:
             return refusal
+        capability_refusal: Refusal | None = None
         for flag in ("stores_edge_events", "stores_events"):
             if not getattr(self.caps, flag):
-                return Refusal(
+                # **Held, not returned, until the edge is known to exist** (row 4c,
+                # round 1). Returning it here answered `cannot_record_override` about an
+                # `edge_id` the store does not hold -- a refusal naming an edge that does
+                # not exist, which is the wrong-reason-for-the-right-outcome shape
+                # D-4c-5 records one call along, and `retract_edge` gets `unknown_edge`
+                # right for the same question.
+                capability_refusal = Refusal(
                     "cannot_record_override",
                     {
                         "why": self.caps.reason(flag),
@@ -3844,11 +3998,14 @@ class Registry:
                         "overridable": False,
                     },
                 )
+                break
 
         with self.adapter.transaction():
             rec = self.adapter.get_edge(edge_id)
             if rec is None:
                 return Refusal("unknown_edge", {"edge_id": edge_id})
+            if capability_refusal is not None:
+                return capability_refusal
             if rec.status != "active":
                 # Read inside the transaction, exactly as `approve`'s `already_decided`
                 # is, and for the same reason: it is what turns a race into an
@@ -3875,12 +4032,26 @@ class Registry:
                 dict(attributes or {}) if "attributes" in changing else payload_before
             )
             schema_version = rec.attr_schema_version
+            # **The payload's warnings are stripped only when the PAYLOAD changes**
+            # (row 4c, round 1). Stripping them unconditionally meant an amendment of
+            # the `confidence` alone deleted `attributes_invalid:...` from a row whose
+            # payload was still invalid and still stored -- so EDGES.md rule 2.5-3's
+            # *"`warn` writes and ENUMERATES"* stopped being true after any unrelated
+            # correction, silently. The durability value is different in the way that
+            # matters: it is a statement about THIS call, so it is always recomputed --
+            # which is exactly the distinction `retract_edge` already draws.
+            payload_changing = "attributes" in changing
             warnings = [
                 w
                 for w in rec.warnings
                 if not w.startswith("not_durable_until_host_commits:")
-                and not w.startswith("attributes_invalid:")
-                and not w.startswith("payload_schema_unregistered:")
+                and not (
+                    payload_changing
+                    and (
+                        w.startswith("attributes_invalid:")
+                        or w.startswith("payload_schema_unregistered:")
+                    )
+                )
             ]
             if "attributes" in changing:
                 if fam is None:
@@ -4171,11 +4342,10 @@ class Registry:
         origin_members, identity_complete, identity_why = self._identity_closure(
             origin_type, identity_cache
         )
-        if len(origin_members) > 1:
-            # The value keeps its name and changes what it MEANS, and 2.8's table is
-            # amended in the same change per ruling R3: it used to say *"edges under the
-            # other name were NOT searched"* and it now says they were, and are marked.
-            warnings.append(f"endpoint_type_merged:{origin_type}")
+        # The `endpoint_type_merged` marker for the ORIGIN is emitted by
+        # `_expand_frontier` below, because the origin is level 1's frontier and one
+        # fact should have one code path -- two that must agree is how row 4b's own
+        # `edge_family_retired` grew a second carrier nobody had written down.
         if not identity_complete:
             # Rule U on the look itself. A closure that stopped early has NOT resolved
             # the identity, so the walk cannot claim to have searched it.
@@ -4219,12 +4389,18 @@ class Registry:
         for level in range(1, depth + 1):
             if not frontier or bound_hit:
                 break
-            expanded, level_closed, level_why = self._expand_frontier(
+            expanded, level_closed, level_why, level_widened = self._expand_frontier(
                 frontier, identity_cache
             )
             if not level_closed:
                 complete = False
                 why = why or level_why
+            for widened_ref in level_widened:
+                # Rule 4.3-14's *"or a frontier node's"*, which fired only for the origin
+                # until row 4c's first adversarial round.
+                marker = f"endpoint_type_merged:{widened_ref}"
+                if marker not in warnings:
+                    warnings.append(marker)
             frontier_keys = tuple(expanded)
             fresh: dict[str, Edge] = {}
             cursor: str | None = None
@@ -4273,7 +4449,23 @@ class Registry:
                     # Rule K. The written reference stays on the edge -- nothing here
                     # edits `src` or `dst` -- and this says which reference the walk
                     # actually found it under when that is not the one it was given.
-                    reached_via[rec.edge_id] = expanded.get(src_k) or expanded.get(dst_k)
+                    # **Membership is tested explicitly, and `or` was a defect** (row
+                    # 4c, round 1). `expanded` maps a WRITTEN reference to `None`, so
+                    # `expanded.get(src_k) or expanded.get(dst_k)` cannot tell *"src is
+                    # absent"* from *"src is present and was written"* -- it fell through
+                    # to the other end's successor name. An edge whose `src` is literally
+                    # the reference the caller walked from came back marked
+                    # `via_successor`, which is the opposite of what Rule K promises.
+                    # A written end wins: if either end is the reference asked for, this
+                    # edge was not reached by following anything.
+                    via: str | None = None
+                    for end in (src_k, dst_k):
+                        if end in expanded:
+                            if expanded[end] is None:
+                                via = None
+                                break
+                            via = via or expanded[end]
+                    reached_via[rec.edge_id] = via
                 if self.max_edges is not None and len(seen) + len(fresh) > self.max_edges:
                     # **Strictly greater, and the `=` in `>=` was a BLOCKING finding**
                     # (row 4b, adversarial round 2). A walk of exactly `max_edges`
@@ -4382,11 +4574,26 @@ class Registry:
         for ne in edges:
             reached: NodeRef | None = None
             for far in (ne.edge.src, ne.edge.dst):
-                if str(far) not in seen_nodes:
-                    seen_nodes.add(str(far))
-                    nodes.append(far)
-                    if reached is None:
-                        reached = far
+                forms = self._identity_forms(far, identity_cache)
+                if len(forms) > 1:
+                    # **One rule, not two: any reference whose identity this walk
+                    # RESOLVED and found to span more than one written name is marked**
+                    # (row 4c, round 1). The marker fired for the origin, then for
+                    # frontier members -- and a node reached at the FINAL depth is never
+                    # a frontier, so whether the same fact was reported depended on the
+                    # depth the caller happened to ask for. It is reported wherever the
+                    # walk resolved the identity, which is exactly where it has the
+                    # evidence; the list is deduplicated and bounded by distinct TYPES,
+                    # not by nodes.
+                    marker = f"endpoint_type_merged:{type_of(far)}"
+                    if marker not in warnings:
+                        warnings.append(marker)
+                if any(form in seen_nodes for form in forms):
+                    continue
+                seen_nodes.update(forms)
+                nodes.append(far)
+                if reached is None:
+                    reached = far
             resolved.append(replace(ne, reached=reached))
         edges = tuple(resolved)
         return NeighborReport(
@@ -4451,6 +4658,21 @@ class Registry:
             #
             # Its `symmetric` is unknown too, so `direction` cannot be applied to it --
             # Rule U -- and that is the second thing the warning says.
+            #
+            # **It still has to be INCIDENT, and returning `True` unconditionally here
+            # was a defect** (row 4c, round 1). This branch made the docstring's *"the
+            # registry narrows, always"* false for the one family shape no test reached:
+            # against an adapter that answers wider than it was asked, edges touching
+            # neither the origin nor anything it reached came back at `at_depth=1` under
+            # `complete=True`, and their far ends were reported in `nodes`. `C17-31`
+            # pins the narrowing with `edge_families=[...]` named, which sets
+            # `searched_keys` and makes this branch unreachable from it -- *"caught
+            # incidentally is a weaker claim than pinned"*, one branch along, in the id
+            # whose docstring says so.
+            src_unreg = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
+            dst_unreg = (rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id)
+            if src_unreg not in frontier_keys and dst_unreg not in frontier_keys:
+                return False, None
             return True, f"edge_family_unregistered:{rec.namespace}:{rec.family}"
         src_k = (rec.src_namespace, rec.src_kind, rec.src_name, rec.src_instance_id)
         dst_k = (rec.dst_namespace, rec.dst_kind, rec.dst_name, rec.dst_instance_id)
@@ -4571,31 +4793,60 @@ class Registry:
         and acknowledgement override what could be SEEN, never what would become TRUE.
         """
         for alias in aliases:
-            other = self.adapter.get_type(namespace, alias)
-            if other is None or (other.name == name and other.kind == kind):
-                continue
-            if other.kind != kind:
+            # **`name_in` rather than `get_type(namespace, alias)`** (row 4c, round 1).
+            # PACKAGE.md 4.1 blesses one word under two kinds and `C0-11` pins that
+            # `get_type` with no `kind` RAISES there -- so a Foundry dump whose alias
+            # names a two-kind word blew `AmbiguousKind` out of this guard and aborted
+            # the whole batch with earlier rows already committed, in a call whose
+            # contract is *"an import cannot return a Refusal -- it returns entries"*.
+            # The guard's question is per-kind anyway, and a query answers it without
+            # asking the adapter to choose.
+            page = self.adapter.find_types(
+                TypeQuery(namespace=namespace, name_in=(alias,), include_retired=True)
+            )
+            others = [rec for rec in page.records if rec.name == alias]
+            if not others and not page.complete:
+                # Rule U on the look itself: it has not said the word is free, only that
+                # it could not say. An identity guard that cannot look refuses.
                 return (
-                    "kind_mismatch",
-                    f"importing {alias!r} as an alias of {namespace}:{kind}:{name} would "
-                    f"make `resolve_type({alias!r})` answer at confidence 1.0 with an "
-                    f"entry of kind {other.kind!r} -- a question about one kind answered "
-                    f"with an entry of another (INTERFACE.md 5.10 refusal #3)",
+                    "predicate_merge" if kind == "predicate" else "kind_mismatch",
+                    f"whether {alias!r} already names an entry could not be determined, "
+                    f"so importing it as an alias of {namespace}:{kind}:{name} cannot be "
+                    f"shown to be safe: "
+                    + (page.why_incomplete or "the backend could not answer the query"),
                 )
-            if kind == "predicate" or other.kind == "predicate":
-                knowable = self.caps.indexes_membership
-                left = set(self._extent(namespace, other.name, True)[0])
-                right = set(self._extent(namespace, name, True)[0])
-                if not knowable or not left or left != right:
+            for other in others:
+                if other.name == name and other.kind == kind:
+                    continue
+                if other.kind != kind:
                     return (
-                        "predicate_merge",
-                        f"importing {alias!r} as an alias of {namespace}:predicate:"
-                        f"{name} would make `resolve_type({alias!r})` answer at "
-                        f"confidence 1.0 with {name!r} -- the same claim `merge_types` "
-                        f"refuses non-overridably unless the two extents are non-empty "
-                        f"and identical (INTERFACE.md 5.10 refusal #2, the ROADMAP.md "
-                        f"kill row)",
+                        "kind_mismatch",
+                        f"importing {alias!r} as an alias of {namespace}:{kind}:{name} "
+                        f"would make `resolve_type({alias!r})` answer at confidence 1.0 "
+                        f"with an entry of kind {other.kind!r} -- a question about one "
+                        f"kind answered with an entry of another (INTERFACE.md 5.10 "
+                        f"refusal #3)",
                     )
+                if kind == "predicate" or other.kind == "predicate":
+                    # See `retire`'s note: a PARTIAL extent is not an identical extent.
+                    left_names, _, left_why = self._extent(namespace, other.name, True)
+                    right_names, _, right_why = self._extent(namespace, name, True)
+                    knowable = (
+                        self.caps.indexes_membership
+                        and left_why is None
+                        and right_why is None
+                    )
+                    left, right = set(left_names), set(right_names)
+                    if not knowable or not left or left != right:
+                        return (
+                            "predicate_merge",
+                            f"importing {alias!r} as an alias of {namespace}:predicate:"
+                            f"{name} would make `resolve_type({alias!r})` answer at "
+                            f"confidence 1.0 with {name!r} -- the same claim "
+                            f"`merge_types` refuses non-overridably unless the two "
+                            f"extents are non-empty and identical (INTERFACE.md 5.10 "
+                            f"refusal #2, the ROADMAP.md kill row)",
+                        )
         return None
 
     def _alias_clash(
@@ -4614,7 +4865,13 @@ class Registry:
         return None
 
     def _refused_import(
-        self, namespace: str, name: str, clash: str, *, reason: str = "alias_collision"
+        self,
+        namespace: str,
+        name: str,
+        clash: str,
+        *,
+        reason: str = "alias_collision",
+        kind: str = "entity",
     ) -> TypeEntry:
         """A row an import declined to write, returned as a shape a caller can read.
 
@@ -4624,7 +4881,11 @@ class Registry:
         now = self._now()
         return TypeEntry(
             name=name,
-            kind="entity",
+            # **The ROW's kind, not `"entity"`** (row 4c, round 1). It was hard-coded, so
+            # a refused `kind="predicate"` import came back shaped as an entity while its
+            # own `import_refused:predicate_merge` reason said otherwise -- disagreeing
+            # about `kind` in the one field INTERFACE.md 2.3's whole argument rests on.
+            kind=kind,
             namespace=namespace,
             definition=(
                 f"not imported: {clash!r} already answers to this word"

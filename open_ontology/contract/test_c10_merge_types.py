@@ -1,4 +1,4 @@
-"""C10 -- ``merge_types``, and the door its operands come through (10). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the door its operands come through (12). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -354,3 +354,184 @@ def test_c10_10_a_predicate_proposal_never_takes_the_auto_path(adapter, make_reg
         "R40 narrows `propose_type` for predicates and for nothing else"
     )
     assert "predicate_requires_review" not in entity.warnings
+
+
+@pytest.mark.requires_capability("stores_events")
+def test_c10_11_a_partial_extent_is_not_an_identical_extent(adapter, make_registry):
+    """**`ROADMAP.md`'s kill row, FIFTH trip.** Row 4c, first adversarial round.
+
+    Rule U's third operand. Row 3c fixed *unknowable is not equal*; row #6's second
+    round fixed *empty is not equal*; nobody had fixed **partial is not equal**.
+
+    `_extent` read **one page** and returned it, and every guard that compares two
+    extents -- `merge_types`' refusal #2, `retire(successor=)`'s, and row 4c's own
+    `_alias_identity_breach` -- took `set(self._extent(...)[0])` and **threw away the
+    third element**, which is the `why` saying the read was partial. So two predicates
+    whose FIRST PAGE of members happened to match compared equal, and all three callers
+    performed the collapse the same store refuses non-overridably when it is not paging.
+
+    **[Observed]** on `DegradedAdapter(page_cap=2, page_cursor=True)` -- this
+    repository's own honest-paging double, added by row 3e for a reason it states as
+    *"PACKAGE.md 3.3 permits it and UC3's scale produces it"* -- with true extents of
+    three members and two: `merge_types` returned a `MergeResult` and
+    `resolve_type("commentable")` answered `searchable` at confidence 1.0.
+
+    **Two backends, two defences, and one does not stand in for the other:**
+
+    * an honest **PAGE** (a cursor to the rest) is answered by `_extent` looping to
+      exhaustion -- there is a rest, so read it;
+    * a **TRUNCATED** answer (capped, no cursor) has no rest to read, so the only
+      defence is the guards folding `_extent`'s own `why` into `knowable`.
+
+    The read path has published that `why` as `PredicateEntry.why_extent_incomplete`
+    the whole time. The guards discarded the one signal it emits.
+    """
+    for label, kwargs in (
+        ("paged", {"page_cap": 2, "page_cursor": True}),
+        ("truncated", {"page_cap": 2}),
+    ):
+        registry = make_registry(adapter, approval_policy="auto")
+        if not registry.caps.indexes_membership:
+            pytest.skip(
+                "PACKAGE.md 3.2 -- this backend declares indexes_membership=False, so "
+                "every extent is already unknowable and `C9-08` holds that half. This "
+                "test needs a computable extent as scaffolding, not as its subject"
+            )
+        seed(registry, "commentable", kind="predicate", definition="a capability")
+        seed(registry, "searchable", kind="predicate", definition="a capability")
+        # The first page of each extent MATCHES; the extents do not.
+        for member in ("aaa_doc", "bbb_note"):
+            seed(registry, member, predicates=["commentable", "searchable"])
+        seed(registry, "zzz_draft", predicates=["commentable"])
+
+        blind = make_registry(DegradedAdapter(adapter, **kwargs), approval_policy="auto")
+        refusal = blind.merge_types(
+            "commentable", "searchable", "they look alike", merged_by="user:sd",
+            acknowledge=[
+                "definitions_diverge", "no_consumer_evidence", "retired_operand",
+                "predicate_merge", "kind_mismatch",
+            ],
+        )
+        assert isinstance(refusal, Refusal), (
+            f"[{label}] merge_types collapsed two predicates whose extents differ, "
+            f"because only their first page was compared -- the kill row"
+        )
+        assert refusal.reason == "predicate_merge", refusal
+        assert refusal.detail["overridable"] is False
+
+        retired = blind.retire(
+            "commentable", "folded", retired_by="user:sd", successor="searchable"
+        )
+        assert isinstance(retired, Refusal) and retired.reason == "predicate_merge", (
+            f"[{label}] retire(successor=) reaches the identical collapse (C9-18), so it "
+            f"reads the identical extents and must reach the identical answer"
+        )
+
+        entry = blind.import_types(
+            [
+                {
+                    "name": "searchable",
+                    "kind": "predicate",
+                    "definition": "a capability",
+                    "aliases": ["commentable"],
+                    "status": "active",
+                }
+            ],
+            namespace="default",
+            kind="predicate",
+        )[0]
+        assert "import_refused:predicate_merge" in entry.warnings, (
+            f"[{label}] and so does the alias door (C12-08)"
+        )
+
+    # And the guard is still NARROWED rather than banned on a paging backend: two
+    # predicates whose extents genuinely match, read across two pages, still merge.
+    ok_registry = make_registry(adapter, approval_policy="auto")
+    seed(ok_registry, "taggable", kind="predicate", definition="a capability")
+    seed(ok_registry, "labelable", kind="predicate", definition="a capability")
+    for member in ("m_one", "m_two", "m_three"):
+        seed(ok_registry, member, predicates=["taggable", "labelable"])
+    paging = make_registry(
+        DegradedAdapter(adapter, page_cap=2, page_cursor=True), approval_policy="auto"
+    )
+    merged = paging.merge_types(
+        "taggable", "labelable", "genuinely one capability", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), (
+        "paging to exhaustion means the extents ARE knowable, so a real duplicate still "
+        "merges -- C10-09 narrowed this guard and did not close the operation"
+    )
+
+
+def test_c10_12_predicate_requires_review_marks_the_unreviewed_and_only_them(
+    adapter, make_registry
+):
+    """Ruling **R40**'s warning, across the whole lifecycle. Row 4c, first round.
+
+    The value's job is to make *"a predicate went live without the review R40
+    requires"* **enumerable** -- that is the entire argument `4C-RUN.md`'s Q50 asks the
+    supervisor to rule on. A warning that is present on every predicate carries no
+    information at all, which is the durability warning's own recorded failure (row 3d:
+    *a signal that never turns off is noise*) moved into the vocabulary.
+
+    **[Observed, row 4c round 1]** it rode onto every approved predicate's `TypeEntry`
+    and stayed there, so a predicate a human had reviewed and one that went live
+    unreviewed read **identically**. And `import_types` -- the door row 4c's own checker
+    found unguarded on the other identity axis -- put a live capability predicate in on
+    a **fully capable** backend with no proposal, no review and no warning at all.
+
+    Four states, and the middle two are the ones that were wrong:
+
+    | how it got there | reviewed? | carries the warning |
+    |---|---|---|
+    | `propose_type` on a proposal-storing backend | not yet | **yes**, on the `Proposal` |
+    | `approve` by a human | yes | **no** |
+    | `propose_type` with `stores_proposals=False` | nobody could be asked | **yes** |
+    | `import_types` | already decided elsewhere | **yes** |
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    proposed = registry.propose_type(
+        "commentable", "things a user may comment on", [], "user:sd", kind="predicate"
+    )
+    if registry.caps.stores_proposals:
+        assert "predicate_requires_review" in proposed.warnings
+        approved = registry.approve(proposed.id, "user:sd")
+        assert isinstance(approved, TypeEntry), approved
+        assert "predicate_requires_review" not in approved.warnings, (
+            "a human reviewed it -- an entry that keeps saying it needs review cannot be "
+            "told apart from one that never got any, which is the whole signal"
+        )
+    else:
+        assert isinstance(proposed, TypeEntry)
+        assert "predicate_requires_review" in proposed.warnings, (
+            "PACKAGE.md 7.3 B4 -- there is nowhere to hold it for review, and that fact "
+            "is what the warning makes enumerable"
+        )
+
+    imported = registry.import_types(
+        [
+            {
+                "name": "annotatable",
+                "kind": "predicate",
+                "definition": "things a user may annotate",
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    )[0]
+    assert imported.status == "active"
+    assert "predicate_requires_review" in imported.warnings, (
+        "R40's justification is that two of the three kill-row trips began with a "
+        "predicate that went live without a human. `propose_type` honoured that on both "
+        "branches and the import door did not, on a fully capable backend"
+    )
+
+    entity = registry.import_types(
+        [{"name": "flight", "definition": "a scheduled movement", "status": "active"}],
+        namespace="default",
+    )[0]
+    assert "predicate_requires_review" not in entity.warnings, (
+        "R40 narrows one kind and nothing else"
+    )
