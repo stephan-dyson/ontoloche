@@ -10,23 +10,23 @@
 
 | | before (row 4c) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 226 | **232** |
-| sync suite, one run, three legs | `549 passed, 148 skipped` | **`561 passed, 154 skipped`** |
-| async suite, one run, three legs | `584 passed, 148 skipped` | **`596 passed, 154 skipped`** |
-| `warnings` values ([`INTERFACE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) §5.4) | 29 | **31** — `identity_stale`, `declared_predicate_merged` |
-| `Refusal.reason` values (§5.12) | 28 | **28** — and that is the row's central result. Q56's cheap half REPORTS; refusing is the founder's |
-| mechanical gates in the suite | 5 | **5** — and one of them gained a whole second axis |
-| `check_merge_guard.py` axes | 1 (extent states) | **2** (+ **staleness**, five callers × three legs × three doubles) |
-| spec sections under R31's rule gate | 5, all in `EDGES.md` | **9** — `INTERFACE.md` §5.2.1, §5.3.2, §5.4.1, §5.6.1 |
-| `ROADMAP.md` kill-row trips | 6 | *(the loop has not run yet)* |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 226 | **249** |
+| sync suite, one run, three legs | `549 passed, 148 skipped` | **`596 passed, 170 skipped`** |
+| async suite, one run, three legs | `584 passed, 148 skipped` | **`631 passed, 170 skipped`** |
+| `warnings` values ([`INTERFACE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/INTERFACE.md) §5.4) | 29 | **32** — `identity_stale`, `declared_predicate_merged`, `alias_check_incomplete` |
+| `Refusal.reason` values (§5.12) | 28 | **30** — `successor_unregistered`, `successor_is_self`. *Q56's cheap half still only REPORTS; both new refusals are about a guard that could not be **evaluated**, which is a different question from the one the founder holds* |
+| mechanical gates in the suite | 5 | **5** — and one of them gained **five** new axes |
+| `check_merge_guard.py` axes | 1 (extent states) | **6** — + staleness, spelling, one-word-one-identity, forward-declared successor, and the NAME door |
+| spec sections under R31's rule gate | 5, all in `EDGES.md` | **9** — `INTERFACE.md` §5.2.1, §5.3.2, §5.4.1, §5.6.1 (**21** rules, 20 pinned, 1 tagged) |
+| `ROADMAP.md` kill-row trips | 6 | **8** — the seventh and eighth both found by this row's loop, both one defect |
 
-**The floor held on every commit.** The brief's floor was 226 ids, sync `549 passed`, async `584 passed`; both suites ran on all three legs before each of the six commits landed, and the count moved 226 → 228 → 230 → 232.
+**The floor held on every commit.** The brief's floor was 226 ids, sync `549 passed`, async `584 passed`; both suites ran on all three legs before each of the six commits landed, and the count moved 226 → 228 → 230 → 232 → 238 → 245 → **249**.
 
 **The one deliberate exception, and it is on the record.** The commit that landed item 1 left the suite **RED** — `check_merge_guard.py` runs inside the contract suite, and its new axis reported 8 problems against code that had not been changed yet. That is the brief's order (*the gate lands before the change it must see*) and the commit message says so in its second paragraph. Item 2 turned it green.
 
 ---
 
-## 2. Item 1 — the staleness axis, watched FAILING against today's code
+## 2. Item 1 — the staleness axis, watched FAILING before the change it must see
 
 The brief's order is that **the gate lands before the change it must see**, and the fifth trip's lesson is why: *a checker built in the same hour as the fix, by the same hand, shares its blind spot.* So [`check_merge_guard.py`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/tools/check_merge_guard.py) gained its staleness axis **first**, with the fixture written from the sixth trip's own record ([`2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md), Door 1) rather than from the fix that follows it.
 
@@ -43,7 +43,9 @@ Three members before the merge and a fourth after it is deliberate: `DegradedAda
 
 **It asks `resolve_type` as well as the four collapsing callers**, because the read is where a stale claim is cashed — and `reinstate`, which `KNOWN_CALLERS` records as a collapsing caller (a verdict a reviewer had to correct from `False` during the sixth trip), had no probe at all before this row.
 
-### 2.2 The run, on today's code — **8 problems, and every one of them is the read**
+### 2.2 The run, against the code as it stood at that commit — **8 problems, and every one of them is the read**
+
+*(A historical record of the gate landing red. `check_merge_guard.py` today has six axes and exits 0; §6 is what happened in between.)*
 
 `py docs/tools/check_merge_guard.py` with `OO_POSTGRES_DSN` set, three legs:
 
@@ -106,9 +108,9 @@ The first cut filed all three degraded doubles as *unknowable*, and asserted tha
 
 ---
 
-## 2b. Five existing ids had to change, and this is the notice the brief requires
+## 2b. Which existing ids had to change, and this is the notice the brief requires
 
-**The brief's rule:** *"Every existing kill-row id must still pass unchanged; if one must change, say why in `4D-RUN.md` before changing it."* No kill-row id changed. **Five ordinary ids did**, all for one reason, and this section was written before any of them was touched.
+**The brief's rule:** *"Every existing kill-row id must still pass unchanged; if one must change, say why in `4D-RUN.md` before changing it."* No kill-row id changed. **Three ordinary ids did** — `C3-10`, `C4-08`, `C8-02` — all for one reason, and this section was written before any of them was touched. *(It said **five** until row 4d's third round checked: `C9-15` and `C16-02` were never edited. `C9-15` failed on the `C3-13` cause below, and `C16-02` changed only through the shared module-level fixture it borrows. The commit message at `843af71` repeats the same error — it says five and lists four — and is corrected here rather than rewritten there.)*
 
 `retire(successor=)` now refuses **`successor_unregistered`** when the successor names no entry (round 1, lens A's BLOCKING 1 — every identity guard on that call is nested inside *"if the successor row exists"*, so naming a successor before it is registered skipped all three, and `resolve_type` then cashed the redirect at 1.0 as soon as the word arrived). Five fixtures name a successor they never create:
 
@@ -117,10 +119,12 @@ The first cut filed all three degraded doubles as *unknowable*, and asserted tha
 | `C3-10` | `retire("watch", successor="capture")`, `capture` never seeded | **Its subject is preserved exactly and gets sharper.** The test asserts a retired name is *named in the resolution rather than silently omitted*, with its `retire_reason` and its successor in `reason` — and it happened to reach *"the successor is not live"* by never creating it. It now seeds `capture`, retires `watch` toward it, and then retires `capture` too. Same five assertions, same subject, and the state is now one a governed vocabulary can actually be in |
 | `C4-08` | the same | seeds `capture`. The subject — *a retired name is not silently reusable* — is untouched: `propose_type` still returns the tombstone |
 | `C8-02` | the same | seeds `capture`. The subject is *history is append-only*; the successor is scaffolding |
-| `C16-02` | the same | seeds `capture`. The subject is the whole-store invariants after a merge |
-| `C9-15` | reached it through the `_support.seed` helper | already seeded `capture`; it failed on the **`C3-13` cause** below, not this one |
+| `C16-02` | the same, *through the shared `exercised` fixture* | **the test body is UNCHANGED.** The fixture it borrows seeds `recording` — not `capture`, because `C16-03` seeds `capture` itself and asserts that doing so writes new events |
+| `C9-15` | — | **UNCHANGED.** It already seeded `capture`, and it failed on the **`C3-13` cause** below rather than this one |
 
 **And `C3-13` failed for a different reason, which changed the fix rather than the test.** Its whole subject is a backend that caps an unlimited query, and the first cut of lens A's BLOCKING 5 made `propose_type` **refuse** when the collision scan could not finish. That does not narrow the guard, it **bans the call on every paging backend** — at exactly the scale (UC3: one namespace, dozens of agencies, thousands of active types) where paging happens. `C10-09`'s own lesson, one call along. So the partial look **warns** (`alias_check_incomplete:<why>`) rather than refusing, at all four doors, which is §5.4's own rule — this call refuses two things and warns about everything else — and the shape `reinstate_alias_check_unavailable` already had for the same question one call away. **`C3-13` is unchanged.**
+
+**Three more moved in rounds 2 and 3, each with its reason in the test:** `C17-45` gained `force=True` on the second leg of the cycle it deliberately builds, because `retire(successor=)` now refuses a **retired** successor (`C9-25`) — and `stores_events`, because a forced retirement needs somewhere to record the override; and `C3-14`'s near-miss assertion was found by mutation to sit inside a conditional that never runs, so §5.3.2-5 is now honestly `prose-only:` rather than falsely pinned.
 
 ---
 
@@ -137,18 +141,19 @@ R54 says *"the fix is one line in `_extent`"*. It is not, and the reason it is n
 | **D-4d-5** | *"a new extent-pair state"* in Part B | It is a **second axis** with its own fixture and its own probes, not a sixth row of `STATES`. Every state Part B held is a state two extents are in *when one guard looks*; staleness is a state **the store** is in, and posing it takes two individually legal merges and one new type. It also probes `resolve_type` — the only one of the five that writes nothing — and `reinstate`, which `KNOWN_CALLERS` has recorded as a collapsing caller since the sixth trip corrected that verdict and which had **no probe at all** |
 | **D-4d-6** | — | The stale axis's own first cut filed all three degraded doubles as *unknowable* and asserted `retire(successor=)` must be REFUSED on each. **On `partial` that is the wrong answer**: an honest page carries a cursor, `_extent` loops to exhaustion (the fifth trip's fix), the extents are read in full and genuinely agree. Corrected, with the reason written into the fixture |
 | **D-4d-7** | — | `predicates(of=…)` now walks an identity closure **per predicate row**, and only when `of=` was given. The closure is one paged read of a namespace's retired rows of that kind, memoised per call; `predicates()` already reads events per row, so this is not a new order of cost. Raised as **Q62** rather than optimised |
+| **D-4d-9** | — | **The Postgres leg leaked a schema per fixture and dropped none.** `check_merge_guard.py` builds a fresh store for every (caller × state × leg), and on Postgres that is a fresh **schema**; six axes deep it is ~50 a run. The database reached **19,220** `oo_*` schemas, and the catalogue bloat **segfaulted the backend three times** during round 1, each followed by ~4.5 minutes of crash recovery — which is also why two suite runs in this row failed with *"the database system is in recovery mode"*. **Fixed at the source rather than by raising `max_locks_per_transaction`:** the checker drops every schema it created in a `finally`, and `C0-08`'s race fixture — which built its own schema and dropped nothing, on every run of the suite since row 3c — registers a finalizer so it goes **even when the test fails**. `DROP DATABASE` / `CREATE DATABASE` cleared the backlog; a full three-leg run now leaves **zero**, asserted after every run in this row since. *(The supervisor's own count at 03:55 was 18,694; mine two hours later was 19,220. Both are true readings of a number that was still growing.)* |
 | **D-4d-8** | R55 | The warning's alias half is a scan of the namespace's **active** rows, so a page the backend could not finish leaves the warning **absent**. Tagged `prose-only:` at §5.4.1-5 with the reason: an absent warning asserts nothing, so there is nothing observable to pin — and the rule is on the record so a later row cannot read the absence as a guarantee |
 
 ---
 
 ## 4. The rule → id mapping (standing constraint 8)
 
-**`check_spec_drift.py` now reads `INTERFACE.md` as well as `EDGES.md`**, and row 4d is the first row to change rules in that document since ruling R31 landed. Eighteen numbered rules, **seventeen pinned by a contract id and one tagged**:
+**`check_spec_drift.py` now reads `INTERFACE.md` as well as `EDGES.md`**, and row 4d is the first row to change rules in that document since ruling R31 landed. **Twenty-one** numbered rules, **twenty pinned by a contract id and one tagged**:
 
 | section | rules | ids |
 |---|---|---|
-| §5.2.1 — the identity reading (**R54**) | 4 | `C2-06`; and `C10-09`/`C10-13`/`C10-14` for 5.2.1-4, the rule that the guards keep the written word |
-| §5.3.2 — staleness at the read (**Q56 default**) | 6 | `C3-14`, `C10-14` |
+| §5.2.1 — the identity reading (**R54**) | 4 | `C2-06`; and `C10-13`/`C10-14` for 5.2.1-4 — **not `C10-09`**, which round 3 proved by mutation still passes when the default is flipped |
+| §5.3.2 — staleness at the read (**Q56 default**) | 8 | `C3-14`, `C10-14`, `C10-16`; 5.3.2-5 `prose-only:` |
 | §5.4.1 — the declared-predicate warning (**R55**) | 5 | `C4-11`, `C12-11`; 5.4.1-5 `prose-only:` |
 | §5.6.1 — the identity filter (**R54**) | 4 | `C6-08` |
 
@@ -160,34 +165,73 @@ R54 says *"the fix is one line in `_extent`"*. It is not, and the reason it is n
 
 ### 4.1 The six kill-row ids, unchanged
 
-R54 changes what a read means in the expression **all six kill-row trips run through**, so the row's own test of itself is that nothing pinning a trip had to move. **None was edited:** `C9-08` (unknowable), `C10-09` (empty), `C10-11` (partial / truncated), `C10-13` (the sixth trip's four doors), `C9-18`…`C9-21`, `C12-08`/`C12-09`. `check_merge_guard.py` is the mechanical form of the same claim and exits 0 on three legs, three doubles and both axes.
+R54 changes what a read means in the expression **all six kill-row trips run through**, so the row's own test of itself is that nothing pinning a trip had to move. **None was edited:** `C9-08` (unknowable), `C10-09` (empty), `C10-11` (partial / truncated), `C10-13` (the sixth trip's four doors), `C9-18`…`C9-21`, `C12-08`/`C12-09`. `check_merge_guard.py` is the mechanical form of the same claim and exits 0 on three legs, three doubles and **all six axes**.
 
 ---
 
-## 5. What the build taught
+## 6. The adversarial loop — three rounds, six lenses, **thirty-one findings**, and it did NOT converge
 
-**1. A ruling can say "one line" and be right about the intent and wrong about the shape — and the difference is a reopened kill row.** R54's one line, written literally, makes every identity guard compare a merge to itself. Nobody reading the ruling would have caught it; the ruling is correct about what the *reads* should do. What found it was the order the ruling itself imposed: **the gate landed before the change it must see**, so the question *"what does this do to every guard?"* had a mechanical answer before the change was written rather than an argument after it.
+**Stop rule (standing constraint 7, and the brief's):** two consecutive clean rounds, or three rounds plus an honest convergence note. **Three rounds ran; none was clean; this is the note.**
 
-**2. The staleness axis found its own defect on its first run, and that is the fifth trip's lesson working.** The first cut asserted the wrong answer for one of three doubles. It was found by *running* the checker, not by reviewing it — which is exactly what §6.4 of `4C-RUN.md` says about checkers built in the same hour, by the same hand, as the thing they check. The correction is written into the fixture rather than quietly applied.
+| round | lenses | BLOCKING | MAJOR | MINOR | ids after |
+|---|---|---|---|---|---|
+| 1 | attack 4c round 3's five guard changes · reach the kill row through this row's changes | **7** | 5 | 2 | 238 |
+| 2 | attack round 1's own fixes · integrate the row as a consumer, and measure | **4** | 4 | 4 | 245 |
+| 3 | reach the kill row · does the writing tell the truth about the code | **5** | 6 | 11 | 249 |
 
-**3. Part A caught the row's own new function within a minute of it being written.** `_declared_predicate_moved` READS a `successor` and scans `aliases`; it writes nothing. The checker does not care — its rule is deliberately over-broad, *any mention of an identity field's name anywhere in a function* — so the suite went red until a person wrote down what the function means. **The false positive cost one paragraph in `KNOWN_CALLERS`; a false negative costs the kill row**, and the sixth trip is the record that a wrong judgement written down is one a reviewer can disprove.
+**The kill row tripped twice more — a SEVENTH and an EIGHTH time — and both are one defect.**
 
-**4. Two of this row's three ruling-driven changes were the same fact at two ends of one seam.** R54 makes a declaration under an absorbed word **visible** (the survivor's extent holds it); R55 makes it **announced** (the declarer is told which identity it landed in). Neither is sufficient: a fact you can only discover by querying afterwards is not a fact reported to the person who could still act on it, and a warning at the door does nothing for the consumer reading an extent a year later. They were ruled together and they belong together.
+- **Seventh** (round 1): every alias guard found its collision by an exact **byte** comparison while the shipped resolver compared **normalised** words and rated an exact match 1.0. `aliases: ["Commentable"]` was written where `["commentable"]` is refused non-overridably, and `resolve_type("commentable")` then answered at 1.0 over differing extents. Fixed by publishing **one** notion of *the same word* beside the resolver, so the registry cannot disagree with the scorer that delivers its 1.0.
+- **Eighth** (round 3): the *same disagreement*, in the one door the seventh trip's fix did not reach — §5.4's *"a retired name is not reusable"*, which was still `get_type`'s byte match, and round 2's keyed guard scans **active** rows only. Four ordinary calls, no alias, no import, no merge.
 
-**5. The default in `list_types` is the call, and a fix that skips the default fixes nothing.** `namespace=None` is the ordinary shape, and the first cut of R54 handled `namespace="default"` correctly and fell back to the written word for the default — a change that passed its own new test, because the test named a namespace. Caught by a throwaway probe that used the call the way a caller would.
+> **That pairing is the most useful thing this loop produced, and it is not flattering.** A fix that publishes a shared key is only as good as its application, and this row shipped the key and missed a caller — **the sixth trip's own diagnosis (*a guard written for one call, over a fact more than one call can change*) applied to a fix rather than to a guard.** Full records, for countersignature: [`2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md).
 
-**6. A closed vocabulary makes you say what a value is FOR, and that is where the design argument happens.** `identity_stale` had to be written into §5.4's table with its carrier, its cause and its ids before any code could emit it — and writing *"a warning, with the confidence untouched at 1.0, because refusing changes what this registry declines to serve and that is the founder's"* is the whole of Q56's split, in one table row, where the next reader will find it.
+### 6.1 What the loop established that no gate in this repository measures
+
+1. **Every round found defects in the previous round's fixes, and round 2's were the worst.** Round 2 found **five** defects inside round 1's fixes — including one where a one-row probe was replaced by an unfiltered namespace scan whose partial page fed a **non-overridable refusal**, which *banned `import_types` on every paging backend*. That is verbatim the lesson round 1 had learned one call earlier and written into its own commit message. Round 3 then found the same class a third time, in round 3's own first cut, inside one suite run.
+2. **`check_merge_guard.py` has now exited 0 through trips five, six, seven and eight** — paging, staleness, the alphabet in `aliases`, the alphabet in `name`. Each time the reason was identical: *a checker only asks the questions its fixtures can pose*. It gained an axis after each, and it is at **six** now. This is the fourth consecutive row-level restatement that constraint 7's loop and constraint 8's gate are both load-bearing and neither substitutes for the other.
+3. **For the first time, the loop found defects OUTSIDE what the row touched.** `4C-RUN.md` §6.6 recorded that across three rounds *"not one finding was in code this row did not touch"*. Five of round 1's twelve findings are in **row 4c's** guards. Read one way that is reassuring; read another it says guards laid down at a loop's cap need the review they did not get — which is what the supervisor ruled row 6b to be.
+4. **A rule table can lie, and only mutation testing finds out.** Round 3's second lens broke the implementation of twenty-one rules one at a time and checked whether the id each table row names actually went red. **Two did not**: §5.3.2-8's warning could be deleted with all 245 ids still green, and §5.6.1-3's bounded lookup could be replaced by an unbounded census with all 245 still green. A third — §5.3.2-5 — had an assertion inside a conditional that never ran, which reads as coverage and is not. All three are corrected; §5.3.2-5 is now honestly `prose-only:`.
+5. **The findings did NOT shrink.** Sixteen BLOCKING across three rounds, on work that had five green mechanical gates before the loop started and six after. What did shrink is their *distance from the row*: round 1 found a shipped collapse, round 3 found mostly documentation that had stopped being true. That is the shape of convergence without its arrival.
+
+### 6.2 What a fourth round would find, [Assumed]
+
+Every round of this row attacked the previous round's fixes and every one succeeded. Round 3's fixes have had no such round. **Stopping here is the cap, not a verdict that the work is clean**, and this document is the record that it was stopped rather than finished. The most likely next finding, on this row's own evidence: another door that compares a word by bytes, or another rule table row whose id passes for a different reason than the rule states.
 
 ---
 
-## 6. Questions for the supervisor — **Q61 onward**
+## 7. What the build taught
 
-**Q61 — Should `identity_stale` distinguish *the extents differ* from *the extents cannot be known*?** *(Founder-visible in consequence, though not in kind.)* The value fires for both, which is Rule U's own reading — *cannot be known to agree* is not *agrees*. But on a backend with `indexes_membership=False` — **UC1 Tenshen's own declared shape**, and `sqlite_minimal`, a reference leg — **every** predicate redirect carries it, permanently and unconditionally. This project has punished exactly that shape twice: `predicate_requires_review` riding onto every approved predicate (row 4c, round 1) and row 3d's durability warning, both fixed with the sentence *a signal that never turns off is noise*. *Recommendation: keep one value for v0 and record this, because the two facts have the same consequence for a caller — do not trust this 1.0 without looking — and splitting them doubles a closed vocabulary for a distinction `Refusal.detail` already carries elsewhere.* Revisit if a deployment on an unknowable backend reports the warning as noise; the cheap mitigation, if it is wanted, is a `<why>` suffix rather than a second value.
+**1. A ruling can say "one line" and be right about the intent and wrong about the shape.** R54's one line, written literally, makes every identity guard compare a merge to itself. What found it was the order the ruling imposed — the gate landed before the change it must see — so *"what does this do to every guard?"* had a mechanical answer before the change was written rather than an argument after it.
 
-**Q62 — Is `predicates(of=…)`'s per-row closure walk affordable at UC3 scale?** The `of=` filter now asks `_identity_names(rec)` for every predicate row in the namespace, and each is one paged read of that namespace's retired predicate rows, memoised per closure call but **not across rows**. At UC3's scale (3,000 types, 30 namespaces) the retired-predicate set is small and the read is cheap; at a scale nobody has measured it is a scan per row. *Recommendation: leave it, record it, and measure it in the Phase 3 ingestion row that first runs `predicates()` in a loop.* `_successor_map` is already memoised per `(namespace, kind)` in the caller's cache dict; passing one cache across the row loop is a two-line change nobody should make without a measurement.
+**2. Publishing a shared definition is half a fix; applying it is the other half.** The seventh trip minted `identity_key`; the eighth is the one door it did not reach. A key that lives in one place cannot drift — and a key that is *applied* in five places out of six is still a registry that disagrees with itself.
 
-**Q63 — Does `consumers` want R54's reading too?** Ruling **R38** gave `Consumer.gate` the identity closure in row 4c, so `consumers(type)` and `retire`'s `live_consumers` guard already resolve the identity. `predicates`, `list_types` and `_extent` now do. **The one surface left comparing a written predicate word is `Consumer.gate`'s `gate_unregistered` warning**, which asks whether a gate names a registered `kind="predicate"` entry — a gate naming an absorbed word is registered, under another name, and is currently warned about. *Recommendation: fold it into row 6b's guard-extraction work rather than here*, because it is a fourth surface for one rule and R53 already scheduled the place where one function replaces five copies. Recorded so 6b reads this first.
+**3. "The guard is narrowed, not banned" had to be learned three times in one row.** Round 1 refused on a partial look and banned `propose_type` on every paging backend (`C3-13` caught it). Round 2 fed a namespace scan's partial page into a non-overridable refusal and banned `import_types` there (`C12-13` caught it). Round 3's first cut did the same thing again in the same function. **The rule is not "be careful"; it is *never turn "we could not finish looking" into a refusal*,** and it is now written at the three call sites.
 
-**Q64 — Should the guards' written-word reading be named rather than defaulted?** Every collapsing guard calls `self._extent(ns, name, True)` positionally and gets the narrow reading **because that is the default**. A later row that flips the default — or a reader who assumes the identity reading is the obvious one — reopens the kill row silently, and the only thing standing between that and a shipped collapse is `C10-14` and `check_merge_guard.py`'s stale axis. *Recommendation: no code change in v0, and take it in row 6b.* Naming it (`_written_extent`, or a required keyword) is a shape change to the five guards in the same breath as R53's extraction, and R53's own reason applies verbatim: changing the guards' shape in a row that changes what they compare is how trips 2, 5 and 6 happened. **The mitigation that shipped instead is that the rule is written into §5.2.1-4 with the ids that break.**
+**4. A fixture that asserts a VERDICT has to be rewritten every time a guard moves; one that asserts the INVARIANT does not.** `check_merge_guard.py`'s `retire` row was corrected twice in one row — once for the paging double, once when the chain fix made the call correctly refuse. It now asserts the thing the kill row is actually about: `resolve_type('commentable')` must not answer `taggable` at 1.0, however the call answers.
 
-**Q65 — Is `resolve_type` now the right place for the *second* half of Q56, or is the answer a new call?** The founder's open half is *refuse, or lower the confidence*. There is a third shape neither the ruling nor this row considered: leave §5.3's guarantee alone and add a **read** that answers *"is this identity still sound?"* — the question a steward asks before a merge and a consumer asks before trusting a redirect, which today can only be assembled from two `predicates()` calls. *Recommendation: raise it, do not take it.* It is a new surface in a document whose §1 non-goals list is load-bearing, and it competes with the cheaper answer (the warning that shipped). Recorded because the founder's ruling on Q56 should see all three options rather than two.
+**5. Mutation testing is the only way to know a rule table is true.** Nineteen of twenty-one mutations reddened the id their rule names. The two that did not were rules nothing exercised, in tables written by this row to satisfy constraint 8 — the gate was green and two of its claims were decorative.
+
+**6. The identity of the NAME is a Rule U question, and nobody had asked it.** Four operands of Rule U are about the extent comparison — unknowable, empty, partial, stale. Trips seven and eight are about the *name*: **one word is not one string**, and *we cannot say what word this is* (an empty key) is not *it is the same word*.
+
+**7. A checker that has to be run to be believed must be cheap enough to run.** The Postgres leg created a schema per fixture and dropped none — ~50 a run, six axes deep. The database reached **19,220** `oo_*` schemas and the catalogue bloat **segfaulted the backend three times**, each followed by ~4.5 minutes of recovery. Fixed at the source, not by raising `max_locks_per_transaction`. See D-4d-9.
+
+---
+
+## 8. Questions for the supervisor — **Q61 onward**
+
+**Q61 — Should `identity_stale` distinguish *the extents differ* from *the extents cannot be known*?** The value fires for both, which is Rule U's own reading. But on `indexes_membership=False` — **UC1 Tenshen's declared shape**, and `sqlite_minimal`, a reference leg — **every** predicate redirect carries it, permanently. This project has twice fixed exactly that shape with the sentence *a signal that never turns off is noise*. *Recommendation: keep one value for v0 and record this*, because the consequence for a caller is identical — do not trust this 1.0 without looking — and splitting doubles a closed vocabulary for a distinction `detail` carries elsewhere.
+
+**Q62 — ~~Is `predicates(of=…)`'s per-row closure walk affordable?~~ MEASURED, and fixed in round 2.** The question asked for a measurement before a two-line change; round 2's integrator lens made it. Query counts were linear and **wall clock quadrupled per doubling** of the predicate count: 13.9× on a plain `predicates(namespace=…)` and 26.5× with `of=`, at 3,481 rows. One closure cache threaded through the call took 80 merged pairs from **109.6 ms to 22.3 ms**. *No ruling needed; recorded because the question is answered and a supervisor should not be asked to rule on it.*
+
+**Q63 — Does `consumers` want R54's reading?** *(Corrected in round 3: the original wording named the wrong surface.)* `Consumer.gate` already resolves the identity under **R38**, and `_gate_warnings` queries `include_retired=True` deliberately, so **a gate naming a merged-away word is not warned** — the claim this question originally made is false, and running it is what showed that. The surface that *is* wrong is the one round 2 found for `list_types`: an identity written **only as an alias**, with no row of that name, was invisible from the absorbed word (`C6-09`). That is fixed. What remains open is whether `gate_unregistered` should say something about an alias-only identity. *Recommendation: fold it into row 6b, which the supervisor has ruled is the review row 4c's guards did not get.*
+
+**Q64 — Should the guards' written-word reading be NAMED rather than defaulted?** Every collapsing guard gets the narrow reading *because it is the default*. A later row that flips it reopens the kill row silently. *Recommendation: no code change in v0; take it in 6b with R53's extraction* — R53's own reason applies verbatim, and round 3 proved by mutation that `C10-13`, `C10-14`, `C10-16`, `C10-17`, `C10-18` and `C3-14` all break if the default is flipped, which is the mitigation that shipped instead.
+
+**Q65 — Is `resolve_type` the right place for the second half of Q56, or is the answer a new call?** The founder's open half is *refuse, or lower the confidence*. There is a third shape: leave §5.3's guarantee alone and add a **read** that answers *"is this identity still sound?"* — the question a steward asks before a merge and a consumer asks before trusting a redirect. *Recommendation: raise it, do not take it*; the founder's ruling on Q56 should see three options rather than two.
+
+**Q66 — `identity_stale` is PERMANENT by construction. Is that the right shape for a consumer?** *(Round 2.)* The absorbed word is retired, so its own written extent can never grow again; the survivor's can. The **first** ordinary type declared against a survivor after a merge therefore makes the two written extents unequal *for good*, and no call amends a live type's `predicates` to undo it. Weakening the comparison to **containment** would make the warning miss **Door 1** — the sixth trip's own walk — so the comparison stays. §5.3.2 now says the value means *this identity has grown apart from the equality that justified it*, not *act on this now*. *Recommendation: rule on the wording, not the comparison.*
+
+**Q67 — Does `_extent(identity=True)` owe a staleness signal of its own?** *(Round 3.)* After R54 the identity's extent includes members declared under either word — which is the ruling working — but a consumer reading `predicates(of=X)` gets no hint that the identity's own justification has gone stale, while `resolve_type` warns. `PredicateEntry` has no `warnings` field, so this is a shape change rather than a value. *Recommendation: not in v0. Record it against Q66*: if the founder rules that permanence makes the warning noise, this is the surface that would carry the better signal instead.
+
+**Q68 — Should `identity_key` erase non-Latin words, or should the registry refuse to hold what it cannot read?** *(Round 3, and it is founder-adjacent.)* The empty-key hole is closed — an unreadable word is never *the same word* as anything — but the underlying fact remains: this registry can hold an alias it cannot compare, and every guard therefore passes it silently. UC3's catalogue is multi-agency; not every label is Latin. The alternatives are a proper Unicode fold (NFKD, combining marks, per-script rules — a real dependency and a real decision about which scripts fold together) or refusing a non-comparable alias at the write door. *Recommendation: record it, ship the empty-key guard, and put the fold to the founder before beacon 2B, because it decides what vocabularies this registry will accept.*

@@ -233,6 +233,34 @@ def test_c6_08_the_predicate_filter_resolves_the_identity_per_namespace(
     other = registry.list_types(predicate="commentable", namespace="dpr")
     assert {t.name for t in other.types} == {"park_sign"}
 
+    # **§5.6.1-3: the lookup is BOUNDED, and the rule was unexercised until round 3** --
+    # a mutation replacing the `name_in` probe with an unbounded census left all 245 ids
+    # green, because this test asserted result sets and never the shape of the query.
+    # Ruling R13 declined to page that census in v0; a fix that quietly reintroduces it
+    # is a fix that changes what the call costs at UC3 scale.
+    seen: list = []
+    inner = registry.adapter
+
+    class _Counting:
+        def __getattr__(self, name):
+            return getattr(inner, name)
+
+        def find_types(self, q):
+            seen.append(q)
+            return inner.find_types(q)
+
+    counted = make_registry(_Counting(), approval_policy="auto")
+    counted.list_types(predicate="searchable")
+    censuses = [
+        q for q in seen
+        if q.predicate is None and q.name_in is None and q.namespace is None
+    ]
+    assert not censuses, (
+        f"the identity is resolved by a bounded `name_in` lookup, not by reading every "
+        f"type in every namespace: {len(censuses)} unfiltered queries"
+    )
+    assert any(q.name_in for q in seen), "and the bounded lookup is the one that ran"
+
     # **The identity only ever ADDS (§5.6.1-4).** The written word is queried in
     # whatever scope the caller asked for, so a type declaring a predicate that names no
     # row at all -- a dangling reference, which EDGES.md §2.7 calls a fact rather than

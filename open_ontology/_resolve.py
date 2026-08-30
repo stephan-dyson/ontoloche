@@ -91,6 +91,34 @@ def identity_key(text: str) -> str:
 _norm = identity_key
 
 
+def same_word(left: str | None, right: str | None) -> bool:
+    """Are these two written words the same word? **The EIGHTH trip's other half.**
+
+    ``identity_key(x) == identity_key(y)`` is not this question, and using it as though
+    it were was a defect in **both** directions (row 4d, round 3). The key erases every
+    run of non-``[a-z0-9]``, so **every word with no ASCII alphanumerics maps to the
+    empty string** — and `difflib` rates two empty strings a perfect **1.0**:
+
+    * a **false 1.0**: an alias ``状态`` ("status") made ``resolve_type("类型")``
+      ("type") — a different word — answer that entry at the confidence `INTERFACE.md`
+      5.3 calls a guarantee, over a pair `merge_types` refuses non-overridably;
+    * a **false refusal**: the second agency's legitimate ``类型`` was then declined
+      ``alias_collision``, the registry insisting two unrelated Chinese words are one.
+
+    **The identity function was manufacturing mechanism 4 rather than preventing it** —
+    on UC3's multi-agency catalogue, whose labels are not all Latin, and on UC2's CMS
+    export, whose headers include punctuation-only and blank columns.
+
+    So: an empty key is *not a word*, and never equal to anything, itself included. That
+    is Rule U on the identity of the NAME — *we cannot say what word this is* is not *it
+    is the same word* — and it is the one-line half. Whether a non-Latin word should
+    normalise to something meaningful rather than to nothing at all is a larger question
+    (NFKD, combining marks, per-script folding) and is raised rather than taken.
+    """
+    key = identity_key(left)
+    return bool(key) and key == identity_key(right)
+
+
 def _similar(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a, b).ratio()
 
@@ -175,7 +203,15 @@ class DeterministicResolver:
             by_name = _similar(cand, _norm(name))
             aliases = getattr(entry, "aliases", ()) or ()
             for alias in aliases:
-                by_name = max(by_name, _similar(cand, _norm(alias)))
+                # **An alias whose key is EMPTY matches nothing** (row 4d, round 3).
+                # `_norm` erases every word with no ASCII alphanumerics, and
+                # `_similar("", "")` is 1.0 -- so one non-Latin alias made this scorer
+                # rate every other non-Latin word a perfect match on the same entry. See
+                # `same_word`.
+                normalised = _norm(alias)
+                if not normalised:
+                    continue
+                by_name = max(by_name, _similar(cand, normalised))
             by_def = 0.0
             if hint:
                 definition = (getattr(entry, "definition", "") or "").strip().lower()

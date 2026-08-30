@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C4 -- ``propose_type`` (13). Mechanism 1: no review.
+"""C4 -- ``propose_type`` (14). Mechanism 1: no review.
 
 The call that makes an addition a *request* rather than a fact. It refuses exactly two
 things and warns about everything else -- refusing a near-duplicate is how you flatten a
@@ -18,8 +18,9 @@ capability predicate.
 from __future__ import annotations
 from datetime import UTC, datetime
 import pytest
+from open_ontology._resolve import same_word
 from open_ontology.policy import NamespacePolicy
-from open_ontology.types import CREATED_BY, Citation, Evidence, Proposal, Refusal, TypeEntry
+from open_ontology.types import CREATED_BY, Citation, Evidence, Proposal, Refusal, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import DOC_EVIDENCE_URL, seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -384,3 +385,57 @@ async def test_c4_13_two_legal_names_that_are_one_word_cannot_both_go_live(adapt
         "one word under two KINDS is blessed by PACKAGE.md 4.1; refusing it would make "
         "this row reject vocabularies the specification permits"
     )
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+async def test_c4_14_a_word_the_key_cannot_read_is_not_the_same_word(adapter, make_registry):
+    """**The identity function was manufacturing mechanism 4.** Row 4d, round 3.
+
+    `identity_key` collapses every run of non-`[a-z0-9]`, so **every word with no ASCII
+    alphanumerics maps to the empty string** — and `difflib` rates two empty strings a
+    perfect **1.0**. That failed in both directions at once:
+
+    * a **false 1.0** — an alias ``状态`` ("status") made `resolve_type("类型")` ("type"),
+      a *different* word, answer that entry at the confidence §5.3 calls a guarantee,
+      over a pair `merge_types` refuses non-overridably;
+    * a **false refusal** — the second agency's legitimate ``类型`` was then declined
+      `alias_collision`, the registry insisting two unrelated Chinese words are one.
+
+    UC3's catalogue is multi-agency and its labels are not all Latin; UC2's CMS export
+    has punctuation-only and blank headers. **An empty key is not a word**, and never
+    equal to anything — Rule U on the identity of the NAME: *we cannot say what word this
+    is* is not *it is the same word*.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable"):
+        await seed(registry, name, kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable"])
+    await seed(registry, "doc", predicates=["searchable"])
+
+    held = (await registry.import_types(
+        [{"name": "commentable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["\u72b6\u6001"], "status": "active"}],
+        namespace="default", kind="predicate",
+    ))[0]
+    assert "\u72b6\u6001" in (held.aliases or ()), held.warnings
+
+    # (a) no false 1.0: a DIFFERENT word does not answer that entry.
+    other = await registry.resolve_type("\u7c7b\u578b", ResolveContext(), tier="opus")
+    assert not (other.type is not None and other.confidence == 1.0), (
+        f"'\u7c7b\u578b' is not '\u72b6\u6001'; two words the key cannot read are not "
+        f"one word: {other.outcome} {other.type.name if other.type else None}"
+    )
+
+    # (b) no false refusal: the second agency's own label is accepted.
+    second = (await registry.import_types(
+        [{"name": "searchable", "kind": "predicate", "definition": "a capability",
+          "aliases": ["\u7c7b\u578b"], "status": "active"}],
+        namespace="default", kind="predicate",
+    ))[0]
+    assert not any(w.startswith("import_refused:") for w in second.warnings), (
+        f"refusing this insists two unrelated words are one -- mechanism 4 manufactured "
+        f"by the function that exists to prevent it: {second.warnings}"
+    )
+
+    # ...and a word the key CAN read still matches across spellings.
+    assert same_word("B\u00fcrgeramt", "b\u00fcrgeramt")
+    assert not same_word("---", "!!!")

@@ -2266,7 +2266,9 @@ async def test_c17_44_the_chain_is_followed_at_every_hop_not_only_at_the_origin(
         "exists to cover"
     )
 
-@pytest.mark.requires_capability("stores_edges", "stores_attributes", "indexes_membership")
+@pytest.mark.requires_capability(
+    "stores_edges", "stores_attributes", "indexes_membership", "stores_events"
+)
 async def test_c17_45_a_broken_or_looping_chain_stops_at_depth_and_says_so(
     adapter, make_registry
 ):
@@ -2297,11 +2299,19 @@ async def test_c17_45_a_broken_or_looping_chain_stops_at_depth_and_says_so(
     await registry.add_edge(
         "blocks", InstanceRef(alpha, "1"), InstanceRef(task_ref, "9"), "user:sd"
     )
+    # `force=True` on the second leg (row 4d, round 3): `retire(successor=)` now refuses
+    # `retired_operand` when the successor is itself retired, because the old word is
+    # then left resolving to NOTHING and §5.10 promises it still resolves -- the same act
+    # `merge_types` has always refused, on a door that never asked. It is OVERRIDABLE,
+    # and this test means it: constructing a cycle is exactly its subject, and §5.9 does
+    # not forbid one. The walk below is what must survive it.
     assert not isinstance(
         await registry.retire("alpha", "folded", retired_by="user:sd", successor="beta"), Refusal
     )
     assert not isinstance(
-        await registry.retire("beta", "folded back", retired_by="user:sd", successor="alpha"),
+        await registry.retire(
+            "beta", "folded back", retired_by="user:sd", successor="alpha", force=True
+        ),
         Refusal,
     )
     cyclic = await registry.neighbors(

@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C9 -- ``retire`` and ``reinstate`` (24). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (25). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -1088,5 +1088,38 @@ async def test_c9_24_reinstate_asks_the_mirror_question_and_a_word_is_not_its_ow
     # (b)
     await seed(registry, "aaa", definition="a word")
     selfish = await registry.retire("aaa", "x", retired_by="user:sd", successor="aaa")
-    assert isinstance(selfish, Refusal) and selfish.reason == "successor_unregistered"
+    assert isinstance(selfish, Refusal) and selfish.reason == "successor_is_self", (
+        "its OWN reason: `successor_unregistered` says *register the successor first*, "
+        "which is false here and is a sentence a caller would act on"
+    )
     assert (await registry.adapter.get_type("default", "aaa")).status == "active", "nothing written"
+
+@pytest.mark.requires_capability("stores_events")
+async def test_c9_25_a_retired_successor_leaves_the_old_word_resolving_to_nothing(registry):
+    """**§5.10's promise, destroyed with no refusal and no warning.** Row 4d, round 3.
+
+    `retire(a, successor=b)` where `b` is **itself retired** leaves `a` resolving to
+    nothing — and §5.10 promises *"the old word still resolves"*. `merge_types` refuses
+    the identical act `retired_operand` and lets a caller acknowledge past it; this door
+    did not ask at all.
+
+    **Overridable**, exactly as §5.10's is — `force` is this call's acknowledgement —
+    because the outcome is a **loss** rather than a false claim, and a steward may mean
+    it. `C17-45` is the test that means it: constructing a cycle is its subject.
+    """
+    for name in ("ma", "mb"):
+        await seed(registry, name, definition="a word")
+    assert isinstance(
+        await registry.retire("mb", "gone", retired_by="user:sd", force=True), TypeEntry
+    )
+
+    refusal = await registry.retire("ma", "folded", retired_by="user:sd", successor="mb")
+    assert isinstance(refusal, Refusal) and refusal.reason == "retired_operand"
+    assert refusal.detail["overridable"] is True
+    assert (await registry.adapter.get_type("default", "ma")).status == "active", "nothing written"
+
+    # ...and a steward who means it says so.
+    assert isinstance(
+        await registry.retire("ma", "folded", retired_by="user:sd", successor="mb", force=True),
+        TypeEntry,
+    )
