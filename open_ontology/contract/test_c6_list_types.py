@@ -1,4 +1,4 @@
-"""C6 -- ``list_types`` (6). Mechanism 2: nobody could find the existing types."""
+"""C6 -- ``list_types`` (8). Mechanism 2: nobody could find the existing types."""
 
 from __future__ import annotations
 
@@ -169,3 +169,66 @@ def test_c6_07_the_census_spans_namespaces_and_a_scoped_listing_says_it_did_not(
     assert [t.namespace for t in scoped.types] == ["dot"]
     assert scoped.complete is False, "a scoped listing hid two rows and must say so"
     assert scoped.why_incomplete and "namespace" in scoped.why_incomplete
+
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+def test_c6_08_the_predicate_filter_resolves_the_identity_per_namespace(
+    adapter, make_registry
+):
+    """**Ruling R54, row 4d — `list_types(predicate=)` names an identity, not a word.**
+
+    `list_types` is the call whose absence means *"nobody could find the existing
+    types"*. After a merge it stopped finding them: every type that had declared the
+    absorbed word vanished from the survivor's listing, with a `known` that counted only
+    what it happened to see. Both directions are asserted — asking by the **survivor**
+    finds the type that declared the absorbed word, and asking by the **absorbed** word
+    finds the type that declared the survivor — because they are one identity and the
+    call cannot have an opinion about which of its names the caller happened to use.
+
+    **The scoping rule is the interesting half.** An identity is per `(namespace, kind)`
+    (§2.1, §2.6): the same word in two namespaces is two identities, and that is exactly
+    what §2.6 makes `namespace` the answer to mechanism 4 *for*. So the closure is
+    resolved **inside** a namespace and never across one, and a second namespace holding
+    its own `commentable` is left alone — asserted here, because a fix that merged the
+    two would be §2.6's answer to mechanism 4 deleting itself, which is the shape ruling
+    R6 was careful to avoid one call along (§5.3.1 rule 4).
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+
+    # A DIFFERENT agency's `commentable`, in its own namespace, meaning its own thing.
+    seed(registry, "commentable", kind="predicate", namespace="dpr", definition="a capability")
+    seed(registry, "park_sign", namespace="dpr", predicates=["commentable"])
+
+    merged = registry.merge_types(
+        "commentable", "searchable", "identical non-empty extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert hasattr(merged, "aliases_added"), merged
+
+    seed(registry, "memo", predicates=["commentable"])
+    seed(registry, "doc", predicates=["searchable"])
+
+    by_survivor = registry.list_types(predicate="searchable", namespace="default")
+    assert {t.name for t in by_survivor.types} == {"note", "memo", "doc"}, (
+        "`memo` declared the absorbed word; it is a member of this identity and the "
+        "call that exists so people can FIND types must find it"
+    )
+    assert by_survivor.known == 3
+
+    by_absorbed = registry.list_types(predicate="commentable", namespace="default")
+    assert {t.name for t in by_absorbed.types} == {"note", "memo", "doc"}, (
+        "one identity, and the answer cannot depend on which of its names was used"
+    )
+
+    # **The default `namespace=None` is the ordinary call and gets the same answer** --
+    # resolved per namespace, by one bounded `name_in` lookup rather than a census.
+    unscoped = registry.list_types(predicate="searchable")
+    assert {t.name for t in unscoped.types} == {"note", "memo", "doc"}
+
+    # ...and the other agency's identical word is untouched. Scoping is what stops two
+    # teams' meanings being collapsed, and R54 must not undo it.
+    other = registry.list_types(predicate="commentable", namespace="dpr")
+    assert {t.name for t in other.types} == {"park_sign"}

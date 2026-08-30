@@ -1,4 +1,4 @@
-"""C2 -- ``predicates`` (5). Mechanism 4 defensively, and the ROADMAP.md kill row.
+"""C2 -- ``predicates`` (6). Mechanism 4 defensively, and the ROADMAP.md kill row.
 
 Predicates are the structure that stops five locally-correct lists being read as five
 duplicates.
@@ -111,3 +111,58 @@ def test_c2_05_a_predicate_is_not_a_supertype(registry):
     assert set(by_name["searchable"].extent) == {"task"}
     assert "note" not in by_name["searchable"].extent
     assert {p.name for p in registry.predicates(of="note")} == {"commentable"}
+
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+def test_c2_06_the_extent_and_the_of_filter_resolve_the_identity(adapter, make_registry):
+    """**Ruling R54, row 4d — `predicates` answers about an IDENTITY, not a word.**
+
+    `INTERFACE.md` §2.1 rules that a reference resolves to the identity it now belongs
+    to. After `merge(commentable → searchable)` this call did not: a type that had
+    declared `commentable` was compared, by written string, against a page holding only
+    the survivor's name — so `predicates(of=that_type)` answered **`known=0`**, and the
+    survivor's `extent` omitted it.
+
+    **That is §5.2's own named failure mode, in the call §5.2 names it in:** an empty
+    answer reading as a confident zero, *"this type satisfies no predicates"*, about a
+    member the registry can see. And it is reachable by two ordinary governance acts —
+    a legal merge, and somebody declaring a type against a word that still resolves.
+
+    The guards are deliberately **not** changed by this: they compare the two **written
+    words**, because asking whether one identity equals itself is circular and would
+    make every collapse compare equal by construction. `C10-09`, `C10-11`, `C10-13`,
+    `C12-08` and `C9-18` all still hold, and `check_merge_guard.py`'s stale axis is the
+    mechanical form of that claim.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+
+    merged = registry.merge_types(
+        "commentable", "searchable", "identical non-empty extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, type(None)) and hasattr(merged, "aliases_added"), merged
+
+    # A type declared AFTER the merge, against the ABSORBED word -- which still
+    # resolves, so declaring it is neither an error nor unusual.
+    seed(registry, "memo", predicates=["commentable"])
+    seed(registry, "doc", predicates=["searchable"])
+
+    listing = registry.predicates(of="memo")
+    assert listing.known == 1, (
+        "`memo` declared a word that still resolves to a live predicate; answering "
+        "known=0 is 5.2's own failure mode -- an empty answer read as a confident zero"
+    )
+    entry = listing.predicates[0]
+    assert entry.name == "searchable", "the identity's live name, not the absorbed one"
+    assert set(entry.extent) == {"note", "memo", "doc"}, (
+        "the extent is the identity's members: every type that declared either word"
+    )
+    assert entry.extent_size == 3
+
+    # The survivor's own members are unchanged in meaning and larger in fact.
+    by_note = registry.predicates(of="note")
+    assert [p.name for p in by_note.predicates] == ["searchable"]
+    assert set(by_note.predicates[0].extent) == {"note", "memo", "doc"}

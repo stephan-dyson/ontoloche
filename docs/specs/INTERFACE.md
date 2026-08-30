@@ -333,6 +333,11 @@ PredicateEntry:
 
 **Behaviour when uncertain.** If a predicate's extent cannot be computed (a backend that cannot index membership), return `extent: []` **with `extent_size: None`** and a `why` — never `extent_size: 0`, which reads as *"nothing is commentable"*.
 
+**`extent` and `of=` resolve the IDENTITY, not the written word** *(ruling **R54**, row 4d, 2026-08-30)*. A predicate absorbed by a merge and its survivor are one identity, so the survivor's `extent` holds every type that declared **either** word and `predicates(of=type)` finds the predicate whichever of its names that type happened to declare. It used to do neither: a type declaring the absorbed word was compared by written string against a page holding only the survivor's name, so `predicates(of=it)` answered **`known=0`** — *"this type satisfies no predicates"* about a member the registry can see, which is **this section's own named failure mode, in this section's own call**. A closure that could not be followed to the end returns `extent_size: None` with the closure's `why`, never a count over an unfinished question. `C2-06`.
+
+> **The identity guards deliberately do NOT ask this question, and the reason is circularity rather than cost.** Every guard in §5.10 compares two extents to decide whether collapsing two words asserts something false. If that comparison resolved identities, the merge under examination would be exactly what joined the two names — so the two closures would be equal **by construction**, the guard would agree with itself and refuse nothing, and `ROADMAP.md`'s kill row would reopen through the fix meant to close a different hole. The guards ask whether two words denote the same set **of their own accord**; this call asks what satisfies a capability. `check_merge_guard.py`'s **stale** axis is the mechanical form of that distinction, and it is why ruling R54 was sequenced behind it: `_extent` is the expression all six kill-row trips run through.
+
+
 ---
 
 ### 5.3 `resolve_type` — existing, proposal, none… or not a type at all
@@ -621,6 +626,11 @@ TypeListing:
 *(`excluded_unknown` added to this shape, and `known` corrected to `int | None`, by row 3c. Both were implemented at 2A — deviations D-5 and Rule K's nullability — and §11 recorded the first, but the shape above never gained either.)*
 
 **Designed against: mechanism 2** — this is the call whose absence means "nobody could find the existing types". The `predicate=` filter is how a caller reads a capability set without flattening it.
+
+**`predicate=` names an IDENTITY, not a written word** *(ruling **R54**, row 4d, 2026-08-30)*. After `merge_types(commentable → searchable)` the two words are one identity — §2.1's rule, and §5.10's own promise that *"the old word still resolves"* — so `list_types(predicate="searchable")` returns every type that declared **either**, and asking by the absorbed word returns the same set. It used to return neither: a type declaring `commentable` disappeared from the survivor's listing **silently**, under a `known` that counted only what it happened to see, which is §5.2's *empty answer read as a confident zero* in the call whose absence means nobody could find the existing types. Reached by two ordinary acts — a legal merge, and somebody declaring a type against a word that still resolves.
+
+> **The closure is resolved INSIDE a namespace and never across one.** An identity is per `(namespace, kind)` (§2.1, §2.6), so a second agency's `commentable` is a different identity and is left alone; collapsing the two would be §2.6's answer to mechanism 4 deleting itself, which is the trap §5.3.1 rule 4 avoids one call along. The default `namespace=None` is answered by asking which namespaces hold a `kind="predicate"` row of that name and resolving each identity there — **one bounded `name_in` lookup**, at most one row per namespace, not the unbounded census ruling **R13** declined to page in v0. The written word is always queried too, so a type declaring a predicate that names no row at all is still found: the identity only ever **adds**. `C6-08`.
+
 
 **Behaviour when uncertain.** `include_retired=False` is the default *and hides things*, so `TypeListing` always reports `known` over the returned set and `complete: false` whenever any filter suppressed rows. A caller that wants a true census passes `include_retired=True, status=None, namespace=None`.
 

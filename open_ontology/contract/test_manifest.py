@@ -20,11 +20,11 @@ import pytest
 EXPECTED_PER_GROUP = {
     0: 14,
     1: 9,
-    2: 5,
+    2: 6,
     3: 14,
     4: 10,
     5: 12,
-    6: 7,
+    6: 8,
     7: 7,
     8: 6,
     9: 21,
@@ -38,7 +38,7 @@ EXPECTED_PER_GROUP = {
     17: 53,
     18: 10,
 }
-TOTAL = 228
+TOTAL = 230
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 
