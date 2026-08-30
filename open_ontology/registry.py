@@ -681,8 +681,8 @@ class Registry:
         reading the target row and, when there was none, **fell back to comparing the
         other row against itself** -- so refusal #1 was equal by construction and could
         not fire. Row 6b's extraction found that fallback, named it, and raised it as
-        Q70; this row's first adversarial lens then walked it, on the kill row's own
-        noun:
+        **Q69**; this row's first adversarial lens then walked it, and the walk is the
+        answer -- on the kill row's own noun:
 
         1. `commentable` and `gamma` are predicates whose extents are non-empty and
            IDENTICAL, so refusal **#2 passes honestly**;
@@ -6543,7 +6543,9 @@ class Registry:
             # than fixed here.** It means an alias written onto a row this call is
             # creating gets #3 and #2 and not #1. Whether that is a ninth walk is what
             # this row's review round is for; changing it would be changing what a guard
-            # compares, which R53 forbids this row to do. Raised as **Q70**.
+            # compares, which R53 forbids this row to do. Raised as **Q69** -- and
+            # ANSWERED by this row's own first adversarial round, which walked it to a
+            # confidence-1.0 collapse on a capability predicate. `C12-14`.
             # A `TypeRef` and NOT a synthetic `TypeRecord`: see `_identity_breach`'s
             # own note. Part A reads this file's AST for every record construction
             # carrying an identity field, and a throwaway operand built that way reads
