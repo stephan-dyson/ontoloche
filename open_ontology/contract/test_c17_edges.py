@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (52). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (53). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -2913,3 +2913,75 @@ def test_c17_52_a_retired_origin_type_says_so_and_an_int_id_is_refused(registry)
         "the cast belongs to the caller (contortion E4), and a cast this package "
         "performs silently is a cast nobody reviews"
     )
+
+
+@pytest.mark.requires_capability(
+    "stores_edges", "stores_attributes", "stores_edge_attributes", "stores_events"
+)
+@pytest.mark.requires_attribute_store
+def test_c17_53_an_absorbed_family_name_is_not_a_hole_in_the_schema_floor(registry):
+    """The WRITE side of `C17-51`. Row 4c, third adversarial round.
+
+    Round 2 taught `neighbors` to follow the **family** chain and left `add_edge`
+    comparing the written string — so an absorbed family name was a permanent,
+    warning-free bypass of the surviving family's `enforce` payload schema, and
+    `neighbors` then returned the resulting edge as an edge of the survivor under
+    `complete=True`. **One identity, two enforcement regimes**, while `EDGES.md` §2.5
+    rules 2 and 3 make the strictness a **floor**.
+
+    The edge is still **written** under the name the caller gave — §2.1's *"the written
+    reference is never edited"* — and it is **validated** by the family that name now
+    denotes. Read side and write side agreeing is the whole point: leaving them
+    different is the inconsistency this row has been bitten by three times.
+    """
+    from ..attributes import AttributeSchema, FieldSpec
+
+    seed(registry, "task")
+    registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default", kind="edge_payload", name="dep_v1", version=1,
+            fields={
+                "reason": FieldSpec(
+                    type="str", description="why the dependency exists", required=True
+                )
+            },
+            additional="forbid", mode="enforce",
+        )
+    )
+    edge_family(
+        registry, "depends_on", payload_schema="dep_v1",
+        definition="one task depends on another",
+    )
+    edge_family(registry, "blocks", definition="one task depends on another")
+    merged = registry.merge_types(
+        "blocks", "depends_on", "one family for one relation", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    through_survivor = registry.add_edge(
+        "depends_on", _payload_task(), _payload_task(2), "user:sd", attributes={}
+    )
+    assert isinstance(through_survivor, Refusal), through_survivor
+    assert through_survivor.reason == "attributes_schema_violation"
+
+    through_absorbed = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(3), "user:sd",
+        attributes={"junk": "anything at all"},
+    )
+    assert isinstance(through_absorbed, Refusal), (
+        "the absorbed name denotes the surviving family, so it is judged by the "
+        "surviving family's schema -- a floor with a hole in it is not a floor"
+    )
+    assert through_absorbed.reason == "attributes_schema_violation"
+    assert "reason:required field missing" in through_absorbed.detail["violations"]
+
+    legal = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(4), "user:sd",
+        attributes={"reason": "the dependency is real"},
+    )
+    assert not isinstance(legal, Refusal), (
+        "and a payload the surviving schema accepts still writes through the absorbed "
+        "name -- the guard is narrowed, not banned"
+    )
+    assert legal.family == "blocks", "written under the name the caller gave (2.1)"

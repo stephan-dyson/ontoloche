@@ -96,13 +96,40 @@ from open_ontology.types import Evidence, Refusal, TypeEntry  # noqa: E402
 
 REGISTRY_SOURCE = ROOT / "open_ontology" / "registry.py"
 
-#: The two fields on a stored `TypeRecord` that re-point what a name RESOLVES to.
+#: The three fields on a stored `TypeRecord` that re-point what a name RESOLVES to.
+#:
+#: **`status` was added by row 4c's THIRD adversarial round, and its absence was a
+#: BLOCKING finding.** `resolve_type` scores only `status="active"` rows, so flipping a
+#: row to active makes every alias it carries a confidence-1.0 answer -- which is
+#: literally what `reinstate` and `import_types` do, and the mechanism of two of the
+#: sixth trip's four doors. A reviewer wrote a caller that touched no `successor` and no
+#: `aliases`, only `status`, and Part A did not flag it.
 #: `successor` redirects a retired word at confidence 1.0 (`INTERFACE.md` §5.3 calls that
 #: a guarantee); `aliases` makes a word answer with this entry. A third field with the
 #: same power would have to be added here -- and adding one without touching this file is
 #: exactly the failure Part A exists to catch, because the AST scan below would find the
 #: writes and this file would not know what they mean.
 IDENTITY_FIELDS = ("successor", "aliases")
+
+#: **`status` is an identity field too, and it gets a NARROWER scan for one reason:
+#: the word is everywhere.** `resolve_type` scores only `status="active"` rows, so
+#: flipping a row to active makes every alias it carries a confidence-1.0 answer --
+#: which is literally what `reinstate` and `import_types` do, and the mechanism of two
+#: of the sixth trip's four doors. A reviewer wrote a caller that touched no `successor`
+#: and no `aliases`, only `status`, and Part A did not flag it.
+#:
+#: The over-broad *"any mention of the name"* rule that `IDENTITY_FIELDS` gets is right
+#: for two rare words and useless for a ubiquitous one: applied to `status` it flagged
+#: eleven functions that only ever COMPARE it. So this one is matched where a record is
+#: actually WRITTEN -- a keyword argument or a dict-literal key -- which still catches
+#: every shape the reviewer's probe used, including
+#: `TypeRecord(**{**rec.__dict__, "status": "active"})`.
+#:
+#: **A narrower rule is a rule with a gap, and the gap is stated rather than implied:**
+#: a `status` written through a computed key escapes this scan. That is the trade a
+#: ubiquitous field forces, and it is why `status` is here rather than folded into
+#: `IDENTITY_FIELDS`.
+STATUS_FIELD = "status"
 
 
 @dataclass(frozen=True)
@@ -138,12 +165,18 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "written for a collision (the kill row's fourth trip, row 4c, found by Part A)",
     ),
     "reinstate": CallerVerdict(
-        False,
-        "a SPLIT, not a collapse: it CLEARS a `successor` off a live row, so a word "
-        "that resolved to another identity goes back to resolving to its own. It cannot "
-        "make two identities into one, and the state it does create is guarded on its "
-        "own terms (`successor_active`, `alias_collision`, §5.9b). §5.10's guards would "
-        "have nothing to compare",
+        True,
+        "**this entry said `collapses=False` until row 4c's third adversarial round, "
+        "and it was wrong.** It read: *a SPLIT, not a collapse -- it CLEARS a successor "
+        "off a live row ... it cannot make two identities into one.* Clearing the "
+        "successor is a split; **re-activating the row is not**. Every alias the row "
+        "carries becomes a confidence-1.0 answer again, over a world that has moved "
+        "since they were written, and `_lifecycle_collisions` scans ACTIVE rows only -- "
+        "so an alias naming a retired predicate was invisible to it, which is the FOURTH "
+        "trip's blind spot untouched in the sibling guard. It now runs the identity "
+        "guards over its dormant aliases. *(A person's judgement, written down and "
+        "wrong, is the enumeration working as designed: a wrong judgement on the record "
+        "is one a reviewer can find.)*",
     ),
     "_write_approved": CallerVerdict(
         False,
@@ -152,6 +185,21 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "re-point a name however the proposal is amended. *(Row 4c looked for `approve` "
         "of a proposal with a successor because the brief named it as a caller; there is "
         "no such thing, and this line is the record that somebody checked.)*",
+    ),
+    "_seed_equivalent_to": CallerVerdict(
+        False,
+        "writes ONE row at store creation -- `EDGES.md` §3.1's `equivalent_to` family, "
+        "with `status=\"active\"` and no aliases and no successor. It creates an "
+        "identity; it cannot fold two into one",
+    ),
+    "retract_edge": CallerVerdict(
+        False,
+        "writes `status=\"retracted\"` onto an **EDGE**, not onto a type. An edge has "
+        "no `aliases` and no `successor` and `resolve_type` never scores one, so no name "
+        "resolves differently because of it. *(Flagged by the `status` scan because that "
+        "field is shared between two record shapes -- and left here rather than excluded "
+        "by type, because a scan that guesses which record a field belongs to is a scan "
+        "with a judgement in it.)*",
     ),
     "resolve_type": CallerVerdict(
         False,
@@ -183,6 +231,27 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
 
 # ---------------------------------------------------------------------------
 # Part A -- the callers, discovered from the AST
+
+
+#: Calls that WRITE a stored record, as opposed to querying one. A `status` keyword
+#: inside one of these re-points what a name resolves to; the same keyword on a
+#: `TypeQuery` is a filter and re-points nothing.
+RECORD_WRITES = ("TypeRecord", "replace", "put_type")
+
+
+def _inside_record_write(node: ast.AST, parents: dict[int, ast.AST]) -> bool:
+    current = parents.get(id(node))
+    while current is not None:
+        if isinstance(current, ast.Call):
+            name = getattr(current.func, "id", None) or getattr(
+                current.func, "attr", None
+            )
+            if name in RECORD_WRITES:
+                return True
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        current = parents.get(id(current))
+    return False
 
 
 def _enclosing_function(node: ast.AST, parents: dict[int, ast.AST]) -> str:
@@ -220,6 +289,26 @@ def identity_writers() -> dict[str, set[str]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.keyword) and node.arg in IDENTITY_FIELDS:
             found.setdefault(_enclosing_function(node, parents), set()).add(node.arg)
+        # `status`, narrowly: a keyword argument or a dict-literal key **inside a record
+        # CONSTRUCTION**. See STATUS_FIELD for why this one is not over-broad -- and note
+        # the second narrowing, which the first attempt needed: `status="active"` is also
+        # a `TypeQuery` FILTER, so matching every keyword flagged fourteen functions that
+        # only ever read.
+        if isinstance(node, ast.keyword) and node.arg == STATUS_FIELD:
+            if _inside_record_write(node, parents):
+                found.setdefault(
+                    _enclosing_function(node, parents), set()
+                ).add(STATUS_FIELD)
+        if isinstance(node, ast.Dict):
+            for key in node.keys:
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value == STATUS_FIELD
+                    and _inside_record_write(node, parents)
+                ):
+                    found.setdefault(
+                        _enclosing_function(node, parents), set()
+                    ).add(STATUS_FIELD)
         if (
             isinstance(node, ast.Constant)
             and isinstance(node.value, str)
