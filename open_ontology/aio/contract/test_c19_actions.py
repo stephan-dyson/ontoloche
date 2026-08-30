@@ -2566,30 +2566,38 @@ async def test_c19_61_every_filter_is_re_applied_above_the_store(adapter, make_r
     assert (await blind.invocations(gate_verdict="allowed")).known == 5
 
 @NEEDS_INVOCATIONS
-async def test_c19_62_a_bounded_compensation_lookup_says_so_rather_than_answering_none(
+async def test_c19_62_the_backward_pointer_is_an_indexed_lookup_and_not_a_walk(
     adapter, make_registry
 ):
-    """**BLOCKING, round 1.** `compensated_by` -- and therefore `outcome` -- lied silently
-    past the bound.
+    """**BLOCKING in round 1, and BLOCKING AGAIN in round 2 — one cause, three defects.**
 
     ACTIONS.md §9 stores only the FORWARD pointer, because the compensating invocation is
     written after the one it compensates and a store never rewrites a row
-    (INTERFACE.md §5.8), so the façade derives the backward one. That derivation reads the
-    ledger, and a ledger is *"one row per action per data row, **forever**"* (§6.3, **Q40**
-    admits nothing sizes it) -- so the read has a bound.
+    (INTERFACE.md §5.8), so the façade derives the backward one. **The first cut derived
+    it by WALKING the ledger, bounded**, and every round found a different face of that:
 
-    **The first cut discarded the page's `complete=False` and returned a bare `None`.**
-    Past the bound the report said `compensated_by=None` **and `outcome="applied"`** for
-    an invocation that had been compensated -- so the ledger did not merely lose a
-    pointer, it reported **the wrong outcome**, in the field §2.6 says *is* the mechanism
-    for `compensable`.
+    * **round 1** — past the bound it returned a bare ``None``, so a compensated
+      invocation read back ``outcome="applied"``. *The ledger reported the wrong OUTCOME*,
+      in the field §2.6 says **is** the mechanism for `compensable`;
+    * **round 1's fix** returned ``(id, why)`` and wired the sentence into
+      ``invocations()`` — and **round 2** found the second call site,
+      ``review_invocation``, destructuring the sentence into ``_why`` and dropping it. *A
+      fix is only as good as its application*, which is the eighth kill-row trip's own
+      sentence about a published key;
+    * **round 2** also measured the walk: it ran **once per returned row**, at
+      O(limit × ledger) — **200,020 row reads for twenty returned rows** on a 10,070-row
+      ledger, and 1,000,000 at the default `limit=100`.
 
-    That is the confident answer Rule U forbids, and this project has now named it nine
-    times. The bound stays -- ruling **R58** puts the façade's paging in Phase 3 and this
-    read feeds no guard -- and what changes is that the caller is **told** when the answer
-    could not be completed.
+    **Pushing the question down removes all three at once**, which is why the fix is a
+    primitive and not a fourth patch: there is no bound to lie about, no sentence to drop
+    and no walk. `find_invocations(compensates=…)` is an indexed equality on a column the
+    store already holds — and it is round 2 of the SPEC row's own finding one derivation
+    along, where *the three filters with no push-down were exactly the three governance
+    reads*.
+
+    This drives it past the size the old bound sat at, through **both** call sites.
     """
-    from open_ontology.aio.registry import _LEDGER_LIMIT
+    from open_ontology.aio.adapter import InvocationRecord
 
     registry = await make_registry(adapter)
     await action_family(registry, "f")
@@ -2599,29 +2607,48 @@ async def test_c19_62_a_bounded_compensation_lookup_says_so_rather_than_answerin
         gate_verdict="allowed", approved_by="auto:auto",
     )
 
-    # Under the bound, the derivation is exact and says nothing.
+    # Padding written straight through primitive 19, so the compensator is far past where
+    # a bounded walk would have stopped looking.
+    for i in range(10_200):
+        await registry.adapter.put_invocation(
+            InvocationRecord(
+                invocation_id=f"pad{i:06d}",
+                namespace="default",
+                family="f",
+                created_by_actor="user:sd",
+            )
+        )
     compensator = await registry.record_invocation(
         "undo", {}, actor="user:sd", outcome="applied", gate_verdict="allowed",
         approved_by="auto:auto", compensates=original.invocation_id,
     )
-    found, why = await registry._compensated_by(original.invocation_id, "default")
-    assert found == compensator.invocation_id and why is None
-    back = [
-        i for i in (await registry.invocations()).invocations
-        if i.invocation_id == original.invocation_id
-    ][0]
-    assert back.outcome == "compensated" and back.compensated_by == compensator.invocation_id
 
-    # Past it, the answer is `None` PLUS A SENTENCE -- never `None` alone.
-    padded, _ = await registry._compensated_by("an-id-no-row-carries", "default")
-    assert padded is None
-    bounded, sentence = await registry._compensated_by(
-        original.invocation_id, "a_namespace_that_holds_nothing"
+    # Call site 1 -- the listing.
+    listed = [
+        i for i in (await registry.invocations(family="f", limit=5)).invocations
+        if i.invocation_id == original.invocation_id
+    ]
+    assert listed, "the original is in the first page, ordered by created_at"
+    assert listed[0].outcome == "compensated", (
+        "the ledger must not report `applied` for an invocation that was compensated -- "
+        "that is the field 2.6 says IS the mechanism for `compensable`"
     )
-    assert bounded is None and sentence is None, (
-        "an EXHAUSTED read that found nothing is a fact, and says nothing"
-    )
-    assert _LEDGER_LIMIT > 0, "the bound is a number a reader can find"
+    assert listed[0].compensated_by == compensator.invocation_id
+
+    # Call site 2 -- `review_invocation`, which round 1's fix did not visit.
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        reviewed = await registry.review_invocation(
+            original.invocation_id, reviewed_by="user:boss"
+        )
+        assert not isinstance(reviewed, Refusal), reviewed
+        assert reviewed.outcome == "compensated", (
+            "one registry may not answer two ways about one invocation, and a fix "
+            "applied at one call site out of two is how the eighth trip happened"
+        )
+        assert reviewed.compensated_by == compensator.invocation_id
+
+    # An invocation nothing compensates is a FACT, not an unknown, and says nothing.
+    assert await registry._compensated_by(compensator.invocation_id, "default") is None
 
 @NEEDS_ATTRIBUTES
 async def test_c19_63_a_payload_schema_is_keyed_apart_from_the_familys_own_eight_keys(
@@ -2841,3 +2868,106 @@ async def test_c19_67_a_payload_schema_naming_nothing_is_not_the_same_as_naming_
     assert not [
         w for w in unnamed.warnings if w.startswith("payload_schema_unregistered:")
     ], "a family that names NO schema is not missing one"
+
+@NEEDS_ATTRIBUTES
+async def test_c19_68_a_declared_predicates_filter_is_answered_above_a_store_that_drops_it(
+    adapter, make_registry
+):
+    """**MAJOR, round 2.** `invocations(unreviewed=False)` answered `known=0` on the
+    fully capable leg with a row that belonged in the answer.
+
+    The `unreviewed` filter is **half** pushed down: the store applies
+    `NOT EXISTS(invocation_reviewed)`, and the half asking whether the FAMILY is in
+    `review` mode stays above it. For `unreviewed=True` the store's half is a
+    **narrowing** of the façade's predicate and the arrangement is sound. For `False` it
+    is not: the answer to *"which invocations are NOT awaiting review?"* is *every
+    auto-mode row plus every reviewed review-mode row*, and the store's `EXISTS` half
+    returns only the second -- **dropping the larger half**, which the registry can only
+    narrow, never widen.
+
+    Fix 2's guarantee -- *a backend that silently ignores a filter can no longer make
+    this call return a WRONG answer, only a slow one* -- holds exactly where the
+    push-down narrows. Where it does not, the filter is not pushed at all.
+    """
+    registry = await make_registry(adapter)
+    if not registry.caps.stores_invocations:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- stores_invocations=False; there is no ledger to filter."
+        )
+    await action_family(registry, "auto_fam", approval_mode="auto")
+    await action_family(registry, "rev_fam", approval_mode="review")
+    for family in ("auto_fam", "rev_fam"):
+        await registry.record_invocation(
+            family, {}, actor="user:sd", outcome="applied",
+            gate_verdict="allowed", approved_by="auto:auto",
+        )
+
+    assert [i.family for i in (await registry.invocations(unreviewed=True)).invocations] == ["rev_fam"]
+    assert [i.family for i in (await registry.invocations(unreviewed=False)).invocations] == [
+        "auto_fam"
+    ], "an auto-mode invocation is not awaiting review, and the store's half cannot say so"
+    assert (await registry.invocations(unreviewed=None)).known == 2
+
+@NEEDS_INVOCATIONS
+async def test_c19_69_a_naive_since_is_read_as_utc_rather_than_raising(adapter, make_registry):
+    """**MAJOR, round 2**, and a regression fix 2 introduced.
+
+    Re-applying every filter above the store put a Python-side `rec.created_at >= since`
+    where none existed before -- and **primitive 21 accepts a naive `since` and answers**
+    while the façade raised `TypeError: can't compare offset-naive and offset-aware
+    datetimes`. A façade that crashes on a value its own primitive takes is not a
+    narrower answer, it is a broken one.
+
+    The registry stores UTC throughout (PACKAGE.md §4.4), so reading a naive value as UTC
+    is the same reading every adapter already makes of one.
+    """
+    from datetime import UTC, datetime
+
+    registry = await make_registry(adapter)
+    await action_family(registry, "f")
+    await registry.record_invocation(
+        "f", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+    long_ago_naive = datetime(2020, 1, 1)
+    long_ago_aware = datetime(2020, 1, 1, tzinfo=UTC)
+    assert (await registry.invocations(since=long_ago_naive)).known == 1
+    assert (await registry.invocations(since=long_ago_aware)).known == 1
+    assert (await registry.invocations(since=datetime(2099, 1, 1))).known == 0
+
+@NEEDS_INVOCATIONS
+async def test_c19_70_the_invocation_input_census_enumerates_what_was_written(
+    adapter, make_registry
+):
+    """**MAJOR, round 2.** `attribute_census(kind="action_payload")` answered `keys=[]`
+    with **`complete=True`** after an invocation had carried an input.
+
+    `actions.ACTION_PAYLOAD_KIND` justifies the separate schema kind partly on *"it makes
+    `attribute_census(kind="action_payload")` the same enumeration for invocation inputs
+    that PACKAGE.md 5.5 gives type attributes"* — and nothing called `observe_attributes`
+    for them. The edge side has `_observe_edge_payload`; the action side had no twin.
+
+    PACKAGE.md §5.5 calls the census *"the floor that applies even in `off` mode"* and
+    argues it on `attributes` accumulating unwatched. **An empty census claiming
+    completeness is Rule U's forbidden empty in the one call whose only job is
+    enumerating what got written.**
+    """
+    from open_ontology.edges import TypeRef
+
+    registry = await make_registry(adapter)
+    if registry._attribute_store() is None:
+        pytest.skip(
+            "PACKAGE.md 5.5 -- the AsyncAttributeStore extension is optional (ruling R2) and "
+            "this backend declines it, so there is no census to take."
+        )
+    await seed(registry, "task", kind="entity")
+    await action_family(registry, "close_ticket", inputs=[InputSpec("ticket", "type")])
+    await registry.record_invocation(
+        "close_ticket",
+        {"ticket": TypeRef("default", "entity", "task")},
+        actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="auto:auto",
+    )
+    census = await registry.attribute_census(kind="action_payload")
+    assert [e.key for e in census.entries] == ["ticket"], census
+    assert census.entries[0].example == "default:entity:task"

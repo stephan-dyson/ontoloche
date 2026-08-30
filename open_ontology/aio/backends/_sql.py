@@ -1177,6 +1177,7 @@ class AsyncBaseSqlAdapter:
         gate_verdict: str | None = None,
         effect_undeclared: bool | None = None,
         unreviewed: bool | None = None,
+        compensates: str | None = None,
         after: str | None = None,
         limit: int = 100,
     ) -> InvocationPage:
@@ -1190,6 +1191,9 @@ class AsyncBaseSqlAdapter:
             ("created_by_actor", actor),
             ("outcome", outcome),
             ("gate_verdict", gate_verdict),
+            # ACTIONS.md 9's forward pointer, asked backwards. One indexed equality --
+            # the facade derives `compensated_by` from it rather than walking the ledger.
+            ("compensates", compensates),
         ):
             if value is not None:
                 where.append(f"{column} = {ph}")

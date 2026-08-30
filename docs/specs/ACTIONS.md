@@ -815,6 +815,7 @@ def find_invocations(
     gate_verdict: str | None = None,             # 4's override query
     effect_undeclared: bool | None = None,       # 2.5's blast-radius query
     unreviewed: bool | None = None,              # 5.2's review queue
+    compensates: str | None = None,              # 3.4's backward pointer, asked forwards
     after: str | None = None,                    # OPAQUE cursor; the keyset it encodes
                                                  #   is (created_at, invocation_id)
     limit: int = 100,

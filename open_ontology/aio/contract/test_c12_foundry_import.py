@@ -684,3 +684,93 @@ async def test_c12_15_a_new_row_whose_consumers_agree_is_still_aliased(adapter, 
     ))[0]
     assert not [w for w in entry.warnings if w.startswith("import_refused:")], entry.warnings
     assert "note" in (entry.aliases or ()), "the legal alias must still be written"
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+async def test_c12_16_the_tenth_trip_the_guard_read_a_state_the_call_destroys(
+    adapter, make_registry
+):
+    """**The kill row's TENTH trip**, found by round 2's fix-auditor lens -- pointed at
+    round 1's own fixes, because this project has counted where its next defect lives.
+
+    `C12-14` closed the case where the row being aliased ONTO does not exist yet, by
+    computing its consumer set from the incoming row's declared `predicates`. **It applied
+    that on one branch only.** When the row already exists the guard took the other branch
+    and read `_consumer_report` off the STORED row -- *the row this same call is about to
+    overwrite*, because `import_types` writes `predicates` from the incoming dict.
+
+    So the guard evaluated a state the call destroys, and the same declared row, the same
+    alias and the same final state got **two different answers depending on whether the
+    name happened to exist already**:
+
+    1. `commentable` and `gamma` are predicates with non-empty IDENTICAL extents, so
+       refusal #2 passes honestly;
+    2. `gamma` **already exists** declaring `meta_p`, and `svc:meta` gates on `meta_p` --
+       so both gate sets read `['svc:meta']` **at guard time** and refusal #1 passes
+       honestly too;
+    3. `commentable` is retired -- an ordinary, permitted governance act;
+    4. `import_types` writes `gamma` with `predicates: []` and
+       `aliases: ["commentable"]`. **Written, unrefused, unwarned**;
+    5. post-import the sets are `['svc:meta']` against `[]`, and
+       `resolve_type("commentable")` answers **`gamma` at confidence 1.0** -- a pair
+       `merge_types` AND `retire(successor=)` both refuse `different_consumer_sets`
+       NON-OVERRIDABLY.
+
+    **[Observed]** on sqlite, Postgres and both async legs, with the full suite green and
+    `check_merge_guard.py` exiting 0 -- the sixth consecutive trip its fixtures could not
+    pose.
+
+    **It is the sixth trip's diagnosis applied to a FIX rather than to a guard** -- *a
+    guard written for one call, over a fact more than one call can change* -- which is
+    also the eighth trip's shape, where a published key reached five callers out of six.
+    Refusal #1 now compares the sets **this write will produce**, on both branches and
+    computed the same way on both sides.
+    """
+    registry = await make_registry(adapter)
+    await registry.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    await seed(registry, "meta_p", kind="predicate")
+    await seed(registry, "commentable", kind="predicate", predicates=["meta_p"])
+    await seed(registry, "gamma", kind="predicate", predicates=["meta_p"])
+    for member in ("aaa_note", "bbb_memo"):
+        await seed(registry, member, predicates=["commentable", "gamma"])
+
+    # Both guards pass HONESTLY on the pre-import reading -- that is the whole trap.
+    assert (await registry._written_extent("default", "commentable", include_retired=True))[0] == (
+        (await registry._written_extent("default", "gamma", include_retired=True))[0]
+    )
+    assert {c.id for c in (await registry.consumers("commentable")).gates_on} == {
+        c.id for c in (await registry.consumers("gamma")).gates_on
+    } == {"svc:meta"}
+
+    retired = await registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
+    if isinstance(retired, Refusal):
+        pytest.skip(
+            "PACKAGE.md 3.6 -- this backend cannot record a forced retirement, so the "
+            f"fixture's first step is unreachable here: {retired.reason}"
+        )
+
+    entry = (await registry.import_types(
+        [
+            {
+                "name": "gamma",
+                "kind": "predicate",
+                "definition": "a capability, re-imported without its predicates",
+                "predicates": [],
+                "aliases": ["commentable"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    ))[0]
+    assert "import_refused:different_consumer_sets" in entry.warnings, entry.warnings
+    assert "commentable" not in (entry.aliases or ())
+
+    resolution = await registry.resolve_type(
+        "commentable", ResolveContext(source="the C12-16 fixture"), tier="opus"
+    )
+    assert resolution.outcome != "existing", (
+        "the tenth trip: the guard read the consumer set the import was about to "
+        "overwrite, and answered two ways for one final state"
+    )

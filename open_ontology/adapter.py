@@ -785,6 +785,14 @@ class StorageAdapter(Protocol):
         gate_verdict: str | None = None,
         effect_undeclared: bool | None = None,
         unreviewed: bool | None = None,
+        # **Row 6b's round 2.** ACTIONS.md 9 stores only the FORWARD pointer and the
+        # facade derives the backward one, and the first cut derived it by WALKING the
+        # ledger -- bounded, so it reported the wrong `outcome` past the bound, and
+        # O(limit x ledger) because it ran once per returned row (measured at 200,020
+        # row reads for twenty rows). It is one indexed lookup now. That is round 2 of
+        # the SPEC row's own finding, one derivation along: *the three filters with no
+        # push-down were exactly the three governance reads.*
+        compensates: str | None = None,
         after: str | None = None,
         limit: int = 100,
     ) -> InvocationPage: ...

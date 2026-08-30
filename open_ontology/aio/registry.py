@@ -25,7 +25,7 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Iterable, Sequence
 from open_ontology._clock import Clock, SystemClock
 from open_ontology._resolve import DeterministicResolver, identity_key, same_word, Resolver
@@ -139,10 +139,9 @@ from open_ontology.registry import (
     _EDGE_HISTORY_WHY,
     _EDGE_PAGE_SIZE,
     _IDENTITY_CHAIN_CAP,
-    _LEDGER_LIMIT,
-    _LEDGER_PAGE,
     _NEAR_MISS_CAP,
     _asserts_domain_semantic,
+    _aware,
     _created_by,
     _edge_from_record,
     _edge_to_record,
@@ -6253,21 +6252,40 @@ class AsyncRegistry:
                 # COMPUTE, and only where the backend can report a row's predicates at
                 # all.
                 checks: list = [(declared_row, "kind_mismatch", None, None)]
-                if standing is not None:
-                    checks.append((standing, "different_consumer_sets", None, None))
-                elif self.caps.indexes_membership:
-                    # **The NINTH trip's door.** The shipped guard fell back to comparing
-                    # `other` against ITSELF here, which made the two sets equal by
-                    # construction and refusal #1 unable to fire -- and a capability
-                    # predicate was merged as a duplicate through it. BOTH sides are
-                    # computed the same way, or the comparison manufactures a difference
-                    # rather than finding one. See `_gates_on`.
+                # **Refusal #1 compares the consumer sets this write WILL PRODUCE, on
+                # BOTH branches -- and applying it to only one of them was the kill row's
+                # TENTH trip.**
+                #
+                # Round 1 computed the incoming row's set when the row did not exist yet
+                # (the NINTH trip) and left the other branch reading `_consumer_report`
+                # off the STANDING row -- **the row this same call is about to
+                # overwrite**, because `import_types` writes `predicates` from the
+                # incoming dict. So the guard evaluated a state the call destroys:
+                # [Observed] `commentable` and `gamma` both gating `['svc:meta']` at
+                # guard time, the import writing `gamma` with `predicates: []` and
+                # `aliases: ["commentable"]` unrefused, and `resolve_type("commentable")`
+                # answering `gamma` at **confidence 1.0** with the sets now `['svc:meta']`
+                # against `[]` -- a pair `merge_types` and `retire(successor=)` both
+                # refuse NON-OVERRIDABLY. **The same declared row, the same alias, the
+                # same final state, and the guard answered two ways depending on whether
+                # the name happened to exist already.**
+                #
+                # That is the SIXTH trip's diagnosis one artefact along -- *a guard
+                # written for one call over a fact more than one call can change* --
+                # applied to a FIX rather than to a guard, which is the eighth trip's own
+                # shape. Both sides are computed the same way and from what the write
+                # will leave behind.
+                if self.caps.indexes_membership:
                     checks.append(
                         (
-                            declared_row,
+                            standing if standing is not None else declared_row,
                             "different_consumer_sets",
                             await self._gates_on(
-                                namespace, kind, name, declared_predicates or ()
+                                namespace,
+                                kind,
+                                name,
+                                declared_predicates or (),
+                                rec=standing,
                             ),
                             await self._gates_on(
                                 other.namespace,
@@ -6279,18 +6297,19 @@ class AsyncRegistry:
                         )
                     )
                 # ...and on `indexes_membership=False` refusal #1 is SKIPPED, not refused
-                # and not passed a half-known operand. A stored row's `predicates` come
+                # and not given a half-known operand. A stored row's `predicates` come
                 # back empty there -- the backend has no membership table -- so comparing
                 # them against an incoming row's known ones compares a fact against an
                 # absence. That is the FIRST trip's operand pointing the other way:
                 # *unknowable is not equal*, and it is not DIFFERENT either. Refusing
                 # would ban `import_types` from writing any aliased row on UC1 Tenshen's
                 # own declared shape, which is `C10-09`'s, `C3-13`'s and `C12-13`'s one
-                # lesson. **The residual is stated rather than implied:** #1 is
-                # unevaluable at this door there, exactly as it is at `merge_types`'
-                # (both sides read blank and compare equal), and what still guards a
-                # PREDICATE pair is refusal #2 -- which refuses every one of them,
-                # because the extents are unknowable too.
+                # lesson. **The residual is stated rather than implied and is Q69:** #1 is
+                # unevaluable at this door there, exactly as it is at `merge_types`' (both
+                # sides read blank and compare equal); a PREDICATE pair is still refused
+                # by #2, because the extents are unknowable too, and an ENTITY pair is
+                # guarded by nothing -- which is true of `merge_types` on that backend as
+                # well, so the doors agree.
                 checks.append((declared_row, "predicate_merge", None, None))
 
                 for operand, guard, there_gates, here_gates in checks:
@@ -7645,62 +7664,57 @@ class AsyncRegistry:
             attr_schema_version=rec.attr_schema_version,
         )
 
-    async def _compensated_by(self, invocation_id: str, namespace: str) -> tuple[str | None, str | None]:
-        """The BACKWARD pointer, derived. ``(compensator, why it may be unknown)``.
+    async def _compensated_by(self, invocation_id: str, namespace: str) -> str | None:
+        """The BACKWARD pointer, derived. ACTIONS.md 9.
 
-        The store holds only the forward pointer, because the compensating invocation is
-        written *after* the one it compensates and a store never rewrites a row
-        (INTERFACE.md 5.8). One fact stored one way and read the other; stated because
-        the asymmetry is real and a reader who saw only the surface would look for a
-        field the store does not have.
+        The store holds only the FORWARD pointer, because the compensating invocation is
+        written after the one it compensates and a store never rewrites a row
+        (INTERFACE.md 5.8), so the facade derives the backward one. **One indexed lookup,
+        and it took a round to get there.**
 
-        **The second element is Rule U, and leaving it out was a BLOCKING finding of
-        this row's own first adversarial round.** The read is bounded at
-        `_LEDGER_LIMIT`, and the first cut discarded the page's `complete=False` and
-        returned a bare ``None`` -- so past the bound the facade reported
-        ``compensated_by=None`` AND ``outcome="applied"`` for an invocation that HAD been
-        compensated. **[Observed]** with 10,100 rows padded ahead of the pair: the ledger
-        did not merely lose a pointer, it reported *the wrong outcome*, in the one field
-        2.6 says IS the mechanism for `compensable`.
+        The first cut WALKED the ledger, bounded, and that was wrong
+        in three ways at once -- all three found by round 2's fix-auditor lens:
 
-        That is the forbidden confident answer this project has now named nine times: an
-        unfinished look is not a fact. The bound stays -- ruling **R58** puts the facade's
-        paging in Phase 3 and this read feeds no guard -- and what changes is that the
-        caller is told when the answer could not be completed.
+        * past the bound it returned a bare ``None``, so a compensated invocation read
+          back ``outcome="applied"``. **The ledger reported the wrong OUTCOME**, in the
+          field 2.6 says IS the mechanism for `compensable` (`C19-62`);
+        * round 1 made it return ``(id, why)`` and wired the sentence into
+          ``invocations()`` -- and the SECOND call site, ``review_invocation``,
+          destructured the sentence into ``_why`` and threw it away. *A fix is only as
+          good as its application*, which is the eighth trip's own sentence about a key;
+        * it ran once per returned row, at O(limit x ledger) -- **measured at 200,020 row
+          reads for twenty returned rows** on a 10,070-row ledger.
+
+        Pushing the question down removes all three: there is no bound to lie about, no
+        sentence to drop, and no walk. That is round 2 of the SPEC row's own finding one
+        derivation along -- *the filters with no push-down were exactly the governance
+        reads* -- and `find_invocations(compensates=)` is an indexed equality on a column
+        the store already holds.
         """
-        after: str | None = None
-        cursors: set[str] = set()
-        while True:
-            page = await self.adapter.find_invocations(
-                namespace=namespace, after=after, limit=_LEDGER_PAGE
-            )
-            for rec in page.records:
-                if rec.compensates == invocation_id:
-                    return rec.invocation_id, None
-            if not page.complete and page.next_after is None:
-                return None, (
-                    page.why_incomplete
-                    or "the backend could not answer this read in full"
-                )
-            after = page.next_after
-            if after is None:
-                return None, None
-            if after in cursors:
-                return None, (
-                    "this backend returned a pagination cursor it had already returned "
-                    "(PACKAGE.md 3.4 primitive 21)"
-                )
-            cursors.add(after)
-            if len(cursors) * _LEDGER_PAGE >= _LEDGER_LIMIT:
-                # **The bound is on the WALK and it is reported rather than hidden.**
-                # A ledger is unbounded by construction (6.3, Q40), so a derivation that
-                # reads it has to stop somewhere -- and the honest form of stopping is
-                # `None` plus a sentence, never `None` alone.
-                return None, (
-                    f"the compensation lookup was bounded at {_LEDGER_LIMIT} rows; "
-                    f"whether this invocation was compensated cannot be told from this "
-                    f"surface (ruling R58 puts the facade's paging in Phase 3)"
-                )
+        page = await self.adapter.find_invocations(
+            namespace=namespace, compensates=invocation_id, limit=2
+        )
+        for rec in page.records:
+            if rec.compensates == invocation_id:
+                return rec.invocation_id
+        return None
+
+    async def _observe_invocation_inputs(
+        self, namespace: str, inputs: dict, schema_version: int | None
+    ) -> None:
+        """PACKAGE.md 5.5's floor, applied to invocation inputs. See
+        :meth:`_observe_edge_payload`, which is the same floor one object along."""
+        store = self._attribute_store()
+        observed = {name: ref_key(ref) for name, ref in inputs.items()}
+        if store is None or not observed:
+            return
+        await store.observe_attributes(
+            namespace,
+            ACTION_PAYLOAD_KIND,
+            observed,
+            at=self._now(),
+            schema_version=schema_version,
+        )
 
     async def record_invocation(
         self,
@@ -7879,10 +7893,20 @@ class AsyncRegistry:
         # predicted the collision and said it worked *"because the two objects never
         # share a store"*; they share `oo_attr_schema`. Deviation D-6b-8, and it is
         # D-4c-1 one kind along.
+        # **By the family's DECLARED schema name, not by the family's own name** -- the
+        # edge side does exactly this (`_edge_payload_schema` passes
+        # `fam.payload_schema`), and passing `family` here made the mechanism inert in
+        # both directions: the enforce-mode schema a family NAMED was never consulted,
+        # and a schema that happened to be keyed by the family name was enforced although
+        # the family never named it. Worse, `payload_schema_unregistered` -- minted in
+        # this row to END R34's inert field -- then fired as a **confident false
+        # negative** about a schema that was registered. Round 2's fix-auditor lens;
+        # `C19-63`'s own fixture could not see it because it registered the schema under
+        # `name == family`.
         schema, violations = await self._check_attributes(
             namespace,
             ACTION_PAYLOAD_KIND,
-            family,
+            fam.payload_schema,
             {k: str(v) for k, v in inputs.items()},
         )
         if violations and schema and schema.mode == "enforce":
@@ -7906,6 +7930,18 @@ class AsyncRegistry:
             schema is None or schema.name != fam.payload_schema
         ):
             warnings.append(f"payload_schema_unregistered:{fam.payload_schema}")
+        # **PACKAGE.md 5.5's census floor, applied to invocation inputs.** `actions.py`
+        # justifies the `action_payload` schema kind partly on *"it makes
+        # `attribute_census(kind="action_payload")` the same enumeration for invocation
+        # inputs that PACKAGE.md 5.5 gives type attributes"* -- and nothing was calling
+        # `observe_attributes` for them, so that census answered `keys=[]` with
+        # **`complete=True`** after an invocation had carried one. An empty census that
+        # claims completeness is Rule U's forbidden empty in the one call whose only job
+        # is enumerating what got written. `_observe_edge_payload` is the same floor one
+        # object along, and this is its twin. Round 2's fix-auditor lens.
+        await self._observe_invocation_inputs(
+            namespace, inputs, schema.version if schema is not None else None
+        )
         warnings.extend(self._invocation_warnings())
 
         now = self._now()
@@ -8054,8 +8090,9 @@ class AsyncRegistry:
             invocation_id=invocation_id,
             detail={"reviewed_by": reviewed_by},
         )
-        compensator, _why = await self._compensated_by(invocation_id, rec.namespace)
-        return await self._invocation(rec, compensated_by=compensator)
+        return await self._invocation(
+            rec, compensated_by=await self._compensated_by(invocation_id, rec.namespace)
+        )
 
     # ==================================================== ACTIONS.md 6.3 invocations
     async def invocations(
@@ -8102,7 +8139,20 @@ class AsyncRegistry:
             outcome=outcome,
             gate_verdict=gate_verdict,
             effect_undeclared=effect_undeclared,
-            unreviewed=unreviewed,
+            # **Only `True` pushes down, and pushing `False` down was a MAJOR finding.**
+            # The store's half is `NOT EXISTS(invocation_reviewed)`, which for `False`
+            # returns only rows that HAVE been reviewed -- and the answer to
+            # `unreviewed=False` is *every auto-mode row plus every reviewed review-mode
+            # row*, so the store dropped the larger half and the registry can only narrow
+            # above it, never widen. [Observed] `known=0` on the fully capable leg with
+            # two rows in the ledger, one of which belonged in the answer.
+            #
+            # Fix 2's guarantee -- *a backend that silently ignores a filter can no longer
+            # make this call return a WRONG answer, only a slow one* -- holds only where
+            # the push-down is a NARROWING of the facade's own predicate. For `False` it
+            # is not, so it is not pushed at all and the whole question is answered above
+            # the store.
+            unreviewed=True if unreviewed else None,
             since=since,
             limit=limit,
         )
@@ -8131,7 +8181,7 @@ class AsyncRegistry:
             and (gate_verdict is None or rec.gate_verdict == gate_verdict)
             and (
                 since is None
-                or (rec.created_at is not None and rec.created_at >= since)
+                or (rec.created_at is not None and rec.created_at >= _aware(since))
             )
             and (
                 effect_undeclared is None
@@ -8169,13 +8219,13 @@ class AsyncRegistry:
                     kept.append(rec)
             rows = kept
 
-        built = []
-        unknown_compensation: str | None = None
-        for rec in rows:
-            compensator, why_unknown = await self._compensated_by(rec.invocation_id, rec.namespace)
-            if why_unknown is not None:
-                unknown_compensation = why_unknown
-            built.append(await self._invocation(rec, compensated_by=compensator))
+        built = [
+            await self._invocation(
+                rec,
+                compensated_by=await self._compensated_by(rec.invocation_id, rec.namespace),
+            )
+            for rec in rows
+        ]
 
         filtered = any(
             value is not None
@@ -8224,11 +8274,6 @@ class AsyncRegistry:
             )
         elif filtered:
             why = "a filter suppressed rows; this is a floor, not a total"
-        elif unknown_compensation is not None:
-            # Rule U reaching the REPORT: if the backward pointer could not be resolved
-            # for any row, this answer is not complete about `compensated_by` or about
-            # the `outcome` derived from it, and saying so is the whole of the fix.
-            why = unknown_compensation
         return InvocationReport(
             invocations=tuple(built),
             # `known: int | None` and not `int`, because a backend entitled to say *"we
