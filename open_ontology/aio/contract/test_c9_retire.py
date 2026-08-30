@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C9 -- ``retire`` and ``reinstate`` (19). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (21). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -790,3 +790,139 @@ async def test_c9_19_a_non_overridable_guard_is_never_reached_through_an_overrid
     assert isinstance(plain, Refusal), plain
     assert plain.reason == "no_consumer_evidence"
     assert plain.detail["overridable"] is True
+
+async def test_c9_20_refusal_one_transfers_to_a_successor_and_force_does_not_move_it(
+    adapter, make_registry
+):
+    """§5.10's refusal **#1**, on `retire(successor=)`. Row 4c, third adversarial round.
+
+    `C9-18` gave this call §5.10's refusals #2 and #3 on the argument that *"the two
+    guards that transfer are the two that are about IDENTITY rather than about
+    evidence"*. **That filed `different_consumer_sets` under evidence, and it is not.**
+    §5.10's own rationale for #1 is *"merging asserts that every consumer of one accepts
+    the other — which is exactly the false claim 0.1 describes"*, an identity claim; the
+    refusal table marks it *"No. Not by `force`, not by `acknowledge`"*; and
+    `ROADMAP.md` states the requirement with no qualification at all — *"It MUST refuse
+    when the two have different consumer sets."*
+
+    **[Observed]** a pair `merge_types` refuses under all seven acknowledgements,
+    collapsed by `retire(successor=, force=True)`. Two documents disagreed about which
+    bucket #1 was in, and the disagreement had a `force=True` door in it.
+
+    `force` overrides what could be **seen**, never what would become **true** — the
+    sentence `C9-18` already carries, applied to the guard it left behind.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    if not registry.caps.indexes_membership:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- indexes_membership=False makes every extent unknowable, "
+            "so `predicate_merge` fires first and this guard is never reached. C9-08 "
+            "holds that half"
+        )
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "searchable", kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable", "searchable"])
+    await registry.register_consumer(
+        Consumer(id="app.comments", gate="commentable", on_unknown="drop",
+                 owner="team-a", locator="app/comments.py")
+    )
+    await registry.register_consumer(
+        Consumer(id="app.search", gate="searchable", on_unknown="drop",
+                 owner="team-b", locator="app/search.py")
+    )
+
+    merged = await registry.merge_types(
+        "commentable", "searchable", "they look alike", merged_by="user:sd",
+        acknowledge=[
+            "different_consumer_sets", "predicate_merge", "kind_mismatch",
+            "cross_namespace_merge", "retired_operand", "definitions_diverge",
+            "no_consumer_evidence",
+        ],
+    )
+    assert isinstance(merged, Refusal) and merged.reason == "different_consumer_sets"
+    assert merged.detail["overridable"] is False
+
+    for force in (False, True):
+        refused = await registry.retire(
+            "commentable", "folded", retired_by="user:sd", successor="searchable",
+            force=force,
+        )
+        assert isinstance(refused, Refusal), (
+            f"retire(successor=, force={force}) reaches the identical collapse, so it "
+            f"reaches the identical refusal"
+        )
+        assert refused.reason in ("different_consumer_sets", "live_consumers"), refused
+        if refused.reason == "different_consumer_sets":
+            assert refused.detail["overridable"] is False
+
+@pytest.mark.requires_capability("stores_events")
+async def test_c9_21_a_consumers_gate_and_a_types_usage_follow_the_identity(
+    adapter, make_registry
+):
+    """**Ruling R38 was ruled for BOTH documents and shipped for one call.** Row 4c, r3.
+
+    `INTERFACE.md` §2.1 says *"a reference to a type resolves to the identity that type
+    now belongs to"* — and it landed in `resolve_type` and `neighbors` while every other
+    surface holding a reference went on comparing the written string. Two of those are
+    confident false negatives in the calls §5.9 guards a retirement with:
+
+    * **`Consumer.gate`.** A live gating consumer of an absorbed predicate was filed
+      under `would_drop` on the survivor **with no warning**, and `retire(survivor)` then
+      succeeded with **no `live_consumers` refusal** — verbatim the row-3c defect
+      `_consumer_report`'s own comment calls *"the exact opposite of the truth"*, one
+      axis along.
+    * **`usage`.** 500 uses recorded under the word the registry says still resolves left
+      the survivor reading `count=0, orphaned=True, why="no use of this type has been
+      recorded"`, and `list_types(orphaned=True)` nominated it for retirement. §5.7 calls
+      that *"the sensor for the venture's core bet"*; it read zero on the most-used word
+      in the vocabulary.
+
+    `record_use` still writes under whichever name the caller used — the record is what
+    happened, and nothing rewrites it. It is the **report** that sums the identity.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    if not registry.caps.indexes_membership or not registry.caps.counts_usage:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend cannot compute an extent or does not count "
+            "usage, so neither half of this has a fact to be right or wrong about"
+        )
+    await seed(registry, "commentable", kind="predicate", definition="can carry comments")
+    await seed(registry, "searchable", kind="predicate", definition="can carry comments")
+    await seed(registry, "note", predicates=["commentable", "searchable"])
+    merged = await registry.merge_types(
+        "commentable", "searchable", "one word for one capability", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    await registry.register_consumer(
+        Consumer(id="app.comments", gate="commentable", on_unknown="drop",
+                 owner="team-a", locator="app/comments.py")
+    )
+    report = await registry.consumers("searchable")
+    assert [c.id for c in report.gates_on] == ["app.comments"], (
+        "the gate names the word the registry says still resolves, at confidence 1.0 -- "
+        "so it gates on this type"
+    )
+    assert not report.would_drop, (
+        "and it is NOT a consumer that would silently drop this type, which is the "
+        "opposite claim"
+    )
+    blocked = await registry.retire("searchable", "no longer needed", retired_by="user:sd")
+    assert isinstance(blocked, Refusal) and blocked.reason == "live_consumers", (
+        "§5.9 guards retirement with `consumers`, and it can only guard what that call "
+        "can see"
+    )
+
+    for _ in range(5):
+        await registry.record_use("commentable", by="svc.notes")
+    survivor = await registry.usage("searchable")
+    assert survivor.count == 5, (
+        "usage is summed over the IDENTITY -- a survivor reading zero about the "
+        "most-used word in the vocabulary is §5.7's own named failure"
+    )
+    assert survivor.orphaned is not True, (
+        "and it is not nominated for retirement as an orphan. `orphaned is None` on a "
+        "backend that cannot timestamp usage is Rule U and correct; `True` here would "
+        "be the confident false negative"
+    )

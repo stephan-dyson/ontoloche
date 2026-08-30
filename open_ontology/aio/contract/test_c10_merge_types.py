@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C10 -- ``merge_types``, and the door its operands come through (12). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the doors its operands come through (13). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -18,7 +18,7 @@ warns.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import Consumer, MergeResult, Refusal, TypeEntry
+from open_ontology.types import Consumer, MergeResult, Refusal, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -530,4 +530,76 @@ async def test_c10_12_predicate_requires_review_marks_the_unreviewed_and_only_th
     ))[0]
     assert "predicate_requires_review" not in entity.warnings, (
         "R40 narrows one kind and nothing else"
+    )
+
+@pytest.mark.requires_capability("stores_events")
+async def test_c10_13_the_sixth_trip_four_doors_into_one_stale_claim(adapter, make_registry):
+    """**`ROADMAP.md`'s kill row, SIXTH trip — four doors, one root cause.** Row 4c,
+    third adversarial round.
+
+    Trips 1–5 were all *the guard did not look properly*: unknowable compared equal,
+    empty compared equal, a caller with no guard, an alias door, a partial read. **This
+    one is different in kind: the guard looked correctly, and then the fact changed.**
+    Every identity guard in this registry compares extents at **write** time and
+    `resolve_type` grants confidence 1.0 at **read** time; four things move in between.
+    Rule U's fourth operand — unknowable is not equal, empty is not equal, partial is not
+    equal, and **STALE is not equal**.
+
+    **Door 1 needs nothing but two legal merges.** Guard #2 compares `left`'s extent to
+    `right`'s and says nothing about `left.aliases`, which `merge_types` re-points at
+    `right` in the same write. So: merge A→B while their extents match; let ordinary
+    vocabulary growth make B and C match; merge B→C. **A's alias rides across, never
+    compared to C, and `resolve_type(A)` answers C at 1.0** — a pair the registry refuses
+    non-overridably when asked directly.
+
+    The other three doors are `reinstate` re-activating a row whose dormant aliases
+    nothing re-checked, `import_types` skipping both alias guards for a `deprecated` row,
+    and an alias written while the word was free with the predicate created afterwards.
+    All four are the same sentence: **an identity claim is checked when it is written and
+    never again.**
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    if not registry.caps.indexes_membership or not registry.caps.stores_aliases:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend cannot compute an extent or cannot store "
+            "aliases, so the fixture's premise is unreachable. C9-08 and C10-11 hold the "
+            "unknowable half"
+        )
+    for name in ("commentable", "searchable", "taggable"):
+        await seed(registry, name, kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable", "searchable", "taggable"])
+
+    first = await registry.merge_types(
+        "commentable", "searchable", "identical extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(first, Refusal), (
+        "this merge is legal and must stay legal -- the guard is narrowed, not banned"
+    )
+    assert "commentable" in first.aliases_added
+
+    # Ordinary vocabulary growth: a new type declaring two existing predicates.
+    await seed(registry, "doc", predicates=["searchable", "taggable"])
+
+    second = await registry.merge_types(
+        "searchable", "taggable", "identical extents", merged_by="user:sd",
+        acknowledge=[
+            "definitions_diverge", "no_consumer_evidence", "predicate_merge",
+            "kind_mismatch", "retired_operand",
+        ],
+    )
+    assert isinstance(second, Refusal), (
+        "`searchable` and `taggable` DO have identical extents -- but `searchable` "
+        "carries `commentable`'s alias, and `commentable` does not. Transferring it "
+        "would assert an equivalence the registry refuses non-overridably when asked"
+    )
+    assert second.detail["overridable"] is False
+    assert "commentable" in second.detail.get("transferred_aliases", [])
+
+    resolution = await registry.resolve_type(
+        "commentable", ResolveContext(), tier="unspecified"
+    )
+    assert resolution.type != "taggable", (
+        "the collapse the registry refuses when asked directly must not be reachable by "
+        "asking twice"
     )

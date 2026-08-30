@@ -288,6 +288,37 @@ class AsyncRegistry:
         return (self._durability_warning,) if self._durability_warning else ()
 
     # ------------------------------------------------------------------ projections
+    async def _identity_names(self, rec: TypeRecord) -> tuple[str, ...]:
+        """Every name this row's identity now answers to. **Ruling R38, row 4c round 3.**
+
+        `INTERFACE.md` §2.1 rules that *"a reference to a type resolves to the identity
+        that type now belongs to"* — **for both documents**, not for one call. It shipped
+        in `resolve_type` and in `neighbors`, and every other surface that holds a
+        reference went on comparing the written string:
+
+        * `Consumer.gate` — a live gating consumer of an absorbed predicate was filed
+          under `would_drop` on the survivor **with no warning**, and `retire(survivor)`
+          then succeeded with no `live_consumers` refusal. Verbatim the row-3c defect
+          this method's own comment calls *"the exact opposite of the truth"*, one axis
+          along: identity instead of kind;
+        * `usage` / `record_use` — 500 uses recorded under the word the registry says
+          still resolves left the survivor reading `count=0, orphaned=True, why="no use
+          of this type has been recorded"`, and `list_types(orphaned=True)` then
+          nominated it for retirement. §5.7 calls that call *"the sensor for the
+          venture's core bet"*.
+
+        Both are **confident false negatives**, which is the one thing Rule U exists to
+        forbid, in the two calls §5.9 guards a retirement with.
+
+        Uncached across calls on purpose: this is one paged read of a namespace's retired
+        rows, and `_consumer_report` is not a request path. Where it *is* hot — the
+        `neighbors` walk — the closure is memoised per call already.
+        """
+        closure, _, _ = await self._identity_closure(
+            TypeRef(rec.namespace, rec.kind, rec.name), {}
+        )
+        return tuple(ref.name for ref in closure)
+
     async def _consumer_report(
         self,
         rec: TypeRecord,
@@ -317,6 +348,11 @@ class AsyncRegistry:
         # did not. Row 3c, after an adversarial review round drove it.
         member_of = set(rec.predicates)
         gates_directly = rec.kind == "predicate"
+        # **A gate is a REFERENCE to a predicate, so it resolves to the identity that
+        # predicate now belongs to** (row 4c, round 3). See `_identity_names`: without
+        # this, a merge silently moved a live gating consumer into `would_drop` and let
+        # `retire` succeed with no `live_consumers` refusal.
+        identity = set(await self._identity_names(rec)) if gates_directly else {rec.name}
         gates_on: list[Consumer] = []
         would_drop: list[Consumer] = []
         would_error: list[Consumer] = []
@@ -329,7 +365,7 @@ class AsyncRegistry:
                 registered_at=row.registered_at,
                 locator=row.locator,
             )
-            if consumer.gate in member_of or (gates_directly and consumer.gate == rec.name):
+            if consumer.gate in member_of or (gates_directly and consumer.gate in identity):
                 gates_on.append(consumer)
             elif consumer.on_unknown == "drop":
                 would_drop.append(consumer)
@@ -451,6 +487,33 @@ class AsyncRegistry:
         policy = self.policy(rec.namespace)
         window = policy.orphan_window
         row = await self.adapter.get_usage(rec.namespace, rec.kind, rec.name)
+
+        # **Usage is summed over the IDENTITY, not over the written word** (row 4c,
+        # round 3). `record_use` goes on writing under whichever name the caller used --
+        # the record is what happened, and nothing rewrites it -- but the survivor's
+        # report must not read `count=0, orphaned=True` about the most-used word in the
+        # vocabulary. See `_identity_names`; §5.7 calls this *"the sensor for the
+        # venture's core bet"* and A4 says it may be the only one.
+        absorbed = [n for n in await self._identity_names(rec) if n != rec.name]
+        for other in absorbed:
+            extra = await self.adapter.get_usage(rec.namespace, rec.kind, other)
+            if extra is None:
+                continue
+            if row is None:
+                row = extra
+                continue
+            row = replace(
+                row,
+                count=(row.count or 0) + (extra.count or 0),
+                last_seen=max(
+                    [t for t in (row.last_seen, extra.last_seen) if t is not None],
+                    default=None,
+                ),
+                first_seen=min(
+                    [t for t in (row.first_seen, extra.first_seen) if t is not None],
+                    default=None,
+                ),
+            )
 
         if not self.caps.counts_usage:
             why = self.caps.reason("counts_usage")
@@ -1327,6 +1390,42 @@ class AsyncRegistry:
                 return await self._entry(existing, extra_warnings=("name_previously_retired",))
             return await self._entry(existing)
 
+        # **A word a LIVE entry already answers to is not a free word** (row 4c, round 3).
+        # `get_type` matches `name` and never `aliases`, so a name held only as somebody
+        # else's alias looked free -- and creating a row under it produced **two active
+        # entries with one word between them**, which is `C16-06`'s whole-store invariant
+        # and mechanism **4** itself. `C16-06` did not catch it because it only ever ran
+        # over the fixture its own test builds.
+        #
+        # It is the kill row's sixth trip by a fourth door: write the alias while the
+        # word is free, create the predicate afterwards, and the identity guard that
+        # would have refused ran once, over a world with nothing yet to compare.
+        # **Only an ALIAS held by a live entry, never another KIND's own name.** The
+        # first cut reused `_alias_clash`, which treats a same-name-different-kind entry
+        # as a collision -- correct for `reinstate`, and wrong here, because
+        # PACKAGE.md 4.1 explicitly blesses one word under two kinds and `C0-11` pins
+        # that `get_type` raises on it. Refusing there would have made this row reject
+        # vocabularies the specification permits, which is the shape D-4b-5 records for
+        # a different rule. Caught by `C12-10` within the minute.
+        clash = await self._alias_holder(namespace, name, kind)
+        if clash is not None:
+            return Refusal(
+                "alias_collision",
+                {
+                    "name": name,
+                    "kind": kind,
+                    "namespace": namespace,
+                    "held_by": clash,
+                    "why": (
+                        f"{clash!r} is an active entry that already answers to {name!r}; "
+                        f"creating a second live entry under that word is mechanism 4, "
+                        f"and INTERFACE.md 5.12's `alias_collision` says exactly this "
+                        f"about `reinstate` one call along"
+                    ),
+                    "overridable": False,
+                },
+            )
+
         schema, violations = await self._check_attributes(namespace, kind, name, attributes)
         warnings: list[str] = []
         if violations:
@@ -1839,6 +1938,50 @@ class AsyncRegistry:
         # the CONSUMER guards, which are about what we could see, never the identity
         # guards, which are about what would become true. Pinned by `C9-18`.
         if successor is not None:
+            # **§5.10's refusal #1 transfers too, and deciding it did not was a
+            # documented mistake** (row 4c, round 3). `INTERFACE.md` §5.9 said *"the two
+            # guards that transfer are the two that are about IDENTITY rather than about
+            # evidence -- §5.10's refusals #2 and #3"*, filing `different_consumer_sets`
+            # under *evidence*. But §5.10's own rationale for #1 is *"merging asserts
+            # that every consumer of one accepts the other, which is exactly the false
+            # claim 0.1 describes"* -- **an identity claim**, and §5.10 marks it *"No.
+            # Not by `force`, not by `acknowledge`"*.
+            #
+            # **[Observed]** a pair `merge_types` refuses non-overridably under all seven
+            # acknowledgements, collapsed by `retire(successor=, force=True)`. Two
+            # sections disagreed about which bucket #1 was in, and the disagreement had a
+            # `force=True` door in it. `ROADMAP.md` states the requirement without
+            # qualification: *"It MUST refuse when the two have different consumer
+            # sets."*
+            succ_for_consumers = await self.adapter.get_type(
+                namespace, successor, kind=rec.kind
+            )
+            if succ_for_consumers is not None:
+                # Computed here rather than reused: D-4c-5 moved the identity guards
+                # ABOVE the consumer guards, so `report` does not exist yet -- and that
+                # ordering is the point, since this refusal is an identity guard too.
+                here = {c.id for c in (await self._consumer_report(rec)).gates_on}
+                there = {
+                    c.id for c in (await self._consumer_report(succ_for_consumers)).gates_on
+                }
+                if here != there:
+                    return Refusal(
+                        "different_consumer_sets",
+                        {
+                            "from": sorted(here),
+                            "into": sorted(there),
+                            "type": type,
+                            "successor": successor,
+                            "why": (
+                                "a successor redirects every `resolve_type` for this "
+                                "word at confidence 1.0, which asserts that every "
+                                "consumer of one accepts the other -- the same claim "
+                                "`merge_types` refuses non-overridably as its refusal #1",
+                            )[0],
+                            "overridable": False,
+                        },
+                    )
+
             # `kind=` is passed for the reason `_alias_identity_breach` uses `name_in`:
             # `get_type` with no kind RAISES on a word registered under two kinds
             # (PACKAGE.md 4.1, `C0-11`), and an identity guard must never be the thing
@@ -2165,6 +2308,35 @@ class AsyncRegistry:
         # Stated cost: a `stores_events=False` store cannot un-burn a name. That is the
         # state of the world BEFORE this row, unchanged -- and it is consistent, because
         # `retire(force=True)` is already refused on such a store for the same reason.
+        # **A row coming back to life brings its ALIASES with it, and nothing re-checked
+        # them** (row 4c, round 3). `reinstate` clears the retirement and re-activates
+        # the row; every alias it carries becomes a confidence-1.0 answer again, over a
+        # world that has moved since they were written. `_lifecycle_collisions` scans
+        # ACTIVE rows only -- so an alias naming a *retired* predicate is invisible to
+        # it, which is the exact blind spot the FOURTH trip named for `_alias_clash`
+        # (*"a retired predicate name still resolves and still has an extent"*),
+        # untouched in the sibling guard.
+        #
+        # `check_merge_guard.py` had `reinstate` recorded as *"a SPLIT, not a collapse …
+        # it cannot make two identities into one"*. It can, and that entry was a person's
+        # judgement written down and wrong -- which is the enumeration working as
+        # designed, because a wrong judgement on the record is one a reviewer can find.
+        dormant = tuple(getattr(rec, "aliases", ()) or ())
+        if dormant:
+            breach = await self._alias_identity_breach(namespace, rec.name, rec.kind, dormant)
+            if breach is not None:
+                reason, sentence = breach
+                return Refusal(
+                    reason,
+                    {
+                        "type": type,
+                        "namespace": namespace,
+                        "dormant_aliases": list(dormant),
+                        "why": sentence,
+                        "overridable": False,
+                    },
+                )
+
         now = self._now()
         reinstated = TypeRecord(
             **{
@@ -2533,6 +2705,39 @@ class AsyncRegistry:
 
         now = self._now()
         aliases = tuple(dict.fromkeys(tuple(right.aliases) + (left.name,) + tuple(left.aliases)))
+        # **The TRANSFERRED aliases are checked, and not checking them was the kill row's
+        # SIXTH trip** (row 4c, round 3). Guard #2 above compares `left`'s extent to
+        # `right`'s and says nothing about `left.aliases` -- which this line re-points at
+        # `right` as well. **[Observed]** in two ordinary, individually legal merges and
+        # one new type declaring two existing predicates: `commentable` -> `searchable`
+        # while their extents matched, then a `doc` making `searchable` and `taggable`
+        # match, then `searchable` -> `taggable`. `resolve_type("commentable")` came back
+        # `taggable` at confidence 1.0 with extents `{note}` and `{doc, note}` -- and the
+        # registry refuses that exact pair NON-OVERRIDABLY when asked directly.
+        #
+        # **This is a different failure from the five before it, and the difference is
+        # what makes it a class rather than a bug.** Trips 1-5 were *the guard did not
+        # look properly*; this one is *the guard looked correctly and then the fact
+        # changed*. The alias was VALID when it was written. Rule U's fourth operand:
+        # unknowable is not equal, empty is not equal, partial is not equal, and
+        # **STALE is not equal**.
+        transferred = tuple(a for a in left.aliases if a not in right.aliases)
+        if transferred:
+            breach = await self._alias_identity_breach(
+                target_ns, right.name, right.kind, transferred
+            )
+            if breach is not None:
+                reason, sentence = breach
+                return Refusal(
+                    reason,
+                    {
+                        "from": from_,
+                        "into": into,
+                        "transferred_aliases": list(transferred),
+                        "why": sentence,
+                        "overridable": False,
+                    },
+                )
         async with self.adapter.transaction():
             merged = await self.adapter.put_type(
                 TypeRecord(**{**right.__dict__, "aliases": aliases, "updated_at": now})
@@ -2754,7 +2959,15 @@ class AsyncRegistry:
             # that the surface could not otherwise produce it was wrong twice over.
             # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
             incoming = tuple(row.get("aliases") or ())
-            if incoming and status != "retired":
+            # **The identity guards run whatever the row's `status` is** (row 4c, round
+            # 3). `status != "retired"` scoped them to live rows, so a Foundry
+            # `deprecated` row carrying `aliases` was written with NEITHER guard -- and
+            # `reinstate` then made it live, carrying an alias nothing had ever compared.
+            # A guard that a row can duck by arriving retired is a guard with a door in
+            # it, which is the third trip's diagnosis on a third axis: **`status` is an
+            # identity field too**, because it decides whether a row's aliases are
+            # scored at confidence 1.0.
+            if incoming:
                 # **The identity guards run FIRST, and the order is the finding.**
                 # `_alias_clash` asks *"is this word already spoken for by something
                 # ALIVE?"*; this asks *"would this alias make one word resolve to a
@@ -3316,6 +3529,30 @@ class AsyncRegistry:
             return refusal
 
         fam = await self._edge_family(family, namespace)
+        if fam is not None and fam.status == "retired":
+            # **The family name resolves to the identity it now belongs to, on the WRITE
+            # side as well as the read side** (row 4c, round 3). Round 2 taught
+            # `neighbors` to follow the family chain (`C17-51`) and left `add_edge`
+            # comparing the written string -- so an absorbed family name was a permanent,
+            # warning-free bypass of the SURVIVING family's `enforce` payload schema, and
+            # `neighbors` then returned the resulting edge as an edge of the survivor
+            # under `complete=True`. **[Observed]** one identity, two enforcement
+            # regimes; `EDGES.md` §2.5 rules 2 and 3 make the strictness a **floor**, and
+            # the absorbed name was a floor with a hole in it.
+            #
+            # The edge is still WRITTEN under the name the caller gave -- §2.1's *"the
+            # written reference is never edited"* -- and it is VALIDATED by the family
+            # that name now denotes.
+            closure, _, _ = await self._identity_closure(
+                TypeRef(namespace, "edge", family), {}
+            )
+            for ref in closure:
+                if ref.name == family:
+                    continue
+                other = await self._edge_family(ref.name, namespace)
+                if other is not None and other.status == "active":
+                    fam = other
+                    break
         if fam is None:
             # EDGES.md 4.3: a named family that is not a registered kind="edge" entry in
             # the namespace it was resolved in. `namespace`'s one job is resolving the
@@ -4744,6 +4981,24 @@ class AsyncRegistry:
                             f"extents are non-empty and identical (INTERFACE.md 5.10 "
                             f"refusal #2, the ROADMAP.md kill row)",
                         )
+        return None
+
+    async def _alias_holder(self, namespace: str, name: str, kind: str) -> str | None:
+        """The ACTIVE entry that already answers to ``name`` as one of its ALIASES.
+
+        Narrower than :meth:`_alias_clash` on purpose, and the narrowing is the whole
+        point: that guard's question is *"is this word spoken for at all?"*, which
+        includes another kind holding it as its own name -- and PACKAGE.md 4.1
+        **blesses** one word under two kinds. This one asks only *"would creating this
+        row make two live entries answer to one word?"*, which is mechanism 4 and
+        nothing else.
+        """
+        records, _ = await self._active_page(namespace)
+        for other in records:
+            if other.name == name and other.kind == kind:
+                continue
+            if name in (other.aliases or ()):
+                return other.name
         return None
 
     async def _alias_clash(
