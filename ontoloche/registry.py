@@ -3160,7 +3160,17 @@ class Registry:
                 transferred = tuple(getattr(rec, "aliases", ()) or ())
                 if transferred:
                     breach = self._alias_identity_breach(
-                        namespace, succ.name, succ.kind, transferred
+                        namespace,
+                        succ.name,
+                        succ.kind,
+                        transferred,
+                        # **The ELEVENTH trip: this operand was missing at THREE of the
+                        # four call sites.** Without it `_gates_on`'s `member_of` is
+                        # empty, so every consumer gating on a predicate the target row
+                        # ITSELF declares is invisible to refusal #1 -- which is the exact
+                        # fact trips 9 and 10 were built on, unfixed at the doors those
+                        # trips did not come through.
+                        declared_predicates=succ.predicates or (),
                     )
                     if breach is not None:
                         reason, sentence = breach
@@ -3471,7 +3481,18 @@ class Registry:
                 },
             )
         if dormant:
-            breach = self._alias_identity_breach(namespace, rec.name, rec.kind, dormant)
+            breach = self._alias_identity_breach(
+                namespace,
+                rec.name,
+                rec.kind,
+                dormant,
+                # The ELEVENTH trip's own door: `reinstate` re-activates a dormant alias,
+                # and the consumer set that makes the collapse false is the one THIS row
+                # declares. [Observed] `resolve_type` going from `proposal / 0.4706` to
+                # `existing / 1.0` across a reinstatement, on a pair `merge_types`
+                # refuses non-overridably.
+                declared_predicates=rec.predicates or (),
+            )
             if breach is not None:
                 reason, sentence = breach
                 return Refusal(
@@ -3985,7 +4006,11 @@ class Registry:
         transferred = tuple(a for a in left.aliases if a not in right.aliases)
         if transferred:
             breach = self._alias_identity_breach(
-                target_ns, right.name, right.kind, transferred
+                target_ns,
+                right.name,
+                right.kind,
+                transferred,
+                declared_predicates=right.predicates or (),
             )
             if breach is not None:
                 reason, sentence = breach
@@ -6386,7 +6411,7 @@ class Registry:
         kind: str,
         aliases: Sequence[str],
         *,
-        declared_predicates: Sequence[str] | None = None,
+        declared_predicates: Sequence[str],
     ) -> tuple[str, str] | None:
         """§5.10's identity guards #2 and #3, applied to an ALIAS write. Row 4c.
 
@@ -7347,6 +7372,53 @@ class Registry:
                     },
                 )
             kind = ref_kind(ref)
+            # **The kind the CALLER wrote is a claim; the stored row is the fact -- and
+            # trusting the claim was the ACTIONS door's own kill-row walk.** `ref_kind`
+            # returns `getattr(ref, "kind", None)`, so a `TypeRef("default", "entity",
+            # "commentable")` naming a real capability predicate -- or a misspelled
+            # `"Predicate"` -- walked straight past the exclusion below, and
+            # `merge_capabilities(commentable, searchable)` reached `verdict="allowed"`
+            # and was RECORDED `applied` on two live predicates. [Observed] row 6b,
+            # round 3.
+            #
+            # That is the SEVENTH trip's diagnosis one surface along: **a guard comparing
+            # a byte where the registry holds a stored fact.** Row 6b hardened
+            # `ref_shape` to refuse an unrecognised SHAPE and left the sibling hole in
+            # the KIND open. 2.3's rule is *"the exclusion is general or it is nothing"*,
+            # and a general exclusion cannot rest on the caller spelling one word
+            # correctly.
+            #
+            # A ref naming no registered row is NOT refused here: 1's last non-goal is
+            # that an `InstanceRef` names an id the host already has and this registry
+            # does not resolve instances, and `type_active` is the precondition that asks
+            # about registration. What is refused is a claim the registry can SEE is
+            # false.
+            if shape in ("type", "instance"):
+                target = type_of(ref) if shape == "instance" else ref
+                stored = self.adapter.find_types(
+                    TypeQuery(namespace=target.namespace, name_in=(target.name,),
+                              include_retired=True)
+                )
+                for row in stored.records:
+                    if row.name == target.name and row.kind != kind:
+                        return Refusal(
+                            "input_kind_mismatch",
+                            {
+                                "input": name,
+                                "problem": "kind",
+                                "declared": kind,
+                                "supplied": row.kind,
+                                "why": (
+                                    f"input {name!r} names "
+                                    f"{target.namespace}:{target.name}, which this "
+                                    f"registry holds as kind {row.kind!r} and the "
+                                    f"reference calls {kind!r}. The kind on a reference "
+                                    f"is a CLAIM; the stored row is the fact"
+                                ),
+                            },
+                        )
+                    if row.name == target.name:
+                        kind = row.kind
             # GENERAL, and not a family's opt-in. Two predicates being "equivalent" is a
             # claim about extents; an action taking two of them is the ROADMAP.md kill
             # row with a verb in front of it.
@@ -7537,8 +7609,16 @@ class Registry:
                     ),
                 )
             listing = self.predicates(namespace=subject_ns, include_retired=True)
+            # **By the registry's own notion of one word, not by bytes.** The seventh
+            # trip is that the guards compared bytes while the resolver compared
+            # normalised words, and `same_word` was published to end that -- so a gate
+            # that byte-matches a predicate NAME says *"no registered predicate named X"*
+            # about a word this registry answers at confidence 1.0. The direction was
+            # safe (Rule U: `holds=None`, verdict refused), and a confident false
+            # sentence about registration is still a confident false sentence. Round 3.
             entry = next(
-                (p for p in listing.predicates if p.name == condition.predicate), None
+                (p for p in listing.predicates if same_word(p.name, condition.predicate)),
+                None,
             )
             if entry is None:
                 return PreconditionResult(
@@ -7699,6 +7779,33 @@ class Registry:
         bad = self._input_refusal(fam, inputs)
         if bad is not None:
             return bad
+        # **2.7's schema binds at BOTH invocation doors**, and binding it only at
+        # `record_invocation` left the gate saying *may this run* -> **yes** for inputs
+        # the recorder then refuses `attributes_schema_violation` non-overridably. That
+        # is `_input_refusal`'s own rule one field along -- *a rule with one enforcement
+        # point is a rule with one door left open* -- and it is round 2's `C19-63` fix
+        # reaching one call site of two, which the tenth-trip countersignature made a
+        # standing thing to check. Round 3.
+        schema, violations = self._check_attributes(
+            namespace,
+            ACTION_PAYLOAD_KIND,
+            fam.payload_schema,
+            {k: str(v) for k, v in inputs.items()},
+        )
+        if violations and schema is not None and schema.mode == "enforce":
+            return Refusal(
+                "attributes_schema_violation",
+                {
+                    "family": family,
+                    "violations": violations,
+                    "schema_version": schema.version,
+                    "why": (
+                        "the supplied inputs fail this family's payload_schema; "
+                        "`record_invocation` refuses the same inputs, and a gate that "
+                        "said `allowed` here would be a gate the recorder overrules"
+                    ),
+                },
+            )
 
         results = tuple(
             self._evaluate(condition, inputs, namespace) for condition in fam.preconditions
