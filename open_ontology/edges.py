@@ -173,6 +173,42 @@ class InstanceRef:
     type: TypeRef
     id: str
 
+    def __post_init__(self) -> None:
+        """``id`` is a ``str``, and a non-``str`` RAISES rather than being coerced.
+
+        **The one place this can be defended, and it was defended nowhere** (row 4c,
+        round 2, found by the lens that builds beacon's slice 1). Beacon's endpoint ids
+        are ``Integer`` -- EDGES.md 2.1 records the cast as contortion **E4** and says
+        plainly that it is *"where a silent key mismatch lives"*. It was living there:
+
+        * ``str(InstanceRef(TASK, 41)) == str(InstanceRef(TASK, "41"))`` -- **identical**;
+        * ``InstanceRef(TASK, 41) != InstanceRef(TASK, "41")`` -- **not equal**;
+        * ``add_edge`` accepted the int and stored it;
+        * ``neighbors`` with the int returned ``known=0, complete=True, warnings=()`` on
+          SQLite -- **a confident, complete, false negative**, Rule U's forbidden empty
+          in the one call a caller would believe -- and raised a raw psycopg
+          ``UndefinedFunction: operator does not exist: text = smallint`` on Postgres,
+          three frames below the facade.
+
+        **One input, two reference backends, two different wrong answers.** EDGES.md 4.2
+        promises a ``ValueError`` for a caller's mistake and `C17-32` pins that promise
+        for ``depth``, ``node`` and ``edge_families``; the field the host actually
+        differs on was checked by nothing.
+
+        Raising rather than coercing is the same decision `AttributeSchema.name` makes
+        about the store's empty-string sentinel: **the cast belongs to the caller, and a
+        cast this package performs silently is a cast nobody reviews.**
+        """
+        if not isinstance(self.id, str):
+            raise TypeError(
+                f"InstanceRef.id is an opaque str (EDGES.md 2.1); got "
+                f"{type(self.id).__name__} {self.id!r}. Beacon's ids are integers and "
+                f"the cast is contortion E4 -- str(id) at the boundary, once, where "
+                f"somebody can see it. Coercing here would make "
+                f"InstanceRef(t, 41) and InstanceRef(t, '41') two references that print "
+                f"the same and compare unequal"
+            )
+
     def __str__(self) -> str:  # "cms:entity:facility#275012"
         return f"{self.type}#{self.id}"
 
@@ -305,7 +341,14 @@ class NeighborEdge:
     #: depth 1.
     at_depth: int
     #: The node this edge newly reached, or ``None`` when it reached nobody new -- a
-    #: self-loop, or a triangle's closing edge whose two ends were both already there.
+    #: self-loop, a triangle's closing edge whose two ends were both already there, or
+    #: **an endpoint already reached under ANOTHER NAME of the same identity** (row 4c,
+    #: round 2: the third case is not a third meaning, it is the same rule applied to
+    #: the identity rather than to the written name, and ruling R38 is what makes those
+    #: two differ. A caller reading EDGES.md 9.3's worked example, which filters on
+    #: ``reached is not None``, drops such an edge from the projection -- correctly,
+    #: because it reaches nobody new -- and the report's ``edge_family_merged`` /
+    #: ``endpoint_type_merged`` markers are what say an identity was folded).
     #:
     #: **Filled by the walk, because a consumer cannot compute it from the report**, and
     #: row 4b's third adversarial round proved that by implementing EDGES.md 9.3's own

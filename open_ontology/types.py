@@ -250,6 +250,26 @@ WARNING_VALUES = (
     # that went live without a human.** C10-09 and C9-18 guard the merge; this guards
     # the door the merge's operands came through.
     "predicate_requires_review",
+    # EDGES.md 4.3, ruling **R38**, row 4c's SECOND adversarial round -- the
+    # twenty-eighth. `NeighborReport`, when a named `edge_families` entry is joined to
+    # another family by a merge or a retirement-with-successor, and the walk therefore
+    # searched the other name too.
+    #
+    # R38 followed the chain for endpoint TYPES and not for family NAMES, and 2.3's
+    # architectural bet is that a family IS a `TypeEntry` -- so it inherits
+    # `merge_types` for free, and what that inheritance did was orphan every edge
+    # written under an absorbed family name, silently, under `complete=True`. Distinct
+    # from `endpoint_type_merged` because it is a different axis: one is about the node
+    # a walk started from, the other about the relation it asked for, and INTERFACE.md
+    # 2.3's Cause B says a value that means two things is a value that means neither.
+    "edge_family_merged",
+    # EDGES.md 4.3, row 4c's second adversarial round -- the twenty-ninth.
+    # `NeighborReport`, when the walk's origin names a type that has been RETIRED.
+    # 4.3-3 warns for a retired FAMILY and 4.3-10 for an UNREGISTERED origin type; a
+    # deliberately retired origin -- mechanism 3, a steward's explicit *"stop using this
+    # word"* -- had no carrier at all, so the one act the vocabulary performs to
+    # discourage a word was invisible in the call a consumer runs against it.
+    "origin_type_retired",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
