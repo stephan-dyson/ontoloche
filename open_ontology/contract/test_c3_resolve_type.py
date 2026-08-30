@@ -1,4 +1,4 @@
-"""C3 -- ``resolve_type`` (15). Mechanism 2, with mechanism 1 as the gate.
+"""C3 -- ``resolve_type`` (16). Mechanism 2, with mechanism 1 as the gate.
 
 No test here may pass or fail because of resolver *quality*: the assertions are about
 outcomes and shapes, never about a score's value.
@@ -596,3 +596,55 @@ def test_c3_15_a_vocabulary_curated_twice_still_resolves(registry):
             f"both words are retired, so {word!r} redirects to nothing -- and the walk "
             f"must terminate rather than follow the cycle"
         )
+
+
+@pytest.mark.requires_capability("stores_events")
+def test_c3_16_the_successor_walk_never_raises_and_says_when_it_stopped(registry):
+    """**Two ways the guaranteed call was not honest.** Row 4d, round 3.
+
+    **(a) It raised.** The successor lookups omitted `kind=`, and `get_type` with no kind
+    **RAISES** on a word registered under two kinds — which `PACKAGE.md` §4.1 explicitly
+    blesses and `C0-11` pins. `retire`'s own guard says exactly why that is wrong (*"an
+    identity guard must never be the thing that blows up"*) and the lesson had not
+    travelled to the resolver. Three ordinary calls, on a store the specification
+    permits, threw `AmbiguousKind` out of the call designed against mechanism 2 — and a
+    proposer that gets an exception finds nothing and re-proposes.
+
+    **(b) It stopped without saying so.** Past `_IDENTITY_CHAIN_CAP` the walk gave up and
+    the answer said *"nothing ACTIVE in the vocabulary fits this"* while blaming
+    **namespaces** in `why_incomplete`. `_identity_closure` and `list_types` both name
+    the cap. Rule U's confident negative, in the call §5.3 calls a guarantee.
+    """
+    for name in ("commentable", "searchable"):
+        seed(registry, name, definition="a word")
+    registry.retire(
+        "commentable", "renamed", retired_by="user:sd", successor="searchable", force=True
+    )
+    assert registry.resolve_type(
+        "commentable", ResolveContext(), kind="entity", tier="opus"
+    ).type.name == "searchable"
+
+    # PACKAGE.md 4.1 blesses one word under two kinds; C0-11 pins that `get_type` raises.
+    seed(registry, "searchable", kind="value_set", definition="a different thing")
+    resolution = registry.resolve_type(
+        "commentable", ResolveContext(), kind="entity", tier="opus"
+    )
+    assert resolution.type is not None and resolution.type.name == "searchable", (
+        "the caller passed `kind=` and did everything right; a store 4.1 permits must "
+        "not throw out of the call designed against mechanism 2"
+    )
+
+    # (b) the cap is named, in the answer and in `why_incomplete`.
+    names = [f"pp{i:02d}" for i in range(20)]
+    for name in names:
+        seed(registry, name, definition="a word")
+    for here, nxt in zip(names, names[1:]):
+        assert isinstance(
+            registry.retire(here, "chain", retired_by="user:sd", successor=nxt, force=True),
+            TypeEntry,
+        )
+    capped = registry.resolve_type("pp00", ResolveContext(), tier="opus")
+    assert "longer than" in capped.reason and "hops" in capped.reason, (
+        f"the walk stopped before it found a live row and must say so: {capped.reason}"
+    )
+    assert "hops" in capped.why_incomplete

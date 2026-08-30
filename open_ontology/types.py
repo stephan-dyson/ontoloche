@@ -88,6 +88,13 @@ REFUSAL_REASONS = (
     # safe**: Rule U, at the one call 5.3 calls a guarantee. Non-overridable, `force`
     # included, exactly as the guards it stands in for are.
     "successor_unregistered",
+    # INTERFACE.md 5.9, row 4d's third adversarial round -- the thirtieth.
+    # `retire(type=X, successor=X)`: a word cannot be its own successor, and a tombstone
+    # that redirects to itself is a claim nobody made and a cycle `_identity_closure`
+    # would have to keep guarding for nothing. Its OWN value because
+    # `successor_unregistered` -- which says *register the successor first* -- is a lie a
+    # caller would act on when the word is registered, live, and is the type itself.
+    "successor_is_self",
     "different_consumer_sets",
     "predicate_merge",
     "kind_mismatch",

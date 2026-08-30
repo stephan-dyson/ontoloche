@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from typing import Any, Iterable, Sequence
 
 from ._clock import Clock, SystemClock
-from ._resolve import DeterministicResolver, identity_key, Resolver
+from ._resolve import DeterministicResolver, identity_key, same_word, Resolver
 from .adapter import (
     AttrObservedRecord,
     AttrSchemaRecord,
@@ -1272,7 +1272,17 @@ class Registry:
                 #
                 # Capped and cycle-guarded the way `_identity_closure` is: §5.9 does not
                 # forbid constructing a cycle, so the walk must survive one.
-                live = self.adapter.get_type(namespace, successor)
+                # **`kind=` is passed, and omitting it raised out of the guaranteed
+                # call** (row 4d, round 3). `retire`'s own guard says why: *"`get_type`
+                # with no kind RAISES on a word registered under two kinds (PACKAGE.md
+                # 4.1, `C0-11`), and an identity guard must never be the thing that
+                # blows up"* -- and the lesson had not travelled to the resolver. Three
+                # ordinary calls on a store 4.1 BLESSES threw `AmbiguousKind` out of the
+                # call designed against mechanism 2, at a caller that had passed `kind=`
+                # and done everything right. A successor of another kind is already
+                # refused at write time by `retire`'s guard #3, so narrowing loses
+                # nothing.
+                live = self.adapter.get_type(namespace, successor, kind=exact.kind)
                 hops = 0
                 walked = {candidate, successor}
                 while (
@@ -1285,7 +1295,26 @@ class Registry:
                     successor = live.successor
                     walked.add(successor)
                     hops += 1
-                    live = self.adapter.get_type(namespace, successor)
+                    live = self.adapter.get_type(namespace, successor, kind=exact.kind)
+                if (
+                    hops >= _IDENTITY_CHAIN_CAP
+                    and live is not None
+                    and live.status == "retired"
+                ):
+                    # **The cap is REPORTED** (row 4d, round 3). The walk stopped before
+                    # it found a live row, and saying *"nothing ACTIVE in the vocabulary
+                    # fits this"* about it -- while blaming NAMESPACES in
+                    # `why_incomplete` -- is Rule U's confident negative in the call 5.3
+                    # calls a guarantee. `_identity_closure` and `list_types` both name
+                    # the cap; this one did not.
+                    capped = (
+                        f"the successor chain from {candidate!r} is longer than "
+                        f"{_IDENTITY_CHAIN_CAP} hops, so the identity it now belongs to "
+                        f"was not resolved to the end (INTERFACE.md 5.9)"
+                    )
+                    cross_complete = False
+                    cross_why = f"{cross_why}; {capped}" if cross_why else capped
+                    cross_note = f"{cross_note}; {capped}" if cross_note else capped
                 if live is not None and live.status != "retired":
                     succession = (
                         f"{candidate!r} was retired with {successor!r} as its "
@@ -1430,7 +1459,7 @@ class Registry:
                 (
                     alias
                     for alias in (entry.aliases or ())
-                    if identity_key(alias) == identity_key(candidate)
+                    if same_word(alias, candidate)
                 ),
                 None,
             )
@@ -1446,47 +1475,20 @@ class Registry:
                 # lookup round 1 added and the only spelling probe in this file that did
                 # not page. It is reported rather than refused: refusing here is the
                 # `C3-13` lesson, twice learned.
-                records: list = []
-                after: str | None = None
-                cursors: set[str] = set()
-                while True:
-                    page = self.adapter.find_types(
-                        TypeQuery(
-                            namespace=namespace,
-                            name_in=self._word_spellings(candidate),
-                            include_retired=True,
-                            after=after,
-                        )
-                    )
-                    records.extend(page.records)
-                    if not page.complete and page.next_after is None:
-                        look_why = page.why_incomplete or (
-                            "the backend could not answer this query in full"
-                        )
-                        break
-                    after = page.next_after
-                    if after is None:
-                        break
-                    if after in cursors:
-                        look_why = (
-                            "this backend returned a pagination cursor it had already "
-                            "returned (PACKAGE.md 3.4 primitive 6)"
-                        )
-                        break
-                    cursors.add(after)
+                records, look_why = self._word_rows(namespace, candidate)
                 written = next(
                     (
                         record
                         for record in records
                         if record.kind == entry.kind
-                        and identity_key(record.name) == identity_key(candidate)
+                        and same_word(record.name, candidate)
                     ),
                     None,
                 )
             stale = (
                 entry is not None
                 and matched is not None
-                and identity_key(best_name) != identity_key(candidate)
+                and not same_word(best_name, candidate)
                 and self._identity_stale(namespace, written, entry)
             )
             # A look that did not finish has not said the identity is sound.
@@ -1955,6 +1957,24 @@ class Registry:
             return edge_refusal
 
         existing = self.adapter.get_type(namespace, name, kind=kind)
+        if existing is None:
+            # **The same word under a different legal spelling** (row 4d, round 3, the
+            # EIGHTH trip). `get_type` is a byte match, so a RETIRED `commentable_`
+            # left `commentable` free -- and `_alias_holder`, keyed in round 2, scans
+            # active rows only. See `_word_rows`.
+            variants, variant_why = self._word_rows(namespace, name, kind=kind)
+            # **Only a RETIRED variant stands in for the name here.** A LIVE one is
+            # `_alias_holder`'s `alias_collision` -- non-overridable, and the answer
+            # `C4-13` requires -- and handing it back as *"the name is already taken,
+            # here is the entry"* would quietly downgrade a refusal to a courtesy.
+            # `C4-13` caught that within one suite run.
+            variants = [
+                r for r in variants if r.name != name and r.status == "retired"
+            ]
+            if variants:
+                existing = variants[0]
+            elif variant_why is not None:
+                alias_check_why = variant_why
         if existing is not None:
             if existing.status == "retired":
                 # A retired name is not reusable. Silently reusing a retired word is
@@ -1980,6 +2000,7 @@ class Registry:
         # vocabularies the specification permits, which is the shape D-4b-5 records for
         # a different rule. Caught by `C12-10` within the minute.
         clash, clash_why = self._alias_holder(namespace, name, kind)
+        clash_why = clash_why or locals().get("alias_check_why")
         # **A look that did not finish has not said the word is free -- and it has not
         # said it is taken either.** Rule U's third operand (*partial is not equal*, the
         # FIFTH trip) was missing from this guard entirely: `_alias_holder` read
@@ -2648,12 +2669,17 @@ class Registry:
         # and they are non-overridable here, `force=True` included: `force` overrides
         # the CONSUMER guards, which are about what we could see, never the identity
         # guards, which are about what would become true. Pinned by `C9-18`.
-        if successor is not None and identity_key(successor) == identity_key(type):
+        if successor is not None and same_word(successor, type):
             # A word cannot be its own successor: the tombstone would say *"this word now
             # means this word"*, and `_identity_closure` would have to keep cycle-guarding
             # a claim nobody meant to make. Row 4d, round 2.
+            # **Its OWN reason, because `successor_unregistered` was a lie a caller
+            # would act on** (row 4d, round 3). That value says *the successor names no
+            # entry, register it first* -- and here the word is registered, live, and is
+            # the type itself. A closed vocabulary earns its keep by each value naming
+            # one fact.
             return Refusal(
-                "successor_unregistered",
+                "successor_is_self",
                 {
                     "type": type,
                     "successor": successor,
@@ -2783,6 +2809,32 @@ class Registry:
                     },
                 )
             if succ is not None:
+                if succ.status == "retired" and not force:
+                    # **A successor that is itself retired leaves the old word resolving
+                    # to NOTHING** (row 4d, round 3), which destroys 5.10's *"the old
+                    # word still resolves"* with no refusal, no acknowledgement and no
+                    # warning. `merge_types` refuses the identical act `retired_operand`
+                    # and lets a caller acknowledge past it; this door did not ask at
+                    # all. Overridable, exactly as 5.10's is -- `force` is this call's
+                    # acknowledgement -- because the outcome is a LOSS rather than a
+                    # false claim, and a steward may mean it.
+                    return Refusal(
+                        "retired_operand",
+                        {
+                            "type": type,
+                            "successor": successor,
+                            "successor_status": succ.status,
+                            "why": (
+                                f"{successor!r} is itself retired, so retiring "
+                                f"{type!r} toward it leaves the old word resolving to "
+                                f"nothing -- INTERFACE.md 5.10 promises it still "
+                                f"resolves. `merge_types` refuses the same act "
+                                f"`retired_operand`"
+                            ),
+                            "overridable": True,
+                            "acknowledge": "force=True",
+                        },
+                    )
                 if succ.kind != rec.kind:
                     return Refusal(
                         "kind_mismatch",
@@ -3310,12 +3362,9 @@ class Registry:
             # actually reaches when the row it brings back carries no aliases of its own,
             # and it compared bytes -- so a variant-spelled alias on the OTHER row was
             # invisible and four ordinary calls left two live entries under one word.
-            if any(
-                identity_key(alias) == identity_key(rec.name)
-                for alias in (other.aliases or ())
-            ):
+            if any(same_word(alias, rec.name) for alias in (other.aliases or ())):
                 return other.name, "alias", why
-            if any(identity_key(other.name) == identity_key(word) for word in mine):
+            if any(same_word(other.name, word) for word in mine):
                 return other.name, "alias", why
 
         # The succession graph, as RECORDED, keyed on ``(name, kind)``.
@@ -3817,6 +3866,16 @@ class Registry:
             # written. `reinstate` is the call that reverses a retirement, and it is
             # the call that carries the guards.
             standing = self.adapter.get_type(namespace, name, kind=row.get("kind", kind))
+            if standing is None:
+                # The eighth trip, at the second write door. See `_word_rows`.
+                variants, _variant_why = self._word_rows(
+                    namespace, name, kind=row.get("kind", kind)
+                )
+                variants = [
+                    r for r in variants if r.name != name and r.status == "retired"
+                ]
+                if variants:
+                    standing = variants[0]
             if standing is not None and standing.status == "retired" and status != "retired":
                 out.append(
                     self._entry(standing, extra_warnings=("name_previously_retired",))
@@ -4253,7 +4312,12 @@ class Registry:
             )
             for rec in page.records:
                 for alias in rec.aliases or ():
-                    holders.setdefault(identity_key(alias), rec.name)
+                    key = identity_key(alias)
+                    if key:
+                        # An empty key is not a word (see `same_word`), so it names no
+                        # holder -- otherwise every non-Latin alias in the namespace
+                        # would share one bucket.
+                        holders.setdefault(key, rec.name)
             if not page.complete and page.next_after is None:
                 why = page.why_incomplete or (
                     "the backend could not page this namespace's active types"
@@ -4376,7 +4440,7 @@ class Registry:
                 if rec is not None and rec.status == "active":
                     joined.extend(alias for alias in rec.aliases if alias != name)
                 # ...and the row that answers to THIS word as one of its aliases.
-                holder = alias_holders.get(identity_key(name))
+                holder = alias_holders.get(identity_key(name)) if identity_key(name) else None
                 if holder is not None and holder != name:
                     joined.append(holder)
                 for other in joined:
@@ -5915,10 +5979,26 @@ class Registry:
             # whole* -- reintroduced by the fifth trip's fix, two functions away, in the
             # same hour. It is recorded rather than quietly repaired because it is the
             # third instance of *"a fix introduces the next defect"* in this row alone.
+            # **Keyed, and it reaches a spelling already in the STORE** (row 4d,
+            # round 3). `_word_spellings` expands only the INCOMING word, so a retired
+            # row named `borough__scoped` was invisible to an alias `borough_scoped` --
+            # the residual round 2 stated as a question, and it is a live 1.0 collapse.
+            # One scan per call rather than per alias, and its `why` is reported by the
+            # caller rather than refused (round 2's own lesson).
             others: list = []
             after: str | None = None
             cursors: set[str] = set()
+            # **The keyed scan's `why` is deliberately NOT fed to the refusal**, and
+            # wiring it in was this fix's own first defect: `C12-13` went red within one
+            # suite run, exactly as round 2's did, because a partial namespace read then
+            # refuses a legal import on every paging backend. Round 2's lesson, third
+            # time asked: **scan once, and never turn "we could not finish looking" into
+            # a refusal.** The residual -- a variant-spelled row missed because the scan
+            # was truncated -- is stated rather than paid for with a false refusal, and
+            # it is raised as a question.
+            keyed, _keyed_why = self._word_rows(namespace, alias)
             partial_why: str | None = None
+            others.extend(keyed)
             spellings = self._word_spellings(alias)
             while True:
                 page = self.adapter.find_types(
@@ -5937,7 +6017,8 @@ class Registry:
                 others.extend(
                     rec
                     for rec in page.records
-                    if identity_key(rec.name) == identity_key(alias)
+                    if same_word(rec.name, alias)
+                    and not any(o.name == rec.name and o.kind == rec.kind for o in others)
                 )
                 if not page.complete and page.next_after is None:
                     partial_why = page.why_incomplete or (
@@ -6082,7 +6163,7 @@ class Registry:
             # CHAIN and left its KEY, so R55's warning missed a variant-spelled alias --
             # the one place the seventh trip's fix did not reach.
             if any(
-                identity_key(alias) == identity_key(declared)
+                same_word(alias, declared)
                 for alias in (other.aliases or ())
             ):
                 return other.name
@@ -6098,6 +6179,64 @@ class Registry:
             if moved is not None:
                 out.append(f"declared_predicate_merged:{declared}:{moved}")
         return out
+
+    def _word_rows(self, namespace: str, word: str, kind: str | None = None):
+        """Every row whose NAME is the same word, **retired included**. Row 4d, round 3.
+
+        ``(records, why the scan did not finish)``.
+
+        **The kill row's EIGHTH trip.** `propose_type`'s *"a retired name is not
+        reusable"* was `get_type(namespace, name)` — an exact BYTE match — and
+        `_alias_holder`, which round 2 keyed, scans **active** rows only. So the retired
+        half of the name door was never keyed at all, and four ordinary calls reached a
+        confidence-1.0 collapse:
+
+        1. `commentable_` goes live as a predicate; a type declares it. Extent ``{note}``;
+        2. `commentable_` is retired — *an ordinary, permitted governance act*;
+        3. `commentable` is proposed and approved; a type declares it. Extent ``{doc}``.
+           **Accepted, no refusal, no warning**;
+        4. `resolve_type("commentable_")` → `commentable` at **1.0**, warnings empty, on
+           the pair `merge_types` refuses non-overridably under every acknowledgement.
+
+        `NAME_RE` admits `commentable_`, `commentable__`, `bike__lane`, `borough_` — every
+        one a variant by `identity_key`, and every one a name two agencies normalising
+        their own column headers produce. **[Observed]** on three legs and the async
+        mirror, with all five checker axes exiting 0: the fourth consecutive trip whose
+        question its fixtures could not pose, and the reason is that not one of the four
+        spellings the axis carried is a legal NAME.
+
+        **A paged scan, and the cost is the one `_alias_holder` already pays** on the
+        neighbouring door — this reads the same namespace with `include_retired=True`.
+        Round 2 removed a scan from `_word_spellings` because it ran **per alias** and
+        fed a partial page into a non-overridable refusal; this one runs once per call
+        and its `why` is reported, never refused. The two lessons are compatible: scan
+        once, and never turn *"we could not finish looking"* into a refusal.
+        """
+        records: list = []
+        why: str | None = None
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = self.adapter.find_types(
+                TypeQuery(namespace=namespace, kind=kind, include_retired=True, after=after)
+            )
+            records.extend(r for r in page.records if same_word(r.name, word))
+            if not page.complete and page.next_after is None:
+                why = page.why_incomplete or (
+                    "the backend could not answer this query in full"
+                )
+                break
+            after = page.next_after
+            if after is None:
+                break
+            if after in cursors:
+                why = (
+                    "this backend returned a pagination cursor it had already returned "
+                    "(PACKAGE.md 3.4 primitive 6)"
+                )
+                break
+            cursors.add(after)
+        return records, why
 
     def _word_spellings(self, word: str) -> tuple[str, ...]:
         """The spellings of ``word`` a `name_in` query must ask for. **Bounded.**
@@ -6157,7 +6296,6 @@ class Registry:
         seventh trip.
         """
         records, why = self._active_page(namespace)
-        wanted = identity_key(name)
         for other in records:
             # **The self-skip is EXACT and the name side is asked** (row 4d, round 2).
             # Both halves were wrong and each was a hole on its own. The skip was keyed
@@ -6174,9 +6312,9 @@ class Registry:
             # `"Borough:"` reach it.
             if other.name == name and other.kind == kind:
                 continue
-            if other.kind == kind and identity_key(other.name) == wanted:
+            if other.kind == kind and same_word(other.name, name):
                 return other.name, None
-            if any(identity_key(alias) == wanted for alias in (other.aliases or ())):
+            if any(same_word(alias, name) for alias in (other.aliases or ())):
                 return other.name, None
         return None, why
 
@@ -6190,14 +6328,18 @@ class Registry:
         the seventh trip, and Rule U's third operand.
         """
         records, why = self._active_page(namespace)
-        wanted = {identity_key(word) for word in tuple(aliases) + (name,)}
+        words = tuple(aliases) + (name,)
         for other in records:
             # Exact self-skip, for `_alias_holder`'s reason.
             if other.name == name and other.kind == kind:
                 continue
-            if identity_key(other.name) in wanted:
+            if any(same_word(other.name, word) for word in words):
                 return other.name, None
-            if wanted & {identity_key(alias) for alias in (other.aliases or ())}:
+            if any(
+                same_word(alias, word)
+                for alias in (other.aliases or ())
+                for word in words
+            ):
                 return other.name, None
         return None, why
 

@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C10 -- ``merge_types``, and the doors its operands come through (18). Mechanism 4, constrained to the point of near-uselessness
+"""C10 -- ``merge_types``, and the doors its operands come through (19). Mechanism 4, constrained to the point of near-uselessness
 on purpose.
 
 Merging two types about which nothing is known is the single most destructive thing this
@@ -18,7 +18,7 @@ warns.
 
 from __future__ import annotations
 import pytest
-from open_ontology.types import Consumer, MergeResult, Refusal, ResolveContext, TypeEntry
+from open_ontology.types import Consumer, Evidence, MergeResult, Refusal, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import seed
 from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -782,6 +782,20 @@ async def test_c10_16_the_stale_warning_survives_every_spelling(adapter, make_re
     assert not isinstance(merged, Refusal), merged
     await seed(registry, "zzz_doc", predicates=["searchable"])
 
+    # **§5.3.2-8: a partial left-hand look is REPORTED**, and until round 3 nothing
+    # exercised it -- a mutation deleting the warning left all 245 ids green. The
+    # left-hand row is found by a paged scan; on a backend that caps an unlimited query
+    # the scan cannot finish, and Rule U's third operand says so rather than answering
+    # 1.0 with `identity_stale` silently absent.
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=2), approval_policy="auto")
+    truncated = await capped.resolve_type("Commentable", ResolveContext(), tier="opus")
+    if truncated.type is not None and truncated.confidence == 1.0:
+        said = " ".join(truncated.type.warnings)
+        assert "identity_stale" in said or "alias_check_incomplete" in said, (
+            f"the left-hand scan could not finish, so this 1.0 stands on a look that did "
+            f"not say the word names no row: {truncated.type.warnings}"
+        )
+
     for spelling in ("commentable", "Commentable", "COMMENTABLE", "commentable ", "commentable-"):
         for kwargs in ({}, {"kind": "predicate"}, {"min_confidence": 1.0}):
             resolution = await registry.resolve_type(
@@ -887,3 +901,74 @@ async def test_c10_18_the_fifth_identity_guard_answers_above_the_capability_gate
         f"{refusal.reason}"
     )
     assert refusal.detail["overridable"] is False
+
+@pytest.mark.requires_capability("indexes_membership", "stores_events")
+async def test_c10_19_the_eighth_trip_a_retired_name_reused_under_another_spelling(
+    adapter, make_registry
+):
+    """**`ROADMAP.md`'s kill row, EIGHTH trip.** Row 4d, third adversarial round.
+
+    §5.4's rule — *a retired name is not reusable; silently reusing a retired word is
+    mechanism 4 with a time delay* — was a **byte** comparison (`get_type`), and round
+    2's keyed guard `_alias_holder` scans **active** rows only. So the retired half of
+    the name door was never keyed, and four ordinary calls reached a confidence-1.0
+    collapse:
+
+    1. `commentable_` goes live as a predicate and a type declares it — extent `{note}`;
+    2. `commentable_` is retired — *an ordinary, permitted governance act*;
+    3. `commentable` is proposed and approved, and a type declares it — extent `{doc}`.
+       **Accepted, no refusal, no warning**;
+    4. `resolve_type("commentable_")` → `commentable` at **1.0**, warnings empty, on the
+       pair `merge_types` refuses non-overridably under every acknowledgement.
+
+    `NAME_RE` admits `commentable_`, `bike__lane`, `borough_` — every one a variant by
+    `identity_key`, and every one a name two agencies normalising their own column
+    headers produce. **The registry already knew**: `retire(commentable_,
+    successor=commentable)` is refused *"a word cannot be its own successor"*. One
+    function said the two words are one word; the door that let both exist compared bytes.
+
+    Pinned with its narrowing: a genuinely different word is still free.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "commentable_", kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable_"])
+    assert isinstance(
+        await registry.retire(
+            "commentable_", "the team stopped using it", retired_by="user:sd", force=True
+        ),
+        TypeEntry,
+    )
+
+    reused = await registry.propose_type(
+        "commentable", "a capability", [Evidence(kind="data", summary="a sample")],
+        "user:sd", kind="predicate",
+    )
+    assert isinstance(reused, TypeEntry), (
+        "`commentable` and the retired `commentable_` are one word; §5.4 hands back the "
+        "tombstone rather than creating a second row"
+    )
+    assert reused.status == "retired"
+    assert "name_previously_retired" in reused.warnings
+
+    # The second write door gives the same answer to the same act.
+    imported = (await registry.import_types(
+        [{"name": "commentable", "kind": "predicate", "definition": "a capability",
+          "status": "active"}],
+        namespace="default", kind="predicate",
+    ))[0]
+    assert "name_previously_retired" in imported.warnings
+
+    # ...and nothing was written, so no 1.0 claim is reachable.
+    resolution = await registry.resolve_type("commentable_", ResolveContext(), tier="opus")
+    assert not (
+        resolution.type is not None
+        and resolution.type.name != "commentable_"
+        and resolution.confidence == 1.0
+    ), "the collapse `merge_types` refuses non-overridably is not reachable by spelling"
+
+    # **The narrowing.** A genuinely different word is still a free word.
+    other = await registry.propose_type(
+        "commentary", "a different capability",
+        [Evidence(kind="data", summary="a sample")], "user:sd", kind="predicate",
+    )
+    assert not isinstance(other, Refusal) and other.name == "commentary"
