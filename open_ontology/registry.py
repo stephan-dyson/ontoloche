@@ -1039,6 +1039,69 @@ class Registry:
             return tuple(names), None, why
         return tuple(names), len(names), None
 
+    def _identity_stale(
+        self, namespace: str, written: TypeRecord | None, answered: TypeRecord | None
+    ) -> bool:
+        """Is the identity claim this read is about to make still TRUE? **Q56's cheap half.**
+
+        ``written`` is the row for the word the caller asked about (it may be a
+        tombstone, or ``None`` when the word names nothing); ``answered`` is the entry
+        the registry is about to hand back at confidence 1.0 through an alias or a
+        successor. ``True`` means the two predicate extents that claim stands on no
+        longer demonstrably agree.
+
+        **This is the kill row's SIXTH trip, and the only fix in this project that is
+        not another guard.** Trips 1-5 were all one sentence -- *the guard did not look
+        properly* -- at an unknowable extent, at an empty one, at all, through a
+        different field, at a partial page. The sixth is **the guard looked correctly,
+        and then the fact changed**: every identity guard in this registry compares
+        predicate extents at **write** time, `resolve_type` grants confidence 1.0 at
+        **read** time, and the vocabulary moves in between. Row 4c closed all four doors
+        the trip came through; it did not close the gap, because closing the gap means
+        verifying the claim where it is MADE. **[Observed]** Door 1 needs nothing
+        unusual: two individually legal merges and one new type declaring two existing
+        predicates, and `resolve_type` answers at 1.0 over a pair `merge_types` refuses
+        non-overridably when asked directly.
+
+        > **Rule U's fourth operand.** Unknowable is not equal. Empty is not equal.
+        > Partial is not equal. And **STALE is not equal**.
+
+        **What this row is allowed to do, and what it is not.** `INTERFACE.md` 5.3 calls
+        the redirect at 1.0 a registry **guarantee**, and changing that -- refusing to
+        answer, or lowering the confidence -- decides what this registry declines to
+        serve. That is the founder's half of **Q56** and is deliberately not taken here.
+        The redirect is returned unchanged, at 1.0, carrying `identity_stale`. The
+        expensive half stays open.
+
+        **The comparison is between the two WRITTEN words, and that is the whole point.**
+        After ruling **R54** `_extent` can resolve an identity rather than a word -- and
+        asking *that* question here would be circular, because the merge under
+        examination is exactly what joined the two names into one identity, so the two
+        closures would be equal by construction and this method could never return
+        ``True``. What a stale claim means is that the two words no longer denote the
+        same set **of their own accord**, so the guards' own reading is the one to make:
+        ``identity=False``, the default.
+
+        Everything else follows the expression the five collapsing guards already share,
+        deliberately and to the letter -- paged to exhaustion, the read's own ``why``
+        folded into ``knowable``, an empty extent no evidence of identical membership
+        (`C10-11`, `C10-09`). **Non-predicate hits pay nothing**: no extent is read, so
+        an ordinary alias on an ordinary entity costs this call zero queries. Nor does a
+        word that names no row of its own -- there is no extent on the left, so no claim
+        about members was ever made and none can have gone stale.
+        """
+        if written is None or answered is None:
+            return False
+        if written.kind != "predicate" or answered.kind != "predicate":
+            return False
+        left_names, _, left_why = self._extent(namespace, written.name, True)
+        right_names, _, right_why = self._extent(namespace, answered.name, True)
+        knowable = (
+            self.caps.indexes_membership and left_why is None and right_why is None
+        )
+        left, right = set(left_names), set(right_names)
+        return not (knowable and bool(left) and left == right)
+
     # =========================================================== 5.3 resolve_type
     def resolve_type(
         self,
@@ -1113,14 +1176,33 @@ class Registry:
                         f"successor; the old word resolves to the successor and is "
                         f"itself not reusable (INTERFACE.md 5.9, 5.10)"
                     )
+                    # **Q56's cheap half, at the successor door.** The redirect is
+                    # correct and stays -- 5.10 promises the old word still resolves --
+                    # but a claim nobody re-checks is cashed HERE, at the 1.0 5.3 calls
+                    # a guarantee. See `_identity_stale`.
+                    stale = self._identity_stale(namespace, exact, live)
                     return Resolution(
                         outcome="existing",
                         reason="; ".join(
-                            [succession] + ([cross_note] if cross_note else [])
+                            [succession]
+                            + (
+                                [
+                                    f"the two predicate extents this redirect stands on "
+                                    f"no longer demonstrably agree, so the identity "
+                                    f"claim written when {candidate!r} was joined to "
+                                    f"{successor!r} has gone STALE (INTERFACE.md 5.3, "
+                                    f"warning `identity_stale`)"
+                                ]
+                                if stale
+                                else []
+                            )
+                            + ([cross_note] if cross_note else [])
                         ),
                         tier=tier,
                         scoped_to=namespace,
-                        type=self._entry(live),
+                        type=self._entry(
+                            live, extra_warnings=("identity_stale",) if stale else ()
+                        ),
                         confidence=1.0,
                         alternatives=((exact.name, None),) + cross_alts,
                         searched_namespaces=searched,
@@ -1209,13 +1291,41 @@ class Registry:
 
         if best_score is not None and best_score >= policy.existing_threshold and best_score >= min_confidence:
             entry = self.adapter.get_type(namespace, best_name, kind=kind)
+            # **Q56's cheap half, at the ALIAS door** -- and this is the door the fourth
+            # and sixth trips both came through. `get_type` matches `name` and never
+            # `aliases`, so a word another entry answers to arrives here rather than at
+            # the exact branch above, and the shipped resolver scores an exact alias
+            # 1.0. That is an identity claim, made by the registry, at a read: the same
+            # claim `merge_types` refuses non-overridably when the two extents differ.
+            # A near miss is NOT one -- nobody wrote that the two words denote one
+            # thing -- so only an exact alias is re-verified.
+            stale = (
+                entry is not None
+                and best_name != candidate
+                and candidate in (entry.aliases or ())
+                and self._identity_stale(namespace, exact, entry)
+            )
             reason_bits.insert(0, f"{best_name!r} matches at {best_score}")
+            if stale:
+                reason_bits.insert(
+                    1,
+                    f"{candidate!r} is answered through {best_name!r}'s aliases, and "
+                    f"the two predicate extents that identity claim stands on no longer "
+                    f"demonstrably agree -- it has gone STALE (INTERFACE.md 5.3, "
+                    f"warning `identity_stale`)",
+                )
             return Resolution(
                 outcome="existing",
                 reason="; ".join(reason_bits),
                 tier=tier,
                 scoped_to=namespace,
-                type=self._entry(entry) if entry else None,
+                type=(
+                    self._entry(
+                        entry, extra_warnings=("identity_stale",) if stale else ()
+                    )
+                    if entry
+                    else None
+                ),
                 confidence=best_score,
                 alternatives=tuple(alternatives),
                 searched_namespaces=searched,
