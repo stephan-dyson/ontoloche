@@ -11,9 +11,9 @@
 
 | | before (row 4d) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §6.2) | 249 | **309** |
-| sync suite, one run, three legs | `596 passed, 170 skipped` | *(see §1.1)* |
-| async suite, one run, three legs | `631 passed, 170 skipped` | *(see §1.1)* |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 249 | **327** — 309 at half A, then 318 → 322 → 327 through the loop (§6) |
+| sync suite, one run, three legs | `596 passed, 170 skipped` | **`757 passed`** (post-rename `ontoloche` paths) |
+| async suite, one run, three legs | `631 passed, 170 skipped` | **`796 passed`** (post-rename `ontoloche` paths) |
 | adapter primitives ([`PACKAGE.md`](https://github.com/stephan-dyson/open-ontology/blob/main/docs/specs/PACKAGE.md) §3.4) | 18 | **21** — `put_invocation`, `get_invocation`, `find_invocations` |
 | store version | 4 | **5** — `oo_invocation`, and `oo_event.invocation_id` |
 | `Capabilities` flags | 14 | **17** — `stores_invocations`, `stores_invocation_events`, `indexes_invocations_by_family` |
@@ -21,7 +21,7 @@
 | `warnings` values **returned by code** | 29 of 32 | **32 of 32** |
 | documents `check_spec_drift.py` reads | 3 | **4** — `ACTIONS.md`, 12 shapes / 4 calls / 10 closed vocabularies / 8 R31 sections |
 | `docs/tools/actions_*.py` probe checks | 96 (kit only) | **129** — the same 96, plus **33** asking the SHIPPED registry |
-| `ROADMAP.md` kill-row trips | 8 | **10** — the ninth by this row's first adversarial lens (the review ruling **R53** and the seventh-trip countersignature designated as *"the review 4c's guards did not get"*), the tenth by its second, **inside the ninth's own fix** |
+| `ROADMAP.md` kill-row trips | 8 | **11** — the ninth by this row's first adversarial lens (the review ruling **R53** and the seventh-trip countersignature designated as *"the review 4c's guards did not get"*), the tenth by its second, **inside the ninth's own fix** |
 
 ---
 
