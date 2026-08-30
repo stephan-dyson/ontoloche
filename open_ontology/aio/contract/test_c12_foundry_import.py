@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C12 -- the Foundry import mapping, and the fourth door into the kill row (10). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping, and the fourth door into the kill row (11). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``AsyncRegistry.import_types``, a method beyond the twelve, because no 5.x
@@ -386,3 +386,53 @@ async def test_c12_10_the_identity_guard_survives_a_word_registered_under_two_ki
     assert not any(w.startswith("import_refused:") for w in ok.warnings), ok.warnings
     assert ok.aliases == ("previously_annotated",)
     assert ok.kind == "predicate"
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+async def test_c12_11_an_imported_row_declaring_a_moved_predicate_is_warned(
+    adapter, make_registry
+):
+    """**Ruling R55, row 4d, at the SECOND write door.**
+
+    A Foundry dump names its own predicates, and nothing here checked them against this
+    deployment's vocabulary — so an imported row declaring a word that had been **merged
+    away** landed silently in the survivor's identity. It is the same fact `C4-11` asserts
+    at `propose_type`, reported the same way, because §2.5's rule is that an import is a
+    vocabulary arriving **already decided** by whoever ran the source system: warning is
+    all this call may do about a declaration, exactly as it is for `predicate_requires_
+    review`.
+
+    The negative is asserted too — an imported row declaring a live, unmerged predicate
+    carries no such warning.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable", "untouched"):
+        await seed(registry, name, kind="predicate", definition="a capability")
+    await seed(registry, "note", predicates=["commentable", "searchable"])
+    merged = await registry.merge_types(
+        "commentable", "searchable", "identical non-empty extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert hasattr(merged, "aliases_added"), merged
+
+    entries = await registry.import_types(
+        [
+            {"name": "memo", "definition": "a short note", "predicates": ["commentable"]},
+            {"name": "card", "definition": "a card", "predicates": ["untouched"]},
+        ],
+        namespace="default",
+    )
+    moved, plain = entries
+    assert "declared_predicate_merged:commentable:searchable" in moved.warnings, (
+        "the dump declared a word this deployment merged away; the row landed in "
+        "`searchable`'s identity and said nothing about it"
+    )
+    assert moved.predicates == ("commentable",), (
+        "the declaration is WRITTEN -- 2.5 imports a vocabulary already decided, and "
+        "refusing it would make this call reject a customer's live vocabulary"
+    )
+    assert not [w for w in plain.warnings if w.startswith("declared_predicate_merged")]
+
+    # And the survivor's extent holds both of them, which is ruling R54's half of the
+    # same seam: the fact is now VISIBLE as well as announced.
+    listing = await registry.list_types(predicate="searchable", namespace="default")
+    assert {"note", "memo", "card"} & {t.name for t in listing.types} == {"note", "memo"}
