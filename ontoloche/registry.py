@@ -2411,7 +2411,7 @@ class Registry:
         predicates: Sequence[str] | None = None,
         definition: str | None = None,
     ) -> TypeEntry | Refusal:
-        """The review that A1 says HHS never had.
+        """The review that A1 says the partner agency never had.
 
         The read and all four writes happen in one transaction, which is what turns
         ``already_decided`` from a race into an idempotent refusal.
