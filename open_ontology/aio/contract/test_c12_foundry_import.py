@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C12 -- the Foundry import mapping, and the fourth door into the kill row (12). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping, and the fourth door into the kill row (13). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``AsyncRegistry.import_types``, a method beyond the twelve, because no 5.x
@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 from open_ontology.types import Evidence, Refusal, ResolveContext, TypeEntry
 from open_ontology.aio.contract._support import seed
+from open_ontology.aio.contract.doubles import AsyncDegradedAdapter
 
 
 FOUNDRY_ROWS = [
@@ -480,3 +481,42 @@ async def test_c12_12_an_imported_row_whose_name_is_spoken_for_is_refused(adapte
     assert holders == ["searchable"], (
         f"two live entries answering to one word is mechanism 4 itself: {holders}"
     )
+
+@pytest.mark.requires_capability("stores_aliases")
+async def test_c12_13_a_legal_import_is_not_banned_by_a_backend_that_pages(adapter, make_registry):
+    """**The guard is narrowed, not banned — for the third time in one row.** Round 2.
+
+    Round 1 replaced `_alias_identity_breach`'s one-row `name_in` probe with an
+    **unfiltered namespace scan**, and fed that scan's partial `why` into a
+    **non-overridable** refusal. So on any backend that caps an unlimited query —
+    `PACKAGE.md` §3.3 explicitly permits one — an import row carrying a **brand-new,
+    unheld** alias came back `import_refused:kind_mismatch`: a legal row refused, with a
+    reason naming two kinds where no two kinds are involved.
+
+    That is what round 1 had learned one call along at `_alias_holder` (*refusing does
+    not narrow the guard, it bans the call on every paging backend*), repeated inside the
+    function round 1 wrote. `import_types` is UC1 Tenshen's Foundry migration path and
+    UC3's Socrata shape, so the banned call is the ingestion wedge.
+
+    The probe is bounded now — `{word, identity_key(word)}`, never a scan — and the row
+    is **written**, with the truncation reported rather than suppressed.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    for i in range(6):
+        await seed(registry, f"row_{i}", definition="a row")
+
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=3), approval_policy="auto")
+    entry = (await capped.import_types(
+        [{"name": "imported_here", "kind": "entity", "definition": "a row",
+          "aliases": ["a_brand_new_word"], "status": "active"}],
+        namespace="default", kind="entity",
+    ))[0]
+    assert not any(w.startswith("import_refused:") for w in entry.warnings), (
+        f"nothing holds `a_brand_new_word`; refusing this bans the ingestion path on "
+        f"every paging backend: {entry.warnings}"
+    )
+    assert entry.status == "active" and "a_brand_new_word" in (entry.aliases or ())
+
+    # The truncation is REPORTED, exactly once.
+    said = [w for w in entry.warnings if w.startswith("alias_check_incomplete:")]
+    assert len(said) == 1, f"reported once, not zero and not twice: {entry.warnings}"
