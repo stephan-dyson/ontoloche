@@ -1,4 +1,4 @@
-"""C4 -- ``propose_type`` (10). Mechanism 1: no review.
+"""C4 -- ``propose_type`` (11). Mechanism 1: no review.
 
 The call that makes an addition a *request* rather than a fact. It refuses exactly two
 things and warns about everything else -- refusing a near-duplicate is how you flatten a
@@ -177,3 +177,79 @@ def test_c4_10_created_by_derived_is_reachable_and_distinct(registry):
         assert entry.created_by == expected, f"{actor!r} -> {entry.created_by!r}"
 
     assert set(CREATED_BY) == {"seed", "ai", "user", "derived"}
+
+
+@pytest.mark.requires_capability("stores_aliases", "stores_events", "indexes_membership")
+def test_c4_11_declaring_a_predicate_whose_identity_moved_is_warned(adapter, make_registry):
+    """**Ruling R55, row 4d — the write door says which identity a declaration landed in.**
+
+    `propose_type` never validated its `predicates` list against anything. A type
+    declaring a predicate that had been **absorbed** — merged away, retired with a live
+    successor, or held as somebody else's alias — was legal, **silent**, and
+    indistinguishable at the door from a type declaring the survivor.
+
+    Ruling **R54**, one commit earlier, makes such a declaration *visible*: the
+    survivor's extent holds it and `predicates(of=…)` counts it. This makes it
+    **announced**, at the door, to the caller who can still act on it. Same fact, the
+    other end of the same seam, and it is cheap.
+
+    **It is a warning and never a refusal**, and that is §5.4's own rule rather than a
+    concession: this call refuses two things and warns about everything else, *because
+    refusing a near-duplicate is how you flatten a capability predicate*. Declaring a
+    predicate under a word that still resolves is **correct** behaviour — §5.10 promises
+    the old word still resolves — so the proposal is created, the declaration stands, and
+    the registry says which identity it landed in.
+
+    Both halves are asserted, and the negative is the one a careless fix breaks: a
+    declaration of a live, unmerged predicate carries **nothing**.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    for name in ("commentable", "searchable", "untouched"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+
+    merged = registry.merge_types(
+        "commentable", "searchable", "identical non-empty extents", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert hasattr(merged, "aliases_added"), merged
+
+    moved = registry.propose_type(
+        "memo",
+        "a short internal note",
+        [Evidence(kind="data", summary="a sample")],
+        "user:sd",
+        predicates=["commentable"],
+    )
+    assert "declared_predicate_merged:commentable:searchable" in moved.warnings, (
+        "`commentable` is not an identity of its own any more; the declarer is writing "
+        "into `searchable` and had no way to know"
+    )
+    assert moved.predicates == ("commentable",), (
+        "the declaration STANDS -- 5.10 promises the old word still resolves, and "
+        "refusing a declaration is how you flatten a capability predicate (5.4)"
+    )
+
+    # **The negative.** A live, unmerged predicate carries nothing: a signal that never
+    # turns off is noise, which is row 4c's own `predicate_requires_review` lesson.
+    plain = registry.propose_type(
+        "card",
+        "a card",
+        [Evidence(kind="data", summary="a sample")],
+        "user:sd",
+        predicates=["untouched"],
+    )
+    assert not [w for w in plain.warnings if w.startswith("declared_predicate_merged")]
+
+    # ...and so does a predicate that names no row at all. A dangling declaration is a
+    # fact rather than an error, and nothing about it has MOVED.
+    dangling = registry.propose_type(
+        "leaflet",
+        "a leaflet",
+        [Evidence(kind="data", summary="a sample")],
+        "user:sd",
+        predicates=["nobody_registered_this"],
+    )
+    assert not [
+        w for w in dangling.warnings if w.startswith("declared_predicate_merged")
+    ]

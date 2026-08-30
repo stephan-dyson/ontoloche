@@ -234,6 +234,18 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "names the field; kept here because a person deciding *\"reader, not writer\"* "
         "is exactly the judgement Part A exists to force",
     ),
+    "_declared_predicate_moved": CallerVerdict(
+        False,
+        "**READS** a retired predicate's `successor`, and scans the namespace's active "
+        "rows for one holding a word as an ALIAS, to answer ruling **R55**'s question at "
+        "the write door: *which identity did this declaration land in?* It returns a "
+        "name that becomes a warning string, and it writes no row. **Flagged by the "
+        "over-broad scan the minute row 4d added it, which is Part A doing exactly its "
+        "job** -- a new function that so much as names an identity field fails this "
+        "check until a person writes down what it means, whether it is a writer or not. "
+        "*(The false positive costs this paragraph; a false negative costs the kill "
+        "row.)*",
+    ),
     "_search_namespaces": CallerVerdict(
         False,
         "**READS** `rec.successor` to build the sentence R6's cross-namespace lookup "

@@ -292,6 +292,21 @@ WARNING_VALUES = (
     # the founder's. This half is Rule U applied at the read and costs one extent read
     # per alias hit on predicates only.
     "identity_stale",
+    # INTERFACE.md 5.4, ruling **R55**, row 4d -- the thirty-first, and the write door's
+    # half of the thirtieth. `Proposal`, and the `TypeEntry` of an auto-approved or
+    # imported row, when a name in `predicates` is a word whose identity has MOVED --
+    # merged away, retired with a live successor, or held as another live entry's alias.
+    #
+    # Neither write door validated its `predicates` list against anything, so declaring
+    # an absorbed word was legal, SILENT, and indistinguishable at the door from
+    # declaring the survivor. Ruling R54 makes such a declaration visible in the
+    # survivor's extent; this makes it ANNOUNCED, to the caller who can still act on it.
+    # A warning and never a refusal, for 5.4's own reason: this call refuses two things
+    # and warns about everything else, because refusing a near-duplicate is how you
+    # flatten a capability predicate -- and declaring a predicate under a word that
+    # still resolves is correct behaviour, since 5.10 promises the old word still
+    # resolves. The registry's job is to say which identity the declaration landed in.
+    "declared_predicate_merged",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

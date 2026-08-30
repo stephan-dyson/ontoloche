@@ -1623,6 +1623,14 @@ class AsyncRegistry:
             if schema and schema.mode == "warn":
                 warnings.extend(f"attributes_invalid:{v}" for v in violations)
 
+        # **Ruling R55, row 4d -- the write door says which identity a declared
+        # predicate landed in.** Neither write door validated its `predicates` list
+        # against anything, so declaring an ABSORBED word was legal, silent, and
+        # indistinguishable from declaring the survivor. R54 (one commit earlier) makes
+        # such a declaration visible in the survivor's extent; this makes it announced,
+        # at the door, to the caller who can still act on it. A warning and never a
+        # refusal: 5.4 refuses two things and warns about everything else.
+        warnings.extend(await self._declared_predicate_warnings(namespace, predicates))
         if kind == "predicate":
             # **Ruling R40, row 4c.** A capability predicate is the one kind where an
             # auto-approval policy approving is the `ROADMAP.md` kill row, and **two of
@@ -3287,9 +3295,19 @@ class AsyncRegistry:
                 # source system, and refusing it would make this call reject a customer's
                 # live vocabulary.
                 warnings=(
-                    ("predicate_requires_review",)
-                    if row.get("kind", kind) == "predicate"
-                    else ()
+                    (
+                        ("predicate_requires_review",)
+                        if row.get("kind", kind) == "predicate"
+                        else ()
+                    )
+                    # **Ruling R55, row 4d, at the SECOND write door.** A foreign dump
+                    # names its own predicates, and nothing checked them against this
+                    # deployment's vocabulary -- so an import declaring an ABSORBED word
+                    # landed silently in the survivor's identity. Same fact as
+                    # `propose_type`'s, reported the same way, because an import is a
+                    # vocabulary arriving already decided and warning is all this call
+                    # may do about a declaration (2.5).
+                    + tuple(await self._declared_predicate_warnings(namespace, predicates))
                 ),
                 retire_reason=retire_reason,
                 retired_by=imported_by if status == "retired" else None,
@@ -5229,6 +5247,64 @@ class AsyncRegistry:
                             f"refusal #2, the ROADMAP.md kill row)",
                         )
         return None
+
+    async def _declared_predicate_moved(self, namespace: str, declared: str) -> str | None:
+        """The name a declared predicate's identity now goes by, or ``None``. **R55, row 4d.**
+
+        Neither write door validated its `predicates` list against anything. A type
+        declaring a predicate that has since been **absorbed** — merged away, or retired
+        with a successor, or held as somebody else's alias — was legal, silent, and
+        indistinguishable at the door from a type declaring the survivor. Ruling **R54**
+        (one commit before this one) makes such a declaration *visible*: the survivor's
+        extent now holds it and `predicates(of=…)` counts it. **R55 makes it announced**,
+        at the door, to the caller who is about to write the wrong word — which is the
+        same fact reported where it can still be acted on, and it is cheap.
+
+        It is a **warning** and never a refusal, for §5.4's own reason: this call refuses
+        two things and warns about everything else, *because refusing a near-duplicate is
+        how you flatten a capability predicate*. Declaring a predicate under a word that
+        still resolves is correct behaviour — §5.10 promises the old word still resolves
+        — and the registry's job here is to say which identity it landed in, not to
+        decline the declaration.
+
+        **Two ways a word moves, and both are checked.** The tombstone with a live
+        `successor` is a direct read and is always reliable. The alias is a scan of the
+        namespace's active rows, so **a page the backend could not answer to the end
+        means this returns ``None``** — the residual is stated rather than implied: it is
+        an absent warning, never a claim that the word did not move, and Rule U's
+        forbidden confident negative would be the opposite (refusing, or asserting the
+        declaration is canonical, on a look that did not finish).
+        """
+        rec = await self.adapter.get_type(namespace, declared, kind="predicate")
+        if rec is not None and rec.status == "active":
+            # The word names its own live predicate. Whether ANOTHER live entry also
+            # answers to it is `propose_type`'s `alias_collision` refusal (the sixth
+            # trip's fourth door), not this warning's question.
+            return None
+        if rec is not None:
+            successor = getattr(rec, "successor", None)
+            if successor:
+                live = await self.adapter.get_type(namespace, successor, kind="predicate")
+                if live is not None and live.status == "active":
+                    return live.name
+        records, _ = await self._active_page(namespace)
+        for other in records:
+            if other.kind != "predicate" or other.name == declared:
+                continue
+            if declared in (other.aliases or ()):
+                return other.name
+        return None
+
+    async def _declared_predicate_warnings(
+        self, namespace: str, predicates: Sequence[str]
+    ) -> list[str]:
+        """``declared_predicate_merged:<declared>:<identity>``, one per moved word."""
+        out: list[str] = []
+        for declared in predicates:
+            moved = await self._declared_predicate_moved(namespace, declared)
+            if moved is not None:
+                out.append(f"declared_predicate_merged:{declared}:{moved}")
+        return out
 
     async def _alias_holder(self, namespace: str, name: str, kind: str) -> str | None:
         """The ACTIVE entry that already answers to ``name`` as one of its ALIASES.
