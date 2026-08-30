@@ -24,143 +24,9 @@
 
 ---
 
-## Phase 0 — Discovery. No code. No spec.
+## Phase 0 — Discovery *(internal research; records not included in the public repo)*
 
-**Why this phase exists:** the interface is determined by *which* pollution mechanism it must prevent, and there are at least four candidates that produce materially different designs:
-
-| If the cause was… | The interface needs… | `merge_types` is… |
-|---|---|---|
-| Anyone could add a type, no review | approval workflow, proposal queue | secondary |
-| Nobody could *find* existing types | excellent `resolve_type` — fuzzy match, embeddings | cleanup, not prevention |
-| Types added once, never retired | lifecycle, deprecation, orphan detection | irrelevant |
-| Teams meant different things by one word | namespacing / scoping | **actively wrong** — merging destroys meaning |
-
-That last row is why this phase is not optional. If the cause is semantic collision, the "merge duplicates" operation currently at the centre of the design is the *opposite* of correct.
-
-### 0.1 — Tenshen archaeology — ✅ **COMPLETE 2026-08-27**
-
-**Finding:** [`docs/findings/FINDINGS-0.1-tenshen-archaeology.md`](docs/findings/FINDINGS-0.1-tenshen-archaeology.md)
-
-**Scope, stated first:** this examined **Tenshen**, not Foundry. The four mechanisms below are hypotheses about *the partner agency*; a single-owner codebase with no teams cannot test them, and **nothing in this finding challenges them.** They are tested at §0.2.
-
-**Headline:** Tenshen's disease is not the one the table describes. Of the seven vocabularies, **five are not pollution at all** — they are *capability predicates* ("what is commentable", "what is searchable"), each locally correct, and **merging them would destroy true information**. **Two** are genuine semantic collision (mechanism 4 — present, inside one codebase, with no teams involved). And the only *documented production incident* was caused by a **fifth mechanism the table does not name**: a producer emitted a new type, every consumer gates on its own private allowlist, and the feature died **silently** in the consumer that had not been updated.
-
-**Consequence:** `consumers(type)` — "who gates on this?" — and `predicate` are **added**; the evidence forced both, and the partner agency cannot make them unnecessary. `merge_types` is guarded. **But which call is the *centre* is NOT settled by this finding** — that is Tenshen's disease, and 0.2 may contest it. See §1.
-
-**The more important structural result:** if 0.2 finds the partner agency has a *different* disease, Phase 2's "two implementations against one interface" stops being a nice-to-have and becomes the load-bearing part of the plan — an interface forced to serve two genuinely unlike consumers is exactly the N=1 cure §2 exists for. **Two different diseases is a good outcome, not a problem.**
-
-**Not a kill criterion trip:** collision is present but not dominant (2 of 7) and not across teams.
-
-<details>
-<summary>Original task definition (kept for provenance)</summary>
-
-Seven disagreeing entity-type vocabularies exist in a codebase under full control, each locally correct:
-
-- `architecture/event-spine.md`
-- `assistant/actions/search_audit.py`
-- `services/aura_render.py`
-- `services/comment_service.py`
-- `services/user_progress_service.py`
-- `services/view_query_spec.py`
-- `services/collab_membership_service.py` (`ENTITY_MODEL`)
-
-**Do:** `git log -S` each one. Record, verbatim, *why each was created* and *whether its author could have found an existing list*.
-
-**Exit criterion:** a written answer to "which of the four mechanisms above produced these seven?" — with evidence per vocabulary.
-
-**Why it matters most:** this is the pollution mechanism, observed, with complete history, in a system fully understood. No external cooperation required, and it can be done today.
-
-</details>
-
-### 0.2 — The partner-agency pollution question *(one conversation)* — **ANSWERED BY ASSUMPTION A1, 2026-08-28**
-
-**[Assumed]** no-review + never-retired dominant (contractor rotation), collision minor, silent-drop present. Phase 1 is written against this; the partner conversation refines it. Kill criterion not tripped by assumption.
-
-**Re-prioritised by finding 0.1.** Ask in this order — the original pollution question is now third, because 0.1 showed it was not the mechanism that caused harm:
-
-1. **"When someone adds a new object type, how do they find out what breaks?"** — tests Cause C (silent per-consumer drop), the mechanism that actually shipped a bug in Tenshen and the one no existing tool answers.
-2. **"Do two teams use the same word for different things?"** — tests Cause B (semantic collision). Present in Tenshen *without* teams, so a multi-team partner agency is the harder case and this is the kill-criterion probe.
-3. `VISION.md` §11 Q3, verbatim: **why did the ontology get polluted, who could edit it, and what was missing?**
-
-**Exit criterion:** either it confirms 0.1's causes, or it names a different one. Both outcomes are useful; only the *absence* of an answer blocks Phase 1.
-
-**Watch for the disconfirming answer:** if the partner agency reports plain duplicate-type sprawl with no predicate structure and no silent-drop problem, then Tenshen was **not** representative and Phase 1 should be re-centred *back* toward `resolve_type`/`merge_types`. 0.1 is N=1; it earns a re-centering, not a certainty.
-
-### 0.2b — What are the contractors actually doing? *(one conversation, highest value in Phase 0)* — **ANSWERED BY ASSUMPTION A2, 2026-08-28**
-
-**[Assumed]** all four produced; ontology mapping is the largest share, roughly half. Venture thesis holds provisionally.
-
-**[Observed]** the organisation relies on vendor-sourced contractors to build ingest, pipelines and transforms. **[Inferred]** that most of those hours go to *mapping raw data into the ontology* rather than to moving bytes — which is the layer Airbyte and dbt do not cover (`VISION.md` §4b).
-
-**Ask:** what does a contractor engagement actually produce — connectors, transforms, ontology definitions, actions, or all four? **Roughly what share is the ontology mapping?**
-
-**Exit criterion:** a rough split of contractor effort across those four.
-
-**Why it is the highest-value question here:** it either confirms the product is the mapping layer — small, complementary to the ETL incumbents, and aimed at an existing budget line — or it reveals the hours go to plumbing, in which case Airbyte already solves it and **the venture thesis narrows sharply**.
-
-### 0.3 — Prior art — ✅ **COMPLETE 2026-08-28**
-
-**Finding:** [`docs/findings/0.3-prior-art.md`](docs/findings/0.3-prior-art.md)
-
-**Verdict:** **no interface worth matching call-for-call; one vocabulary worth matching field-for-field.** Both candidates are pure *declaration* registries. `foundry-ontology-open`'s `Ontology` class is five `register_*` methods plus `get_linked_types` / `validate_ontology` / `summary` / `to_dict`, with **no** proposal, approval, retirement, usage, provenance or consumer concept. Foundry's public Ontology API is **read-only for type metadata** — `GET .../objectTypes` and `GET .../fullMetadata` exist; creating an object type via API does not, and the open request for it is [palantir/foundry-platform-python#318](https://github.com/palantir/foundry-platform-python/issues/318) (2026-01-19). **The proposal→approval loop has no prior art in either.**
-
-**Three consequences carried into Phase 1:** (1) do **not** copy the `register_*` shape — `propose_type` may return a proposal, which a declaration API cannot express; (2) **do** round-trip Foundry's `status ∈ {active, experimental, deprecated}` against our `proposed | active | retired`, and say how `experimental` reads; (3) carry Foundry's `apiName` / `rid` / `primaryKey` as opaque **provenance**, not as our own fields.
-
-**The practical asymmetry:** a customer can be migrated *off* Foundry through the read API today and *onto* it through no public API at all — so "match Foundry so we can hand data back" is not a real requirement.
-
-<details>
-<summary>Original task definition (kept for provenance)</summary>
-
-Read [`foundry-ontology-open`](https://github.com/cloudbadal007/foundry-ontology-open)'s ObjectType / LinkType / ActionType shapes, and Foundry's own type-registry API surface if reachable.
-
-**Exit criterion:** a one-paragraph note on whether any existing interface is worth matching for migration purposes. Cheap insurance against reinventing a shape someone already got right.
-
-</details>
-
-### 0.4 — The ingestion question *(one conversation, same visit as 0.2)* — **ANSWERED BY ASSUMPTION A3, 2026-08-28**
-
-**[Assumed]** "a pipeline means a contractor engagement, and the queue is long." Phase 3 is self-serve mapping.
-
-**"Has anyone tried to automate the CSV uploads, and what happened?"**
-
-- *"Six-month queue for a pipeline"* → the wedge is a self-serve connector; reasons 1 and 2 are the operational cause. **A business.**
-- *"Source system won't allow it"* → a narrow engineering problem.
-- *"Nobody has asked"* → an organisation that has not noticed 500 hours. A different sale.
-
-**Exit criterion:** which of the three. This decides Phase 3's shape, not Phase 1's — recorded now because the conversation is free while standing there.
-
-### 0.5 — The proposal-quality test — ✅ **RUN 2026-08-28**
-
-**Results:** [`docs/findings/0.5-RESULTS.md`](docs/findings/0.5-RESULTS.md) · ground truth pre-registered first in [`docs/findings/0.5-ground-truth-PREREGISTERED.md`](docs/findings/0.5-ground-truth-PREREGISTERED.md)
-
-**Verdict: the bet survives at the top model tier, and dies at the cheap one.** Four blind agents, four tiers. Structure correct 4/4. Opus made **zero factual errors in 12 checked claims** and recomputed a poisoned metric correctly unprompted; one Sonnet also caught the temporal anomaly and asked the user rather than asserting. **Haiku inverted the CMS severity scale** — turning a worst-violations report into its opposite while every number stayed correct and nothing errored.
-
-**Three consequences:** (1) walkthrough step 5 (impact analysis) is confirmed **load-bearing** — it is the only proposed mechanism that catches a confident wrong answer; (2) **model tier is a product parameter**, not an implementation detail, and belongs in the cost model; (3) **verification against external domain documentation must be in the product**, since the severity inversion was caught by reading CMS, not by inspecting data.
-
-**Not measured, despite being pre-registered:** the correction rate *as a domain expert would judge it*. Factual accuracy was measured instead. The rubber-stamping risk is untouched and still needs a human.
-
-<details>
-<summary>Original task definition (kept for provenance)</summary>
-
-**Tests the single weakest assumption in the whole venture:** that step 2 of [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) — the system *proposing* a reading of a file rather than handing the user a schema editor — is right often enough that a domain expert keeps reviewing instead of rubber-stamping. **If the correction rate is high, the product does not work, and no amount of engineering fixes it.**
-
-**No partner file can ever be used for this.** Data of that kind does not leave the organisation that holds it, and a venture resting on the founder's professional access is compromised regardless of care taken. **The public equivalent is better anyway** — same domain, comparable publishers, reproducible by any reader, zero exposure.
-
-**Data, counted over all 419,479 rows 2026-08-28:** [`NH_HealthCitations_Aug2026.csv`](https://data.cms.gov/provider-data/dataset/r5ix-sfxw) — CMS nursing-home health citations. 165,336,194 bytes, 23 columns, **14,627 facilities**, updated 2026-08-01. Confirmed pathologies: a boolean-sounding column holding **six** status strings with no yes/no among them; **1.28%** of rows (5,338 of 416,948) with a correction date *preceding* the survey date; a `Location` column **99.988% redundant** with four others; and 104 facility names shared across multiple CCNs, so name-based resolution merges distinct facilities. Ground truth is pre-registered in [`docs/findings/0.5-ground-truth-PREREGISTERED.md`](docs/findings/0.5-ground-truth-PREREGISTERED.md).
-
-**Do:** hand the file (or a slice) to a capable model cold and ask it to produce step 2's proposal. Score it against the ground truth a human establishes separately. **Measure, do not eyeball.**
-
-**Exit criterion:** a correction rate, with the scoring method written down. Plus a specific answer to: **does it notice the correction-date anomaly, or does it confidently propose an "overdue" metric that is silently wrong for 1% of rows?**
-
-**Why this belongs in Phase 0:** it is the cheapest possible disconfirmation of the core usability bet, it costs nothing, it needs no cooperation from anyone, and — like 0.1 — an agent can run it today.
-
-**Known gap:** the file has no `Inspector` column, so this tests entity resolution on **Facilities** but not on **People**, and the walkthrough's step-4 action has no counterpart. Find a second public source for the person half, or leave it untested and say so.
-
-</details>
-
-**PHASE 0 EXIT — PASSED BY ASSUMPTION 2026-08-28.** 0.1, 0.3 and 0.5 done on evidence; 0.2, 0.2b, 0.4 assumed (A1–A3) pending the partner conversations. **0.3 closed 2026-08-28** — its verdict is Phase 1's first prior-art input. Two 0.5 gaps also remain open and are scheduled below: T4 entity resolution on the name-collision slice, and the People half.
-
----
+Phase 0 ran 2026-08-27/28: an archaeology of the design partner's existing vocabulary (finding 0.1), a prior-art survey (0.3), and a pre-registered proposal-quality test over public CMS data (0.5). Its three partner questions (0.2, 0.2b, 0.4) were closed **by assumption** under the founder's 2026-08-28 directive — see [the assumptions decision](docs/decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md) (A1–A3, each with the one question that would revise it). What Phase 0 forced into the interface (`consumers`, `predicate`, the guarded `merge_types`, the kill criteria below) is carried by the specs and the decision register; the findings themselves were internal working documents.
 
 ## Phase 1 — The interface. One document, no implementation. — ✅ **v0 SHIPPED 2026-08-28**
 
@@ -233,7 +99,7 @@ merge_types(from, into, reason)   -> MUST refuse when the two have different con
 | 6 | ~~**`docs/specs/ACTIONS.md` v0**~~ — **DONE 2026-08-29** ([`docs/specs/ACTIONS.md`](docs/specs/ACTIONS.md)). Governed actions over the registry and the edge store. An action family **is** a `kind="action"` `TypeEntry` — the third instance of EDGES' pattern, *a family is a row of the vocabulary and its instances live in a store beside the registry* — so it inherits propose→approve, `resolve_type`, lifecycle and `consumers` unchanged and **adds no call to `INTERFACE.md` §5**. Preconditions closed at **four** kinds, each answered by a call that already exists (no query language, and `evaluated_by` makes that checkable); effects closed at **four** operations, with `approve`/`reject`/`retire`/`reinstate`/`merge_types`/`register_consumer` barred from being one — *an action may propose; only a human, or an auto-policy a deployment set deliberately, may approve*. **No executor and no scheduler**, and §4 says out loud that the gate is therefore advisory by construction. `Refusal.reason` **21 → 28** and warnings **22 → 25**, both through `INTERFACE.md` in the same change per **R3**. Four calls, three adapter primitives, three capability flags. The **128-tool ceiling is a first-class design input**, re-measured rather than cited — and §11.6 caught the fixture moving mid-row while the arithmetic held. **62 numbered rules → 58 planned `C19` ids** from the first draft (constraint 8). **Three adversarial rounds, six reviewers, three KILL-ROW TRIPS — two against the shipped registry, both fixed and pinned** (`C10-09`, `C9-18`; suite 194 → **196**, `606 passed`). **Nine contortions recorded, none designed away**; closed at the cap with a convergence note that says the loop did **not** converge — the design is converging, the self-audit is not. **Q35—Q48 open for a ruling**, six founder-visible | none — and round 3's founder lens recommends **#6 be the last spec row before #5** | Opus |
 | 7 | **Phase 3** ingestion / mapping | none — the venture's wedge, not Tenshen's need | later |
 
-**Alongside, not gating:** ~~0.3 prior art~~ **done 2026-08-28, before #1** ([`docs/findings/0.3-prior-art.md`](docs/findings/0.3-prior-art.md)); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
+**Alongside, not gating:** ~~0.3 prior art~~ **done 2026-08-28, before #1** (`docs/findings/0.3-prior-art.md`); 0.5's T4 rerun on the name-collision slice of the full CMS file (Opus); the People-half source hunt (Sonnet).
 
 **Rule of the ordering:** nothing in #1–#4 may take a shape *because* Tenshen has it. If a Tenshen need and a CMS-data need conflict, the CMS need wins and the conflict is recorded in the spec — that recorded conflict is Phase 2's exit criterion ("the interface changed at least once") arriving early.
 

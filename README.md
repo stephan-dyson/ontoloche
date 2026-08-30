@@ -34,10 +34,8 @@ pytest --pyargs ontoloche.aio.contract      # the same 145 ids, awaited
   from the specs recorded rather than silently resolved. `3B-ASYNC.md` also carries the async
   design: the async tree is *generated* from the sync source by `tools/unasync.py`, so there is
   one implementation of the registry rather than two that drift.
-- [`docs/findings/0.3-prior-art.md`](docs/findings/0.3-prior-art.md) — what the two visible prior interfaces
   actually look like, read on 2026-08-28. Verdict: no interface worth matching call-for-call;
   Foundry's status vocabulary worth matching field-for-field.
-- [`docs/findings/FINDINGS-0.1-tenshen-archaeology.md`](docs/findings/FINDINGS-0.1-tenshen-archaeology.md) —
   the first piece of real evidence. Seven entity vocabularies in one codebase, traced to
   their origin commits. It changed the interface: **most "duplicate" types are not
   duplicates**, and the failure that actually shipped a bug was a type being *silently

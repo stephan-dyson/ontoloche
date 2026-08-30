@@ -106,7 +106,7 @@ python -m open_ontology.contract --adapter beacon.ontology:WorkLinkTypeAdapter
 
 The source file downloaded from the CMS Provider Data Catalog on 2026-08-28 is
 **165,336,194 bytes — byte-for-byte the size
-[`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) records for the
+`0.5-ground-truth-PREREGISTERED.md` records for the
 file 0.5 used.** So the fixture is the sample 0.5 actually cut, not a lookalike.
 
 **Eight type rows, not four hundred.** The registry stores types, not instances; the 400

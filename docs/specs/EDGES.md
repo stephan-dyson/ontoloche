@@ -900,7 +900,7 @@ The probe fills it from the T1.7 report:
 
 ## 10. Design test 2 — UC2 CMS: the implicit edges in a 400-row export
 
-**CMS wins any conflict with Tenshen** (`ROADMAP.md`, rule of the ordering). Data: the checked-in 400-row Montana sample, `ontoloche/contract/fixtures/cms_sample_400.csv`, cut from the public CMS file by [`docs/tools/make_sample.py`](../tools/make_sample.py). Counts are pre-registered in [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md).
+**CMS wins any conflict with Tenshen** (`ROADMAP.md`, rule of the ordering). Data: the checked-in 400-row Montana sample, `ontoloche/contract/fixtures/cms_sample_400.csv`, cut from the public CMS file by [`docs/tools/make_sample.py`](../tools/make_sample.py). Counts are pre-registered in `0.5-ground-truth-PREREGISTERED.md`.
 
 ### 10.1 Expected outcomes — **stated before the walk-through**
 

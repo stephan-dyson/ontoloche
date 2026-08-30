@@ -4,7 +4,7 @@
 **Status:** Draft, 2026-08-28. Satisfies `ROADMAP.md` Phase 2 preparation. Deliverable **#2** of the Tenshen-rebuild ordering. **Deliverable #3 has since landed** — the package, both backends and the 113-test suite are real and green (§8.4, §8b.5, §11); the sections written before it say so where it matters. *(Header corrected by row 3c; it still read "No code yet".)*
 **Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md), assumptions **A1**, **A4** and ruling **A5**.
 **Sits underneath:** [`INTERFACE.md`](INTERFACE.md) v0. Where this document and `INTERFACE.md` disagree, `INTERFACE.md` wins and the disagreement is recorded in §11 rather than resolved silently.
-**Evidence inputs:** [`INTERFACE.md`](INTERFACE.md) (the calls, the refusals, the two design tests) · [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md) and [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) (the CMS entities and their pre-registered counts) · `beacon/src/beacon/models/work_link_type.py` and `.../services/work_link_service.py`, read-only on 2026-08-28 (the Tenshen design test) · [`0.3-prior-art.md`](../findings/0.3-prior-art.md) (the Foundry import mapping the suite must test).
+**Evidence inputs:** [`INTERFACE.md`](INTERFACE.md) (the calls, the refusals, the two design tests) · `0.5-RESULTS.md` and `0.5-ground-truth-PREREGISTERED.md` (the CMS entities and their pre-registered counts) · `beacon/src/beacon/models/work_link_type.py` and `.../services/work_link_service.py`, read-only on 2026-08-28 (the Tenshen design test) · `0.3-prior-art.md` (the Foundry import mapping the suite must test).
 **Claim tags:** **[Observed]** seen directly · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 
 ---
@@ -1702,7 +1702,7 @@ Stating this is not pedantry: reading "the sample loads through the adapter" as 
 
 ### 8.2 Expected row counts, from the pre-registered ground truth
 
-Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Aug2026.csv` (CMS Provider Data Catalog, downloaded 2026-08-28). Ground truth frozen in [`0.5-ground-truth-PREREGISTERED.md`](../findings/0.5-ground-truth-PREREGISTERED.md) as `093f102`, before any proposal was generated.
+Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Aug2026.csv` (CMS Provider Data Catalog, downloaded 2026-08-28). Ground truth frozen in `0.5-ground-truth-PREREGISTERED.md` as `093f102`, before any proposal was generated.
 
 | `kind` | `name` | rows in `oo_type` | `oo_usage.count` | source of the count |
 |---|---|---|---|---|
@@ -1717,7 +1717,7 @@ Sample: `sample_state.csv`, the first 400 Montana rows of `NH_HealthCitations_Au
 
 **Totals: 8 rows in `oo_type`, 8 in `oo_usage`, 8 in `oo_proposal`, ≥16 in `oo_event`** (a `proposed` and an `approved` per type), and 0 in `oo_consumer` — nothing in a CSV registers a consumer, and `consumers()` correctly reports `known: 0, complete: False`.
 
-**Caution on the one [Inferred] count.** The seven severity codes present in the sample (B, C, D, E, F, G, J) come from [`0.5-RESULTS.md`](../findings/0.5-RESULTS.md)'s quotation of run **D**, which is the run that got the *ordering* backwards. The letter list itself was not among the two claims verified as errors, but it was also not independently counted. **The contract test must compute this number from the sample rather than assert it**, and record it — grading against a number taken from an unverified quotation is exactly the moved-target failure the pre-registration exists to prevent. The four `[Observed]` counts are asserted; this one is computed and reported.
+**Caution on the one [Inferred] count.** The seven severity codes present in the sample (B, C, D, E, F, G, J) come from `0.5-RESULTS.md`'s quotation of run **D**, which is the run that got the *ordering* backwards. The letter list itself was not among the two claims verified as errors, but it was also not independently counted. **The contract test must compute this number from the sample rather than assert it**, and record it — grading against a number taken from an unverified quotation is exactly the moved-target failure the pre-registration exists to prevent. The four `[Observed]` counts are asserted; this one is computed and reported.
 
 ### 8.3 What the CMS path exercises beyond counts
 
