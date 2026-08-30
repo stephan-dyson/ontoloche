@@ -1,4 +1,4 @@
-"""C12 -- the Foundry import mapping, and the fourth door into the kill row (9). From 0.3 consequence 2 / INTERFACE.md 2.5.
+"""C12 -- the Foundry import mapping, and the fourth door into the kill row (10). From 0.3 consequence 2 / INTERFACE.md 2.5.
 
 The mapping is stated in the interface rather than left to an importer, so it is tested
 here. It lands on ``Registry.import_types``, a method beyond the twelve, because no 5.x
@@ -321,3 +321,70 @@ def test_c12_09_an_imported_alias_between_identical_extents_is_still_written(reg
         "narrowed the guard, and a fix that banned the operation would pass a checker "
         "that only tested refusals"
     )
+
+
+@pytest.mark.requires_capability("stores_aliases")
+def test_c12_10_the_identity_guard_survives_a_word_registered_under_two_kinds(registry):
+    """`PACKAGE.md` §4.1 blesses one word under two kinds. Row 4c, first round.
+
+    `C0-11` pins that `get_type(namespace, name)` with **no** `kind` **raises**
+    `AmbiguousKind` there — that is the adapter refusing to guess, and it is correct.
+    Row 4c's new identity guard called it exactly that way, so **a Foundry dump whose
+    alias names a two-kind word blew the exception out of `import_types`** — a call
+    whose whole contract is *"an import cannot return a `Refusal`; it returns entries"*
+    — aborting the batch with earlier rows already committed.
+
+    The guard's question is per-kind anyway, so a query answers it without asking the
+    adapter to choose. **The fix for a guard that cannot look is never to look less
+    carefully.**
+
+    The second half is the shape of what comes back. `_refused_import` hard-coded
+    `kind="entity"`, so a refused `kind="predicate"` import returned an entry describing
+    itself as an entity while its own `import_refused:predicate_merge` reason said
+    otherwise — two answers about `kind`, in the field `INTERFACE.md` §2.3's whole
+    argument rests on.
+    """
+    seed(registry, "facility", definition="a nursing home")
+    seed(registry, "facility", kind="value_set", definition="the set of facility codes")
+    seed(registry, "surveyed", kind="predicate", definition="a capability")
+    seed(registry, "home", predicates=["surveyed"])
+
+    entries = registry.import_types(
+        [
+            {
+                "name": "inspected",
+                "kind": "predicate",
+                "definition": "a capability",
+                "aliases": ["facility"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    )
+    assert len(entries) == 1, "the batch completed rather than raising"
+    entry = entries[0]
+    assert any(w.startswith("import_refused:") for w in entry.warnings), entry.warnings
+    assert entry.kind == "predicate", (
+        "a refused import is shaped like the row it refused, not like an entity -- the "
+        "reason and the shape must agree about `kind`"
+    )
+
+    # And a batch whose aliases are clean still imports, so the guard did not simply
+    # start refusing everything on a two-kind store.
+    ok = registry.import_types(
+        [
+            {
+                "name": "annotated",
+                "kind": "predicate",
+                "definition": "a capability",
+                "aliases": ["previously_annotated"],
+                "status": "active",
+            }
+        ],
+        namespace="default",
+        kind="predicate",
+    )[0]
+    assert not any(w.startswith("import_refused:") for w in ok.warnings), ok.warnings
+    assert ok.aliases == ("previously_annotated",)
+    assert ok.kind == "predicate"

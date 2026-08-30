@@ -1,4 +1,4 @@
-"""C17 -- the edge store and the read seam (47). `EDGES.md` v0, roadmap row 4b.
+"""C17 -- the edge store and the read seam (50). `EDGES.md` v0, roadmap row 4b.
 
 Three things shape this group, and each is a lesson this repository already paid for.
 
@@ -1566,11 +1566,36 @@ def test_c17_33_a_merge_makes_the_walk_incomplete_and_the_report_says_so(registr
     )
     assert f"endpoint_type_merged:{old}" in predecessor.warnings
 
-    # A type nobody merged says nothing of the kind.
+    # A walk from a type nobody merged says nothing about ITS OWN identity -- and does
+    # say that the identity at the far end spans two names, because the walk resolved
+    # that one too. **The marker names the reference whose identity is split, not the
+    # origin**, and marking every identity the walk resolved (rather than the origin and
+    # frontier alone) is row 4c's first adversarial round: whether the same fact was
+    # reported used to depend on the depth the caller happened to ask for.
     ordinary = registry.neighbors(InstanceRef(cit, "C1"), ["blocks"], 1, namespace="default")
     assert ordinary.complete is True
-    assert not any(w.startswith("endpoint_type_merged") for w in ordinary.warnings)
-    assert all(ne.via_successor is None for ne in ordinary.edges)
+    assert f"endpoint_type_merged:{cit}" not in ordinary.warnings, (
+        "the origin's own identity is not split, and the marker names a reference"
+    )
+    assert f"endpoint_type_merged:{old}" in ordinary.warnings, (
+        "the node this walk reached IS split, and a caller who has just been handed "
+        "`facility_old#F1` is entitled to know it now denotes `facility_new`"
+    )
+    assert all(ne.via_successor is None for ne in ordinary.edges), (
+        "nothing was followed to find this edge -- it was written under `citation`"
+    )
+
+    # And a graph with no merge in it at all says nothing of the kind anywhere.
+    seed(registry, "survey", definition="an inspection visit")
+    survey = TypeRef("default", "entity", "survey")
+    registry.add_edge(
+        "blocks", InstanceRef(cit, "C2"), InstanceRef(survey, "S1"), "user:sd"
+    )
+    untouched = registry.neighbors(
+        InstanceRef(survey, "S1"), ["blocks"], 1, namespace="default"
+    )
+    assert untouched.complete is True
+    assert not any(w.startswith("endpoint_type_merged") for w in untouched.warnings)
 
 
 @pytest.mark.requires_capability("stores_edges", "stores_attributes")
@@ -1812,6 +1837,40 @@ def test_c17_37_a_payload_schema_nobody_registered_writes_the_edge_and_says_so(r
     assert "payload_schema_unregistered:blocks_payload" in edge.warnings
     assert edge.attr_schema_version is None
     assert edge.attributes == {"role": "anything"}, "written, never dropped"
+
+    # **And `attr_schema_version=None` only holds when NOTHING governs** -- row 4c's
+    # first adversarial round found rule 2.5-5 claiming it unconditionally. The family's
+    # NAMED schema is absent; the per-namespace one is not, so it governs, the version it
+    # stamps is its own, and in `enforce` mode the write is refused rather than written.
+    if not registry.caps.stores_attributes:
+        return
+    from ..attributes import AttributeSchema, FieldSpec
+
+    store = getattr(registry, "_attribute_store", None)
+    if store is None or store() is None:
+        return
+    registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default", kind="edge_payload", version=1,
+            fields={
+                "basis": FieldSpec(
+                    type="str", description="why this edge was asserted", required=True
+                )
+            },
+            additional="allow", mode="warn",
+        )
+    )
+    governed = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(3), "user:sd", attributes={"role": "x"}
+    )
+    assert not isinstance(governed, Refusal), governed
+    assert "payload_schema_unregistered:blocks_payload" in governed.warnings, (
+        "the NAMED schema is still absent and still said so"
+    )
+    assert governed.attr_schema_version == 1, (
+        "and the per-namespace schema governs, so the version is its own -- not None"
+    )
+    assert "attributes_invalid:basis:required field missing" in governed.warnings
 
 
 @pytest.mark.requires_capability("stores_edges", "stores_attributes", "stores_edge_attributes")
@@ -2247,6 +2306,10 @@ def test_c17_44_the_chain_is_followed_at_every_hop_not_only_at_the_origin(regist
     assert InstanceRef(old, "7") not in report.nodes, (
         "the origin under its former name is the origin, at any depth"
     )
+    assert f"endpoint_type_merged:{new}" in report.warnings, (
+        "EDGES.md rule 4.3-14 says the marker fires for the origin's type -- and it is "
+        "the origin's identity that spans two names here"
+    )
 
     # And from the other end of the graph, the merged node is still the far endpoint of
     # a second-hop edge -- the case no depth-1 test can produce.
@@ -2258,6 +2321,15 @@ def test_c17_44_the_chain_is_followed_at_every_hop_not_only_at_the_origin(regist
         f"{task_ref}#2",
         f"{old}#7",
     }, "the node reached is the one the edge names, which is what was written"
+    assert any(
+        w.startswith("endpoint_type_merged:") for w in from_task.warnings
+    ), (
+        "**and the report says so from THIS end too** -- rule 4.3-14 says the marker "
+        "fires for *the origin's type OR a frontier node's*, and it fired for the origin "
+        "alone until row 4c's first adversarial round. A caller reading `warnings` to "
+        "decide whether to look further was told nothing at exactly the hop this id "
+        "exists to cover"
+    )
 
 
 @pytest.mark.requires_capability("stores_edges", "stores_attributes", "indexes_membership")
@@ -2303,6 +2375,15 @@ def test_c17_45_a_broken_or_looping_chain_stops_at_depth_and_says_so(
     )
     assert cyclic.known == 1, "a cycle is walked once, not forever"
     assert cyclic.edges[0].via_successor == f"{alpha}#1"
+    assert cyclic.complete is True, (
+        "**and a cycle is COMPLETE, which rule 4.3-15 claimed it was not until row 4c's "
+        "first adversarial round.** The visited set resolves such a closure entirely, so "
+        "the walk searched every name the identity spans and `complete=True` is the true "
+        "statement. A cycle is a strange vocabulary, not a truncated read -- and saying "
+        "`complete=False` about a whole answer is the same category of lie as saying "
+        "`complete=True` about a partial one"
+    )
+    assert cyclic.why_incomplete is None
 
     # 2 -- a chain longer than the cap.
     long_registry = make_registry(adapter)
@@ -2478,3 +2559,201 @@ def test_c17_47_a_second_retraction_is_refused_and_the_first_decision_survives(r
         "an edge that never existed is a different failure from one already decided, "
         "and reusing one value for both would be INTERFACE.md 2.3's Cause B"
     )
+
+
+# ------------------------------------------- 4c round 1: what the reviewers reproduced
+
+
+@pytest.mark.requires_capability(
+    "stores_edges", "stores_attributes", "stores_events"
+)
+def test_c17_48_a_written_reference_is_never_reported_as_a_followed_one(registry):
+    """Rule K, precisely. Row 4c, first adversarial round — **three defects in one walk.**
+
+    `NeighborEdge.via_successor` is documented *"`None` when this edge was found under
+    the very reference the walk was given"*, and that is the whole content of Rule K: a
+    caller must be able to tell a **written** reference from a **followed** one.
+
+    1. **`via_successor` was set on an edge whose `src` was literally the reference the
+       caller passed.** `expanded` maps a written reference to `None`, so
+       `expanded.get(src_k) or expanded.get(dst_k)` could not tell *"src is absent"*
+       from *"src is present and was written"* — `or` fell through to the far end's
+       successor name. The most ordinary edge there is came back marked as followed.
+    2. **`nodes` was not de-duplicated across a merged identity**, though the ORIGIN
+       was, with an explicit argument. After a merge, two edges to two written names of
+       one identity reported two distinct neighbours — the same false statement the
+       origin exclusion exists to prevent, at the far end.
+    3. **A merged FRONTIER node produced no `endpoint_type_merged`.** `EDGES.md` rule
+       `4.3-14` says *"the origin's type — **or a frontier node's**"*; the warning fired
+       for the origin only, so a caller reading `warnings` to decide whether to look
+       further was told nothing at the hop `C17-44` exists to cover.
+    """
+    seed(registry, "hub")
+    seed(registry, "owner", definition="the person accountable")
+    seed(registry, "assignee", definition="the person accountable")
+    blocks(registry)
+    hub = TypeRef("default", "entity", "hub")
+    owner = TypeRef("default", "entity", "owner")
+    assignee = TypeRef("default", "entity", "assignee")
+
+    # An edge written FROM the survivor's own name, and two edges into the two names.
+    registry.add_edge(
+        "blocks", InstanceRef(owner, "1"), InstanceRef(assignee, "1"), "user:sd"
+    )
+    registry.add_edge("blocks", InstanceRef(hub, "9"), InstanceRef(owner, "7"), "user:sd")
+    registry.add_edge(
+        "blocks", InstanceRef(hub, "9"), InstanceRef(assignee, "7"), "user:sd"
+    )
+    merged = registry.merge_types(
+        "assignee", "owner", "one word for one person", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+
+    # 1 -- the edge whose src IS the reference walked from.
+    written = registry.neighbors(
+        InstanceRef(owner, "1"), ["blocks"], 1, namespace="default"
+    )
+    assert written.known == 1
+    assert written.edges[0].via_successor is None, (
+        "this edge's `src` is the very reference the caller passed, so nothing was "
+        "followed to find it -- Rule K's own sentence"
+    )
+
+    # 2 and 3 -- one identity at the far end, reached under two written names.
+    from_hub = registry.neighbors(
+        InstanceRef(hub, "9"), ["blocks"], 1, namespace="default"
+    )
+    assert from_hub.known == 2, "two edges were written, and both are real"
+    assert len(from_hub.nodes) == 1, (
+        f"one identity is one neighbour: {[str(n) for n in from_hub.nodes]}"
+    )
+    assert any(
+        w.startswith("endpoint_type_merged:") for w in from_hub.warnings
+    ), "and the report says the identity at the far end spans more than one name"
+
+
+@pytest.mark.requires_capability("stores_edges", "stores_attributes")
+def test_c17_49_an_unregistered_family_edge_still_has_to_be_incident(
+    adapter, make_registry
+):
+    """*"The registry narrows, ALWAYS"* — on the one branch no test reached. Row 4c, r1.
+
+    `EDGES.md` §4.3 rule 13 keeps an edge whose family nobody registered, because
+    dropping it is the silent per-consumer drop this document is designed against. That
+    branch returned `True` **without checking incidence at all**, so against an adapter
+    that answers wider than it was asked, edges touching neither the origin nor anything
+    it reached came back at `at_depth=1` under `complete=True`, with their far ends in
+    `nodes`.
+
+    `C17-31` claims the narrowing holds *"on the default `direction="both"` as well as
+    on `out` and `in`"* — and passes `edge_families=[...]`, which sets `searched_keys`
+    and makes this branch unreachable from it. **That is its own docstring's complaint —
+    *"caught incidentally is a weaker claim than pinned"* — one branch along**, in the id
+    that makes the complaint.
+
+    Keeping the edge and dropping the incidence check are two different decisions, and
+    only the first one was ever argued.
+    """
+
+    class _IgnoresFrontier:
+        """A backend that answers a wider question than it was asked. `C0-10`'s shape."""
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        def find_edges(self, query):
+            return self._inner.find_edges(replace(query, incident_to=None))
+
+    registry = make_registry(adapter)
+    seed(registry, "hub")
+    blocks(registry)
+    hub = TypeRef("default", "entity", "hub")
+    registry.add_edge("blocks", InstanceRef(hub, "1"), InstanceRef(hub, "2"), "user:sd")
+    # An edge of a family NOBODY registered, touching neither the origin nor its reach.
+    far = EdgeRecord(
+        edge_id="unrelated-edge",
+        namespace="default",
+        family="unregistered_fam",
+        src_namespace="default", src_kind="entity", src_name="hub", src_instance_id="800",
+        dst_namespace="default", dst_kind="entity", dst_name="hub", dst_instance_id="900",
+    )
+    adapter.put_edge(far, expect_absent=True)
+
+    wide = make_registry(_IgnoresFrontier(adapter))
+    report = wide.neighbors(InstanceRef(hub, "1"), None, 1, namespace="default")
+    reached = {ne.edge.edge_id for ne in report.edges}
+    assert "unrelated-edge" not in reached, (
+        "an edge incident on neither the origin nor anything it reached is not a "
+        "neighbour of the origin, whoever registered its family"
+    )
+    assert InstanceRef(hub, "900") not in report.nodes
+
+
+@pytest.mark.requires_capability(
+    "stores_edges", "stores_attributes", "stores_edge_attributes",
+    "stores_edge_events", "stores_events",
+)
+@pytest.mark.requires_attribute_store
+def test_c17_50_an_unrelated_amendment_does_not_erase_the_payloads_warnings(registry):
+    """`EDGES.md` rule `2.5-3`: *"`warn` writes and **enumerates**"*. Row 4c, round 1.
+
+    `amend_edge` stripped `attributes_invalid:` and `payload_schema_unregistered:` from
+    the row **unconditionally**, so amending only the `confidence` deleted the
+    enumeration from a row whose payload was still invalid and still stored. The
+    escape hatch stopped being enumerable after any unrelated correction, silently —
+    which is `PACKAGE.md` §5.5's whole subject, reached through the call R37 added.
+
+    The durability value is different in the way that matters: it is a statement about
+    **this call**, so it is always recomputed. That is the distinction `retract_edge`
+    already draws, and the fix is to draw it here too.
+    """
+    from ..attributes import AttributeSchema, FieldSpec
+
+    _payload_family(registry)
+    registry.register_attribute_schema(
+        AttributeSchema(
+            namespace="default", kind="edge_payload", name="blocks_payload", version=1,
+            fields={
+                "role": FieldSpec(type="str", description="the src end's role", required=True)
+            },
+            additional="forbid", mode="warn",
+        )
+    )
+    edge = registry.add_edge(
+        "blocks", _payload_task(), _payload_task(2), "user:sd", attributes={"bogus": 1}
+    )
+    assert not isinstance(edge, Refusal), edge
+    before = {w for w in edge.warnings if w.startswith("attributes_invalid:")}
+    assert before, "the fixture needs a payload the schema complains about"
+
+    amended = registry.amend_edge(
+        edge.edge_id, "re-scored by a cheaper model", amended_by="ai:classifier",
+        confidence=0.9,
+    )
+    assert not isinstance(amended, Refusal), amended
+    assert amended.attributes == {"bogus": 1}, "the payload was not touched"
+    assert {
+        w for w in amended.warnings if w.startswith("attributes_invalid:")
+    } == before, (
+        "so its enumeration is not touched either -- a row that is still invalid must "
+        "not come back reading clean"
+    )
+
+    # Amending the PAYLOAD does recompute them, because then they are about this write.
+    fixed = registry.amend_edge(
+        edge.edge_id, "corrected", amended_by="user:sd", attributes={"role": "owner"}
+    )
+    assert not isinstance(fixed, Refusal), fixed
+    assert not any(w.startswith("attributes_invalid:") for w in fixed.warnings)
+
+    # And an edge that does not exist is `unknown_edge`, even where the amendment could
+    # not have been recorded: a refusal must not name a capability about a missing row.
+    if registry.caps.stores_edge_events and registry.caps.stores_events:
+        missing = registry.amend_edge(
+            "no-such-edge", "x", amended_by="user:sd", confidence=1.0
+        )
+        assert isinstance(missing, Refusal) and missing.reason == "unknown_edge"

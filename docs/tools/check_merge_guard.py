@@ -194,6 +194,32 @@ def identity_writers() -> dict[str, set[str]]:
                     found.setdefault(
                         _enclosing_function(node, parents), set()
                     ).add(key.value)
+        # `d["successor"] = other` -- ONE refactor away from the dict-literal shape three
+        # real callers already use, and invisible to the two branches above. Row 4c's
+        # first adversarial round wrote four collapsing callers and this scan saw one.
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.slice, ast.Constant)
+                    and target.slice.value in IDENTITY_FIELDS
+                ):
+                    found.setdefault(
+                        _enclosing_function(node, parents), set()
+                    ).add(target.slice.value)
+        # `object.__setattr__(rec, "aliases", ...)` / `setattr(rec, "successor", ...)` --
+        # the frozen-dataclass escape hatch, which this package uses elsewhere.
+        if isinstance(node, ast.Call):
+            name = getattr(node.func, "attr", getattr(node.func, "id", None))
+            if name in ("setattr", "__setattr__") and len(node.args) >= 2:
+                attribute = node.args[1]
+                if (
+                    isinstance(attribute, ast.Constant)
+                    and attribute.value in IDENTITY_FIELDS
+                ):
+                    found.setdefault(
+                        _enclosing_function(node, parents), set()
+                    ).add(attribute.value)
     return found
 
 
@@ -224,6 +250,11 @@ def check_callers() -> list[str]:
 
 # ---------------------------------------------------------------------------
 # Part B -- the states, against the shipped registry
+
+#: A probe that could not build its fixture on this backend returns a string starting
+#: with this. It is NOT a pass: the row prints `NOT REACHABLE` and says why. Row 4c's
+#: first adversarial round found five rows printing `REFUSED` for a probe that never ran.
+_NOT_REACHABLE = "NOT REACHABLE: "
 
 EVIDENCE = [Evidence(kind="data", summary="check_merge_guard fixture")]
 
@@ -305,9 +336,9 @@ def _probe_merge(registry: Registry, *, expect_refused: bool, reasons: set[str],
             return f"merge_types refused {result.reason!r}, expected one of {sorted(reasons)}"
         if result.detail.get("overridable") is not False:
             return (
-                f"merge_types' {reason!r} does not declare itself non-overridable; "
-                f"a guard that can be acknowledged past is a warning wearing a "
-                f"refusal's name"
+                f"merge_types' {result.reason!r} does not declare itself "
+                f"non-overridable; a guard that can be acknowledged past is a warning "
+                f"wearing a refusal's name"
             )
         return None
     if isinstance(result, Refusal):
@@ -335,6 +366,12 @@ def _probe_retire(registry: Registry, *, expect_refused: bool, reasons: set[str]
                     f"`resolve_type` now answers the old word with the new entry at "
                     f"confidence 1.0, which is the merge `merge_types` refuses"
                 )
+            if isinstance(result, Refusal) and result.detail.get("overridable") is not False:
+                return (
+                    f"retire(successor=)'s {result.reason!r} does not declare itself "
+                    f"non-overridable -- `force` overrides what could be SEEN, never "
+                    f"what would become TRUE"
+                )
             if result.reason not in (reasons | {"cannot_record_override"}):
                 return (
                     f"retire(successor=, force={force}) refused {result.reason!r}, "
@@ -360,9 +397,16 @@ def _probe_import(registry: Registry, *, expect_refused: bool, reasons: set[str]
     # a live entry.
     retired = registry.retire("commentable", "superseded", retired_by="user:sd", force=True)
     if isinstance(retired, Refusal):
-        # On a backend that cannot record the override there is no way to set the
-        # fixture up, and saying so is honest -- the state is unreachable there.
-        return None
+        # **`NOT REACHABLE`, not `None`.** Returning `None` here rendered identically to
+        # a real pass, so five `sqlite_minimal / import_types / ...` rows printed
+        # **REFUSED** for a probe that never ran -- and the footer went on claiming
+        # *"every extent state gets the guard's answer on every leg"*. That is ruling
+        # R12's own rule (a verdict without its coverage line is not a verdict) broken
+        # inside the checker built to enforce that discipline. Row 4c, round 1.
+        return _NOT_REACHABLE + (
+            f"this backend cannot record the forced retirement the fixture needs: "
+            f"{retired.reason}"
+        )
     entries = registry.import_types(
         [
             {
@@ -498,9 +542,10 @@ def _legs():
     return legs
 
 
-def check_states() -> tuple[list[str], list[str]]:
+def check_states() -> tuple[list[str], list[str], list[str]]:
     problems: list[str] = []
     lines: list[str] = []
+    unreachable: list[str] = []
     for leg, build, knowable in _legs():
         for caller, probe in PROBES.items():
             for label, fixture, refused, reasons, kind in STATES:
@@ -523,28 +568,81 @@ def check_states() -> tuple[list[str], list[str]]:
                     failure = f"the probe raised {type(error).__name__}: {error}"
                 state = label if knowable else f"{label} (unknowable here)"
                 verdict = "REFUSED" if expect_refused else "allowed"
-                if failure:
+                if failure and failure.startswith(_NOT_REACHABLE):
+                    unreachable.append(
+                        f"{leg} / {caller} / {state}: "
+                        + failure[len(_NOT_REACHABLE):]
+                    )
+                    lines.append(f"  {leg:15s} {caller:13s} {state:28s} NOT REACHABLE")
+                elif failure:
                     problems.append(f"{leg} / {caller} / {state}: {failure}")
                     lines.append(f"  {leg:15s} {caller:13s} {state:28s} FAILED")
                 else:
                     lines.append(f"  {leg:15s} {caller:13s} {state:28s} {verdict}")
-        # The `unknowable` row on a leg that CAN index membership, built with the
-        # double rather than with a real store: the two sides genuinely differ and the
-        # backend genuinely cannot say, which is the shape of the FIRST trip.
+        # **The two states no real leg can produce, built with the double.** Both are
+        # shapes of trips this project has already taken, and `unknowable` was exercised
+        # for `merge_types` alone until row 4c's first adversarial round pointed out that
+        # `import_types x unknowable` was exercised on no leg at all -- the state the
+        # FIRST trip was made of, on the caller the FOURTH was.
+        #
+        # `partial` is the FIFTH trip's own shape: an honest paging backend
+        # (`page_cap`/`page_cursor`, which PACKAGE.md 3.3 permits and UC3's scale
+        # produces) whose first page of two extents matches while the extents differ.
+        # `_extent` read one page and every guard discarded the `why` that said so, so
+        # two predicates compared equal and all three callers performed the collapse.
+        # No real leg pages at two rows, which is exactly why this row is synthetic.
         if knowable:
-            registry = build()
-            _both(registry, ["note"], ["doc"])
-            blind = Registry(
-                DegradedAdapter(registry.adapter, indexes_membership=False),
-                policies={"default": NamespacePolicy(approval_policy="auto")},
-            )
-            failure = _probe_merge(blind, expect_refused=True, reasons={"predicate_merge"})
-            if failure:
-                problems.append(f"{leg} / merge_types / unknowable: {failure}")
-                lines.append(f"  {leg:15s} {'merge_types':13s} {'unknowable':28s} FAILED")
-            else:
-                lines.append(f"  {leg:15s} {'merge_types':13s} {'unknowable':28s} REFUSED")
-    return problems, lines
+            for shape, wrap in (
+                ("unknowable", lambda a: DegradedAdapter(a, indexes_membership=False)),
+                ("partial", lambda a: DegradedAdapter(a, page_cap=2, page_cursor=True)),
+                # **`truncated` is a DIFFERENT state from `partial`, and the difference
+                # is which defence catches it.** `partial` is an honest PAGE (a cursor to
+                # the rest) and the fix for it is `_extent` looping to exhaustion.
+                # `truncated` is a backend that caps and offers no cursor -- PACKAGE.md
+                # 3.3's other honest page -- where there IS no rest to read, so the only
+                # defence is the guards folding `_extent`'s own `why` into `knowable`.
+                # **Added because the `partial` row did NOT catch a mutation that removed
+                # that fold** (row 4c, round 1): with paging fixed the extents genuinely
+                # differ, so the guard refuses for the right reason anyway and the
+                # belt-and-braces went unexercised. Two states, two defences, and one
+                # row cannot stand in for the other.
+                ("truncated", lambda a: DegradedAdapter(a, page_cap=2)),
+            ):
+                for caller, probe in PROBES.items():
+                    registry = build()
+                    if shape in ("partial", "truncated"):
+                        # Extents that genuinely differ, and whose FIRST PAGE matches.
+                        _both(
+                            registry,
+                            ["aaa_doc", "bbb_note", "zzy_scratch"],
+                            ["aaa_doc", "bbb_note"],
+                        )
+                    else:
+                        _both(registry, ["note"], ["doc"])
+                    blind = Registry(
+                        wrap(registry.adapter),
+                        policies={"default": NamespacePolicy(approval_policy="auto")},
+                    )
+                    try:
+                        failure = probe(
+                            blind,
+                            expect_refused=True,
+                            reasons={"predicate_merge"},
+                            kind="predicate",
+                        )
+                    except Exception as error:  # pragma: no cover
+                        failure = f"the probe raised {type(error).__name__}: {error}"
+                    if failure and failure.startswith(_NOT_REACHABLE):
+                        unreachable.append(
+                            f"{leg} / {caller} / {shape}: " + failure[len(_NOT_REACHABLE):]
+                        )
+                        lines.append(f"  {leg:15s} {caller:13s} {shape:28s} NOT REACHABLE")
+                    elif failure:
+                        problems.append(f"{leg} / {caller} / {shape}: {failure}")
+                        lines.append(f"  {leg:15s} {caller:13s} {shape:28s} FAILED")
+                    else:
+                        lines.append(f"  {leg:15s} {caller:13s} {shape:28s} REFUSED")
+    return problems, lines, unreachable
 
 
 def main() -> int:
@@ -563,9 +661,16 @@ def main() -> int:
     print("\nPart B -- the guard's answer for every state, on every leg:")
     if not os.environ.get("OO_POSTGRES_DSN"):
         print("  postgres        NOT RUN -- set OO_POSTGRES_DSN to include the third leg")
-    state_problems, lines = check_states()
+    state_problems, lines, unreachable = check_states()
     for line in lines:
         print(line)
+    if unreachable:
+        # Ruling R12, applied to this checker: **a verdict without its coverage line is
+        # not a verdict.** A row whose fixture could not be built on a leg is printed and
+        # named, never folded into the passes.
+        print("\n  states that could not be REACHED on a leg (not passes):")
+        for line in unreachable:
+            print(f"    {line}")
 
     problems = caller_problems + state_problems
     print()
@@ -581,7 +686,9 @@ def main() -> int:
         return 1
     print(
         "Every caller that re-points a name is accounted for, and every extent state "
-        "gets the guard's answer on every leg.\n"
+        "that is REACHABLE on a leg gets the guard's answer there"
+        + (" (the rows above say which were not)." if unreachable else ".")
+        + "\n"
         "What this does NOT cover, stated rather than implied: it checks the guards a "
         "caller HAS, not the guards a caller might need for a collapse reached through "
         "a field nobody has thought of. Part A is the half that makes that visible -- a "
