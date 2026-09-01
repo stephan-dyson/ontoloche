@@ -74,6 +74,7 @@ __all__ = [
     "ref_shape",
     "ref_kind",
     "ref_key",
+    "parse_ref",
     "is_person",
 ]
 
@@ -273,6 +274,75 @@ def ref_key(ref: Any) -> str:
         t = ref.type
         return f"{t.namespace}:{t.kind}:{t.name}#{ref.id}"
     return f"{ref.namespace}:{ref.kind}:{ref.name}"
+
+
+def parse_ref(key: str) -> InputRef:
+    """The inverse of :func:`ref_key`: the flat identity string, read back as a ref.
+
+    ACTIONS.md 2.3, **ruling R72**, row 6c. One additive public function, no shape
+    change.
+
+    **Why it exists.** 2.3 argues at length that ``EdgeRef`` carries ``family`` and
+    ``namespace`` so *"the reference can be READ without a store round trip"* a year
+    later -- and ``InvocationRecord.inputs`` is JSON (PACKAGE.md 3.3), so what the
+    ledger actually holds is ``"beacon:edge:b_edges#e-abc123"``. The write half was
+    exported and the read half was not, which left every consumer hand-splitting the
+    string the document promised was readable. A surface the document does not print is
+    how deviation **D-6b-1** happened, so 2.3 prints this signature in the same change.
+
+    **It RAISES for anything it does not recognise, and that is the whole discipline.**
+    *A permissive default for a value you did not recognise* is the one shape row 6b
+    shipped twice -- ``ref_shape`` returning ``"type"`` for a bare string (the kill row,
+    through a ref shape) and ``_alias_identity_breach`` comparing a row against itself
+    (the ninth trip) -- and ``is_person`` records it a third time one section along.
+    There is no ``None`` fallback and no *"probably a type ref"* branch here: a caller
+    that gets a value back got one this function actually read, and a caller that
+    passed something else finds out at the call, which is R64's required-keyword rule
+    applied to a parser.
+
+    **The grammar is exactly what** :func:`ref_key` **writes, and nothing else:**
+
+    * ``"<namespace>:<kind>:<name>"``                -> :class:`~ontoloche.edges.TypeRef`
+    * ``"<namespace>:<kind>:<name>#<id>"``           -> :class:`~ontoloche.edges.InstanceRef`
+    * ``"<namespace>:edge:<family>#<edge_id>"``      -> :class:`EdgeRef`
+
+    Split on the **first** ``#``, because an instance id and an ``edge_id`` are both
+    OPAQUE -- *"the host's identifier"* (2.3) -- and may contain one; the head is then
+    exactly three colon-separated segments, because a type ``name`` cannot contain a
+    colon (``NAME_RE``). Anything else is refused rather than guessed at.
+
+    **``kind == "edge"`` with an id is an ``EdgeRef``, and the flat form cannot say
+    otherwise.** 2.3 requires an ``InstanceRef``'s type to be ``kind="entity"``, so
+    ``"ns:edge:x#y"`` has exactly one legal reading. An ``InstanceRef`` built over a
+    ``kind="edge"`` type -- which 2.3 forbids and the dataclass does not enforce --
+    round-trips to an ``EdgeRef``. That is a fact about ``ref_key``'s FORMAT rather than
+    about this parser, and it is stated here rather than discovered by a reader of a
+    year-old ledger.
+
+    :raises ValueError: for a non-``str``, or for any string outside the grammar above.
+    """
+    if not isinstance(key, str):
+        raise ValueError(
+            f"parse_ref takes the flat identity string `ref_key` writes; got "
+            f"{type(key).__name__}. There is no default for a value this function did "
+            f"not recognise (ACTIONS.md 2.3, ruling R72)"
+        )
+    head, sep, tail = key.partition("#")
+    parts = head.split(":")
+    if len(parts) != 3:
+        raise ValueError(
+            f"{key!r} is not a reference `ref_key` produced: the part before any '#' "
+            f"must be exactly `<namespace>:<kind>:<name>` and this has "
+            f"{len(parts)} colon-separated segment(s) (ACTIONS.md 2.3, ruling R72)"
+        )
+    namespace, kind, name = parts
+    if not sep:
+        return TypeRef(namespace, kind, name)
+    if kind == "edge":
+        # 2.3: an `InstanceRef`'s type MUST be `kind="entity"`, so this string has one
+        # legal reading and it is the edge one.
+        return EdgeRef(edge_id=tail, family=name, namespace=namespace)
+    return InstanceRef(type=TypeRef(namespace, kind, name), id=tail)
 
 
 @dataclass(frozen=True)

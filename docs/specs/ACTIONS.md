@@ -142,6 +142,24 @@ InputSpec:
     families:   tuple[str, ...] | None   # for ref="edge": which families are acceptable
 ```
 
+**The flat identity string, and its inverse** *(ruling **R72**, row 6c)*. An invocation's `inputs` are stored as JSON (`PACKAGE.md` §3.3), so what the ledger actually holds for each argument is the flat string `ref_key` writes — `"beacon:edge:b_edges#e-abc123"`. This document promised that string was readable *"without a store round trip"* and exported only the half that writes it, so every consumer hand-split it. **The read half is printed here**, in the same change that ships it, because a surface the document does not print is how deviation **D-6b-1** happened:
+
+```python
+def ref_key(ref: InputRef) -> str: ...        # the flat identity string, as stored
+def parse_ref(key: str) -> InputRef: ...      # its inverse. RAISES ValueError for
+                                              #   anything outside the grammar below
+```
+
+| written form | reads back as |
+|---|---|
+| `"<namespace>:<kind>:<name>"` | `TypeRef` |
+| `"<namespace>:<kind>:<name>#<id>"` | `InstanceRef` |
+| `"<namespace>:edge:<family>#<edge_id>"` | `EdgeRef` |
+
+**It raises rather than guessing, and that is the whole discipline.** *A permissive default for a value you did not recognise* is the shape row 6b shipped **twice** — `ref_shape` returning `"type"` for a bare string, which walked `merge_capabilities(commentable, searchable)` past the `predicate` exclusion, and `_alias_identity_breach` comparing a row against itself, which is the kill row's **ninth** trip. There is no `None` fallback and no *"probably a type ref"* branch: a caller that gets a value back got one this function actually read, which is **R64**'s required-keyword rule applied to a parser.
+
+**The split is on the FIRST `#`, and the head is exactly three colon-separated segments.** An instance id and an `edge_id` are both **opaque** — *"the host's identifier"* — and may contain either character; a type `name` cannot contain a colon, so the head is unambiguous. **`kind == "edge"` with an id is an `EdgeRef`**, because this section requires an `InstanceRef`'s type to be `kind="entity"`, so that string has exactly one legal reading — an `InstanceRef` built over a `kind="edge"` type, which this section forbids, round-trips to an `EdgeRef`. That is a fact about the *format* rather than about the parser, and it is stated here rather than discovered by the reader of a year-old ledger.
+
 **Why `EdgeRef` carries `family` and `namespace` when `edge_id` alone identifies the edge.** Because an invocation record is read long after the edge store has moved on, and an `edge_id` on its own is unreadable without a join — the objection `EDGES.md` §2.1 raises against a surrogate endpoint. A retracted edge still has a family and a namespace; a bare id has nothing. **[Inferred]** this is what a reader of a year-old invocation actually wants, and it costs two strings.
 
 **`predicate` is excluded as an input kind at every ref level, and it is the general rule again.** `EDGES.md` §2.4.1 forbids `kind="predicate"` in any family's `endpoint_kinds`, at either level, because *two predicates being equivalent is a claim about extents* and `ROADMAP.md`'s kill row is one indirection away. **An action taking two predicates as inputs is the same indirection with a verb in front of it** — `merge_capabilities(commentable, searchable)` is the kill row spelled as a tool call. The exclusion is inherited unchanged and stated here so nobody has to derive it: **no `InputSpec` may name `predicate` in `kinds`**, and a family that does is refused at declaration.

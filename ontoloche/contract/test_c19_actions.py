@@ -38,6 +38,7 @@ import pytest
 
 from ..actions import (
     APPROVAL_MODES,
+    EdgeRef,
     EFFECT_OPS,
     EVALUATORS,
     GATE_VERDICTS,
@@ -53,6 +54,8 @@ from ..actions import (
     ProjectionReport,
     action_attributes,
     effect_identity,
+    parse_ref,
+    ref_key,
 )
 from ..adapter import ACTION_CAPABILITY_FLAGS, CAPABILITY_FLAGS, Capabilities
 from ..edges import InstanceRef, TypeRef
@@ -3437,3 +3440,98 @@ def test_c19_76_record_invocation_warns_on_a_retired_declared_edge_family(
         "the record is KEPT and it says the blast radius points at a withdrawn word"
     )
     assert late.outcome == "applied", "a warning is not a refusal"
+
+
+def test_c19_77_ref_key_and_parse_ref_round_trip_over_every_reference_shape(
+    adapter, make_registry
+):
+    """§2.3, ruling **R72** -- the flat identity string reads back as the ref it was.
+
+    **Why the parser exists.** §2.3 argues at length that `EdgeRef` carries `family` and
+    `namespace` so *"the reference can be READ without a store round trip"* a year
+    later, and `InvocationRecord.inputs` is JSON (`PACKAGE.md` §3.3) -- so what the
+    ledger holds is `"beacon:edge:b_edges#e-abc123"`, and the package exported only the
+    half that WRITES it. Every consumer hand-split the string the document promised was
+    readable.
+
+    The property is stated as a property rather than as three examples: for every ref
+    shape, `parse_ref(ref_key(r)) == r`, **and** `ref_key(parse_ref(k)) == k`. The
+    second half is not redundant -- a parser that dropped a namespace would satisfy
+    neither, but a parser that normalised one would satisfy only the first.
+
+    The opaque halves are exercised with the characters that break a naive split: an
+    instance id and an `edge_id` are *"the host's identifier"* and may contain `:` and
+    `#`, which is why the split is on the FIRST `#` and the head is exactly three
+    colon-separated segments.
+    """
+    refs = [
+        TypeRef("beacon", "entity", "person"),
+        TypeRef("default", "predicate", "commentable"),
+        InstanceRef(TypeRef("beacon", "entity", "person"), "41"),
+        InstanceRef(TypeRef("dpr", "value_set", "borough"), "a:b#c"),
+        EdgeRef("e-abc123", "b_edges", "beacon"),
+        EdgeRef("e#x:y", "b_edges", "beacon"),
+    ]
+    for ref in refs:
+        key = ref_key(ref)
+        assert parse_ref(key) == ref, key
+        assert ref_key(parse_ref(key)) == key, key
+
+    # `kind == "edge"` with an id has exactly ONE legal reading, because §2.3 requires
+    # an `InstanceRef`'s type to be `kind="entity"`. A fact about the FORMAT, pinned so
+    # a reader of a year-old ledger does not discover it.
+    assert isinstance(parse_ref("beacon:edge:b_edges#e-1"), EdgeRef)
+
+    # And it is the same string the LEDGER stores, not a parallel format: drive one
+    # through the shipped registry and read the stored key back.
+    if not (registry := make_registry(adapter)).caps.stores_invocations:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend declares stores_invocations=False; the "
+            "round-trip property above is asserted on every leg"
+        )
+    if not registry.caps.stores_attributes:
+        pytest.skip("PACKAGE.md 3.2 -- ACTIONS.md 2.2 needs stores_attributes")
+    seed(registry, "person")
+    action_family(registry, "touch_person", inputs=[InputSpec("who", "instance")])
+    who = InstanceRef(TypeRef("default", "entity", "person"), "41")
+    out = registry.record_invocation(
+        "touch_person", {"who": who}, actor="user:sd", outcome="applied",
+        approved_by="user:sd",
+    )
+    assert not isinstance(out, Refusal), out
+    assert parse_ref(out.inputs["who"]) == who, (
+        "the ledger's stored string is the one this parser reads; a second format "
+        "would be two homes for one fact"
+    )
+
+
+def test_c19_78_parse_ref_refuses_what_it_did_not_recognise_and_never_defaults(
+    adapter, make_registry
+):
+    """§2.3, ruling **R72** -- and this id is the one that matters.
+
+    **A permissive default for a value you did not recognise is the single shape row 6b
+    shipped twice.** `ref_shape` returned `"type"` for anything that was not an
+    `EdgeRef` or an `InstanceRef`, so a bare string walked past the general `predicate`
+    exclusion and `merge_capabilities(commentable, searchable)` reached
+    `verdict="allowed"`; `_alias_identity_breach` fell back to comparing a row against
+    itself, which is the kill row's **ninth** trip; and `is_person` records the same
+    mistake one section along, its own docstring naming the rule -- *unknown is not a
+    person.* It is also not a type ref, and it is not a reference at all.
+
+    So `parse_ref` **raises** for everything outside §2.3's grammar. There is no `None`
+    fallback and no *"probably a type ref"* branch: a caller that gets a value back got
+    one this function actually read, and a caller that passed something else finds out
+    **at the call** -- R64's required-keyword rule applied to a parser.
+    """
+    for bad in (None, 42, b"beacon:entity:person", ("beacon", "entity", "person")):
+        with pytest.raises(ValueError):
+            parse_ref(bad)
+
+    for bad in ("", "person", "beacon:person", "beacon:entity:person:extra",
+                "beacon:entity:person:extra#41", "#41"):
+        with pytest.raises(ValueError):
+            parse_ref(bad)
+
+    # The narrowing half: refusing everything passes a test that only tests refusals.
+    assert parse_ref("beacon:entity:person") == TypeRef("beacon", "entity", "person")
