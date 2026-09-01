@@ -1047,7 +1047,10 @@ class ActionRegistry:
             if inv.invocation_id == invocation_id:
                 self._log[i] = replace(inv, reviewed_at=NOW)
                 return self._log[i]
-        return Refusal("action_family_unknown", {"invocation_id": invocation_id})
+        # Ruling **R73**, row 6c: the THIRTY-FIRST value, minted in the change that
+        # specifies the fifth call. `action_family_unknown` names a missing FAMILY
+        # and this names a missing INVOCATION -- INTERFACE.md 2.3's Cause B.
+        return Refusal("unknown_invocation", {"invocation_id": invocation_id})
 
     # -- ACTIONS 6.3 ----------------------------------------------------
 
@@ -1223,12 +1226,16 @@ class ActionRegistry:
 
 
 def assert_vocabularies_closed() -> None:
-    """The seven refusal values and the THREE warning values this spec adds are in
-    the package's closed tuples, not in this file's head."""
+    """The EIGHT refusal values and the THREE warning values this spec adds are in
+    the package's closed tuples, not in this file's head.
+
+    The eighth is `unknown_invocation`, minted by ruling **R73** in row 6c -- the value
+    ACTIONS.md 7 argued for and declined on an explicitly conditional premise that the
+    fifth call expired."""
     for r in (
         "action_family_unknown", "precondition_unmet", "human_approval_required",
         "tier_below_action_policy", "effect_not_permitted", "action_store_absent",
-        "input_kind_mismatch",
+        "input_kind_mismatch", "unknown_invocation",
     ):
         assert r in REFUSAL_REASONS, f"{r} missing from types.REFUSAL_REASONS"
     for w in ("effect_undeclared", "approval_unrecorded", "declaration_amended"):

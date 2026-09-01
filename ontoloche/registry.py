@@ -8527,18 +8527,26 @@ class Registry:
             return absent
         rec = self.adapter.get_invocation(invocation_id)
         if rec is None:
-            # `unknown_invocation` was argued and NOT taken (7): no call in ACTIONS.md
-            # names an existing invocation by id, so the vocabulary has no value for it.
-            # This call does name one -- it is the deviation above -- and it reuses
-            # `action_family_unknown` rather than minting a twenty-ninth value in a build
-            # row, with the mismatch recorded as a question rather than decided here.
+            # **`unknown_invocation`, the thirty-first value -- ruling R73, row 6c.**
+            # ACTIONS.md 7 argued for this value and declined it, and the argument was
+            # explicitly conditional: *"no call in this document names an existing
+            # invocation by id."* This call does, so the condition the absence rested on
+            # is gone and 6.5 mints it in the change that specifies the call.
+            #
+            # The build row reused `action_family_unknown` and recorded the mismatch as
+            # a question rather than defending it (D-6b-3). It is not kept: that value
+            # names a missing FAMILY and this names a missing INVOCATION -- one word for
+            # two objects, INTERFACE.md 2.3's Cause B, and the same argument that keeps
+            # `unknown_edge` separate from `edge_family_unknown`. A host draining a
+            # review queue and told *no such action family* would go looking for a
+            # family that is registered, live, and not the problem.
             return Refusal(
-                "action_family_unknown",
+                "unknown_invocation",
                 {
                     "invocation_id": invocation_id,
                     "why": (
-                        f"no invocation {invocation_id!r} is stored; see 6B-RUN.md's "
-                        f"D-6b-3 for why this call exists and why it reuses this value"
+                        f"no invocation {invocation_id!r} is stored, so there is nothing "
+                        f"to mark reviewed (ACTIONS.md 6.5, ruling R73)"
                     ),
                 },
             )

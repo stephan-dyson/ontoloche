@@ -170,6 +170,23 @@ REFUSAL_REASONS = (
     # endpoint, and one word for two objects is 2.3's Cause B.
     "input_kind_mismatch",       # ACTIONS 2.3 -- a supplied input is not what the
                                  #   family declared, or is a predicate at any door
+    # ACTIONS.md 6.5, ruling **R73**, row 6c -- the THIRTY-FIRST, and it is the value
+    # ACTIONS.md 7 argued for and DECLINED. The argument was explicitly conditional:
+    # *"no call in this document names an existing invocation by id"* -- and the fifth
+    # call, `review_invocation(invocation_id, *, reviewed_by)`, does. R3's rule is that
+    # a value is minted in the change that introduces it, and the condition its absence
+    # rested on is what row 6b changed, so both halves land together: the call is
+    # specified in 6.5 and this value replaces the `action_family_unknown` the build row
+    # reused for it.
+    #
+    # `action_family_unknown` is NOT kept, and reusing it was the placeholder D-6b-3
+    # recorded rather than defended: that value names a missing FAMILY and this names a
+    # missing INVOCATION -- one word for two objects, which is INTERFACE.md 2.3's Cause
+    # B and the same argument that keeps `unknown_edge` separate from
+    # `edge_family_unknown`. A host draining a review queue and told *no such action
+    # family* would go looking for the family, which is registered, live, and not the
+    # problem.
+    "unknown_invocation",        # ACTIONS 6.5 -- no invocation is stored under this id
 )
 
 # INTERFACE.md 5.4 -- CLOSED, the same rule R3 gives for REFUSAL_REASONS and for the

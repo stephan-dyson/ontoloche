@@ -69,7 +69,7 @@ from ontoloche.aio.adapter import ACTION_CAPABILITY_FLAGS, CAPABILITY_FLAGS, Cap
 from ontoloche.edges import InstanceRef, TypeRef
 from ontoloche.errors import NotSupported, UnknownType
 from ontoloche.policy import TierOrder
-from ontoloche.types import Evidence, Proposal, Refusal, TypeEntry
+from ontoloche.types import REFUSAL_REASONS, Evidence, Proposal, Refusal, TypeEntry
 from ontoloche.aio.contract._support import action_family, edge_family, seed
 from ontoloche.aio.contract.doubles import AsyncDegradedAdapter
 
@@ -3388,3 +3388,122 @@ def test_c19_78_parse_ref_refuses_what_it_did_not_recognise_and_never_defaults(
 
     # The narrowing half: refusing everything passes a test that only tests refusals.
     assert parse_ref("beacon:entity:person") == TypeRef("beacon", "entity", "person")
+
+@NEEDS_INVOCATIONS
+async def test_c19_79_review_invocation_is_a_fifth_call_and_never_a_write_call_parameter(
+    adapter, make_registry
+):
+    """Rule **6-9**, ruling **R73**, adopting deviation **D-6b-3** in full.
+
+    **A review is a second act by a second person at a later time.** A `reviewed_by=`
+    on `record_invocation` would let the actor who ran the action mark their own
+    invocation reviewed -- a `register_consumer` that quietly no-ops, one object along,
+    which is the mechanism this whole layer exists to make visible. So the drain is a
+    **fifth call**, §6.5, and the write call has no such parameter.
+
+    The absence is asserted mechanically rather than asserted in prose: the signature of
+    `record_invocation` carries no reviewer parameter, and a caller who passes one gets
+    a `TypeError` at the call rather than a silently ignored keyword.
+    """
+    import inspect
+
+    registry = await make_registry(adapter)
+    params = set(inspect.signature(registry.record_invocation).parameters)
+    assert not params & {"reviewed_by", "reviewed_at", "review"}, sorted(params)
+
+    await action_family(registry, "reconcile_borough", approval_mode="review")
+    with pytest.raises(TypeError):
+        await registry.record_invocation(
+            "reconcile_borough", {}, actor="user:sd", outcome="applied",
+            approved_by="auto:auto", reviewed_by="user:sd",
+        )
+
+    # ...and the fifth call takes `reviewed_by` as a REQUIRED keyword: a review with no
+    # reviewer is the unsigned approval §3.2 refuses to fabricate.
+    fifth = inspect.signature(registry.review_invocation).parameters
+    assert fifth["reviewed_by"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert fifth["reviewed_by"].default is inspect.Parameter.empty
+
+@NEEDS_INVOCATIONS
+async def test_c19_80_an_unknown_invocation_id_refuses_unknown_invocation_and_not_the_family(
+    adapter, make_registry
+):
+    """Rule **6-10**, ruling **R73** -- the thirty-first `Refusal.reason`.
+
+    §7 argued this value and **declined** it, and the argument was explicitly
+    conditional: *"no call in this document names an existing invocation by id."*
+    §6.5's fifth call names one, so the condition expired and R3's rule -- a value is
+    minted in the change that introduces it -- puts the value and the call together.
+
+    **Not `action_family_unknown`**, which the build row reused and recorded as a
+    mismatch rather than defended. That value names a missing **family**; this names a
+    missing **invocation**. One word for two objects is `INTERFACE.md` §2.3's Cause B,
+    the same argument that keeps `unknown_edge` separate from `edge_family_unknown` --
+    and it is not abstract: a host draining a review queue and told *no such action
+    family* would go looking for a family that is registered, live, and not the problem.
+    """
+    registry = await make_registry(adapter)
+    await action_family(registry, "reconcile_borough", approval_mode="review")
+
+    out = await registry.review_invocation("no-such-invocation", reviewed_by="user:boss")
+    assert isinstance(out, Refusal)
+    assert out.reason == "unknown_invocation", out.reason
+    assert out.detail["invocation_id"] == "no-such-invocation"
+    assert "unknown_invocation" in REFUSAL_REASONS
+
+@NEEDS_INVOCATIONS
+async def test_c19_81_the_review_queue_drains_end_to_end(adapter, make_registry):
+    """Rule **6-11**. `review` mode's queue, from the mode to the empty queue.
+
+    §5.2 specified the READ (`invocations(unreviewed=True)`) and §3.5 minted the EVENT,
+    and v0's four calls appended none -- so `approval_mode="review"` shipped as a mode
+    whose queue could never drain, and three adversarial rounds read both sections
+    without finding it. **What found it was writing the ids**, which is §14's own
+    argument arriving as evidence.
+
+    `C19-50` holds the mode's approval and the filter; this holds the DRAIN as one
+    sequence, because a queue that empties in a unit test and not in the order a host
+    performs it is the failure `C19-50` could not pose.
+    """
+    registry = await make_registry(adapter)
+    if not registry.caps.stores_events:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- a review IS an event and this backend keeps none, so "
+            "`review_invocation` refuses `cannot_record_override` rather than claiming "
+            "a review nothing recorded"
+        )
+    await action_family(registry, "infer_person_relationships", approval_mode="review")
+    gate = await registry.preflight("infer_person_relationships", {}, actor="ai:nightly")
+    filed = [
+        await registry.record_invocation(
+            "infer_person_relationships", {}, actor="ai:nightly", outcome="applied",
+            gate_verdict="allowed", approved_by=gate.approved_by, judged=gate,
+        )
+        for _ in range(3)
+    ]
+    assert (await registry.invocations(unreviewed=True)).known == 3
+
+    for i, one in enumerate(filed):
+        reviewed = await registry.review_invocation(one.invocation_id, reviewed_by="user:boss")
+        assert not isinstance(reviewed, Refusal), reviewed
+        assert reviewed.reviewed_at is not None
+        assert (await registry.invocations(unreviewed=True)).known == 2 - i
+
+    # The event is the record, and it names the reviewer -- a review nobody signed is
+    # the unsigned approval §3.2 refuses to fabricate.
+    read_back = [
+        i
+        for i in (await registry.invocations()).invocations
+        if i.invocation_id == filed[0].invocation_id
+    ][0]
+    events = [
+        e for e in read_back.provenance.history if e.event == "invocation_reviewed"
+    ]
+    assert events and events[0].actor == "user:boss", read_back.provenance.history
+
+    # Reviewing an already-reviewed invocation is not refused -- it is an append-only
+    # log and a second reviewer is a fact, not an error. Rule U: the queue is empty
+    # because the event exists, not because a flag was flipped.
+    again = await registry.review_invocation(filed[0].invocation_id, reviewed_by="user:other")
+    assert not isinstance(again, Refusal), again
+    assert (await registry.invocations(unreviewed=True)).known == 0
