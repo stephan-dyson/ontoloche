@@ -1,6 +1,6 @@
 # STATUS — where we are, at a glance
 
-**Updated:** 2026-09-01 (6b's Q69–Q78 ruled as R67–R76; row 6c opened) (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
+**Updated:** 2026-09-01 (**repo PUBLIC** — the 2026-08-30 GO executed by the founder's word; 6b's Q69–Q78 ruled as R67–R76; row 6c opened) (updated by the supervisor at every landing). Detail: [ROADMAP.md](ROADMAP.md) · every doc: [docs/README.md](docs/README.md).
 
 | Roadmap item | Status |
 |---|---|
