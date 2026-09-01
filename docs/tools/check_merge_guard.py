@@ -103,6 +103,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -2113,6 +2114,235 @@ def check_forward_successor() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ---------------------------------------------------------------------------
+# Part B, eighth axis -- THE ALIAS RE-POINT AT `retire(successor=)`. Ruling R75, row 6c.
+#
+# **Why an axis rather than a contract id alone.** Until row 6c `retire(successor=)`
+# wrote no alias, and its guard nonetheless read `rec.aliases` as *"transferred"* -- the
+# tenth trip's *one door disagreeing with itself*. R75 sent a DESIGN TEST at it instead
+# of a patch, and the test found the guard's reading right and the write missing:
+#
+#   * an alias that ALSO has a row (what `merge_types` leaves behind) survives the
+#     retirement through the SUCCESSOR CHAIN, and the `aliases` field plays no part;
+#   * an alias with **no row**, or one naming a retired row that does not point back at
+#     the holder, went from `existing / <holder> / 1.0` to `proposal / None / 0.36`
+#     and `0.56` -- **on sqlite and on postgres, for entities and for predicates.**
+#
+# So `retire` now WRITES the transfer, which makes it a fourth writer of `aliases` --
+# and this file's standing rule is that a writer of an identity field is judged and then
+# DRIVEN. Part A judges it (it already prints `retire writes aliases,status,successor
+# COLLAPSES`); this axis drives it, and asks the two questions Part A cannot:
+#
+#   1. does the word the retirement re-points still resolve to the successor at 1.0?
+#      (the defect R75's design test found);
+#   2. does the write happen ONLY where the identity guard passed? (the tenth trip's
+#      own shape -- *the write a guard permits and the write a call performs must be
+#      the same write*).
+
+#: `(label, build the fixture, the word whose resolution is under test)`. Each builds a
+#: `commentable` carrying one alias, in the two shapes the design test separated.
+def _repoint_alias_only(registry: Registry) -> str | None:
+    """An alias no row holds -- what `import_types` writes. Shape B."""
+    _seed(registry, "taggable", kind="predicate", definition="a capability")
+    _seed(registry, "commentable", kind="predicate", definition="a capability")
+    _seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    _seed(registry, "bbb_memo", predicates=["commentable", "taggable"])
+    rows = registry.import_types(
+        [
+            {
+                "name": "commentable",
+                "status": "active",
+                "aliases": ["zzz_widget_flag"],
+                "definition": "a capability",
+            }
+        ],
+        kind="predicate",
+    )
+    if not rows or "zzz_widget_flag" not in (rows[0].aliases or ()):
+        return _NOT_REACHABLE + (
+            "this backend did not keep the imported alias "
+            f"({list(rows[0].warnings) if rows else 'no row'})"
+        )
+    return None
+
+
+def _repoint_alias_names_a_retired_row(registry: Registry) -> str | None:
+    """An alias naming a RETIRED row with no successor -- the kill row's FOURTH-trip
+    shape, and the case the guard actually fires on. Shape B2."""
+    _seed(registry, "taggable", kind="predicate", definition="a capability")
+    _seed(registry, "commentable", kind="predicate", definition="a capability")
+    _seed(registry, "searchable", kind="predicate", definition="a capability")
+    _seed(registry, "aaa_note", predicates=["commentable", "taggable", "searchable"])
+    _seed(registry, "bbb_memo", predicates=["commentable", "taggable", "searchable"])
+    gone = registry.retire(
+        "searchable", "no longer used", retired_by="user:sd", force=True
+    )
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire a predicate ({gone.reason})"
+    rows = registry.import_types(
+        [
+            {
+                "name": "commentable",
+                "status": "active",
+                "aliases": ["searchable"],
+                "definition": "a capability",
+            }
+        ],
+        kind="predicate",
+    )
+    if not rows or "searchable" not in (rows[0].aliases or ()):
+        return _NOT_REACHABLE + (
+            "this backend did not keep the imported alias "
+            f"({list(rows[0].warnings) if rows else 'no row'})"
+        )
+    return None
+
+
+REPOINT_FIXTURES = {
+    "alias-only": (_repoint_alias_only, "zzz_widget_flag"),
+    "alias->retired row": (_repoint_alias_names_a_retired_row, "searchable"),
+}
+
+
+def _repoint_case(registry: Registry, word: str) -> tuple[str, str | None, str | None]:
+    """Drive one retirement and judge it.
+
+    ``(verdict, failure sentence or None, unreachable sentence or None)``.
+
+    **Two questions, and they are separable on purpose.** (1) *Does the word the
+    retirement re-points still resolve to the successor at 1.0?* -- the defect R75's
+    design test found. (2) *Does the write happen ONLY where the identity guard passed?*
+    -- the tenth trip's own shape, *the write a guard permits and the write a call
+    performs must be the same write.*
+
+    On a page-capped double the FIRST question cannot be posed at all, and the row says
+    so rather than passing or failing: `_alias_map` reads the namespace's active rows to
+    exhaustion, a capped backend truncates that scan, and the word therefore fails to
+    resolve at 1.0 **before** the retirement as well as after. That is Rule U working --
+    a truncated scan has not said the word is unheld -- not a regression, and calling it
+    one would be this file's own recorded failure of printing `REFUSED` for a probe that
+    never ran. **The second question is still asked there**, and it is the one that
+    matters on a degraded read.
+    """
+    before = registry.resolve_type(word, ResolveContext(), tier="unspecified")
+    posable = (
+        before.type is not None
+        and before.type.name == "commentable"
+        and before.confidence == 1.0
+    )
+    retired = registry.retire(
+        "commentable",
+        "taggable says it better",
+        retired_by="user:sd",
+        successor="taggable",
+        force=True,
+    )
+    survivor = registry.adapter.get_type("default", "taggable", kind="predicate")
+    names = (survivor.aliases if survivor else ()) or ()
+    if isinstance(retired, Refusal):
+        # A refused retirement must leave NOTHING behind -- no tombstone and no alias.
+        if word in names:
+            return "FAILED", (
+                f"the retirement was REFUSED ({retired.reason}) and the alias {word!r} "
+                f"was written onto the successor anyway -- a write the guard did not "
+                f"permit"
+            ), None
+        return "REFUSED, no write", None, None
+
+    if word not in names:
+        return "FAILED", (
+            f"the retirement was ALLOWED and the alias {word!r} was not written onto "
+            f"the successor, whose aliases are {list(names)} -- the guard on this call "
+            f"reads `rec.aliases` as TRANSFERRED and this door performed no transfer. "
+            f"**A door that guards a transfer it does not perform is the tenth trip's "
+            f"one door disagreeing with itself** (ruling R75)"
+        ), None
+
+    if not posable:
+        return "written; resolution NOT POSABLE", None, (
+            f"`resolve_type({word!r})` answered "
+            f"{getattr(before.type, 'name', None)!r} at {before.confidence} BEFORE the "
+            f"retirement, so this backend cannot pose the resolution half: `_alias_map` "
+            f"reads active rows to exhaustion and a capped page truncates that scan. "
+            f"Rule U -- a truncated scan has not said the word is unheld. The WRITE half "
+            f"is asked and passes"
+        )
+
+    after = registry.resolve_type(word, ResolveContext(), tier="unspecified")
+    if not (
+        after.type is not None
+        and after.type.name == "taggable"
+        and after.confidence == 1.0
+    ):
+        return "FAILED", (
+            f"the alias was written and `resolve_type({word!r})` still answers "
+            f"{getattr(after.type, 'name', None)!r} at {after.confidence}, where it "
+            f"answered {getattr(before.type, 'name', None)!r} at {before.confidence} "
+            f"the call before -- the write happened and the redirect did not"
+        ), None
+    return "re-pointed", None, None
+
+
+def check_alias_repoint() -> tuple[list[str], list[str], list[str]]:
+    """Ruling **R75**: the words a retirement re-points must still resolve, and the
+    write must happen only where the guard passed.
+
+    **The doubles run beside the real legs, and the fifth trip is why.** `partial` is an
+    honest paging backend whose first page of two extents matches while the extents
+    differ; `truncated` caps with no cursor, so there IS no rest to read and the only
+    defence is the guards folding `_extent`'s own `why` into `knowable`. **A door that
+    WRITES an alias on a truncated read is the fifth trip's shape with a write
+    attached**, which is strictly worse than the fifth trip was -- so this axis asks the
+    question on both doubles rather than on the real legs alone.
+    """
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+    for leg, build, knowable in _legs():
+        shapes: list[tuple[str, Any]] = [("", None)]
+        if knowable:
+            shapes += [
+                ("partial", lambda a: DegradedAdapter(a, page_cap=2, page_cursor=True)),
+                ("truncated", lambda a: DegradedAdapter(a, page_cap=2)),
+            ]
+        for shape, wrap in shapes:
+            for label, (fixture, word) in REPOINT_FIXTURES.items():
+                row = f"{label} / {shape}" if shape else label
+                registry = build()
+                try:
+                    blocked = fixture(registry)
+                except Exception as exc:  # pragma: no cover - a probe that cannot run
+                    blocked = _NOT_REACHABLE + (
+                        f"the probe raised {type(exc).__name__}: {exc}"
+                    )
+                if blocked is not None:
+                    lines.append(f"  {leg:15s} {'retire':13s} {row:32s} NOT REACHABLE")
+                    unreachable.append(
+                        f"{leg} / retire / {row}: {blocked[len(_NOT_REACHABLE):]}"
+                    )
+                    continue
+                if wrap is not None:
+                    # The fixture is built on the honest adapter and the RETIREMENT is
+                    # driven through the degraded one, exactly as `check_states` does: a
+                    # double that cannot build its own fixture poses no question at all.
+                    registry = Registry(
+                        wrap(registry.adapter),
+                        policies={"default": NamespacePolicy(approval_policy="auto")},
+                    )
+                try:
+                    verdict, failure, unposable = _repoint_case(registry, word)
+                except Exception as exc:  # pragma: no cover
+                    verdict, failure, unposable = "FAILED", (
+                        f"the probe raised {type(exc).__name__}: {exc}"
+                    ), None
+                lines.append(f"  {leg:15s} {'retire':13s} {row:32s} {verdict}")
+                if failure is not None:
+                    problems.append(f"{leg} / retire / {row}: {failure}")
+                if unposable is not None:
+                    unreachable.append(f"{leg} / retire / {row}: {unposable}")
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -2179,6 +2409,11 @@ def main() -> int:
             "  and CONSUMER SETS -- refusal #1, which this checker could not fail on "
             "until row 6b's third round:",
             check_consumer_sets,
+        ),
+        (
+            "  and the ALIAS RE-POINT -- ruling R75: a door that guards a transfer must "
+            "perform it:",
+            check_alias_repoint,
         ),
     ):
         print()

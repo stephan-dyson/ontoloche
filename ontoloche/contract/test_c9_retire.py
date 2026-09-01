@@ -1,4 +1,4 @@
-"""C9 -- ``retire`` and ``reinstate`` (25). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (28). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -7,12 +7,18 @@ from __future__ import annotations
 
 import pytest
 
-from ..types import Consumer, Refusal, TypeEntry
+from ..types import Consumer, Refusal, ResolveContext, TypeEntry
 from ._support import seed
 from .doubles import DegradedAdapter
 
 NO_EVENTS = {"stores_events": "work_link_types has no event table"}
 NO_TIMESTAMPS = {"timestamps_usage": "work_link_types has no last_used_at column"}
+
+
+def _CTX():
+    """A resolve context with nothing in it: this group's questions are about the
+    registry's own identity answers, not about the scorer's signal."""
+    return ResolveContext()
 
 
 def _with_live_consumer(registry):
@@ -1147,3 +1153,191 @@ def test_c9_25_a_retired_successor_leaves_the_old_word_resolving_to_nothing(regi
         registry.retire("ma", "folded", retired_by="user:sd", successor="mb", force=True),
         TypeEntry,
     )
+
+
+# ------------------------------------------------------- row 6c, ruling R75
+#
+# `retire(successor=)`'s guard has read `rec.aliases` as *"transferred"* since row 4d,
+# and this call wrote no alias -- the kill row's TENTH trip in a different dress, *one
+# door disagreeing with itself*. R53 barred row 6b's lineage from re-comparing what that
+# guard reads without a design test; **R75 sent the design test.**
+#
+# The test ran on all three legs over the two alias shapes, and each half of the
+# disagreement is true of one shape. An alias that ALSO has a row -- what `merge_types`
+# leaves behind -- survives the retirement through the SUCCESSOR CHAIN, and the
+# `aliases` field plays no part in it. An alias with no row of its own, or one naming a
+# retired row that does not point back at the holder, went from `existing / commentable
+# / 1.0` to `proposal / None / 0.3568` and `0.5556`. **The redirect is not real without
+# the write**, so the write is the defect and the guard's reading was the intended one.
+
+
+def _alias_only_predicate(registry, *, alias="zzz_widget_flag"):
+    """`commentable`, carrying an alias no row holds, with `taggable`'s extent equal."""
+    seed(registry, "commentable", kind="predicate", definition="a capability")
+    seed(registry, "taggable", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    seed(registry, "bbb_memo", predicates=["commentable", "taggable"])
+    rows = registry.import_types(
+        [
+            {
+                "name": "commentable",
+                "status": "active",
+                "aliases": [alias],
+                "definition": "a capability",
+            }
+        ],
+        kind="predicate",
+    )
+    return rows[0] if rows else None
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_26_retire_with_a_successor_re_points_the_aliases_it_guards(
+    adapter, make_registry
+):
+    """Ruling **R75**. The words a retirement re-points must still resolve to the
+    successor -- and until row 6c they stopped.
+
+    **[Observed, row 6c's design test, sqlite and postgres, entity and predicate]**
+    ``resolve_type`` on an alias of the retired row went from ``existing / commentable /
+    1.0`` -- the confidence INTERFACE.md 5.3 calls a **guarantee** -- to ``proposal /
+    None / 0.3568``, because ``_alias_map`` scans **active** rows only and the word's
+    holder had just been retired. The guard on this call has been reading those words as
+    *transferred* since row 4d and this path transferred none.
+
+    The write is ``merge_types``' own line one call along: the successor takes the words
+    the retired row answered to, deduplicated, and the retired row **keeps its own** --
+    a tombstone is a record of what a word meant, and editing it would be rewriting a
+    provenance-bearing row (INTERFACE.md 5.8).
+    """
+    registry = make_registry(adapter)
+    row = _alias_only_predicate(registry)
+    assert row is not None and "zzz_widget_flag" in (row.aliases or ()), row
+
+    before = registry.resolve_type("zzz_widget_flag", _CTX(), tier="unspecified")
+    assert before.outcome == "existing" and before.type.name == "commentable"
+    assert before.confidence == 1.0
+
+    retired = registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(retired, TypeEntry), retired
+
+    after = registry.resolve_type("zzz_widget_flag", _CTX(), tier="unspecified")
+    assert after.outcome == "existing", (after.outcome, after.confidence)
+    assert after.type.name == "taggable"
+    assert after.confidence == 1.0, "the redirect is real, and now it is real by a write"
+
+    survivor = [t for t in registry.list_types("predicate").types if t.name == "taggable"]
+    assert "zzz_widget_flag" in survivor[0].aliases
+    assert "zzz_widget_flag" in retired.aliases, (
+        "the tombstone keeps its own words; `merge_types` leaves them on the absorbed "
+        "row for the same reason"
+    )
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_27_a_refused_retirement_writes_no_alias_onto_the_successor(
+    adapter, make_registry
+):
+    """Ruling **R75**, and this is the half a careless fix deletes.
+
+    *The write a guard permits and the write a call performs must be the same write* --
+    the kill row's TENTH trip stated from the other end. The alias transfer happens
+    **only** where ``_alias_identity_breach`` passed on exactly those words, so a
+    retirement the identity guard refuses leaves the successor untouched: no tombstone,
+    no alias, nothing.
+
+    **The fixture is Q77's own observation, and it is the STALE shape** (the kill row's
+    sixth trip): the alias is written while every extent agrees, the world then moves,
+    and the retirement arrives with the ROW pair still agreeing and the ALIAS pair no
+    longer agreeing. So the refusal is the guard firing on the transfer specifically --
+    the case row 6b described as *"a legal retirement refused `predicate_merge` about a
+    transfer that does not happen."* It happens now, and the refusal is therefore about
+    a write rather than about a phantom.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "commentable", kind="predicate", definition="a capability")
+    seed(registry, "taggable", kind="predicate", definition="a capability")
+    seed(registry, "searchable", kind="predicate", definition="a capability")
+    # t0 -- every extent agrees, so the alias is legal when it is written. `searchable`
+    # is retired first because `alias_collision` forbids two ACTIVE entries holding one
+    # word between them (§5.9b): an alias always names a word no live row answers to.
+    seed(registry, "aaa_note", predicates=["commentable", "taggable", "searchable"])
+    assert isinstance(
+        registry.retire("searchable", "an ordinary, permitted governance act",
+                        retired_by="user:sd", force=True),
+        TypeEntry,
+    )
+    rows = registry.import_types(
+        [
+            {
+                "name": "commentable",
+                "status": "active",
+                "aliases": ["searchable"],
+                "definition": "a capability",
+            }
+        ],
+        kind="predicate",
+    )
+    assert rows and "searchable" in (rows[0].aliases or ()), (
+        "the alias is legal at t0 -- every extent agrees",
+        list(rows[0].warnings) if rows else None,
+    )
+    # t1 -- the world moves. `commentable` and `taggable` still agree with each other;
+    # `searchable` no longer agrees with either. Rule U's fourth operand: STALE is not
+    # equal.
+    seed(registry, "ccc_doc", predicates=["commentable", "taggable"])
+
+    refusal = registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(refusal, Refusal), refusal
+    assert refusal.reason in ("predicate_merge", "different_consumer_sets", "kind_mismatch")
+    assert refusal.detail["overridable"] is False
+
+    survivor = [t for t in registry.list_types("predicate").types if t.name == "taggable"]
+    assert "searchable" not in survivor[0].aliases, (
+        "a write the guard did not permit is the tenth trip pointing the other way"
+    )
+    still = [t for t in registry.list_types("predicate").types if t.name == "commentable"]
+    assert still and still[0].status == "active", "and no tombstone either"
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_28_the_retired_names_own_word_is_not_added_as_an_alias(
+    adapter, make_registry
+):
+    """Ruling **R75**, and the boundary of it.
+
+    The retired row's **own name** is deliberately not written onto the successor. The
+    successor relation already makes ``resolve_type(<retired name>)`` answer with the
+    successor at 1.0 through the chain -- row 6c's design test observed exactly that on
+    every leg -- so adding it would be a **second home for one fact** (EDGES.md 2.4's
+    rule), and it would be a write no guard on this call examined: the guard's operand
+    is ``rec.aliases``, so the write is ``rec.aliases``.
+
+    Stated as an id rather than as a comment because *"we deliberately did not write
+    that"* is exactly the kind of decision a later row silently reverses.
+    """
+    registry = make_registry(adapter)
+    row = _alias_only_predicate(registry)
+    assert row is not None and "zzz_widget_flag" in (row.aliases or ())
+
+    retired = registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(retired, TypeEntry), retired
+
+    survivor = [t for t in registry.list_types("predicate").types if t.name == "taggable"]
+    assert "commentable" not in survivor[0].aliases, (
+        "the successor CHAIN answers the retired name; a second home for one fact is "
+        "EDGES.md 2.4's rule"
+    )
+    # ...and the chain does answer it, which is why the alias is unnecessary.
+    chained = registry.resolve_type("commentable", _CTX(), tier="unspecified")
+    assert chained.outcome == "existing" and chained.type.name == "taggable"
+    assert chained.confidence == 1.0

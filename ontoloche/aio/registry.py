@@ -2568,6 +2568,12 @@ class AsyncRegistry:
         if not reason or not reason.strip():
             raise ValueError("retire requires a non-empty reason")
         rec = await self._require(namespace, type)
+        #: Ruling **R75**, row 6c -- the successor row and the alias words the identity
+        #: guard has cleared for transfer onto it. ``None`` and ``()`` whenever there is
+        #: no successor, no alias, or a backend that stores none: *no successor means no
+        #: transfer*, which is a stated absence rather than an empty write.
+        repoint_onto: TypeRecord | None = None
+        repoint_words: tuple[str, ...] = ()
 
         # **`retire(successor=)` IS a collapse, and it gets the merge's guards.**
         # `resolve_type` on a retired name returns its successor at confidence 1.0
@@ -2853,6 +2859,35 @@ class AsyncRegistry:
                 # one hole opened the next. `merge_types` has carried this guard since
                 # `C10-13`; the difference between the two calls was never the identity
                 # claim, only which write made it.
+                #
+                # **Ruling R75, row 6c: the guard's reading was RIGHT and the WRITE was
+                # missing, and a design test decided that rather than a patch.** The
+                # comment above says the aliases are *"re-pointed"* and this path wrote
+                # none -- the tenth trip's *one door disagreeing with itself*, in row
+                # 4d's guard, which R53 barred this lineage from re-comparing without a
+                # design test. The test ran on all three legs over the two alias SHAPES,
+                # and each half of the disagreement is true of one shape:
+                #
+                #   A. an alias that ALSO has a row -- what `merge_types` leaves behind:
+                #      the absorbed name becomes a retired row whose `successor` names
+                #      the survivor. **[Observed, sqlite and postgres]** the redirect
+                #      survives at `existing / taggable / 1.0` -- but what carries it is
+                #      the SUCCESSOR CHAIN, not this field: the successor's alias list
+                #      is still `()` afterwards.
+                #   B. an alias with NO row of its own (`import_types` writes these), or
+                #      one naming a retired row that does not point back at the holder
+                #      -- the kill row's FOURTH-trip shape, and the case this guard
+                #      actually fires on. **[Observed, sqlite and postgres, entity and
+                #      predicate]** `existing/commentable/1.0` -> `proposal/None/0.3568`
+                #      and `-> proposal/None/0.5556`. **The redirect is NOT real.**
+                #
+                # `_alias_map` scans ACTIVE rows only, so the moment the holder is
+                # retired the word it answered for is held by nothing and falls back to
+                # the scorer. For every alias this guard treats as *transferred*, the
+                # transfer had to happen for the guard's claim to be true -- and it did
+                # not. **The write is added below**, in the same transaction as the
+                # tombstone; R53's boundary is lifted for exactly this door by R75 and
+                # no further, and what the guard COMPARES is untouched.
                 transferred = tuple(getattr(rec, "aliases", ()) or ())
                 if transferred:
                     breach = await self._alias_identity_breach(
@@ -2880,6 +2915,12 @@ class AsyncRegistry:
                                 "overridable": False,
                             },
                         )
+                    # Ruling **R75**. The guard has passed on exactly these words, so
+                    # these are the words that may be written. Captured here rather than
+                    # recomputed at the write, because *the write a guard permits and
+                    # the write a call performs must be the same write* -- the tenth
+                    # trip's own sentence, pointing at the other end.
+                    repoint_onto, repoint_words = succ, transferred
 
         report = await self._consumer_report(rec)
 
@@ -2964,6 +3005,59 @@ class AsyncRegistry:
                     "overrode": [c.id for c in report.gates_on] if force else [],
                 },
             )
+            # **The alias RE-POINT, ruling R75** -- the write the guard above has been
+            # checking since row 4d and that this path never performed.
+            #
+            # It is `merge_types`' own line one call along: the survivor takes the words
+            # the absorbed row answered to, deduplicated, first occurrence winning. The
+            # retired row KEEPS its own aliases, exactly as `merge_types` leaves them on
+            # the absorbed row -- a tombstone is a record of what a word meant, and
+            # editing it would be rewriting a provenance-bearing row (INTERFACE.md 5.8).
+            #
+            # **The retired row's own NAME is deliberately not added.** The successor
+            # relation already makes `resolve_type(<retired name>)` answer with the
+            # successor at 1.0 through the chain -- the design test observed exactly
+            # that -- so adding it would be a second home for one fact (EDGES.md 2.4's
+            # rule) and would be a write no guard on this call examined. The guard's
+            # operand is `rec.aliases`; the write is `rec.aliases`; *the write a guard
+            # permits and the write a call performs are the same write.*
+            #
+            # In the same transaction as the tombstone, because a retirement whose
+            # redirect half is missing is precisely the state R75's design test found.
+            if repoint_onto is not None and repoint_words:
+                merged_aliases = tuple(
+                    dict.fromkeys(tuple(repoint_onto.aliases or ()) + repoint_words)
+                )
+                if merged_aliases != tuple(repoint_onto.aliases or ()):
+                    await self.adapter.put_type(
+                        TypeRecord(
+                            **{
+                                **repoint_onto.__dict__,
+                                "aliases": merged_aliases,
+                                "updated_at": now,
+                            }
+                        )
+                    )
+                    # An alias write with no history is the thing this project refuses:
+                    # `merge_types` records `aliases_added` on the survivor and so does
+                    # this. A reader asking *"why does the successor answer to this
+                    # word?"* has an answer that names the retirement that did it.
+                    await self._append_event(
+                        repoint_onto.namespace,
+                        "retired",
+                        retired_by,
+                        kind=repoint_onto.kind,
+                        name=repoint_onto.name,
+                        detail={
+                            "aliases_added": list(repoint_words),
+                            "from": rec.name,
+                            "reason": (
+                                f"{rec.name!r} was retired with {repoint_onto.name!r} "
+                                f"as its successor; the words it answered to are "
+                                f"re-pointed here (INTERFACE.md 5.9/5.10, ruling R75)"
+                            ),
+                        },
+                    )
         return self._written(await self._entry(stored))
 
     # ============================================================= 5.9b reinstate
