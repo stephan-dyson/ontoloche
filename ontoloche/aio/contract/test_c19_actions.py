@@ -3189,3 +3189,106 @@ async def test_c19_73_a_precondition_names_a_predicate_by_the_registrys_notion_o
         "disagreeing with itself"
     )
     assert out.verdict == "allowed"
+
+@NEEDS_ATTRIBUTES
+@pytest.mark.requires_capability("stores_edges")
+async def test_c19_75_preflight_warns_when_a_declared_edge_family_has_been_retired(
+    adapter, make_registry
+):
+    """Rule **2.5-11**, ruling **R71** -- the GATE half.
+
+    **The hole.** Rule 2.5-7 checks that an effect names a registered `kind="edge"`
+    family **at declaration**, and §2.5's headline is *"the door is the declaration"* --
+    which has no answer for the family being retired **afterwards**. A steward's
+    ordinary retirement left every family declaring that word with a blast radius aimed
+    at something withdrawn, and `preflight` went on answering `allowed` in silence.
+
+    **A warning and never a refusal**: refusing would make an ordinary retirement break
+    every host mid-flight, the shape §2.5 refuses twice. **No value is minted** --
+    `edge_family_retired:<name>` already carries this exact fact one layer down
+    (`EDGES.md` §4.3, on the read *and* on the write), which is `INTERFACE.md` §2.3's own
+    discipline.
+
+    The verdict is untouched, and that assertion is the whole rule: this is information,
+    not a gate.
+    """
+    registry = await make_registry(adapter)
+    await edge_family(registry, "person_links", level="instance")
+    await action_family(
+        registry,
+        "link_people",
+        effects=[Effect(op="add_edge", family="person_links", namespace="default")],
+    )
+
+    before = await registry.preflight("link_people", {}, actor="user:sd")
+    assert before.verdict == "allowed"
+    assert before.warnings == (), "nothing is retired yet"
+
+    retired = await registry.retire(
+        "person_links", reason="superseded", retired_by="user:sd", force=True
+    )
+    assert not isinstance(retired, Refusal), retired
+
+    after = await registry.preflight("link_people", {}, actor="user:sd")
+    assert after.verdict == "allowed", "an ordinary retirement does not break every host"
+    assert "edge_family_retired:person_links" in after.warnings
+
+    # One per FAMILY and not one per effect: a family declaring both edge ops on one
+    # retired family has one retired family, which is one fact.
+    await action_family(
+        registry,
+        "link_and_unlink",
+        effects=[
+            Effect(op="add_edge", family="person_links", namespace="default"),
+            Effect(op="retract_edge", family="person_links", namespace="default"),
+        ],
+    )
+    both = await registry.preflight("link_and_unlink", {}, actor="user:sd")
+    assert both.warnings == ("edge_family_retired:person_links",)
+
+@NEEDS_INVOCATIONS
+@pytest.mark.requires_capability("stores_edges")
+async def test_c19_76_record_invocation_warns_on_a_retired_declared_edge_family(
+    adapter, make_registry
+):
+    """Rule **2.5-11**, ruling **R71** -- the LEDGER half, and the reason there are two
+    ids rather than one.
+
+    Shipping this at `record_invocation` alone would be *a fix applied at one call site
+    of two*, which is the single sentence of the kill row's ninth, tenth and eleventh
+    trips (`C12-14`, `C12-16`, `C12-17`) and the reason `declared_predicates` became a
+    required keyword. `C19-75` holds the gate; this holds the record; both read the same
+    list off `AsyncRegistry._retired_blast_radius`.
+
+    **Judged over the DECLARATION OF RECORD**, not over today's family: rule 3-7's own
+    reason is that the record says what the gate judged, and a warning about a blast
+    radius the actor never declared would be a true sentence about the wrong moment.
+    """
+    registry = await make_registry(adapter)
+    await edge_family(registry, "person_links", level="instance")
+    await action_family(
+        registry,
+        "link_people",
+        effects=[Effect(op="add_edge", family="person_links", namespace="default")],
+    )
+    judged = await registry.preflight("link_people", {}, actor="user:sd")
+    assert judged.warnings == ()
+
+    clean = await registry.record_invocation(
+        "link_people", {}, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by=judged.approved_by, judged=judged,
+    )
+    assert not isinstance(clean, Refusal), clean
+    assert not [w for w in clean.warnings if w.startswith("edge_family_retired")]
+
+    await registry.retire("person_links", reason="superseded", retired_by="user:sd", force=True)
+
+    late = await registry.record_invocation(
+        "link_people", {}, actor="user:sd", outcome="applied",
+        gate_verdict="not_asked", approved_by="user:sd",
+    )
+    assert not isinstance(late, Refusal), late
+    assert "edge_family_retired:person_links" in late.warnings, (
+        "the record is KEPT and it says the blast radius points at a withdrawn word"
+    )
+    assert late.outcome == "applied", "a warning is not a refusal"

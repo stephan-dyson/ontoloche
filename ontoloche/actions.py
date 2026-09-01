@@ -574,6 +574,22 @@ class Preflight:
     #: legitimate no-floor configuration is a stated absence, not an alarm
     tier_floor_why: str | None = None
     why_incomplete: str | None = None
+    #: INTERFACE.md 5.4's values, and ``Preflight`` is a carrier of them from row 6c.
+    #:
+    #: **Ruling R71, rule 2.5-11.** 2.5-7 checks that an effect names a registered
+    #: ``kind="edge"`` family **at declaration** -- *"the door is the declaration"* --
+    #: and that door has no answer for the family being RETIRED afterwards. The gate
+    #: went on saying ``allowed`` about a blast radius aimed at a word a steward had
+    #: withdrawn, and said nothing at all.
+    #:
+    #: It is a warning and never a refusal, because refusing would make a steward's
+    #: ordinary retirement break every host mid-flight -- the shape 2.5 refuses twice --
+    #: and no value is minted: ``edge_family_retired`` already carries this exact fact
+    #: one layer down (EDGES.md 4.3, both its carriers). **This field exists so the
+    #: warning reaches BOTH invocation doors**: shipping it at ``record_invocation``
+    #: alone would be *a fix applied at one call site of two*, which is the ninth,
+    #: tenth and eleventh kill-row trips' one sentence.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
