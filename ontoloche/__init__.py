@@ -35,6 +35,8 @@ from .actions import (
     Preflight,
     ProjectionReport,
     action_attributes,
+    parse_ref,
+    ref_key,
 )
 from .edges import (
     Edge,
@@ -94,6 +96,8 @@ __all__ = [
     "Preflight",
     "ProjectionReport",
     "action_attributes",
+    "ref_key",
+    "parse_ref",
     "Registry",
     "Citation",
     "Consumer",

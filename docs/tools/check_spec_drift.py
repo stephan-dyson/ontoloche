@@ -244,6 +244,21 @@ ACTION_CALLS = (
     "projection",
 )
 
+#: `ACTIONS.md`'s printed MODULE-LEVEL function signatures, against `actions.py`. **Row
+#: 6c, ruling R72.**
+#:
+#: `ACTION_CALLS` above holds the facade's calls against `Registry`; this holds the
+#: functions a consumer imports from the package. §2.3 prints `ref_key` and `parse_ref`
+#: as the two halves of one identity string, and **the read half was missing for a whole
+#: row** -- the document promised the string was readable *"without a store round trip"*
+#: and exported only the writer, which is Q74 and is the shape D-6b-1 already cost a
+#: correction for. A printed function nothing holds is a printed function that drifts,
+#: and §9's three primitives are this file's own record of that.
+ACTION_FUNCTIONS = (
+    "ref_key",
+    "parse_ref",
+)
+
 #: ACTIONS.md's CLOSED VOCABULARIES, held against `actions.py`'s tuples -- contents, not
 #: counts, because this document states them as printed alternatives rather than as
 #: number words.
@@ -953,6 +968,38 @@ def main() -> int:
                     f"ACTIONS {call}(): the spec declares {name!r}; the code does not "
                     f"take it"
                 )
+        # Row 6c, ruling R72 -- the module-level functions the document prints.
+        for function in ACTION_FUNCTIONS:
+            impl = getattr(actions_module, function, None)
+            if impl is None:
+                problems.append(
+                    f"ACTIONS {function}(): the spec prints it; `ontoloche.actions` has "
+                    f"no such function"
+                )
+                continue
+            if function not in getattr(actions_module, "__all__", ()):
+                problems.append(
+                    f"ACTIONS {function}(): printed by the spec as a public surface and "
+                    f"absent from `actions.__all__` -- a surface the package does not "
+                    f"export is one a consumer hand-rolls, which is Q74 itself"
+                )
+            import inspect
+
+            actual = set(inspect.signature(impl).parameters)
+            printed_params = call_params(actions_blocks, function)
+            if printed_params is None:
+                problems.append(f"ACTIONS {function}(): no signature printed in the spec")
+                continue
+            for pname in sorted(actual - printed_params):
+                problems.append(
+                    f"ACTIONS {function}(): the implementation takes {pname!r} and the "
+                    f"spec's signature does not"
+                )
+            for pname in sorted(printed_params - actual):
+                problems.append(
+                    f"ACTIONS {function}(): the spec declares {pname!r}; the code does "
+                    f"not take it"
+                )
         for printed, (module, attribute) in ACTIONS_SHAPES.items():
             cls = getattr(module, attribute, None)
             if cls is None or not hasattr(cls, "__dataclass_fields__"):
@@ -1054,7 +1101,9 @@ def main() -> int:
         f"docs/specs/ACTIONS.md: every printed shape matches ontoloche/actions.py "
         f"({len(ACTIONS_SHAPES) + len(ACTIONS_CLASS_SHAPES)} shapes), every printed call "
         f"signature matches Registry "
-        f"({len(ACTION_CALLS)} calls), and every closed vocabulary it prints matches the "
+        f"({len(ACTION_CALLS)} calls), every printed module-level function matches "
+        f"ontoloche/actions.py and is exported ({len(ACTION_FUNCTIONS)} functions), and "
+        f"every closed vocabulary it prints matches the "
         f"tuple that holds it ({len(ACTION_VOCABULARIES) + 2}).\n"
         f"EDGES.md: every numbered rule in "
         f"{', '.join(sorted(R31_SECTIONS))} carries a contract id or a tagged "
