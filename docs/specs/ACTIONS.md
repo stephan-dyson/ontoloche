@@ -3,7 +3,7 @@
 **Version:** `v0` — **unstable.** Every name, field and return shape here may change without a deprecation path. Standing constraint 4.
 **Status:** Draft, 2026-08-29. Satisfies `ROADMAP.md` row **#6**. Unblocks nothing in the Tenshen rebuild — beacon's actions stay in code (beacon spec §10.7) and this document is deliberately written so that they can stay there.
 **Assumptions:** *written against the 2026-08-28 assumptions; see docs/decisions/* — specifically [`decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md`](../decisions/2026-08-28-assumptions-in-lieu-of-office-answers.md).
-**Rulings this document carries:** **R20** (`model_tier` on provenance; no tier gate in *storage* — the gate here is a declared product parameter, §5.2) · **R24** (no tenancy dimension in the protocol) · **R25** (paging is Phase 3's, decided for every listing together) · **R18** (exactly one cross-field attribute rule per kind, and this document takes exactly one) · **R31** (every numbered rule ships executable — standing constraint 8, §14) · **R3** (`Refusal.reason` is closed — **seven** values added to [`INTERFACE.md`](INTERFACE.md) §5.12 by this change, and **three** warning values to §5.4; the header said *six* and *one* until round 2 counted it, which is the self-accounting failure §19.2 records twice).
+**Rulings this document carries:** **R20** (`model_tier` on provenance; no tier gate in *storage* — the gate here is a declared product parameter, §5.2) · **R24** (no tenancy dimension in the protocol) · **R25** (paging is Phase 3's, decided for every listing together) · **R18** (exactly one cross-field attribute rule per kind, and this document takes exactly one) · **R31** (every numbered rule ships executable — standing constraint 8, §14) · **R3** (`Refusal.reason` is closed — **seven** values added to [`INTERFACE.md`](INTERFACE.md) §5.12 by row #6, an **eighth** (`unknown_invocation`) by **R73** in row 6c, and **three** warning values to §5.4 with no fourth since; the header said *six* and *one* until round 2 counted it, which is the self-accounting failure §19.2 records twice) · **R70**/**R71**/**R72**/**R73** (row 6c's amendments: rule 10-9's scope, the retired blast-radius warning, `parse_ref`, and §6.5's fifth call).
 **Claim tags:** **[Observed]** seen directly · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 
 **This row is a spec and ships no action store.** The design tests in §11–§13 are driven through real beacon, CMS and NYC data by four throwaway probes in [`docs/tools/`](../tools/), the way row #4's were — not read. The build row owns the contract ids §14 plans.
@@ -463,7 +463,7 @@ with three new `event` values — `invocation_recorded`, `invocation_reviewed`, 
 
 **Two things make it not-nothing, and both are countable rather than rhetorical:**
 
-1. **The refusal is typed and recorded.** `Refusal.reason` is closed (§7), so *"the gate said no"* is a value from a twenty-seven-word vocabulary rather than a free-text log line, and every refusal of every family is one query away.
+1. **The refusal is typed and recorded.** `Refusal.reason` is closed (§7), so *"the gate said no"* is a value from a thirty-one-word vocabulary rather than a free-text log line, and every refusal of every family is one query away.
 2. **Every override is enumerable — as a floor, not a total.** `invocations(gate_verdict="refused", outcome="applied")` returns the cases where a host ran something the gate refused, and because it is a **filtered** listing it comes back `complete=False` with a `why` (§6.3, Rule K, `INTERFACE.md` §5.6's rule for `TypeListing`). *(The first draft's implementation stamped it `complete=True` through a dead sub-expression — `(not filtered or True)` — in the one query this section asks an operator to act on. Round 1.)*
 
 > **And a floor is only worth something if the store can compute it, which round 2 found it could not.** `gate_verdict`, `effect_undeclared` and `unreviewed` were on `invocations()` and on **no primitive**, so §8's *"the registry filters above the store"* meant the façade read a `limit`-bounded page and filtered it afterwards. On the ingestion lens's own fixture — **2,399 datasets, one invocation each, one override at row 1,200** — the query returned **zero rows**, `complete=False`. **A floor of zero is not a conservative measurement; it is the wrong one, and it is indistinguishable from a clean deployment.** The three filters with no push-down were exactly the three governance reads: this section's override query, §2.5's blast-radius query, and §5.2's review queue. They are on primitive 21 now (§9), which is why this section's claim is a claim rather than a hope. That is the same move `INTERFACE.md` §2.8 makes with `list_types(unverified_semantics=True)`: **the registry cannot stop the thing; it can make the thing countable, and a count is what turns a policy discussion into a measurement.**
@@ -536,22 +536,9 @@ So, concretely, for the one host that exists:
 
 ---
 
-## 6. The calls — four, and none of them in `INTERFACE.md` §5
+## 6. The calls — five, and none of them in `INTERFACE.md` §5
 
-> **The build row found a FIFTH, and it is recorded here rather than left in a run
-> document.** §5.2 says a `review`-mode invocation *"is enumerable by
-> `invocations(unreviewed=True)` **until an `invocation_reviewed` event is appended**"*
-> and §3.5 mints the event value — **and none of the four calls below appends one**, so
-> the queue `review` mode creates could never drain. `review_invocation(invocation_id, *,
-> reviewed_by, namespace)` is that writer. It is deliberately **not** a parameter on
-> `record_invocation`: a review is a second act by a second person at a later time, and a
-> parameter on the write call would let the actor who ran the action mark their own
-> invocation reviewed. It refuses `action_store_absent` with no store and
-> `cannot_record_override` on a backend that cannot keep the event — *a review nothing
-> records is not a review*. Deviation **D-6b-3** in [`6B-RUN.md`](../runs/6B-RUN.md);
-> `C19-50` exercises it. **The count in this heading is four because that is what the
-> specification designed; the implementation needs five, and saying so here is the
-> correction rather than the heading being quietly rewritten.**
+> **The fifth is `review_invocation`, and this heading said *four* for a row.** §5.2 says a `review`-mode invocation *"is enumerable by `invocations(unreviewed=True)` **until an `invocation_reviewed` event is appended**"* and §3.5 mints the event value — **and none of the first four calls appends one**, so the queue `review` mode creates could never drain. The build row shipped the writer as deviation **D-6b-3** and raised it rather than specifying it on its own authority; **ruling R73 adopts D-6b-3's argument in full** and §6.5 is that specification. The heading is corrected in the same change, because *"the count in this heading is four because that is what the specification designed"* was an honest note in v0 and would be a stale number in v0.1.
 
 > **The rules of this section, numbered and each exercised or tagged** — ruling **R31**, standing constraint 8. The ids are *planned*; §14 says why the checker is not pointed here yet.
 
@@ -565,6 +552,9 @@ So, concretely, for the one host that exists:
 | 6-6 | `preflight` and `record_invocation` validate every supplied input against its `InputSpec`, and refuse a `kind="predicate"` ref whatever the family declared | `C19-51` |
 | 6-7 | A shipped call that **raises** for an unregistered subject (`predicates`, `consumers`) is caught and becomes `holds=None` plus a `why`; nothing escapes the return type | `C19-52` |
 | 6-8 | `invocations` does not page | `prose-only:` ruling **R25** routed paging for every listing to Phase 3 *together*; a test asserting the absence of a cursor would pin a decision this document is explicitly not making |
+| 6-9 | `review_invocation` is a **fifth call and never a parameter on `record_invocation`**: a review is a second act by a second person, and a parameter on the write call would let the actor who ran the action mark their own invocation reviewed *(ruling **R73**, adopting **D-6b-3**)* | `C19-79` |
+| 6-10 | `review_invocation` on an id no invocation is stored under refuses **`unknown_invocation`** — §7's declined value, minted here because the condition its absence rested on is exactly what this call changes. Not `action_family_unknown`: that names a missing *family* and this names a missing *invocation*, which is `INTERFACE.md` §2.3's Cause B | `C19-80` |
+| 6-11 | The queue drains end to end: a `review`-mode invocation is enumerable by `invocations(unreviewed=True)` until `review_invocation` appends the `invocation_reviewed` event, after which it is not — and the invocation carries `reviewed_at` | `C19-81` |
 
 Signatures are Python-shaped because deliverable #2 is a Python package. They are **not** a module layout.
 
@@ -707,13 +697,30 @@ def projection(
 
 Shape and rules in §10, because the argument for it is the tool-slot ceiling and not the call list.
 
+### 6.5 `review_invocation` — the queue's only drain *(ruling **R73**, row 6c)*
 
+```python
+def review_invocation(
+    invocation_id: str,
+    *,
+    reviewed_by: str,
+    namespace: str = "default",
+) -> Invocation | Refusal: ...
+```
+
+Appends the `invocation_reviewed` event §3.5 mints, so the invocation stops being enumerable by `invocations(unreviewed=True)` and reads back with `reviewed_at` set. Refuses **`unknown_invocation`** (no invocation is stored under that id), `action_store_absent` (`stores_invocations=False`), and `cannot_record_override` on a backend that cannot keep the event — *a review nothing records is not a review*.
+
+**It is a fifth call and deliberately not a parameter on `record_invocation`**, and D-6b-3's argument for that is adopted in full: **a review is a second act by a second person at a later time.** A `reviewed_by=` on the write call would let the actor who ran the action mark their own invocation reviewed, which is `register_consumer`-that-quietly-no-ops one object along — the mechanism this whole layer exists to make visible.
+
+> **Why this arrived as a deviation rather than as a design, and the register keeps the sequence.** §5.2 specified the read (`invocations(unreviewed=True)`) and §3.5 minted the event, and **no call appended one** — so `approval_mode="review"` shipped as a mode whose queue could never drain. Three adversarial rounds read §5.2 and §3.5; what found it was writing the ids. That is §14's own argument arriving as evidence: *"a build row finds what a reading round cannot, by trying to write the test."*
+>
+> **`unknown_invocation` is minted here and not before, and the conditionality is the point.** §7 argued the value and declined it **because no call in this document named an existing invocation by id**. This call does. R3's rule is that a value is added in the change that introduces it, so the value and the call it belongs to land together — and the build row's placeholder (`action_family_unknown`, recorded as a mismatch rather than defended) is replaced rather than left. One word for two objects is §2.3's Cause B: a host draining a review queue and told *no such action family* would go looking for a family that is registered, live, and not the problem.
 
 ---
 
 ## 7. Refusals — through `INTERFACE.md` §5.12, amended in this change
 
-**Ruling R3's rule:** a value is added by amending §5.12 **in the change that introduces it**. This document adds **seven** — six in the first draft and a seventh from its first adversarial round — taking the closed vocabulary from twenty-one to **twenty-eight**. As with `EDGES.md` v0's four, **no v0 code path returns any of them** — row #6 is a spec and ships no action store — and they are enumerated in `INTERFACE.md` §5.12 and in `types.REFUSAL_REASONS` anyway, because a reason specified in a spec and absent from the tuple is the same drift the checker exists to catch, pointing the other way.
+**Ruling R3's rule:** a value is added by amending §5.12 **in the change that introduces it**. This document adds **eight** — six in the first draft, a seventh from its first adversarial round, and an **eighth (`unknown_invocation`) in row 6c under ruling R73**, which is the one v0 argued for and declined. As with `EDGES.md` v0's four, **no v0 code path returned any of the first seven** — row #6 is a spec and ships no action store — and they were enumerated in `INTERFACE.md` §5.12 and in `types.REFUSAL_REASONS` anyway, because a reason specified in a spec and absent from the tuple is the same drift the checker exists to catch, pointing the other way. **Row 6b made all seven reachable; row 6c makes the eighth reachable in the change that mints it**, which is the shape R3 wants from here on.
 
 | value | returned by | why none of the twenty-one said it |
 |---|---|---|
@@ -725,7 +732,15 @@ Shape and rules in §10, because the argument for it is the tool-slot ceiling an
 | **`input_kind_mismatch`** | `preflight` and `record_invocation`, when a supplied `InputRef` is not what the `InputSpec` declared — wrong ref shape, wrong kind, wrong family, or missing — **and whenever any input is a `kind="predicate"`, whatever the family declared** | **Added by round 1, and it closes the kill row.** `InputSpec.kinds` bound at declaration and at nothing else, so a family declared with `kinds=None` accepted two predicates and the gate said `allowed`: `merge_capabilities(commentable, searchable)`, end to end. **`endpoint_kind_mismatch` is not reused** — that value is about an *edge's* endpoint, and one word for two objects is `INTERFACE.md` §2.3's Cause B, the same argument that keeps `unknown_edge` separate from `edge_family_unknown` |
 | **`action_store_absent`** | any invocation call against an adapter declaring `stores_invocations=False` | A capability refusal, the **fifth** of that shape after `proposals_not_stored`, `cannot_record_override`, `consumer_source_read_only` and `edge_store_absent` — and it exists for the reason the first of those does: an empty `InvocationReport` would read as *"nothing has ever run"*, which is Rule U's forbidden empty in the one call a caller would believe |
 
-**One more was considered and NOT taken: `unknown_invocation`.** *(This read "a seventh" until round 3: seven were taken — the six of the first draft plus round 1's `input_kind_mismatch` — so the one declined is the eighth.)* `EDGES.md` needed `unknown_edge` because `retract_edge` names an existing edge by id. **No call in this document names an existing invocation by id** — `compensates` names one, and a `compensates` pointing at nothing is recorded with a warning rather than refused, because refusing would discard the compensation record itself (§2.5's argument again) — and `invocations(...)` is a *filter*, where an empty result is the honest answer rather than a silent drop. **Stated so that the absence is a decision rather than an oversight.**
+**One more was considered and not taken in v0, and row 6c TOOK it: `unknown_invocation`, the thirty-first value.** *(This read "a seventh" until round 3: seven were taken — the six of the first draft plus round 1's `input_kind_mismatch` — so the one declined was the eighth.)*
+
+> **The v0 argument, kept verbatim, because what changed is a fact and not a judgement.** `EDGES.md` needed `unknown_edge` because `retract_edge` names an existing edge by id. **No call in this document names an existing invocation by id** — `compensates` names one, and a `compensates` pointing at nothing is recorded with a warning rather than refused, because refusing would discard the compensation record itself (§2.5's argument again) — and `invocations(...)` is a *filter*, where an empty result is the honest answer rather than a silent drop. **Stated so that the absence is a decision rather than an oversight.**
+
+**What changed: §6.5's `review_invocation` names an existing invocation by id.** The declining argument was explicitly conditional on a fact about the call list, the build row changed that fact (deviation **D-6b-3**), and **ruling R73** mints the value in the change that specifies the call — R3's rule, applied to a condition that expired rather than to a mind that was changed. **The conditionality is what makes this an amendment rather than a reversal**, and it is why the argument above is preserved instead of rewritten: a reader who wants to know whether the vocabulary grows carelessly can see exactly which premise moved.
+
+| value | returned by | why none of the thirty said it |
+|---|---|---|
+| **`unknown_invocation`** | `review_invocation` naming an `invocation_id` the store does not hold (§6.5) | The exact shape of `unknown_edge`, one object along. **`action_family_unknown` is not reused**, and the build row's reuse of it was recorded as a mismatch rather than defended: that value names a missing **family** and this names a missing **invocation** — one word for two objects, which is `INTERFACE.md` §2.3's Cause B and the same argument that keeps `unknown_edge` separate from `edge_family_unknown`. A host draining a review queue and told *no such action family* would go looking for a family that is registered, live, and not the problem |
 
 **Three warning values, added to `INTERFACE.md` §5.4 in this change** — the same rule, extended to warnings by `EDGES.md` §2.8:
 
@@ -1417,7 +1432,7 @@ Numbering continues from Q34 (ruled as R39). None of these is taken on this docu
 | **No executor and no scheduler** | §1's first two non-goals, and §4 states the consequence rather than hiding it: the gate is advisory by construction |
 | Invocations with append-only provenance | §3. `Invocation`, `InvocationProvenance` narrowing `Provenance` the *other* way from `EdgeProvenance`, `EventRecord.invocation_id`, three event values, and a correction that is a new event while a compensation is a new invocation |
 | Gating — families through the proposal loop, invocations through `approval_mode` / `min_auto_tier` | §5. And §5.3 states what `min_auto_tier` does **not** decide, per **R20** |
-| New `Refusal.reason` values through `INTERFACE.md` §5.12 in the same change (**R3**) | **Seven** added: `action_family_unknown`, `precondition_unmet`, `human_approval_required`, `tier_below_action_policy`, `effect_not_permitted`, `action_store_absent` — and `input_kind_mismatch`, which round 1 added in the change that closed the kill row. §5.12 enumerates **twenty-eight**; `types.REFUSAL_REASONS` carries them in the same commit. A seventh (`unknown_invocation`) is argued and **not** taken |
+| New `Refusal.reason` values through `INTERFACE.md` §5.12 in the same change (**R3**) | **Seven** added: `action_family_unknown`, `precondition_unmet`, `human_approval_required`, `tier_below_action_policy`, `effect_not_permitted`, `action_store_absent` — and `input_kind_mismatch`, which round 1 added in the change that closed the kill row. §5.12 enumerated **twenty-eight** at this row; `types.REFUSAL_REASONS` carries them in the same commit. An eighth (`unknown_invocation`) was argued and **not** taken here — **and IS taken in row 6c under ruling R73**, when §6.5's fifth call made its declining premise expire; §5.12 stands at **thirty-one** |
 | New `warnings` values through `INTERFACE.md` §5.4 in the same change | **Three**: `effect_undeclared:<op>:<target>` (the brief offered it as a *refusal*; the UC1 design test moved it), `approval_unrecorded` (round 1) and `declaration_amended:<from>:<to>` (round 2). §5.4 now **twenty-five** across nine carriers |
 | Capability flags in `PACKAGE.md`'s style, with `why`; adapter primitives ≤ 4 | §8 (three flags, two declarations, three more argued **not** taken) and §9 (**three** primitives, 19–21). `EventRecord.invocation_id` lands as a field; the `read_events` **filter** is the build row's, and §9.1 records the round trip this row took to learn that — the Protocol was amended without its six implementations, and `runtime_checkable` plus a Protocol-only drift check hid it |
 | Tenancy: none in the protocol (**R24**) | §8, and §11.4 names the consequence for beacon's enterprise blocker instead of claiming a fix |
