@@ -249,6 +249,14 @@ Effect:
 
 A family declaring any of the six is refused **at declaration**: `Refusal(reason="effect_not_permitted")`. Not at invocation. `EDGES.md` §2.4.1 spent a whole adversarial round learning that a rule checked only at write time is a rule a family author opts out of by declaring something permissive, and the lesson transfers without modification: **the door is the declaration.**
 
+> **And "the door is the declaration" had no answer for the family being RETIRED afterwards** *(rule 2.5-11, ruling **R71**, row 6c)*. Rule 2.5-7 refuses an effect naming an edge family that is not a registered `kind="edge"` entry, **at declaration** — and then a steward retires that family, which is an ordinary, permitted governance act. Every family declaring it keeps a blast radius aimed at a withdrawn word; `preflight` went on answering `allowed` and `record_invocation` went on warning nothing. **The declaration door is the right door for what a family may DECLARE and cannot be the only door for a fact that changes after it.**
+>
+> **A warning, and never a refusal.** Refusing would make a steward's ordinary retirement break every host mid-flight, which is the shape this section refuses twice — *"refusing to record what already occurred is the worst available answer"*, and `effect_undeclared`'s whole argument. **No value is minted**: `edge_family_retired:<name>` already exists in `INTERFACE.md` §5.4 for the identical fact one layer down, where `EDGES.md` §4.3 emits it on the read *and* on the write because *"a caller who has just written under a word somebody withdrew is entitled to know"* — and a caller about to invoke a verb whose declared blast radius lands on one is in exactly that position. §2.3's discipline, applied to warnings: reuse the value; a closed vocabulary that grows a value per variant of one failure is not closed for long.
+>
+> **Both invocation doors carry it, and that is the rule rather than an implementation detail.** `Preflight` gains a `warnings` field for it (§6.1). Shipping it at `record_invocation` alone would be *a fix applied at one call site of two* — the single sentence of the kill row's ninth, tenth and eleventh trips, and the reason `declared_predicates` became a required keyword.
+>
+> **Rule U on the namespace, inherited from rule 2.5-7 rather than re-decided.** `namespace=None` declares an input-determined namespace (rule 2.5-10), so the family is looked for where the declaration says it lives and, failing that, in the family's own namespace — the reading the declaration door already takes. A family the lookup cannot find there is **not** warned about: *we could not find it* is not *it was retired*, and a warning that fired on every input-determined effect would be the detector this section measured at 2,394 of 2,399 correct invocations, one field along.
+
 > **And "the declaration" is THREE call sites, not one — a round-1 finding that had made §17's kill-row audit false.** The shipped `Registry._edge_family_refusal` is called from `propose_type`, from `approve` **and from `import_types`**, and says why in its own docstring: *"because a rule with one enforcement point is a rule with one door left open — and the thing on the other side of this one is the `ROADMAP.md` kill row."* This document said *"at declaration"* eleven times and named no call, and `import_types` appears nowhere in it. A reviewer imported an **active** `kind="action"` family declaring `merge_types` as an effect *and* breaching §2.2's cross-field rule, through the shipped registry, with no warning at all. **`import_types` returns entries and cannot return a `Refusal`**, so on that path the entry is not written and the caller gets the existing `import_refused:<reason>` warning (`INTERFACE.md` §5.4) — the same treatment the edge path already gives.
 
 **Declared versus observed, and why the record-time failure is a warning rather than a refusal.** The brief for this row offered `effect_undeclared` as a candidate `Refusal.reason`. Driving UC1 through the model moved it (§11):
@@ -276,6 +284,7 @@ If `record_invocation` **refused** a report because the host observed an effect 
 | 2.5-8 | A `propose_type` effect **must name a `kind`**, and it must be one of `entity` / `edge` / `value_set` — an **allowlist**. `predicate` is excluded because an auto-approving namespace would mint live capability sets unattended and §5.10's guard does **not** fire on two empty extents; `action` because §15.1 ranks a verb above a noun. Round 2 reached the kill row by *omitting* the key a blocklist tested | `C19-48` |
 | 2.5-9 | Effect identity is `(op, namespace, family, kind)`, with `why` excluded — except for `host_state`, which has no target and whose `why` is its identity | `C19-49` |
 | 2.5-10 | `namespace=None` on an edge op **declares** an input-determined namespace, and is satisfied only by an observed effect whose namespace one of the invocation's own inputs carries | `C19-55` |
+| 2.5-11 | A declared `kind="edge"` blast-radius family that is **retired at invocation time** is a **warning** — `edge_family_retired:<name>`, `INTERFACE.md` §5.4's existing value, not a new one — carried by **both** `preflight` and `record_invocation`, and never a refusal *(ruling **R71**, row 6c)* | `C19-75`, `C19-76` |
 
 ### 2.6 `reversibility` — a declaration, and the honest thing it is not
 
@@ -572,6 +581,9 @@ Preflight:
     tier_floor:        str | None                # the family's min_auto_tier
     tier_floor_why:    str | None                # required when tier_floor is None. Rule U
     why_incomplete:    str | None
+    warnings:          tuple[str, ...]           # INTERFACE.md 5.4's values. Rule 2.5-11:
+                                                 #   `edge_family_retired:<name>` when a
+                                                 #   declared edge family is retired NOW
 
 PreconditionResult:
     condition:     Precondition

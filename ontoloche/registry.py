@@ -7484,6 +7484,60 @@ class Registry:
                 )
         return None
 
+    def _retired_blast_radius(
+        self, namespace: str, effects: Sequence[Effect]
+    ) -> list[str]:
+        """``edge_family_retired:<name>`` for every declared edge effect whose family is
+        retired **at invocation time**. ACTIONS.md 2.5 rule **2.5-11**, ruling **R71**.
+
+        **The hole this closes.** Rule 2.5-7 checks that an effect names a registered
+        ``kind="edge"`` family at DECLARATION, and 2.5's own headline is *"the door is
+        the declaration"* -- which has no answer for the family being retired
+        afterwards. A steward retires ``person_links``; every family declaring it as an
+        effect keeps a blast radius aimed at a withdrawn word; ``preflight`` still said
+        ``allowed`` and ``record_invocation`` still warned nothing.
+
+        **A warning, never a refusal, and no value minted.** Refusing would make an
+        ordinary retirement break every host mid-flight, which is the shape 2.5 refuses
+        twice (*"refusing to record what already occurred is the worst available
+        answer"*). ``edge_family_retired`` already exists in INTERFACE.md 5.4 for the
+        identical fact one layer down -- EDGES.md 4.3 emits it on the READ and on the
+        WRITE, because *"a caller who has just written under a word somebody withdrew is
+        entitled to know"*, and a caller about to invoke a verb whose declared blast
+        radius lands on one is in exactly that position. 2.3's discipline: reuse the
+        value, do not mint a variant of one failure.
+
+        **Both invocation doors call this**, and that is the point rather than an
+        implementation detail: shipping it at ``record_invocation`` alone would be *a
+        fix applied at one call site of two*, which is the ninth, tenth and eleventh
+        kill-row trips' single sentence.
+
+        **Rule U on the namespace, inherited from rule 2.5-7 rather than re-decided.**
+        ``namespace=None`` on an edge op DECLARES an input-determined namespace (rule
+        2.5-10), so the family is looked for where the declaration says it lives and,
+        when it says nothing, in the family's own namespace -- exactly the reading
+        ``_action_family_refusal`` takes at the declaration door. A family the lookup
+        cannot find there is **not** warned about: *we could not find it* is not *it was
+        retired*, and a warning that fired on every input-determined effect would be the
+        detector 2.5 measured at 2,394 of 2,399 correct invocations, one field along.
+        """
+        out: list[str] = []
+        for effect in effects:
+            if effect.op not in ("add_edge", "retract_edge") or not effect.family:
+                continue
+            where = effect.namespace or namespace
+            rec = self.adapter.get_type(where, effect.family, kind="edge")
+            if rec is None or rec.status != "retired":
+                continue
+            value = f"edge_family_retired:{effect.family}"
+            if value not in out:
+                # One per FAMILY, not one per effect: a family declaring both
+                # `add_edge` and `retract_edge` on one retired family has one retired
+                # family, and 2.5's own `effect_undeclared` counts surplus effects
+                # because those are separate facts. This is one fact.
+                out.append(value)
+        return out
+
     def _why_unknown_tier(self, namespace: str, tier: str | None) -> str:
         """Which of ACTIONS.md 5.2's THREE unknown causes this is.
 
@@ -7862,6 +7916,11 @@ class Registry:
                     r.why or "a condition could not be evaluated" for r in unknown
                 )
             ),
+            # Rule 2.5-11 / ruling **R71**: a declared `kind="edge"` blast-radius family
+            # retired since the declaration. On `base`, so it reaches the refused
+            # verdicts too -- a gate that refuses for an unrelated reason still owes the
+            # caller the fact that its blast radius points at a withdrawn word.
+            warnings=tuple(self._retired_blast_radius(namespace, fam.effects)),
         )
 
         if unknown:
@@ -8291,6 +8350,13 @@ class Registry:
             ):
                 continue
             warnings.append(f"effect_undeclared:{effect.op}:{effect_target(effect)}")
+
+        # Rule 2.5-11 / ruling **R71** -- a declared edge family retired since the
+        # declaration. Judged over the DECLARATION OF RECORD (`effects_of_record`), not
+        # over today's family, for rule 3-7's own reason: the record says what the gate
+        # judged, and a warning about a blast radius the actor never declared would be a
+        # sentence about the wrong moment. `preflight` carries the same list.
+        warnings.extend(self._retired_blast_radius(namespace, effects_of_record))
 
         # ACTIONS.md 2.7 -- the NAME-level schema governing THIS family's inputs. R10's
         # mechanism, live from the start rather than inert: every family's inputs have a
