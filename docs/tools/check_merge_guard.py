@@ -2343,6 +2343,173 @@ def check_alias_repoint() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ---------------------------------------------------------------------------
+# Part B, ninth axis -- THE SAME CALL, TWICE. The kill row's TWELFTH trip.
+#
+# **The trip.** `retire` read `.status` twice and both times on the SUCCESSOR, so it
+# never asked whether the row it was retiring was ALREADY retired. Before ruling R75 a
+# repeat retirement merely rewrote the tombstone; R75 attached an alias write to it, and
+# a second retirement toward a different successor then copied the retired row's words
+# onto a **second live row while the first still held them** -- two active entries
+# answering to one word, which is `C16-06` and mechanism 4.
+#
+# **Why an axis and not only an id.** The checker exited 0 with this live, for the
+# SEVENTH consecutive trip, and the reason is countable as it was for trip eleven: this
+# file contained **zero** occurrences of a repeated call on one row. Every one of its
+# `retire(`/`merge_types(`/`import_types(`/`reinstate(` fixtures opened its door exactly
+# **once**. The eighth axis drives both alias shapes through `retire` on every leg and
+# two doubles and still could not pose *"what if this door is opened twice?"*
+#
+# **The invariant this axis holds, and it is the one that closes the family:** *the write
+# a call performs must be idempotent in the state the guard read.* A guard evaluated once
+# for a call that can run twice is a permission cashed twice, and `rec.aliases` is not
+# consumed by the write it authorises -- the tombstone keeps its words by design
+# (INTERFACE.md 5.8) -- so nothing in the state stops the second cash.
+
+
+def _one_word_holders_everywhere(registry: Registry) -> dict[str, list[str]]:
+    """``{identity_key: [names of ACTIVE rows answering to it]}`` over the namespace.
+
+    `C16-06`'s whole-store invariant, keyed the way the resolver keys a word (the
+    seventh trip), and counting a row's NAME as well as its aliases (the eighth).
+    """
+    holders: dict[str, list[str]] = {}
+    for kind in ("predicate", "entity"):
+        listing = registry.list_types(kind)
+        for entry in listing.types:
+            if entry.status != "active":
+                continue
+            for word in (entry.name, *(entry.aliases or ())):
+                key = identity_key(word)
+                if not key:
+                    continue
+                if entry.name not in holders.setdefault(key, []):
+                    holders[key].append(entry.name)
+    return holders
+
+
+def _repeat_retire(registry: Registry) -> str | None:
+    """`retire(alpha -> beta)` then `retire(alpha -> gamma)`. The twelfth trip."""
+    for name in ("alpha", "beta", "gamma"):
+        _seed(registry, name, kind="predicate", definition="one and the same thing")
+    for member in ("aaa_note", "bbb_memo"):
+        _seed(registry, member, predicates=["alpha", "beta", "gamma"])
+    rows = registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zeta"],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
+    if not rows or "zeta" not in (rows[0].aliases or ()):
+        return _NOT_REACHABLE + (
+            "this backend did not keep the imported alias "
+            f"({list(rows[0].warnings) if rows else 'no row'})"
+        )
+    first = registry.retire(
+        "alpha", "superseded by beta", retired_by="user:sd", successor="beta", force=True
+    )
+    if isinstance(first, Refusal):
+        return _NOT_REACHABLE + f"the first retirement is refused here ({first.reason})"
+    registry.retire(
+        "alpha", "actually gamma", retired_by="user:sd", successor="gamma", force=True
+    )
+    return None
+
+
+def _repeat_merge(registry: Registry) -> str | None:
+    """`merge_types(alpha -> beta)` twice. The absorbed row is retired by the first."""
+    for name in ("alpha", "beta"):
+        _seed(registry, name, kind="predicate", definition="one and the same thing")
+    for member in ("aaa_note", "bbb_memo"):
+        _seed(registry, member, predicates=["alpha", "beta"])
+    first = registry.merge_types(
+        "alpha", "beta", reason="one word for one meaning", merged_by="user:sd",
+        acknowledge=list(ALL_ACKNOWLEDGEMENTS),
+    )
+    if isinstance(first, Refusal):
+        return _NOT_REACHABLE + f"the first merge is refused here ({first.reason})"
+    registry.merge_types(
+        "alpha", "beta", reason="again", merged_by="user:sd",
+        acknowledge=list(ALL_ACKNOWLEDGEMENTS),
+    )
+    return None
+
+
+def _repeat_import(registry: Registry) -> str | None:
+    """The same aliased row imported twice."""
+    _seed(registry, "beta", kind="predicate", definition="one and the same thing")
+    _seed(registry, "aaa_note", predicates=["beta"])
+    row = {"name": "beta", "status": "active", "aliases": ["zeta"],
+           "definition": "one and the same thing"}
+    rows = registry.import_types([row], kind="predicate")
+    if not rows or "zeta" not in (rows[0].aliases or ()):
+        return _NOT_REACHABLE + (
+            "this backend did not keep the imported alias "
+            f"({list(rows[0].warnings) if rows else 'no row'})"
+        )
+    registry.import_types([row], kind="predicate")
+    return None
+
+
+def _repeat_reinstate(registry: Registry) -> str | None:
+    """`reinstate` twice on one retired row."""
+    _seed(registry, "alpha", kind="predicate", definition="one and the same thing")
+    _seed(registry, "aaa_note", predicates=["alpha"])
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire here ({gone.reason})"
+    first = registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
+    if isinstance(first, Refusal):
+        return _NOT_REACHABLE + f"the first reinstate is refused here ({first.reason})"
+    registry.reinstate("alpha", "again", reinstated_by="user:sd")
+    return None
+
+
+REPEAT_PROBES = {
+    "retire": _repeat_retire,
+    "merge_types": _repeat_merge,
+    "import_types": _repeat_import,
+    "reinstate": _repeat_reinstate,
+}
+
+
+def check_repeated_calls() -> tuple[list[str], list[str], list[str]]:
+    """Every collapsing caller, opened TWICE, against `C16-06`'s whole-store invariant."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+    for leg, build, knowable in _legs():
+        for caller, probe in REPEAT_PROBES.items():
+            registry = build()
+            try:
+                blocked = probe(registry)
+            except Exception as exc:  # pragma: no cover - a probe that cannot run
+                blocked = _NOT_REACHABLE + f"the probe raised {type(exc).__name__}: {exc}"
+            if blocked is not None:
+                lines.append(f"  {leg:15s} {caller:13s} called twice          NOT REACHABLE")
+                unreachable.append(
+                    f"{leg} / {caller} / called twice: {blocked[len(_NOT_REACHABLE):]}"
+                )
+                continue
+            shared = {
+                word: names
+                for word, names in _one_word_holders_everywhere(registry).items()
+                if len(names) > 1
+            }
+            if shared:
+                problems.append(
+                    f"{leg} / {caller} / called twice: opening this door a SECOND time "
+                    f"left more than one ACTIVE row answering to a word -- {shared}. "
+                    f"That is `C16-06`'s whole-store invariant and mechanism 4, and the "
+                    f"guard on this call was evaluated ONCE for a call that ran twice. "
+                    f"*The write a call performs must be idempotent in the state the "
+                    f"guard read* -- the kill row's TWELFTH trip"
+                )
+                lines.append(f"  {leg:15s} {caller:13s} called twice          FAILED")
+            else:
+                lines.append(f"  {leg:15s} {caller:13s} called twice          one word, one row")
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -2414,6 +2581,11 @@ def main() -> int:
             "  and the ALIAS RE-POINT -- ruling R75: a door that guards a transfer must "
             "perform it:",
             check_alias_repoint,
+        ),
+        (
+            "  and THE SAME CALL, TWICE -- the kill row's twelfth trip: a guard "
+            "evaluated once for a call that can run twice:",
+            check_repeated_calls,
         ),
     ):
         print()

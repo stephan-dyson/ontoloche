@@ -73,6 +73,7 @@ from ontoloche.actions import (
     ProjectionReport,
     effect_identity,
     effect_target,
+    flat_form_problem,
     is_person,
     ref_key,
     ref_kind,
@@ -2568,6 +2569,47 @@ class AsyncRegistry:
         if not reason or not reason.strip():
             raise ValueError("retire requires a non-empty reason")
         rec = await self._require(namespace, type)
+
+        # **The TWELFTH kill-row trip, and this call never asked whether the row it is
+        # retiring is ALREADY retired** (row 6c's first adversarial round, kill-row lens;
+        # introduced by this row's own item 5 and proved by bisect against `664d3a5^`).
+        #
+        # `retire` read `.status` exactly twice and both times on the SUCCESSOR. Before
+        # ruling R75 a second retirement merely rewrote the tombstone; R75 attached an
+        # alias write to it, so a repeat retirement toward a DIFFERENT successor copied
+        # the retired row's words onto a **second** live row while the first still held
+        # them. **[Observed, sqlite, Postgres and the async mirror, three ordinary
+        # calls]** `retire(alpha, successor=beta)` then `retire(alpha, successor=gamma)`
+        # left `beta.aliases == gamma.aliases == ('zeta',)` -- **two ACTIVE rows
+        # answering to one word**, which is `C16-06`'s whole-store invariant and
+        # mechanism **4** itself, on a pair `merge_types` refuses `predicate_merge`
+        # NON-OVERRIDABLY, with `resolve_type("zeta")` answering one of them at **1.0**
+        # and *which one* decided by nothing but page order.
+        #
+        # **The diagnosis is the sixth trip's shape landing on a fix for the fourth
+        # consecutive round**, and it is a new sentence rather than a repeat: trip 9 was
+        # the operand absent, trip 10 the operand on one branch of two, trip 11 the
+        # operand at one call site of four, and this is **the guard evaluated once for a
+        # call that can run twice**. *The write a guard permits and the write a call
+        # performs must be the same write* holds per call and fails across calls,
+        # because `rec.aliases` is not consumed by the write -- the tombstone keeps its
+        # words by design (INTERFACE.md 5.8) -- so the same permission is cashed again
+        # on every repeat.
+        #
+        # **Fixed the way the sibling call already answers the identical question.**
+        # `reinstate` on a row that is not retired returns the standing entry with
+        # `reinstate_no_op:not_retired` rather than writing; `retire` on a row that is
+        # already retired now does the same. That is also the more correct answer to the
+        # question the old behaviour was answering badly: rewriting `retire_reason`,
+        # `retired_by`, `retired_at` and `successor` on a standing tombstone is an EDIT
+        # of a provenance-bearing row, and INTERFACE.md 5.8's rule is that *a correction
+        # is a new event, never an edit*. The path to change a successor is
+        # `reinstate` then `retire` -- two ordinary calls that each record who did them,
+        # which is exactly the path `successor_active`'s own `detail` prescribes for the
+        # neighbouring case.
+        if rec.status == "retired":
+            return await self._entry(rec, extra_warnings=("retire_no_op:already_retired",))
+
         #: Ruling **R75**, row 6c -- the successor row and the alias words the identity
         #: guard has cleared for transfer onto it. ``None`` and ``()`` whenever there is
         #: no successor, no alias, or a backend that stores none: *no successor means no
@@ -2920,7 +2962,18 @@ class AsyncRegistry:
                     # recomputed at the write, because *the write a guard permits and
                     # the write a call performs must be the same write* -- the tenth
                     # trip's own sentence, pointing at the other end.
-                    repoint_onto, repoint_words = succ, transferred
+                    # **The successor's OWN name is dropped from the transfer** (row 6c,
+                    # round 1, kill-row lens, MINOR). `_alias_identity_breach` skips the
+                    # self row when it compares, so an alias list containing the
+                    # successor's word passed the guard and would have written `taggable`
+                    # into `taggable.aliases` -- the *second home for one fact* this
+                    # write is careful to avoid for `rec.name`, arriving by the other
+                    # route. A row does not answer to its own name as an alias; it
+                    # answers to it as its name.
+                    repoint_onto = succ
+                    repoint_words = tuple(
+                        a for a in transferred if not same_word(a, succ.name)
+                    )
 
         report = await self._consumer_report(rec)
 
@@ -3042,9 +3095,25 @@ class AsyncRegistry:
                     # `merge_types` records `aliases_added` on the survivor and so does
                     # this. A reader asking *"why does the successor answer to this
                     # word?"* has an answer that names the retirement that did it.
+                    # **`aliases_transferred`, and filing it as `"retired"` was a MAJOR
+                    # of this row's first adversarial round.** The first cut appended
+                    # `event="retired"` on the row that is **alive and is the
+                    # survivor**, so `provenance("taggable")` read
+                    # `[('proposed',…), ('approved',…), ('retired',…)]` and a reader
+                    # asking *"was this ever retired?"* was told yes by the log this
+                    # write added precisely so the transfer would not be invisible.
+                    #
+                    # It did not corrupt `_lifecycle_collisions` -- that reader takes
+                    # `detail["successor"]` and this detail has none -- and **safe by
+                    # the accident of a missing dict key is exactly what this register
+                    # does not accept**: one event value carrying two facts is
+                    # INTERFACE.md 2.3's Cause B, and that guard is one key away from
+                    # reading this as a succession edge. `"merged"` is not reused for
+                    # the same reason: it is the value `_lifecycle_collisions` reads as
+                    # *this word was absorbed into that one*, which is a different act.
                     await self._append_event(
                         repoint_onto.namespace,
-                        "retired",
+                        "aliases_transferred",
                         retired_by,
                         kind=repoint_onto.kind,
                         name=repoint_onto.name,
@@ -4590,12 +4659,24 @@ class AsyncRegistry:
             )
             for rec in page.records:
                 for alias in rec.aliases or ():
-                    key = identity_key(alias)
-                    if key:
+                    # **`word` and not `key`, and the shadowing was a MAJOR of row 6c's
+                    # first adversarial round.** The memo key is bound as `key` sixteen
+                    # lines up and this loop rebound it, so `cache[key]` stored the scan
+                    # under the LAST alias's identity key and the memo never hit once
+                    # any active row in the namespace carried an alias -- which ruling
+                    # R75 makes the ordinary state of a curated store. **[Observed]**
+                    # forty `_identity_closure` calls over one shared cache: **2**
+                    # `find_types` calls with no aliases in the store, **41** with one.
+                    # That is linear in NODE count where deviation D-4c-11 claims linear
+                    # in the vocabulary, and it is the defect row 4c's round 1 fixed for
+                    # `_identity_closure` reappearing in the function row 4d's round 2
+                    # wrote to mirror it.
+                    word = identity_key(alias)
+                    if word:
                         # An empty key is not a word (see `same_word`), so it names no
                         # holder -- otherwise every non-Latin alias in the namespace
                         # would share one bucket.
-                        holders.setdefault(key, rec.name)
+                        holders.setdefault(word, rec.name)
             if not page.complete and page.next_after is None:
                 why = page.why_incomplete or (
                     "the backend could not page this namespace's active types"
@@ -7161,6 +7242,40 @@ class AsyncRegistry:
                         "why": f"input {name!r} is declared ref={spec.ref!r}",
                     },
                 )
+            # **A reference the flat identity form cannot carry is refused HERE, at the
+            # write door, so the ledger's strings stay parseable by construction.**
+            # Row 6c's first adversarial round, integrator lens, BLOCKING: `NAME_RE`
+            # binds `propose_type`'s NAME and binds no `namespace` at all, and neither
+            # bound a reference SUPPLIED at an invocation door -- so a `TypeRef` whose
+            # `name` carried a `#` was accepted, stored as `"beacon:entity:person#p-1"`,
+            # and read back a year later as an **`InstanceRef` naming an object that
+            # never existed**, with no exception anywhere. A namespace carrying a `:`
+            # produced the loud half: a ledger row `parse_ref` refuses, written by this
+            # layer itself.
+            #
+            # **That is worse than the failure R72 was written to prevent.** `ref_shape`
+            # returning `"type"` for a bare string was the most permissive reading of
+            # something it did not recognise; this is a CONFIDENT reading of the wrong
+            # thing -- the seventh trip's shape (*a guard comparing a byte where the
+            # registry holds a stored fact*) arriving in a parser.
+            #
+            # The refusal belongs at the write door rather than in `parse_ref`, because
+            # a parser that guessed which of two readings a caller meant would be the
+            # permissive default again. See `actions.flat_form_problem`.
+            unrepresentable = flat_form_problem(ref)
+            if unrepresentable is not None:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "input": name,
+                        "problem": "unrepresentable",
+                        "why": (
+                            f"input {name!r} cannot be written to the invocation ledger "
+                            f"without changing what it means: {unrepresentable} "
+                            f"(ACTIONS.md 2.3)"
+                        ),
+                    },
+                )
             kind = ref_kind(ref)
             # **The kind the CALLER wrote is a claim; the stored row is the fact -- and
             # trusting the claim was the ACTIONS door's own kill-row walk.** `ref_kind`
@@ -7274,8 +7389,22 @@ class AsyncRegistry:
                 )
         return None
 
+    def _input_namespaces(self, inputs: dict) -> set[str]:
+        """Every namespace this invocation's own inputs carry. ACTIONS.md rule 2.5-10.
+
+        The same set ``record_invocation`` computes for the ``effect_undeclared``
+        comparison, lifted so both readers of *"input-determined"* use one derivation
+        rather than two. A second home for one rule is EDGES.md 2.4's own objection.
+        """
+        out = {getattr(ref, "namespace", None) for ref in inputs.values()}
+        out |= {
+            getattr(getattr(ref, "type", None), "namespace", None)
+            for ref in inputs.values()
+        }
+        return {ns for ns in out if isinstance(ns, str)}
+
     async def _retired_blast_radius(
-        self, namespace: str, effects: Sequence[Effect]
+        self, namespace: str, effects: Sequence[Effect], inputs: dict | None = None
     ) -> list[str]:
         """``edge_family_retired:<name>`` for every declared edge effect whose family is
         retired **at invocation time**. ACTIONS.md 2.5 rule **2.5-11**, ruling **R71**.
@@ -7302,30 +7431,56 @@ class AsyncRegistry:
         fix applied at one call site of two*, which is the ninth, tenth and eleventh
         kill-row trips' single sentence.
 
-        **Rule U on the namespace, inherited from rule 2.5-7 rather than re-decided.**
-        ``namespace=None`` on an edge op DECLARES an input-determined namespace (rule
-        2.5-10), so the family is looked for where the declaration says it lives and,
-        when it says nothing, in the family's own namespace -- exactly the reading
-        ``_action_family_refusal`` takes at the declaration door. A family the lookup
-        cannot find there is **not** warned about: *we could not find it* is not *it was
-        retired*, and a warning that fired on every input-determined effect would be the
-        detector 2.5 measured at 2,394 of 2,399 correct invocations, one field along.
+        **An input-determined effect is judged over the namespaces the INPUTS carry, and
+        judging it in the family's own namespace was a false answer in BOTH directions**
+        (row 6c's first adversarial round, integrator lens, MAJOR). ``namespace=None`` on
+        an edge op DECLARES an input-determined namespace (rule 2.5-10), and the edge
+        lands wherever the invocation's inputs point:
+
+        * **[Observed]** ``person_links`` retired in ``tenant_a`` and active in
+          ``beacon``, with the inputs pointing at ``tenant_a``: **no warning at all**,
+          while the edge landed exactly where the family is withdrawn;
+        * **[Observed]** the mirror -- retired in ``beacon``, active in ``tenant_a``,
+          inputs pointing at ``tenant_a``: ``edge_family_retired`` **warned about a
+          family that is live where the edge went.**
+
+        The first cut inherited rule 2.5-7's *"the effect's namespace, or the family's
+        own"* reading from the DECLARATION door, where it is correct because a
+        declaration has no inputs. An invocation does, and rule 2.5-10 already says they
+        are what decides. `record_invocation` was computing the same set two blocks
+        along for `effect_undeclared`; the derivation is shared now rather than doubled.
+
+        **Rule U on what is still unfound.** A family the lookup cannot find in any
+        candidate namespace is **not** warned about -- *we could not find it* is not *it
+        was retired* -- and a warning that fired on every input-determined effect would
+        be the detector 2.5 measured at 2,394 of 2,399 correct invocations, one field
+        along. An effect that names a namespace EXPLICITLY is judged there and nowhere
+        else, because that declaration is the host's own answer to the question.
         """
+        candidates = self._input_namespaces(inputs or {})
         out: list[str] = []
         for effect in effects:
             if effect.op not in ("add_edge", "retract_edge") or not effect.family:
                 continue
-            where = effect.namespace or namespace
-            rec = await self.adapter.get_type(where, effect.family, kind="edge")
-            if rec is None or rec.status != "retired":
-                continue
-            value = f"edge_family_retired:{effect.family}"
-            if value not in out:
-                # One per FAMILY, not one per effect: a family declaring both
-                # `add_edge` and `retract_edge` on one retired family has one retired
-                # family, and 2.5's own `effect_undeclared` counts surplus effects
-                # because those are separate facts. This is one fact.
-                out.append(value)
+            if effect.namespace is not None:
+                where = (effect.namespace,)
+            else:
+                # Rule 2.5-10: input-determined. The family's own namespace stays in the
+                # set as the fallback for an invocation carrying no inputs at all, which
+                # is the case the declaration door's reading was written for.
+                where = tuple(candidates) or (namespace,)
+            for scope in where:
+                rec = await self.adapter.get_type(scope, effect.family, kind="edge")
+                if rec is None or rec.status != "retired":
+                    continue
+                value = f"edge_family_retired:{effect.family}"
+                if value not in out:
+                    # One per FAMILY, not one per effect and not one per namespace: a
+                    # family declaring both `add_edge` and `retract_edge` on one retired
+                    # family has one retired family, and 2.5's own `effect_undeclared`
+                    # counts surplus effects because those are separate facts. This is
+                    # one fact.
+                    out.append(value)
         return out
 
     def _why_unknown_tier(self, namespace: str, tier: str | None) -> str:
@@ -7710,7 +7865,9 @@ class AsyncRegistry:
             # retired since the declaration. On `base`, so it reaches the refused
             # verdicts too -- a gate that refuses for an unrelated reason still owes the
             # caller the fact that its blast radius points at a withdrawn word.
-            warnings=tuple(await self._retired_blast_radius(namespace, fam.effects)),
+            warnings=tuple(
+                await self._retired_blast_radius(namespace, fam.effects, inputs)
+            ),
         )
 
         if unknown:
@@ -7868,6 +8025,7 @@ class AsyncRegistry:
         history: tuple[ProvenanceEvent, ...] = ()
         history_why: str | None = None
         reviewed_at: datetime | None = None
+        reviewed_by: str | None = None
         for flag in ("stores_invocation_events", "stores_events"):
             if not getattr(self.caps, flag):
                 history_why = self.caps.reason(flag)
@@ -7885,6 +8043,7 @@ class AsyncRegistry:
             for r in rows:
                 if r.event == "invocation_reviewed":
                     reviewed_at = r.at
+                    reviewed_by = r.actor
         return Invocation(
             invocation_id=rec.invocation_id,
             family=rec.family,
@@ -7920,6 +8079,7 @@ class AsyncRegistry:
             compensates=rec.compensates,
             compensated_by=compensated_by,
             reviewed_at=reviewed_at,
+            reviewed_by=reviewed_by,
             warnings=tuple(rec.warnings or ()),
             attr_schema_version=rec.attr_schema_version,
         )
@@ -8125,11 +8285,7 @@ class AsyncRegistry:
             for e in effects_of_record
             if e.op in ("add_edge", "retract_edge") and e.namespace is None
         }
-        input_ns = {getattr(ref, "namespace", None) for ref in inputs.values()}
-        input_ns |= {
-            getattr(getattr(ref, "type", None), "namespace", None)
-            for ref in inputs.values()
-        }
+        input_ns = self._input_namespaces(inputs)
         for effect in observed_effects:
             if effect_identity(effect) in declared:
                 continue
@@ -8146,7 +8302,9 @@ class AsyncRegistry:
         # over today's family, for rule 3-7's own reason: the record says what the gate
         # judged, and a warning about a blast radius the actor never declared would be a
         # sentence about the wrong moment. `preflight` carries the same list.
-        warnings.extend(await self._retired_blast_radius(namespace, effects_of_record))
+        warnings.extend(
+            await self._retired_blast_radius(namespace, effects_of_record, inputs)
+        )
 
         # ACTIONS.md 2.7 -- the NAME-level schema governing THIS family's inputs. R10's
         # mechanism, live from the start rather than inert: every family's inputs have a
@@ -8312,10 +8470,35 @@ class AsyncRegistry:
         act by a second person at a later time, and a parameter on the write call would
         let the actor who ran the action mark their own invocation reviewed.
         """
+        if not reviewed_by or not reviewed_by.strip():
+            # **A review with no reviewer is the unsigned approval 3.2 refuses to
+            # fabricate**, and it was accepted (row 6c, round 1, integrator lens). A
+            # `ValueError` rather than a `Refusal`, exactly as `retire` and `reinstate`
+            # answer an empty `reason`: this is a caller's mistake about its own
+            # arguments, not a decision the registry is taking about the vocabulary.
+            raise ValueError(
+                "review_invocation requires a non-empty reviewed_by -- a review nobody "
+                "signed is the unsigned approval ACTIONS.md 3.2 refuses to fabricate"
+            )
         absent = self._invocations_absent({"invocation_id": invocation_id})
         if absent is not None:
             return absent
         rec = await self.adapter.get_invocation(invocation_id)
+        if rec is not None and rec.namespace != namespace:
+            # **The `namespace` argument was accepted and IGNORED** (row 6c, round 1,
+            # integrator lens, MAJOR). It reached only the `action_store_absent` detail
+            # dict; the id lookup is store-wide and the event was appended to
+            # `rec.namespace`, so a review-queue operator scoped to one tenant drained
+            # **another tenant's** queue with no refusal -- in a registry where 2.6
+            # makes `namespace` the answer to mechanism 4, and on the UC3 shape where
+            # dozens of publishers share one catalogue.
+            #
+            # `unknown_invocation` and not a new value: *no invocation is stored under
+            # this id **in this scope***, which is the same fact the id-missing branch
+            # states. A parameter that cannot change an outcome is worse than no
+            # parameter, and the honest alternative -- deleting it -- would make the
+            # call unable to say which scope it was asked about.
+            rec = None
         if rec is None:
             # **`unknown_invocation`, the thirty-first value -- ruling R73, row 6c.**
             # ACTIONS.md 7 argued for this value and declined it, and the argument was
@@ -8334,9 +8517,11 @@ class AsyncRegistry:
                 "unknown_invocation",
                 {
                     "invocation_id": invocation_id,
+                    "namespace": namespace,
                     "why": (
-                        f"no invocation {invocation_id!r} is stored, so there is nothing "
-                        f"to mark reviewed (ACTIONS.md 6.5, ruling R73)"
+                        f"no invocation {invocation_id!r} is stored in namespace "
+                        f"{namespace!r}, so there is nothing to mark reviewed "
+                        f"(ACTIONS.md 6.5, ruling R73)"
                     ),
                 },
             )
@@ -8470,12 +8655,38 @@ class AsyncRegistry:
         if unreviewed is not None:
             kept = []
             for rec in rows:
-                key = (rec.namespace, rec.family)
-                if key not in review_modes:
-                    fam, _ = await self._action_family(rec.family, rec.namespace)
-                    review_modes[key] = bool(
-                        fam is not None and fam.approval_mode == "review"
-                    )
+                # **The mode of RECORD, not today's mode -- rule 3-8's own field, and
+                # reading the live family here was a MAJOR of row 6c's first adversarial
+                # round.** `declared_policy` carries *"the policy the gate judged"*
+                # precisely so an amendment cannot re-describe an invocation after the
+                # fact, and this read ignored it. **[Observed]** three invocations filed
+                # under `review` and never reviewed left the queue the moment a steward
+                # flipped the family to `auto` -- no event, no warning, `known` moving
+                # from 3 to 0 -- and four historical `auto` invocations became *awaiting
+                # review* retroactively when the flip went the other way. Their own
+                # `declared_policy.approval_mode` said `review` and `auto` throughout.
+                #
+                # That is rule 3-1's argument one call along: *a record pointing at the
+                # current declaration would silently re-describe its own blast radius
+                # every time somebody edited the family.* A queue that empties because a
+                # steward edited an unrelated field is a governance mechanism nobody can
+                # operate.
+                #
+                # Rule U on the fallback: a record filed before the policy of record was
+                # stored -- or by a backend that could not keep one -- has no mode to
+                # read, so the live family answers and the report says the set is a
+                # floor either way.
+                recorded = (rec.declared_policy or {}).get("approval_mode")
+                if recorded is not None:
+                    is_review = recorded == "review"
+                else:
+                    key = (rec.namespace, rec.family)
+                    if key not in review_modes:
+                        fam, _ = await self._action_family(rec.family, rec.namespace)
+                        review_modes[key] = bool(
+                            fam is not None and fam.approval_mode == "review"
+                        )
+                    is_review = review_modes[key]
                 # BOTH halves above the store: the family's MODE (another row's
                 # attributes, which no primitive can see) and the row's own reviewed
                 # state, which the primitive pushes down and this re-checks for the
@@ -8490,7 +8701,7 @@ class AsyncRegistry:
                         else ()
                     )
                 ])
-                if (review_modes[key] and not reviewed) is unreviewed:
+                if (is_review and not reviewed) is unreviewed:
                     kept.append(rec)
             rows = kept
 
@@ -8587,7 +8798,29 @@ class AsyncRegistry:
         know which *page* a host assembles, and asking it to would put the host's routing
         table in this registry.
         """
+        if budget < 0 or reserved < 0 or reserved > budget:
+            # A caller's mistake about its own arithmetic, answered the way `retire`
+            # answers an empty `reason`. Row 6c, round 1, integrator lens: `budget=-5`
+            # returned `over_by=227, fits=()` -- an arithmetic answer to a question with
+            # no arithmetic in it, in the call 10.1 says exists to make a real ceiling
+            # visible.
+            raise ValueError(
+                f"projection needs a non-negative budget and a reserved that fits "
+                f"inside it; got budget={budget}, reserved={reserved}"
+            )
         listing = await self.list_types("action", namespace=namespace)
+        # **Every `kind="action"` row in the scope, whatever its status** -- used only to
+        # tell an EMPTY scope from a scope with nothing surfaced. Row 6c, round 1,
+        # integrator lens: a typo'd `namespace` produced zeroes, `fits` naming every
+        # ordered group and `over_by=0` -- the call affirmatively answering *everything
+        # fits* about a scope holding nothing, which is R70's own sentence pointing at
+        # itself. The four situations that produce all-zero counts (a scope that does not
+        # exist, a scope whose families are all retired, a scope whose families are all
+        # still `proposed`, and a scope that simply declares no surfaces) were
+        # indistinguishable in `why_incomplete`, and only the last of them is the one
+        # R70 protects.
+        scope_rows = len(listing.types)
+        scope_active = sum(1 for e in listing.types if e.status == "active")
         pool = [
             ActionFamily.from_attributes(
                 e.name, e.namespace, dict(e.attributes or {}), e.status
@@ -8612,6 +8845,7 @@ class AsyncRegistry:
         if order is None:
             return ProjectionReport(
                 surface=surface,
+                namespace=namespace,
                 budget=budget,
                 reserved=reserved,
                 counts=counts,
@@ -8722,8 +8956,29 @@ class AsyncRegistry:
                     )
 
         unknown_groups = [group for group in order if counts[group] == 0]
+        # **Rule U on the SCOPE, and only the last of these is what R70 protects.** An
+        # all-zero answer has four causes and they are not interchangeable: a namespace
+        # that holds no `kind="action"` row at all (a typo'd scope), one whose families
+        # are all retired, one whose families are all still `proposed`, and one whose
+        # families simply declare no surfaces. Saying nothing about which is the empty
+        # this call exists to make visible, in the report that says *everything fits*.
+        scope_why: str | None = None
+        if scope_rows == 0:
+            scope_why = (
+                f"namespace {namespace!r} holds no `kind=\"action\"` row of any status, "
+                f"so every count here is zero because the SCOPE is empty rather than "
+                f"because nothing declares a surface"
+                if namespace is not None
+                else "this store holds no `kind=\"action\"` row of any status"
+            )
+        elif scope_active == 0:
+            scope_why = (
+                f"every `kind=\"action\"` row in this scope is retired or still "
+                f"proposed ({scope_rows} row(s), 0 active), so nothing was selectable"
+            )
         return ProjectionReport(
             surface=surface,
+            namespace=namespace,
             budget=budget,
             reserved=reserved,
             counts=counts,
@@ -8745,10 +9000,11 @@ class AsyncRegistry:
                 "consumers_at_risk inherits ConsumerReport.complete == False "
                 "(INTERFACE.md 5.1); it is known casualties, never all of them"
                 + (
-                    f"; groups no registered family carries: {unknown_groups}"
+                    f"; groups no family in this scope carries: {unknown_groups}"
                     if unknown_groups
                     else ""
                 )
+                + (f"; {scope_why}" if scope_why else "")
             ),
         )
 

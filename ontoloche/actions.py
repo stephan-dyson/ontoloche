@@ -75,6 +75,7 @@ __all__ = [
     "ref_kind",
     "ref_key",
     "parse_ref",
+    "flat_form_problem",
     "is_person",
 ]
 
@@ -274,6 +275,73 @@ def ref_key(ref: Any) -> str:
         t = ref.type
         return f"{t.namespace}:{t.kind}:{t.name}#{ref.id}"
     return f"{ref.namespace}:{ref.kind}:{ref.name}"
+
+
+#: The two characters ACTIONS.md 2.3's flat identity form spends: ``:`` separates the
+#: three identity segments and ``#`` opens the opaque half. A segment carrying either is
+#: a segment the string cannot represent.
+_FLAT_FORM_SEPARATORS = (":", "#")
+
+
+def flat_form_problem(ref: Any) -> str | None:
+    """Why :func:`ref_key` could not faithfully represent this reference, or ``None``.
+
+    **Row 6c's first adversarial round, integrator lens, BLOCKING.** :func:`parse_ref`
+    was written against the grammar :func:`ref_key` writes and reasoned only about a
+    colon: *"a type `name` cannot contain a colon (`NAME_RE`)"*. `NAME_RE` binds
+    `propose_type`'s **name** and binds no `namespace` at all, and neither bound a
+    reference **supplied at an invocation door** -- so a `TypeRef` whose `name` carried a
+    ``#`` was accepted, stored as ``"beacon:entity:person#p-1"``, and read back a year
+    later as an **`InstanceRef` naming an object that never existed**, with no exception
+    raised at any point.
+
+    > **That is worse than the failure R72 was written to prevent.** `ref_shape`
+    > returning ``"type"`` for a bare string was *the most permissive reading of
+    > something it did not recognise*; this is a **confident reading of the wrong
+    > thing** -- the seventh trip's shape (*a guard comparing a byte where the registry
+    > holds a stored fact*) arriving in a parser, and Rule U's own worst case: not an
+    > unknown answered as known, but one fact answered as a different fact.
+
+    **The refusal belongs at the WRITE door, not at the parser.** `parse_ref` is total
+    over the strings `ref_key` produces and refuses everything else; making it *also*
+    guess which of two readings a caller meant would be the permissive default again. So
+    the invocation doors refuse a reference the flat form cannot carry, which keeps the
+    ledger's strings parseable **by construction** -- the same shape as
+    `_input_refusal`'s other rules, and the reason `input_kind_mismatch` is the value.
+
+    Only the three IDENTITY segments are checked. An instance id and an ``edge_id`` are
+    **opaque** -- *"the host's identifier"* -- they live after the first ``#``, and 2.3
+    is explicit that this package does not get to have opinions about them.
+    """
+    shape = ref_shape(ref)
+    if shape is None:
+        return None  # `_input_refusal` has its own, earlier, answer for this
+    if shape == "edge":
+        segments = (("namespace", ref.namespace), ("family", ref.family))
+    elif shape == "instance":
+        t = ref.type
+        segments = (
+            ("namespace", t.namespace),
+            ("kind", t.kind),
+            ("name", t.name),
+        )
+    else:
+        segments = (
+            ("namespace", ref.namespace),
+            ("kind", ref.kind),
+            ("name", ref.name),
+        )
+    for field, value in segments:
+        if not isinstance(value, str):
+            return f"{field} is a {type(value).__name__} and not a string"
+        for separator in _FLAT_FORM_SEPARATORS:
+            if separator in value:
+                return (
+                    f"{field}={value!r} contains {separator!r}, which ACTIONS.md 2.3's "
+                    f"flat identity form spends as a separator -- `ref_key` would write "
+                    f"a string `parse_ref` reads back as a DIFFERENT reference"
+                )
+    return None
 
 
 def parse_ref(key: str) -> InputRef:
@@ -588,6 +656,15 @@ class Invocation:
     compensated_by: str | None = None
     #: set by an ``invocation_reviewed`` event. ACTIONS.md 5.2
     reviewed_at: datetime | None = None
+    #: WHO reviewed it -- the actor on the ``invocation_reviewed`` event, derived by the
+    #: facade beside ``reviewed_at``. Row 6c's first adversarial round, integrator lens:
+    #: two reviewers are deliberately allowed (an append-only log, and a second reviewer
+    #: is a fact rather than an error), so ``reviewed_at`` silently re-points to the
+    #: LAST one and an operator asking *who cleared this* had to walk
+    #: ``provenance.history``. A governance record whose subject is *who signed off*
+    #: should not make that the one question it answers only indirectly. It is the LAST
+    #: reviewer, matching ``reviewed_at``; the whole sequence stays in ``history``.
+    reviewed_by: str | None = None
     #: INTERFACE.md 5.4's vocabulary
     warnings: tuple[str, ...] = ()
     #: the inputs schema in force when this was written
@@ -719,6 +796,19 @@ class ProjectionReport:
     known: int | None
     complete: bool
     why_incomplete: str | None = None
+    #: the SCOPE this report answered over -- the ``namespace`` argument, verbatim, and
+    #: ``None`` when the caller supplied none and the answer is store-wide.
+    #:
+    #: **Row 6c's first adversarial round, integrator lens, MAJOR.** `namespace` is
+    #: optional and its default is the whole catalogue, and nothing on this report said
+    #: which answer a caller was holding. **[Observed]** one publisher's 222 families
+    #: with a 40-family co-tenant on the store: scoped, two surfaces fit; unscoped, the
+    #: same call charged 40 slots the publisher does not own, moved `known` 222 -> 262
+    #: and reported two surfaces evicted that would have shipped. Ruling **R70**
+    #: narrowed the TYPO judgement to the scope in the row that left the ANSWER's scope
+    #: unnamed -- the guard scoped and the report silent. `Preflight` carries its
+    #: `namespace` for the same reason.
+    namespace: str | None = None
 
 
 # ------------------------------------------------------------------- 5.2 the gate

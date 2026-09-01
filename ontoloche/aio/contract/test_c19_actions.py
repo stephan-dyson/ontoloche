@@ -3507,3 +3507,283 @@ async def test_c19_81_the_review_queue_drains_end_to_end(adapter, make_registry)
     again = await registry.review_invocation(filed[0].invocation_id, reviewed_by="user:other")
     assert not isinstance(again, Refusal), again
     assert (await registry.invocations(unreviewed=True)).known == 0
+
+@NEEDS_INVOCATIONS
+async def test_c19_82_a_ref_the_flat_form_cannot_carry_is_refused_at_both_doors(
+    adapter, make_registry
+):
+    """Rule **2.5-13**. **BLOCKING, round 1** -- and it is worse than the failure R72
+    was written to prevent.
+
+    `NAME_RE` binds `propose_type`'s **name**, binds no `namespace` at all, and neither
+    bound a reference **supplied at an invocation door**. So a `TypeRef` whose `name`
+    carried a `#` was accepted, stored as ``"beacon:entity:person#p-1"``, and read back
+    by `parse_ref` as an **`InstanceRef` naming an object that never existed** -- with no
+    exception anywhere. A `namespace` carrying a `:` produced the loud half: a ledger row
+    `parse_ref` refuses, written by this layer itself.
+
+    `ref_shape` returning ``"type"`` for a bare string was *the most permissive reading
+    of something it did not recognise*; **this is a confident reading of the wrong
+    thing** -- the seventh trip's shape (*a guard comparing a byte where the registry
+    holds a stored fact*) arriving in a parser.
+
+    **The refusal belongs at the WRITE door and not in the parser**: a parser that
+    guessed which of two readings a caller meant would be the permissive default again.
+    Refusing here keeps every string in the ledger parseable **by construction**.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "person")
+    await action_family(registry, "touch", inputs=[InputSpec("who", "type")])
+
+    for bad, why in (
+        (TypeRef("beacon", "entity", "person#p-1"), "a '#' in the name"),
+        (TypeRef("beacon:crm", "entity", "person"), "a ':' in the namespace"),
+        (TypeRef("beacon", "ent#ity", "person"), "a '#' in the kind"),
+    ):
+        gate = await registry.preflight("touch", {"who": bad}, actor="user:sd")
+        assert isinstance(gate, Refusal), (why, gate)
+        assert gate.reason == "input_kind_mismatch"
+        assert gate.detail["problem"] == "unrepresentable", why
+
+        filed = await registry.record_invocation(
+            "touch", {"who": bad}, actor="user:sd", outcome="applied",
+            approved_by="user:sd",
+        )
+        assert isinstance(filed, Refusal), (why, filed)
+        assert filed.detail["problem"] == "unrepresentable", why
+
+    # The narrowing half: refusing everything passes a test that only tests refusals.
+    good = TypeRef("default", "entity", "person")
+    ok = await registry.record_invocation(
+        "touch", {"who": good}, actor="user:sd", outcome="applied", approved_by="user:sd",
+    )
+    assert not isinstance(ok, Refusal), ok
+    assert parse_ref(ok.inputs["who"]) == good, (
+        "and the ledger's string reads back as the ref that was written"
+    )
+
+    # The opaque halves are still the host's business: an id may carry either character.
+    opaque = InstanceRef(TypeRef("default", "entity", "person"), "a:b#c")
+    await action_family(registry, "touch_one", inputs=[InputSpec("who", "instance")])
+    out = await registry.record_invocation(
+        "touch_one", {"who": opaque}, actor="user:sd", outcome="applied",
+        approved_by="user:sd",
+    )
+    assert not isinstance(out, Refusal), out
+    assert parse_ref(out.inputs["who"]) == opaque
+
+@NEEDS_INVOCATIONS
+@pytest.mark.requires_capability("stores_edges")
+async def test_c19_83_an_input_determined_effect_is_judged_over_the_inputs_namespaces(
+    adapter, make_registry
+):
+    """Rule **2.5-12**. **MAJOR, round 1** -- and it was a false answer in **both**
+    directions.
+
+    Rule 2.5-10 says `namespace=None` on an edge op declares an **input-determined**
+    namespace: the edge lands where the invocation's own inputs point. Rule 2.5-11's
+    first cut inherited the DECLARATION door's reading (*the effect's namespace, or the
+    family's own*), which is correct there because a declaration has no inputs.
+
+    **[Observed]** with the family retired in the namespace the inputs point at and
+    active in the family's own: **no warning at all**, while the edge landed exactly
+    where the word is withdrawn. And the mirror -- retired in the family's namespace,
+    active where the inputs point: **a warning about a family that is live where the
+    edge went.** `record_invocation` was already computing the input namespaces two
+    blocks along for `effect_undeclared`; the derivation is shared now rather than
+    doubled.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "person", namespace="tenant_a")
+    await edge_family(registry, "person_links", level="instance", namespace="tenant_a")
+    await edge_family(registry, "person_links", level="instance", namespace="default")
+    await action_family(
+        registry, "link_people",
+        inputs=[InputSpec("who", "instance")],
+        # `namespace=None` -- rule 2.5-10, input-determined.
+        effects=[Effect(op="add_edge", family="person_links")],
+    )
+    who = {"who": InstanceRef(TypeRef("tenant_a", "entity", "person"), "1")}
+
+    assert (await registry.preflight("link_people", who, actor="user:sd")).warnings == ()
+
+    # THE FALSE NEGATIVE: retired where the inputs point, live in the family's own.
+    assert not isinstance(
+        await registry.retire(
+            "person_links", reason="superseded", retired_by="user:sd",
+            namespace="tenant_a", force=True,
+        ),
+        Refusal,
+    )
+    gate = await registry.preflight("link_people", who, actor="user:sd")
+    assert "edge_family_retired:person_links" in gate.warnings, (
+        "the edge lands in tenant_a and the family is withdrawn there"
+    )
+    filed = await registry.record_invocation(
+        "link_people", who, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by=gate.approved_by, judged=gate,
+    )
+    assert "edge_family_retired:person_links" in filed.warnings
+
+    # THE FALSE POSITIVE: an invocation whose inputs point at the namespace where the
+    # family is still live must NOT be warned about the family's own namespace.
+    await seed(registry, "person")
+    elsewhere = {"who": InstanceRef(TypeRef("default", "entity", "person"), "1")}
+    quiet = await registry.preflight("link_people", elsewhere, actor="user:sd")
+    assert quiet.warnings == (), (
+        "the edge lands in `default`, where the family is active", quiet.warnings
+    )
+
+@NEEDS_INVOCATIONS
+async def test_c19_84_the_review_queue_reads_the_mode_of_record_not_todays_mode(
+    adapter, make_registry
+):
+    """Rule **6-12**. **MAJOR, round 1**, and it is rule 3-1's argument one call along.
+
+    `Invocation.declared_policy` carries *"the policy the gate judged"* (rule 3-8)
+    precisely so an amendment cannot re-describe an invocation after the fact, and this
+    read took `approval_mode` off the **live family** instead.
+
+    **[Observed]** three invocations filed under `review` and never reviewed left the
+    queue the moment a steward flipped the family to `auto` -- no event, no warning,
+    `known` moving from 3 to 0 -- and the flip the other way made historical `auto`
+    invocations *awaiting review* retroactively. Their own `declared_policy` said
+    `review` and `auto` throughout. **A queue that empties because somebody edited an
+    unrelated field is a governance mechanism nobody can operate.**
+    """
+    registry = await make_registry(adapter)
+    await action_family(registry, "merge_contacts", approval_mode="review")
+    gate = await registry.preflight("merge_contacts", {}, actor="ai:nightly")
+    for _ in range(3):
+        await registry.record_invocation(
+            "merge_contacts", {}, actor="ai:nightly", outcome="applied",
+            gate_verdict="allowed", approved_by=gate.approved_by, judged=gate,
+        )
+    assert (await registry.invocations(unreviewed=True)).known == 3
+
+    # An ordinary amendment: the steward decides new invocations may auto-approve.
+    await action_family(registry, "merge_contacts", approval_mode="auto")
+    after = await registry.invocations(unreviewed=True)
+    assert after.known == 3, (
+        "the three were judged under `review` and none has been reviewed; an amendment "
+        "does not review them"
+    )
+    assert all(
+        i.declared_policy["approval_mode"] == "review" for i in after.invocations
+    )
+
+    # ...and the other direction: a historical `auto` invocation does not join the queue.
+    await action_family(registry, "search_tasks", approval_mode="auto")
+    auto_gate = await registry.preflight("search_tasks", {}, actor="ai:nightly")
+    await registry.record_invocation(
+        "search_tasks", {}, actor="ai:nightly", outcome="applied",
+        gate_verdict="allowed", approved_by=auto_gate.approved_by, judged=auto_gate,
+    )
+    await action_family(registry, "search_tasks", approval_mode="review")
+    queue = await registry.invocations(unreviewed=True)
+    assert {i.family for i in queue.invocations} == {"merge_contacts"}, (
+        "a family flipped INTO review does not retroactively enqueue what ran under auto"
+    )
+
+@NEEDS_INVOCATIONS
+async def test_c19_85_review_invocation_honours_its_namespace_and_needs_a_reviewer(
+    adapter, make_registry
+):
+    """Rule **6-13**. **MAJOR + MINOR, round 1.**
+
+    The `namespace` argument reached only the `action_store_absent` detail dict: the id
+    lookup was store-wide and the event was appended to `rec.namespace`, so **a
+    review-queue operator scoped to one tenant drained another tenant's queue with no
+    refusal** -- in a registry where §2.6 makes `namespace` the answer to mechanism 4,
+    and on the UC3 shape where dozens of publishers share one catalogue. *A parameter
+    that cannot change an outcome is worse than no parameter.*
+
+    And a review with **no reviewer** was accepted, which is the unsigned approval §3.2
+    refuses to fabricate. A `ValueError` rather than a `Refusal`, exactly as `retire`
+    and `reinstate` answer an empty `reason`: a caller's mistake about its own
+    arguments is not a decision about the vocabulary.
+    """
+    registry = await make_registry(adapter)
+    await action_family(registry, "reconcile", approval_mode="review", namespace="dpr")
+    gate = await registry.preflight("reconcile", {}, actor="user:sd", namespace="dpr")
+    filed = await registry.record_invocation(
+        "reconcile", {}, actor="user:sd", namespace="dpr", outcome="applied",
+        gate_verdict="allowed", approved_by=gate.approved_by, judged=gate,
+    )
+    assert not isinstance(filed, Refusal), filed
+
+    wrong = await registry.review_invocation(
+        filed.invocation_id, reviewed_by="user:boss", namespace="oti_311"
+    )
+    assert isinstance(wrong, Refusal), wrong
+    assert wrong.reason == "unknown_invocation"
+    assert wrong.detail["namespace"] == "oti_311"
+
+    for empty in ("", "   "):
+        with pytest.raises(ValueError):
+            await registry.review_invocation(filed.invocation_id, reviewed_by=empty)
+
+    # The narrowing half: the right scope still drains, and the record says WHO.
+    if not registry.caps.stores_events:
+        pytest.skip(
+            "PACKAGE.md 3.2 -- a review IS an event and this backend keeps none; the "
+            "scope and reviewer rules above are asserted on every leg"
+        )
+    right = await registry.review_invocation(
+        filed.invocation_id, reviewed_by="user:boss", namespace="dpr"
+    )
+    assert not isinstance(right, Refusal), right
+    assert right.reviewed_at is not None
+    assert right.reviewed_by == "user:boss", (
+        "two reviewers are allowed and `reviewed_at` re-points to the last, so the "
+        "record answers *who cleared this* directly rather than only through history"
+    )
+
+@NEEDS_ATTRIBUTES
+async def test_c19_86_projection_names_its_scope_and_says_which_empty_it_is(
+    adapter, make_registry
+):
+    """Rules **10-11** and **10-12**. **MAJOR + MINOR, round 1.**
+
+    `namespace` is optional, its default is the **whole store**, and nothing on the
+    report said which answer a caller was holding. **[Observed]** one publisher's
+    families with a co-tenant on the store: scoped, two surfaces fit; unscoped, the same
+    call charged slots the publisher does not own and reported surfaces evicted that
+    would have shipped. **Ruling R70 narrowed the TYPO judgement to the scope in the row
+    that left the ANSWER's scope unnamed** -- the guard scoped and the report silent.
+
+    And an all-zero answer has four causes that are not interchangeable. A typo'd
+    `namespace` produced zeroes, `fits` naming every ordered group and `over_by=0` --
+    **the call affirmatively answering *everything fits* about a scope holding
+    nothing**, which is rule 10-9's own sentence pointing at itself.
+    """
+    registry = await make_registry(adapter)
+    await action_family(registry, "publish", reachability=["console"], namespace="dpr")
+    await action_family(registry, "close", reachability=["console"], namespace="oti_311")
+
+    scoped = await registry.projection("s", budget=10, order=("console",), namespace="dpr")
+    assert scoped.namespace == "dpr", "the report echoes the scope it answered over"
+    assert scoped.counts == {"console": 1}
+
+    wide = await registry.projection("s", budget=10, order=("console",))
+    assert wide.namespace is None, "None says the answer is store-wide"
+    assert wide.counts == {"console": 2}, "and it charged the co-tenant's family too"
+
+    # Which empty is it? A scope that holds no `kind="action"` row at all.
+    absent = await registry.projection("s", budget=10, order=("console",), namespace="dpr_typo")
+    assert not isinstance(absent, Refusal), "an empty scope is not a typo'd GROUP"
+    assert "the SCOPE is empty" in (absent.why_incomplete or ""), absent.why_incomplete
+
+    # ...against a scope that holds rows and simply declares no surfaces, which is the
+    # one case rule 10-9 exists to protect.
+    await action_family(registry, "ingest", reachability=[], namespace="pipeline")
+    quiet = await registry.projection(
+        "s", budget=10, order=("console",), namespace="pipeline"
+    )
+    assert "the SCOPE is empty" not in (quiet.why_incomplete or "")
+    assert "groups no family in this scope carries" in (quiet.why_incomplete or "")
+
+    # Rule 10-12: a caller's mistake about its own arithmetic.
+    for budget, reserved in ((-5, 0), (10, -1), (3, 4)):
+        with pytest.raises(ValueError):
+            await registry.projection("s", budget=budget, reserved=reserved, order=("console",))
