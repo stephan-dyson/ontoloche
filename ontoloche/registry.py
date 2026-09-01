@@ -8773,34 +8773,47 @@ class Registry:
         order = tuple(dict.fromkeys(order))
         counts = {group: counts.get(group, 0) for group in order}
 
-        # **The typo judgement is made against EVERY registered family, not against the
-        # namespace-filtered pool** (rule 10-9): an empty NAMESPACE is a legitimate
-        # scope and answers with zeroes, where an unknown GROUP is a misspelling. Round
-        # 1 found the filtered version refusing a real projection over an empty
-        # namespace -- and round 2 found the rule misfiring on a host that has no
-        # surfaces at all, so it requires that SOME family somewhere declares one. Four
-        # ingestion families with `reachability=()` are not a typo; they are the
-        # venture's own customer.
-        everywhere = [
-            ActionFamily.from_attributes(
-                e.name, e.namespace, dict(e.attributes or {}), e.status
-            )
-            for e in self.list_types("action").types
-        ]
-        declares_any_surface = any(f.reachability for f in everywhere if f.declared)
+        # **The typo judgement is made against THIS SCOPE's pool** -- rule 10-9, as
+        # ruling **R70** narrowed it in row 6c. *A typo is an `order` naming groups no
+        # family in THIS SCOPE carries, where the scope declared any surface at all.*
+        #
+        # Both prior readings were wrong, and each cost a round. Round 1 of the spec row
+        # judged against the namespace-filtered pool with no *declares any surface*
+        # condition, and an empty NAMESPACE refused a real projection; the fix moved the
+        # judgement to the STORE-WIDE pool and added the condition -- which fixed the
+        # empty namespace and introduced **Q72**: an ingestion host whose families all
+        # declare `reachability=()` got zeroes while it was alone on the store and a
+        # REFUSAL the moment an unrelated co-tenant registered one family with a surface.
+        # **[Observed, row 6c's design test over UC3's many-publishers catalogue]** four
+        # `ingest_dataset_*` families in `dpr`, alone: `counts={'catalogue_ingest': 0}`.
+        # One `close_311_request` registered in `oti_311`, nothing about `dpr` changed:
+        # `Refusal(action_family_unknown)`. UC3 is dozens of publishers in one catalogue,
+        # so *"somebody else's namespace"* is the normal condition, not the exotic one.
+        #
+        # The scoped pool answers both: an empty namespace declares no surface, so it
+        # gets zeroes (round 1's finding); a co-tenant's surface is out of scope, so it
+        # cannot make the neighbour's ordinary projection a typo (Q72's); and a scope
+        # that DOES use surfaces still catches a misspelling, which is the whole of the
+        # rule. The judgement uses the same ACTIVE, DECLARED pool `counts` is computed
+        # over: a scope whose only surfaced family is retired answers with zeroes rather
+        # than refusing, which is this register's standing direction -- never turn *we
+        # could not find it* into a refusal.
+        declares_any_surface = any(f.reachability for f in pool)
         if declares_any_surface and not any(
-            group in f.reachability for f in everywhere if f.declared for group in order
+            group in f.reachability for f in pool for group in order
         ):
             return Refusal(
                 "action_family_unknown",
                 {
                     "order": list(order),
                     "surface": surface,
+                    "namespace": namespace,
                     "why": (
-                        "no registered family anywhere carries any of these groups, so "
-                        "this projection is over an entirely unknown vocabulary -- and "
-                        "an empty report for a typo is mechanism C committed by the call "
-                        "that exists to surface it (ACTIONS.md 10.3)"
+                        "no registered family in this scope carries any of these "
+                        "groups, and this scope does declare surfaces, so this "
+                        "projection is over an entirely unknown vocabulary -- and an "
+                        "empty report for a typo is mechanism C committed by the call "
+                        "that exists to surface it (ACTIONS.md 10.3, ruling R70)"
                     ),
                 },
             )
