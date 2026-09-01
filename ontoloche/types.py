@@ -208,6 +208,17 @@ WARNING_VALUES = (
     "name_previously_retired",
     "retired_without_usage_evidence",
     "reinstate_no_op",
+    # Row 6c, the kill row's TWELFTH trip. `retire` on a row that is ALREADY
+    # retired writes nothing and says so, which is `reinstate_no_op`'s treatment
+    # of the identical question one call along. Before ruling R75 a repeat
+    # retirement merely rewrote the tombstone -- an EDIT of a provenance-bearing
+    # row, which INTERFACE.md 5.8 already forbids; R75 attached an ALIAS WRITE to
+    # it, and a repeat toward a second successor then left TWO ACTIVE ROWS
+    # answering to one word (`C16-06`, mechanism 4) on a pair `merge_types`
+    # refuses non-overridably. Not a refusal: nothing was prevented and the
+    # desired state already holds, which is R4's own line for a call that would
+    # otherwise quietly do nothing.
+    "retire_no_op",
     "reinstate_alias_check_unavailable",
     "import_refused",
     "not_durable_until_host_commits",

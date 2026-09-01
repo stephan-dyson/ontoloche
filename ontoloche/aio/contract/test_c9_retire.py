@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C9 -- ``retire`` and ``reinstate`` (28). Mechanism 3.
+"""C9 -- ``retire`` and ``reinstate`` (31). Mechanism 3.
 
 Retirement is guarded by ``consumers``, not by usage.
 """
@@ -1296,3 +1296,160 @@ async def test_c9_28_the_retired_names_own_word_is_not_added_as_an_alias(
     chained = await registry.resolve_type("commentable", _CTX(), tier="unspecified")
     assert chained.outcome == "existing" and chained.type.name == "taggable"
     assert chained.confidence == 1.0
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+async def test_c9_29_a_second_retirement_is_a_no_op_and_writes_no_alias_onto_a_second_successor(
+    adapter, make_registry
+):
+    """**The kill row's TWELFTH trip**, and the guard that was missing is `rec.status`.
+
+    `retire` read `.status` exactly twice and **both times on the successor**. Before
+    ruling R75 a repeat retirement merely rewrote the tombstone; R75 attached an alias
+    write to it, so a second retirement toward a **different** successor copied the
+    retired row's words onto a second live row **while the first still held them**.
+
+    **[Observed, sqlite, Postgres and the async mirror, three ordinary calls]**
+    ``retire(alpha, successor=beta)`` then ``retire(alpha, successor=gamma)`` left
+    ``beta.aliases == gamma.aliases == ('zeta',)`` — **two ACTIVE rows answering to one
+    word**, which is `C16-06`'s whole-store invariant and mechanism **4** itself, on a
+    pair `merge_types` refuses `predicate_merge` **non-overridably**, with
+    `resolve_type("zeta")` answering one of them at **1.0** and *which one* decided by
+    nothing but page order.
+
+    **The diagnosis is a new sentence rather than a repeat.** Trip 9 was the operand
+    absent, trip 10 the operand on one branch of two, trip 11 the operand at one call
+    site of four; this is **the guard evaluated once for a call that can run twice**.
+    *The write a guard permits and the write a call performs must be the same write*
+    holds per call and fails across calls, because `rec.aliases` is not consumed by the
+    write — the tombstone keeps its words by design (`INTERFACE.md` §5.8) — so the same
+    permission is cashed again on every repeat.
+
+    **Fixed the way the sibling call already answers the identical question**, and the
+    fix is also the more correct answer to what the old behaviour was answering badly:
+    rewriting a standing tombstone's four retirement columns is an **edit** of a
+    provenance-bearing row, which §5.8 forbids. The path to change a successor is
+    `reinstate` then `retire`.
+    """
+    registry = await make_registry(adapter)
+    for name in ("alpha", "beta", "gamma"):
+        await seed(registry, name, kind="predicate", definition="one and the same thing")
+    for member in ("aaa_note", "bbb_memo"):
+        await seed(registry, member, predicates=["alpha", "beta", "gamma"])
+    rows = await registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zeta"],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
+    assert rows and "zeta" in (rows[0].aliases or ()), rows
+
+    first = await registry.retire(
+        "alpha", "superseded by beta", retired_by="user:sd", successor="beta", force=True
+    )
+    assert isinstance(first, TypeEntry), first
+
+    second = await registry.retire(
+        "alpha", "actually gamma", retired_by="user:sd", successor="gamma", force=True
+    )
+    assert isinstance(second, TypeEntry), "nothing was prevented, so this is not a refusal"
+    assert "retire_no_op:already_retired" in second.warnings, second.warnings
+
+    live = {t.name: tuple(t.aliases) for t in (await registry.list_types("predicate")).types}
+    holders = sorted(name for name, aliases in live.items() if "zeta" in aliases)
+    assert holders == ["beta"], (
+        "C16-06: no two active entries in one namespace hold one word between them",
+        live,
+    )
+
+    # ...and nothing about the standing tombstone moved, which is §5.8's rule.
+    tombstone = [
+        t
+        for t in (await registry.list_types("predicate", include_retired=True)).types
+        if t.name == "alpha"
+    ][0]
+    assert tombstone.status == "retired"
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+async def test_c9_30_the_successors_own_name_is_not_transferred_into_its_own_aliases(
+    adapter, make_registry
+):
+    """Row 6c, round 1, kill-row lens, MINOR — *the second home for one fact by the
+    other route.*
+
+    `C9-28` pins that the retired row's **own name** is not added to the successor's
+    aliases, because the succession chain already answers it. The same argument binds
+    the word on the other side: `_alias_identity_breach` skips the self row when it
+    compares, so an alias list containing the **successor's** name passed the guard and
+    would have written ``taggable`` into ``taggable.aliases``. A row does not answer to
+    its own name as an alias; it answers to it as its name.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "taggable", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    await seed(registry, "bbb_memo", predicates=["commentable", "taggable"])
+    # `commentable` is aliased to a word that IS the successor's name -- reachable
+    # because `alias_collision` looks at LIVE holders and this alias is written before
+    # anything makes the pair a collision at this door.
+    rows = await registry.import_types(
+        [{"name": "commentable", "status": "active", "aliases": ["zzz_flag"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert rows and "zzz_flag" in (rows[0].aliases or ())
+
+    out = await registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(out, TypeEntry), out
+    survivor = [t for t in (await registry.list_types("predicate")).types if t.name == "taggable"][0]
+    assert "taggable" not in survivor.aliases, "a row does not alias its own name"
+    assert "zzz_flag" in survivor.aliases, "and the transfer still happened"
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+async def test_c9_31_the_alias_transfer_is_its_own_event_and_not_a_retirement(
+    adapter, make_registry
+):
+    """Row 6c, round 1, kill-row lens, MAJOR — *safe by the accident of a missing dict
+    key is not safe.*
+
+    The first cut of R75's write appended ``event="retired"`` on the row that is **alive
+    and is the survivor**, so `provenance(successor)` read
+    ``[('proposed', …), ('approved', …), ('retired', …)]`` and a reader asking *"was
+    this ever retired?"* was told **yes** by the log the write added precisely so the
+    transfer would not be invisible.
+
+    It did not corrupt `_lifecycle_collisions` — that reader takes
+    ``detail["successor"]`` and this detail has none — and that is the point: **one
+    event value carrying two facts is `INTERFACE.md` §2.3's Cause B**, and the guard is
+    one dict key away from reading it as a succession edge. `"merged"` is not reused
+    either: that is the value the same guard reads as *this word was absorbed into that
+    one*, which is a different act.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "commentable", kind="predicate", definition="a capability")
+    await seed(registry, "taggable", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    await registry.import_types(
+        [{"name": "commentable", "status": "active", "aliases": ["zzz_widget_flag"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert isinstance(
+        await registry.retire(
+            "commentable", "taggable says it better", retired_by="user:sd",
+            successor="taggable", force=True,
+        ),
+        TypeEntry,
+    )
+
+    survivor = await registry.provenance("taggable", namespace="default")
+    events = [e.event for e in survivor.history]
+    assert "retired" not in events, (
+        "the survivor is alive; an event saying otherwise is one word for two facts",
+        events,
+    )
+    transfer = [e for e in survivor.history if e.event == "aliases_transferred"]
+    assert transfer, events
+    assert transfer[0].detail["aliases_added"] == ["zzz_widget_flag"]
+    assert transfer[0].detail["from"] == "commentable"

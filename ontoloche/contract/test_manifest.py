@@ -1,6 +1,6 @@
-"""Suite bookkeeping -- not one of the 338.
+"""Suite bookkeeping -- not one of the 346.
 
-PACKAGE.md 6.2 enumerates 338 contract tests in twenty groups and calls the
+PACKAGE.md 6.2 enumerates 346 contract tests in twenty groups and calls the
 enumeration *the coverage floor, not a budget*. This checks the floor is actually on the
 floor: every enumerated id exists as a test function, and nothing has quietly gone
 missing while the suite was being written.
@@ -27,7 +27,7 @@ EXPECTED_PER_GROUP = {
     6: 9,
     7: 7,
     8: 6,
-    9: 28,
+    9: 31,
     10: 19,
     11: 5,
     12: 18,
@@ -37,9 +37,9 @@ EXPECTED_PER_GROUP = {
     16: 6,
     17: 53,
     18: 10,
-    19: 81,
+    19: 86,
 }
-TOTAL = 338
+TOTAL = 346
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 
