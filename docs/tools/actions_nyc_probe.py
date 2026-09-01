@@ -55,6 +55,95 @@ def check(label: str, ok: bool, detail: str = "") -> None:
     print(f"  [{'PASS' if ok else 'FAIL'}] {label}" + (f" -- {detail}" if detail else ""))
 
 
+def _r70_design_test(check) -> None:
+    """§10's design test, re-run over UC3's many-publishers catalogue. Ruling **R70**.
+
+    Two engines, exactly as the rest of this file uses them: the throwaway kit and the
+    **shipped** ``ontoloche.Registry``. A rule fixed in the kit alone is row 4b's own
+    recorded lesson, and rule 10-9 lives in both.
+    """
+    from ontoloche import Evidence, NamespacePolicy, Registry  # noqa: E402
+    from ontoloche.actions import action_attributes             # noqa: E402
+    from ontoloche.backends.sqlite import SQLiteAdapter         # noqa: E402
+    from ontoloche.types import Refusal                         # noqa: E402
+
+    evidence = [Evidence(kind="data", summary="the UC3 catalogue fixture")]
+    publishers = ("dpr", "oti_311", "dot")
+    shipped = Registry(
+        SQLiteAdapter.open(":memory:"),
+        policies={
+            ns: NamespacePolicy(namespace=ns, approval_policy="auto",
+                                min_auto_approve_tier="sonnet")
+            for ns in publishers
+        },
+    )
+
+    def declare_shipped(name, namespace, reachability):
+        out = shipped.propose_type(
+            name,
+            f"{name}: a governed verb in {namespace}'s half of the catalogue",
+            evidence, "user:probe", kind="action", namespace=namespace, tier="opus",
+            attributes=action_attributes(reversibility="reversible",
+                                         approval_mode="auto",
+                                         reachability=reachability),
+        )
+        assert not isinstance(out, Refusal), out
+
+    kit = ActionRegistry(edge_families=set(), tier_order=("haiku", "sonnet", "opus"))
+
+    def declare_kit(name, namespace, reachability):
+        kit.declare(ActionFamily(name=name, namespace=namespace,
+                                 reversibility="reversible", approval_mode="auto",
+                                 reachability=tuple(reachability)))
+
+    def both(call):
+        return call(shipped), call(kit)
+
+    # R70.1 -- the ingestion host, alone on the store.
+    for i in range(4):
+        declare_shipped(f"ingest_dataset_{i}", "dpr", [])
+        declare_kit(f"ingest_dataset_{i}", "dpr", [])
+    alone = both(lambda r: r.projection("catalogue_ingest", budget=10,
+                                        order=("catalogue_ingest",), namespace="dpr"))
+    check("R70.1  an ingestion host alone on the store gets zeroes, not a typo refusal",
+          all(not getattr(x, "refused", False) and not isinstance(x, Refusal)
+              and x.counts == {"catalogue_ingest": 0} for x in alone),
+          " | ".join(str(getattr(x, "counts", getattr(x, "reason", x))) for x in alone))
+
+    # R70.2 -- a CO-TENANT registers a surfaced family. Nothing about `dpr` changed.
+    declare_shipped("close_311_request", "oti_311", ["catalogue_console"])
+    declare_kit("close_311_request", "oti_311", ["catalogue_console"])
+    after = both(lambda r: r.projection("catalogue_ingest", budget=10,
+                                        order=("catalogue_ingest",), namespace="dpr"))
+    check("R70.2  ...and STILL gets zeroes once a co-tenant declares a surface",
+          all(not getattr(x, "refused", False) and not isinstance(x, Refusal)
+              and x.counts == {"catalogue_ingest": 0} for x in after),
+          " | ".join(str(getattr(x, "counts", getattr(x, "reason", x))) for x in after))
+
+    # R70.3 -- the half a careless fix deletes.
+    typo = both(lambda r: r.projection("console", budget=10,
+                                       order=("catalogue_consle",), namespace="oti_311"))
+    check("R70.3  ...while a scope that DOES use surfaces still catches a misspelling",
+          all(getattr(x, "reason", None) == "action_family_unknown" for x in typo),
+          " | ".join(str(getattr(x, "reason", x)) for x in typo))
+
+    # R70.4 -- round 1 of the spec row's own finding, still true.
+    empty = both(lambda r: r.projection("console", budget=10,
+                                        order=("catalogue_console",), namespace="dot"))
+    check("R70.4  ...and an empty namespace is still a legitimate scope",
+          all(not getattr(x, "refused", False) and not isinstance(x, Refusal)
+              for x in empty),
+          " | ".join(str(getattr(x, "counts", getattr(x, "reason", x))) for x in empty))
+
+    # R70.5 -- store-wide scope: the whole store DOES declare a surface, so a group
+    # nobody anywhere carries is still a typo.
+    wide = both(lambda r: r.projection("console", budget=10,
+                                       order=("catalogue_consle",)))
+    check("R70.5  ...and a store-wide projection over an unknown group is still a typo",
+          all(getattr(x, "reason", None) == "action_family_unknown" for x in wide),
+          " | ".join(str(getattr(x, "reason", x)) for x in wide))
+
+
 def main() -> int:
     print("UC3 -- NYC Open Data, three agencies, one word. ACTIONS.md 13\n")
 
@@ -284,6 +373,26 @@ def main() -> int:
     check("R1-A4  a FILTERED invocations() answer is never `complete` -- a floor, not a total",
           before.complete is False and reg.invocations().complete is True,
           f"filtered={before.complete} unfiltered={reg.invocations().complete}")
+
+    # **Row 6c, ruling R70: §10's design test, re-run over the many-publishers
+    # catalogue that is UC3's own shape.**
+    #
+    # Rule 10-9 judged a typo against the STORE-WIDE pool, so an ingestion host got
+    # zeroes while it was alone and a REFUSAL the moment an unrelated co-tenant
+    # registered one surfaced family. UC3 is a catalogue of 84 publishing agencies
+    # **[Observed, the pinned Socrata catalog: 2,399 datasets, 84 agencies]**, so a
+    # co-tenant is the ordinary condition. The narrowed rule -- *a typo is an `order`
+    # naming groups no family in THIS SCOPE carries, where the scope declared any
+    # surface at all* -- is what R70 takes, and this is the walk that decided it.
+    #
+    # Expected outcomes, STATED BEFORE THE WALK-THROUGH (the shape 11.1 uses):
+    #   R70.1  an ingestion host alone on the store gets zeroes
+    #   R70.2  ...and STILL gets zeroes when a co-tenant registers a surfaced family
+    #   R70.3  ...while a scope that DOES use surfaces still catches a misspelling
+    #   R70.4  ...and an empty namespace is still a legitimate scope (round 1's finding)
+    #   R70.5  ...and a store-wide projection over a group nobody carries is still a typo
+    print("\n10.3 R70 -- rule 10-9 over UC3's many-publishers catalogue:")
+    _r70_design_test(check)
 
     # **Row 6b, brief item 5: the same questions, asked of the SHIPPED registry.**
     # The kit leg above is what makes this probe's pre-registered numbers comparable run

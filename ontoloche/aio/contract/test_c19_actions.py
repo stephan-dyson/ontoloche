@@ -2319,11 +2319,12 @@ async def test_c19_54_a_host_with_no_surfaces_gets_zeroes_rather_than_a_typo_ref
     a typo** -- rule 10-6 firing on a host that simply has no surfaces. An ingestion
     pipeline has no chat surface, no tool array and no provider cap.
 
-    So the typo judgement requires that **some** family somewhere declares a surface at
-    all; and it is made against **every registered family**, not against the
-    ``namespace``-filtered pool, because an empty *namespace* is a legitimate scope where
-    an unknown *group* is a misspelling. Round 1 found the filtered version refusing a
-    real projection over an empty namespace.
+    So the typo judgement requires that a family declares a surface at all -- and
+    **ruling R70, row 6c**, narrows *where it looks* to **this scope**: the
+    ``namespace``-filtered pool, not the store-wide one. An empty *namespace* is a
+    legitimate scope where an unknown *group* is a misspelling; round 1 of the spec row
+    found a filtered version with no such condition refusing a real projection over an
+    empty namespace, and ``C19-74`` holds the other direction.
     """
     registry = await make_registry(adapter)
     for i in range(4):
@@ -2334,11 +2335,64 @@ async def test_c19_54_a_host_with_no_surfaces_gets_zeroes_rather_than_a_typo_ref
     assert out.counts == {"catalogue_ingest": 0}
     assert out.known == 0
 
-    # An empty NAMESPACE is a legitimate scope, judged against every registered family.
+    # An empty NAMESPACE is a legitimate scope: it declares no surface, so it answers
+    # with zeroes rather than refusing. Round 1 of the spec row's own finding.
     await action_family(registry, "elsewhere", reachability=["task"], namespace="dpr")
     scoped = await registry.projection("s", budget=10, order=("task",), namespace="default")
     assert not isinstance(scoped, Refusal), "an empty namespace answers with zeroes"
     assert scoped.counts == {"task": 0}
+
+@NEEDS_ATTRIBUTES
+async def test_c19_74_a_co_tenants_surface_cannot_make_a_neighbours_projection_a_typo(
+    adapter, make_registry
+):
+    """Rule **10-9** as **ruling R70** narrows it, and the design test that decided it.
+
+    **The defect [Observed, row 6b's Q72, reproduced by row 6c's design test over UC3's
+    many-publishers catalogue].** The typo judgement was made against the **store-wide**
+    pool, so an ingestion host whose families all declare ``reachability=()`` got zeroes
+    while it was **alone** on the store and a **refusal** the moment an unrelated
+    co-tenant registered one family with a surface. Nothing about the ingestion host
+    changed between the two calls. UC3 is dozens of publishers in one catalogue, so
+    *"somebody else's namespace"* is the ordinary condition rather than the exotic one --
+    and a rule whose answer depends on data outside the scope it was asked about is
+    mechanism **C** committed by the call built to surface it.
+
+    The narrowed rule: *a typo is an ``order`` naming groups no family in **this scope**
+    carries, where the scope declared any surface at all.* Both prior readings were
+    wrong and each cost a round -- ``C19-54`` holds the empty-namespace direction, this
+    id holds the co-tenant direction, and the third assertion holds the half a careless
+    fix deletes: **a scope that does use surfaces still catches a misspelling.**
+    """
+    registry = await make_registry(adapter)
+    for i in range(4):
+        await action_family(registry, f"ingest_dataset_{i}", reachability=[], namespace="dpr")
+
+    alone = await registry.projection(
+        "catalogue_ingest", budget=10, order=("catalogue_ingest",), namespace="dpr"
+    )
+    assert not isinstance(alone, Refusal), "a host with no surfaces is not a typo"
+    assert alone.counts == {"catalogue_ingest": 0}
+
+    # A CO-TENANT registers a surfaced family. Nothing about `dpr` changed.
+    await action_family(
+        registry, "close_311_request", reachability=["catalogue_console"],
+        namespace="oti_311",
+    )
+    after = await registry.projection(
+        "catalogue_ingest", budget=10, order=("catalogue_ingest",), namespace="dpr"
+    )
+    assert not isinstance(after, Refusal), (
+        "a co-tenant's surface is out of scope and cannot make this a typo"
+    )
+    assert after.counts == alone.counts, "the same call gives the same answer"
+
+    # ...and the half a careless fix deletes: a scope that DOES use surfaces still
+    # catches a misspelling.
+    typo = await registry.projection(
+        "console", budget=10, order=("catalogue_consle",), namespace="oti_311"
+    )
+    assert isinstance(typo, Refusal) and typo.reason == "action_family_unknown"
 
 @NEEDS_ATTRIBUTES
 async def test_c19_58_a_repeated_group_is_charged_once_and_fits_never_intersects_evicted(

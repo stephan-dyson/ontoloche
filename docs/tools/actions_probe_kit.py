@@ -1168,20 +1168,22 @@ class ActionRegistry:
                     grouped[group].append(f)
                     selected += 1
                     break
-        declares_any_surface = any(
-            f.reachability for f in self.families.values() if f.reversibility is not None)
+        declares_any_surface = any(f.reachability for f in pool)
         if declares_any_surface and not any(
-                g in f.reachability
-                for f in self.families.values()
-                if f.reversibility is not None
-                for g in order):
-            # A typo, judged against EVERY registered family rather than against
-            # the namespace-filtered pool: an empty NAMESPACE is a legitimate
-            # scope, not a misspelling. Round 1 found the filtered version
-            # refusing a real projection over an empty namespace.
+                g in f.reachability for f in pool for g in order):
+            # A typo, judged against THIS SCOPE's pool -- ruling **R70**, row 6c.
+            # Round 1 of the spec row judged against the namespace-filtered pool
+            # with no *declares any surface* condition and refused a real
+            # projection over an empty namespace; the fix moved the judgement
+            # store-wide, and an ingestion host then got a REFUSAL the moment an
+            # unrelated co-tenant registered one surfaced family (Q72). The scoped
+            # pool answers both, and UC3's many-publishers catalogue is the design
+            # test that decided it.
             return Refusal("action_family_unknown",
                            {"order": list(order), "surface": surface,
-                            "why": "no registered family carries any of these groups"})
+                            "namespace": namespace,
+                            "why": "no registered family in this scope carries any "
+                                   "of these groups"})
 
         capacity = budget - reserved
         used = 0
