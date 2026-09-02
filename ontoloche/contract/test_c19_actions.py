@@ -4455,6 +4455,12 @@ def test_c19_95_consumers_at_risk_reads_one_report_per_family_and_names_what_it_
 
 
 @NEEDS_INVOCATIONS
+# `review_invocation` refuses `cannot_record_override` where a review cannot be
+# recorded, which is correct and is this test's SCAFFOLDING rather than its subject.
+# Stacking is honoured since round 1's `iter_markers` fix -- `get_closest_marker`
+# silently kept only the innermost, which is how three ids ran in configurations whose
+# fixtures cannot exist.
+@pytest.mark.requires_capability("stores_events", "stores_invocation_events")
 def test_c19_96_a_review_says_whether_the_invocation_was_ever_in_a_queue(
     adapter, make_registry
 ):
