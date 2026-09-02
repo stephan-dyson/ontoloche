@@ -1380,8 +1380,11 @@ def test_c9_29_a_second_retirement_is_a_no_op_and_writes_no_alias_onto_a_second_
     **Fixed the way the sibling call already answers the identical question**, and the
     fix is also the more correct answer to what the old behaviour was answering badly:
     rewriting a standing tombstone's four retirement columns is an **edit** of a
-    provenance-bearing row, which §5.8 forbids. The path to change a successor is
-    `reinstate` then `retire`.
+    provenance-bearing row, which §5.8 forbids. **The path to change a successor is
+    `retire` the SUCCESSOR, then `reinstate`, then `retire`** -- `reinstate` refuses
+    `successor_active` non-overridably while the successor is live, and its own
+    `detail["path_back"]` says so *(round 2's fix-auditor lens; the first cut of this
+    sentence prescribed a remedy the registry refuses)*.
     """
     registry = make_registry(adapter)
     for name in ("alpha", "beta", "gamma"):
@@ -1508,3 +1511,133 @@ def test_c9_31_the_alias_transfer_is_its_own_event_and_not_a_retirement(
     assert transfer, events
     assert transfer[0].detail["aliases_added"] == ["zzz_widget_flag"]
     assert transfer[0].detail["from"] == "commentable"
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_32_the_retired_rows_own_name_is_not_transferred_either(
+    adapter, make_registry
+):
+    """Row 6c, round 3, closing round 2's fix-auditor MAJOR — *`C9-30`'s filter was
+    one-sided.*
+
+    `C9-28` forbids adding the retired row's **own name** to the successor's aliases:
+    the succession chain already answers it at 1.0, so a second copy is a second home
+    for one fact. `C9-30` then dropped the **successor's** name and nothing else — so a
+    retired row carrying its own name inside its own alias list still transferred it,
+    which is `C9-28`'s forbidden write arriving by a third route.
+
+    **[Observed, before the fix]** ``taggable.aliases == ('commentable', 'zeta')``.
+
+    And the skipped words are **stated** rather than silently filtered: a caller who
+    hands this call two words and sees one arrive is owed the reason, which is §5.8's
+    rule about corrections pointed at a drop instead of at an edit.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "commentable", kind="predicate", definition="a capability")
+    seed(registry, "taggable", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    seed(registry, "bbb_memo", predicates=["commentable", "taggable"])
+    rows = registry.import_types(
+        [{"name": "commentable", "status": "active",
+          "aliases": ["commentable", "zzz_flag"], "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert rows and set(rows[0].aliases or ()) == {"commentable", "zzz_flag"}
+
+    out = registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(out, TypeEntry), out
+    survivor = [t for t in registry.list_types("predicate").types if t.name == "taggable"][0]
+    assert "commentable" not in survivor.aliases, (
+        "C9-28: the retired row's own name has a home already -- the succession chain",
+        survivor.aliases,
+    )
+    assert "zzz_flag" in survivor.aliases, "and the transfer still happened"
+
+    transfer = [
+        e
+        for e in registry.provenance("taggable", namespace="default").history
+        if e.event == "aliases_transferred"
+    ]
+    assert transfer, "the transfer is recorded"
+    assert transfer[0].detail["aliases_not_added"] == ["commentable"], (
+        "a word this call deliberately did not write is STATED, never silently dropped",
+        transfer[0].detail,
+    )
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_33_the_alias_transfer_is_announced_at_the_call_that_performs_it(
+    adapter, make_registry
+):
+    """Row 6c, round 3, closing round 1's integrator MINOR — *the write lands on the
+    successor and the call returns the tombstone.*
+
+    R75's transfer moves a word from one identity to another, and the caller performing
+    it got back an entry carrying the **retired** row's own aliases with no signal that a
+    second row had started answering to them. The `aliases_transferred` **event** is on
+    the survivor: the right home for the history, the wrong one for the caller, because
+    reading it means already knowing to look.
+
+    `aliases_transferred:<successor>` is the thirty-fifth warning value, and it carries
+    the successor's **name** because *which row answers now* is the half a caller acts
+    on. A warning and never a refusal: nothing was prevented.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "commentable", kind="predicate", definition="a capability")
+    seed(registry, "taggable", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    registry.import_types(
+        [{"name": "commentable", "status": "active", "aliases": ["zzz_widget_flag"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    out = registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(out, TypeEntry), out
+    assert "aliases_transferred:taggable" in out.warnings, (
+        "the call that moved the word says so, and says where it went",
+        out.warnings,
+    )
+
+    # ...and a retirement that transferred NOTHING does not claim it did.
+    seed(registry, "quiet_one", kind="predicate", definition="a capability")
+    seed(registry, "quiet_two", kind="predicate", definition="a capability")
+    seed(registry, "ccc_draft", predicates=["quiet_one", "quiet_two"])
+    plain = registry.retire(
+        "quiet_one", "folded in", retired_by="user:sd", successor="quiet_two",
+        force=True,
+    )
+    assert isinstance(plain, TypeEntry), plain
+    assert not [w for w in plain.warnings if w.startswith("aliases_transferred")], (
+        "a warning that never turns off is noise -- row 3d's own lesson",
+        plain.warnings,
+    )
+
+
+def test_c9_34_no_consumer_evidence_says_what_it_could_not_see_about_this_kind(
+    adapter, make_registry
+):
+    """Row 6c, round 3, closing round 1's kill-row MINOR — *the right refusal reached
+    by a sentence about the wrong fact.*
+
+    On a backend that cannot index membership an empty ``gates_on`` means *we could not
+    look*, and `retire` refuses `no_consumer_evidence` for that reason. The refusal is
+    correct. Its `why` said **"this backend cannot compute a predicate's extent"**
+    whatever it was retiring — about an ENTITY, which has no extent and never had one.
+
+    `C9-19`'s own class one noun along, in the one field a caller reads to decide what
+    to do next.
+    """
+    registry = make_registry(DegradedAdapter(adapter, indexes_membership=False))
+    seed(registry, "note", definition="a note")
+    seed(registry, "memo", definition="a memo")
+    out = registry.retire("note", "folded into memo", retired_by="user:sd")
+    assert isinstance(out, Refusal) and out.reason == "no_consumer_evidence", out
+    why = out.detail["why"]
+    assert "predicate's extent" not in why, ("an entity has no extent", why)
+    assert "entity" in why, ("the sentence names the kind it could not see", why)

@@ -890,3 +890,79 @@ def test_c12_18_declared_predicates_is_a_required_keyword(adapter, make_registry
         "a default here is what let three of four callers omit the operand refusal #1 "
         "cannot work without -- R64's own reasoning, one guard along"
     )
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c12_19_an_import_that_removes_a_standing_alias_says_so_and_records_it(
+    adapter, make_registry
+):
+    """Row 6c, round 1 kill-row `m1` and round 2 kill-row `m4`, closed in round 3 —
+    *an import writes `aliases` wholesale, and dropping one was silent.*
+
+    Every word the standing row answered to and the dump does not name is **erased**,
+    with no refusal, no warning and no event — including one ruling **R75** had just
+    transferred there in the same store. A word that resolved at confidence 1.0 stops
+    resolving, and `INTERFACE.md` §5.3 calls that confidence a guarantee.
+
+    **[Observed, before the fix]** ``beta.aliases`` went ``('zeta',)`` → ``()`` on an
+    ordinary import whose warnings were ``('predicate_requires_review',)``, with the
+    `aliases_transferred` event **still standing** and asserting a fact the store no
+    longer held.
+
+    Not a refusal: removing an alias is a legitimate act and an import is a vocabulary
+    arriving *already decided*, which is why this call refuses almost nothing. What it
+    owes is what §5.8 asks of any correction — **say it, and record it as a new event
+    rather than as an edit.**
+    """
+    registry = make_registry(adapter)
+    seed(registry, "alpha", kind="predicate", definition="a capability")
+    seed(registry, "beta", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["alpha", "beta"])
+    seed(registry, "bbb_memo", predicates=["alpha", "beta"])
+    registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zzz_moved"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert isinstance(
+        registry.retire(
+            "alpha", "beta says it better", retired_by="user:sd", successor="beta",
+            force=True,
+        ),
+        TypeEntry,
+    )
+    survivor = [t for t in registry.list_types("predicate").types if t.name == "beta"][0]
+    assert "zzz_moved" in survivor.aliases, "R75's transfer happened"
+
+    rows = registry.import_types(
+        [{"name": "beta", "status": "active", "aliases": [], "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert rows and isinstance(rows[0], TypeEntry), rows
+    assert "aliases_removed:zzz_moved" in rows[0].warnings, (
+        "the call that took the word away says which word",
+        rows[0].warnings,
+    )
+    after = [t for t in registry.list_types("predicate").types if t.name == "beta"][0]
+    assert "zzz_moved" not in after.aliases, "the removal itself is still permitted"
+
+    removed = [
+        e
+        for e in registry.provenance("beta", namespace="default").history
+        if e.event == "aliases_removed"
+    ]
+    assert removed, (
+        "INTERFACE.md 5.8 -- a correction is a NEW EVENT, never an edit; the removal "
+        "half owed one too, or the transfer's own record stands alone asserting a fact "
+        "the store no longer holds"
+    )
+    assert removed[0].detail["aliases_removed"] == ["zzz_moved"], removed[0].detail
+
+    # ...and an import that removes NOTHING does not claim it did.
+    quiet = registry.import_types(
+        [{"name": "beta", "status": "active", "aliases": [], "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert not [
+        w for w in quiet[0].warnings if w.startswith("aliases_removed")
+    ], ("a signal that never turns off is noise", quiet[0].warnings)

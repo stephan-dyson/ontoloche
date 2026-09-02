@@ -3797,3 +3797,222 @@ async def test_c19_86_projection_names_its_scope_and_says_which_empty_it_is(
     for budget, reserved in ((-5, 0), (10, -1), (3, 4)):
         with pytest.raises(ValueError):
             await registry.projection("s", budget=budget, reserved=reserved, order=("console",))
+
+@NEEDS_INVOCATIONS
+@pytest.mark.requires_capability("stores_edges", "stores_events")
+async def test_c19_87_an_unrelated_input_does_not_drag_its_namespace_into_the_warning(
+    adapter, make_registry
+):
+    """Rule **2.5-12**. **MAJOR, round 2's fix-auditor lens** -- *`C19-83`'s fix
+    reintroduced the false positive it was written to remove.*
+
+    `_input_namespaces` unions every namespace **any** input mentions, so an input with
+    nothing to do with the edge drags its namespace into the candidate set and the
+    warning fires about a family that is live where the edge went -- the exact second
+    direction `C19-83` exists to close, one field along.
+
+    **[Observed]** `person_links` ACTIVE in `default` where the edge lands, retired in
+    `tenant_a` named only by an unrelated `cfg` input:
+    ``('edge_family_retired:person_links',)`` at **both** doors.
+
+    Two fixes, because the two doors know different things. The ledger door is handed
+    ``observed_effects`` and therefore knows **where the edge went**, so an
+    input-determined declaration is judged there and nowhere else. The gate has no such
+    fact -- the invocation has not happened -- so it warns only when **every** candidate
+    that has the family has retired it: *we do not know where it lands* is not *it was
+    retired*, which is Rule U in the field 2.5-11 added to state an absence.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "person")
+    await seed(registry, "cfg", namespace="tenant_a")
+    await edge_family(registry, "person_links", level="instance")
+    await edge_family(registry, "person_links", level="instance", namespace="tenant_a")
+    await action_family(
+        registry, "link_people",
+        inputs=[InputSpec("who", "instance"), InputSpec("cfg", "instance", required=False)],
+        effects=[Effect(op="add_edge", family="person_links")],
+    )
+    assert not isinstance(
+        await registry.retire(
+            "person_links", reason="superseded", retired_by="user:sd",
+            namespace="tenant_a", force=True,
+        ),
+        Refusal,
+    )
+    inputs = {
+        "who": InstanceRef(TypeRef("default", "entity", "person"), "1"),
+        "cfg": InstanceRef(TypeRef("tenant_a", "entity", "cfg"), "c1"),
+    }
+    gate = await registry.preflight("link_people", inputs, actor="user:sd")
+    assert gate.warnings == (), (
+        "the family is ACTIVE in `default`, where the edge lands; the retired one is in "
+        "a namespace only an unrelated input mentions",
+        gate.warnings,
+    )
+    filed = await registry.record_invocation(
+        "link_people", inputs, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by=gate.approved_by, judged=gate,
+        observed_effects=[
+            Effect(op="add_edge", family="person_links", namespace="default")
+        ],
+    )
+    assert not [
+        w for w in filed.warnings if w.startswith("edge_family_retired")
+    ], ("the ledger knows the edge landed in `default`", filed.warnings)
+
+    # ...and `C19-83`'s TRUE direction still fires: retired in every candidate that has
+    # it. Narrowing a guard that must keep refusing is how a fix deletes a rule.
+    await seed(registry, "person", namespace="tenant_a")
+    only_a = {
+        "who": InstanceRef(TypeRef("tenant_a", "entity", "person"), "1"),
+        "cfg": InstanceRef(TypeRef("tenant_a", "entity", "cfg"), "c1"),
+    }
+    still = await registry.preflight("link_people", only_a, actor="user:sd")
+    assert "edge_family_retired:person_links" in still.warnings, (
+        "every candidate holding this family has retired it", still.warnings
+    )
+
+@pytest.mark.requires_capability("stores_attributes", "stores_events")
+async def test_c19_88_the_scope_census_tells_an_all_retired_scope_from_a_typod_one(
+    adapter, make_registry
+):
+    """Rule **10-11**. **MAJOR, round 2's fix-auditor lens** -- *`C19-86`'s scope
+    sentence asserts a falsehood.*
+
+    `projection` probed the scope with ``list_types("action", namespace=...)``, which
+    defaults to ``include_retired=False`` -- so ``scope_rows`` counted **active** rows,
+    which makes it the same number as ``scope_active``, leaves the ``scope_active == 0``
+    branch **unreachable on all three legs**, and tells an all-retired scope that it
+    *"holds no kind=action row of any status"*.
+
+    **[Observed]** ``list_types("action", namespace="tenant_a")`` -> ``[]`` while
+    ``include_retired=True`` -> ``[('publish_doc', 'retired')]``, with the retired-only
+    sentence **byte-identical** to the typo'd-scope one. A report whose job is saying
+    *which* empty this is earns nothing if it cannot tell them apart.
+    """
+    registry = await make_registry(adapter)
+    await action_family(registry, "publish_doc", reachability=["console"], namespace="tenant_a")
+    assert not isinstance(
+        await registry.retire(
+            "publish_doc", reason="withdrawn", retired_by="user:sd",
+            namespace="tenant_a", force=True,
+        ),
+        Refusal,
+    )
+    retired = await registry.projection(
+        "s", budget=10, order=("console",), namespace="tenant_a"
+    )
+    typo = await registry.projection(
+        "s", budget=10, order=("console",), namespace="tenant_zzz"
+    )
+    assert retired.counts == {"console": 0} and typo.counts == {"console": 0}
+    assert "the SCOPE is empty" in (typo.why_incomplete or ""), typo.why_incomplete
+    assert "the SCOPE is empty" not in (retired.why_incomplete or ""), (
+        "a scope holding a retired family is not a scope holding nothing",
+        retired.why_incomplete,
+    )
+    assert "0 active" in (retired.why_incomplete or ""), retired.why_incomplete
+    assert "retired" in (retired.why_incomplete or ""), retired.why_incomplete
+
+    # ...and the pool stays ACTIVE-ONLY: a retired family is not selectable, and
+    # counting one would change the arithmetic this call exists for.
+    assert retired.known == 0, retired.known
+
+@NEEDS_INVOCATIONS
+async def test_c19_89_the_review_queues_rule_u_fallback_is_stated_and_counted(
+    adapter, make_registry
+):
+    """Rule **6-12**. **MINOR, round 2's fix-auditor lens** -- *`C19-84`'s Rule-U
+    fallback is unwarned.*
+
+    A row carrying no ``declared_policy.approval_mode`` -- filed before the field
+    existed, or by a backend that keeps none -- falls back to the family's mode
+    **today**, which is the entire defect `C19-84` closed, fully live for that row. The
+    comment claimed *"the report says the set is a floor either way"*; that was true
+    only of ``complete=False``, which is a sentence about the **filter**.
+
+    The clause names **how many** rows fell back, because *some of these rows* and *all
+    of these rows* are different facts to an operator draining a queue.
+    """
+    registry = await make_registry(adapter)
+    await action_family(registry, "publish", approval_mode="review")
+    filed = await registry.record_invocation(
+        "publish", {}, actor="user:sd", outcome="applied", approved_by="user:sd",
+    )
+    assert not isinstance(filed, Refusal), filed
+
+    ordinary = await registry.invocations(unreviewed=True)
+    assert not isinstance(ordinary, Refusal), ordinary
+    assert "judged against the family's mode TODAY" not in (
+        ordinary.why_incomplete or ""
+    ), ("every row here carries its own mode of record", ordinary.why_incomplete)
+
+    # **A backend that kept no policy of record, as a READ-SIDE double.** The store
+    # cannot be edited into that shape -- `put_invocation` refuses to overwrite an
+    # existing id, which is the ledger's own append-only rule -- so the condition is
+    # constructed the way round 2's own lens constructed it: a proxy that answers the
+    # read with the field absent. That is exactly what a backend filing rows before the
+    # field existed looks like from here.
+    class _NoPolicyOfRecord:
+        def __init__(self, inner):
+            object.__setattr__(self, "inner", inner)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def __setattr__(self, name, value):
+            setattr(self.inner, name, value)
+
+        async def find_invocations(self, **kwargs):
+            page = await self.inner.find_invocations(**kwargs)
+            return type(page)(
+                **{
+                    **page.__dict__,
+                    "records": tuple(
+                        type(r)(**{**r.__dict__, "declared_policy": {}})
+                        for r in page.records
+                    ),
+                }
+            )
+
+    stripped = list((await registry.adapter.find_invocations(namespace="default")).records)
+    assert stripped, "the fixture filed one"
+    blind = await make_registry(_NoPolicyOfRecord(adapter))
+    fell_back = await blind.invocations(unreviewed=True)
+    assert "judged against the family's mode TODAY" in (
+        fell_back.why_incomplete or ""
+    ), ("a fallback nobody can see is a fallback nobody can act on",
+        fell_back.why_incomplete)
+    assert f"{len(stripped)} of " in (fell_back.why_incomplete or ""), (
+        "some and all are different facts", fell_back.why_incomplete
+    )
+
+def test_c19_90_the_flat_form_refusal_says_which_of_its_two_failures_this_is():
+    """Rule **2.5-13**. **MAJOR, round 2's fix-auditor lens** -- *`C19-82`'s `why` is
+    wrong for one of the two cases it covers.*
+
+    A segment carrying ``#`` makes `ref_key` write a string `parse_ref` reads back as a
+    **different reference** -- the BLOCKING of round 1, and the sentence was written for
+    it. A **namespace** carrying ``:`` makes `ref_key` write a string `parse_ref`
+    **raises** on: nothing is misread, the ledger row is simply unreadable.
+
+    **[Observed]** ``"org:beacon:entity:person"`` -> ``ValueError`` naming four
+    segments, under a `why` telling the caller it *"reads back as a DIFFERENT
+    reference"* -- which sends it looking for a misreading that does not happen, in the
+    one field this refusal exists to make actionable.
+    """
+    from ontoloche.actions import flat_form_problem
+
+    misread = flat_form_problem(TypeRef("beacon", "entity", "person#p-1"))
+    assert misread and "DIFFERENT reference" in misread, misread
+    assert parse_ref(ref_key(TypeRef("beacon", "entity", "person#p-1"))) != TypeRef(
+        "beacon", "entity", "person#p-1"
+    ), "and the misreading is real, which is why that sentence is right for this case"
+
+    unreadable = flat_form_problem(TypeRef("org:beacon", "entity", "person"))
+    assert unreadable and "RAISES" in unreadable, unreadable
+    assert "DIFFERENT reference" not in unreadable, (
+        "nothing is misread here; the row cannot be read at all", unreadable
+    )
+    with pytest.raises(ValueError):
+        parse_ref(ref_key(TypeRef("org:beacon", "entity", "person")))

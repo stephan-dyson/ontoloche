@@ -393,6 +393,34 @@ WARNING_VALUES = (
     # record. It is a WARNING and never a refusal, for 5.4's own reason and for 2.5's:
     # refusing to record what already occurred is the worst available answer.
     "declaration_unjudged",
+    # INTERFACE.md 5.4, ruling **R75**, row 6c's THIRD adversarial round -- the
+    # thirty-fifth. `TypeEntry`, returned by `retire(successor=)` when the call
+    # transferred the retired row's aliases onto its successor. Carries the successor's
+    # name, because *which row answers now* is the half a caller acts on.
+    #
+    # R75's write lands on the SUCCESSOR and the call returns the TOMBSTONE, so the one
+    # act that moved a word from one identity to another was invisible at the call that
+    # performed it: the caller got back an entry still carrying the retired row's own
+    # aliases and nothing saying a second row had started answering to them. The
+    # `aliases_transferred` EVENT is on the survivor -- the right home for the history,
+    # the wrong one for the caller, because reading it means already knowing to look.
+    # Round 1 raised it and left it open pending a value; the value is this one.
+    "aliases_transferred",
+    # INTERFACE.md 5.4/5.9, row 6c's first and second adversarial rounds, closed in the
+    # third -- the thirty-sixth. `TypeEntry`, returned by `import_types` when the
+    # incoming row's `aliases` REPLACE a standing row's and words are lost.
+    #
+    # An import writes `aliases` wholesale, so every word the standing row answered to
+    # and the dump does not name was erased with no refusal, no warning and no event --
+    # including one ruling R75 had just transferred there. **[Observed]** `beta.aliases`
+    # went `('zeta',)` -> `()` on an ordinary import, with `zeta` resolving at 1.0 before
+    # and scoring as a proposal after, and the `aliases_transferred` event still standing
+    # and asserting a fact the store no longer held.
+    #
+    # Not a refusal -- removing an alias is a legitimate act, and an import is a
+    # vocabulary arriving already decided. What it owes is what INTERFACE.md 5.8 asks of
+    # any correction: say it, and record it as a new event rather than as an edit.
+    "aliases_removed",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

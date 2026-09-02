@@ -2907,10 +2907,19 @@ class Registry:
         # question the old behaviour was answering badly: rewriting `retire_reason`,
         # `retired_by`, `retired_at` and `successor` on a standing tombstone is an EDIT
         # of a provenance-bearing row, and INTERFACE.md 5.8's rule is that *a correction
-        # is a new event, never an edit*. The path to change a successor is
-        # `reinstate` then `retire` -- two ordinary calls that each record who did them,
-        # which is exactly the path `successor_active`'s own `detail` prescribes for the
-        # neighbouring case.
+        # is a new event, never an edit*.
+        #
+        # **The path to change a successor is `retire` the SUCCESSOR, then `reinstate`,
+        # then `retire`** -- three ordinary calls that each record who made them.
+        # *(Round 2's fix-auditor lens found this sentence prescribing a remedy the
+        # registry refuses: the first cut said "`reinstate` then `retire`", and
+        # `reinstate` refuses `successor_active` NON-OVERRIDABLY whenever the successor
+        # is live, which is the ordinary case for a row whose successor a caller wants
+        # to change. **[Observed, both legs and the async mirror]**
+        # `Refusal('successor_active', ..., path_back="retire 'beta' first")` -- the
+        # refusal's own `detail` had the correct step one all along, and three
+        # documents copied the wrong one from each other. A remedy nobody can run is
+        # the same defect as an unreachable guard, in prose.)*
         if rec.status == "retired":
             return self._entry(rec, extra_warnings=("retire_no_op:already_retired",))
 
@@ -2920,6 +2929,14 @@ class Registry:
         #: transfer*, which is a stated absence rather than an empty write.
         repoint_onto: TypeRecord | None = None
         repoint_words: tuple[str, ...] = ()
+        #: the successor that took the words, once the write has actually happened --
+        #: ``None`` whenever nothing moved, which is what keeps the warning below a
+        #: statement about a write rather than about an intention.
+        transferred_to: str | None = None
+        #: the words the guard cleared and the write deliberately does NOT perform --
+        #: the successor's own name and the retired row's own name, both of which have
+        #: a home already (`C9-28`, `C9-30`, `C9-32`). Reported, never silently dropped.
+        repoint_dropped: tuple[str, ...] = ()
 
         # **`retire(successor=)` IS a collapse, and it gets the merge's guards.**
         # `resolve_type` on a retired name returns its successor at confidence 1.0
@@ -3274,9 +3291,30 @@ class Registry:
                     # write is careful to avoid for `rec.name`, arriving by the other
                     # route. A row does not answer to its own name as an alias; it
                     # answers to it as its name.
+                    # **And the RETIRED row's own name is dropped too, which the first
+                    # cut did not do** (row 6c, round 2, fix-auditor lens, MAJOR).
+                    # `C9-30`'s filter was ONE-SIDED: it dropped `succ.name` and nothing
+                    # else, so a retired row whose own alias list happened to carry its
+                    # own name still transferred it -- **[Observed]**
+                    # `taggable.aliases == ('commentable', 'zeta')` after
+                    # `retire("commentable", successor="taggable")`, which is **exactly
+                    # the write `C9-28` forbids**, arriving by the third route. `C9-28`
+                    # is an id rather than a comment precisely because *"we deliberately
+                    # did not write that"* is what a later row silently reverses, and
+                    # what reversed it here was the fix for its own sibling case.
+                    #
+                    # **The dropped words are STATED rather than silently filtered**, in
+                    # the `aliases_transferred` detail below: a caller who handed this
+                    # call two words and sees one arrive is owed the reason, and a silent
+                    # drop is the shape §5.8 refuses one field along. `C9-32`.
                     repoint_onto = succ
                     repoint_words = tuple(
-                        a for a in transferred if not same_word(a, succ.name)
+                        a
+                        for a in transferred
+                        if not same_word(a, succ.name) and not same_word(a, rec.name)
+                    )
+                    repoint_dropped = tuple(
+                        a for a in transferred if a not in repoint_words
                     )
 
         report = self._consumer_report(rec)
@@ -3314,13 +3352,28 @@ class Registry:
         # `force=True` is the override, recorded in history like any other.
         # Row 3c, after an adversarial review round reproduced the silent retirement.
         if not report.gates_on and not self.caps.indexes_membership and not force:
+            # **The sentence is about THIS row's kind, and it named a predicate's extent
+            # whatever it was retiring** (row 6c, round 1, kill-row lens, MINOR, closed
+            # in round 3). **[Observed, `DegradedAdapter(indexes_membership=False)`]**
+            # `retire("note", successor="memo")` -- two ordinary ENTITIES -- was refused
+            # with *"this backend cannot compute a predicate's extent"*, about a row that
+            # has no extent and never had one. The REFUSAL is correct and stays: an empty
+            # `gates_on` on this backend means *we could not look*. What was wrong is the
+            # `why`, and this is `C9-19`'s own class one noun along -- *the right refusal
+            # reached by a sentence about the wrong fact* -- in the one field a caller
+            # reads to decide what to do next. `C9-34`.
+            unknowable = (
+                "this backend cannot compute a predicate's extent"
+                if rec.kind == "predicate"
+                else "this backend cannot report which rows declare a predicate"
+            )
             return Refusal(
                 "no_consumer_evidence",
                 {
                     "why": (
-                        "this backend cannot compute a predicate's extent, so an empty "
-                        "`gates_on` means we could not look, not that nothing gates on "
-                        "it: " + (self.caps.reason("indexes_membership") or "")
+                        unknowable + ", so an empty `gates_on` means we could not look, "
+                        f"not that nothing gates on this {rec.kind}: "
+                        + (self.caps.reason("indexes_membership") or "")
                     ),
                     "type": type,
                     "overridable": True,
@@ -3423,6 +3476,13 @@ class Registry:
                         name=repoint_onto.name,
                         detail={
                             "aliases_added": list(repoint_words),
+                            # **The words the guard cleared and this write deliberately
+                            # skipped** (row 6c, round 2, `C9-32`): the successor's own
+                            # name and the retired row's own name, each of which already
+                            # has one home. A reader comparing the tombstone's aliases
+                            # against the survivor's would otherwise find a silent
+                            # difference and no sentence anywhere saying it was meant.
+                            "aliases_not_added": list(repoint_dropped),
                             "from": rec.name,
                             "reason": (
                                 f"{rec.name!r} was retired with {repoint_onto.name!r} "
@@ -3431,7 +3491,31 @@ class Registry:
                             ),
                         },
                     )
-        return self._written(self._entry(stored))
+                    transferred_to = repoint_onto.name
+        # **The transfer is announced AT THE CALL** (row 6c, round 1, integrator lens,
+        # MINOR, left open through round 2 and closed here). The write lands on the
+        # SUCCESSOR and this call returns the TOMBSTONE, so a caller who retired one
+        # word into another got back an entry carrying the retired row's own aliases and
+        # **no signal whatsoever** that a second row had just started answering to them.
+        # The `aliases_transferred` EVENT is on the survivor, which is the right home for
+        # the history and the wrong one for the caller: reading it means already knowing
+        # to look.
+        #
+        # `aliases_transferred` is the **thirty-fifth** warning value, minted here with
+        # its INTERFACE.md §5.4 row per **R3** and carrying the successor's name, because
+        # *which* row now answers is the half a caller acts on. It is a warning and never
+        # a refusal for §5.4's standing reason -- nothing was prevented, and the write is
+        # the one R75 exists to perform. `C9-33`.
+        return self._written(
+            self._entry(
+                stored,
+                extra_warnings=(
+                    (f"aliases_transferred:{transferred_to}",)
+                    if transferred_to is not None
+                    else ()
+                ),
+            )
+        )
 
     # ============================================================= 5.9b reinstate
     def reinstate(
@@ -4265,7 +4349,12 @@ class Registry:
             )
 
         # An acknowledgement that cannot be recorded is refused -- but only AFTER the
-        # four non-overridable guards above. A merge those refuse is refused whether or
+        # **FIVE** non-overridable guards above. *(Four until the kill row's THIRTEENTH
+        # trip added `alias_collision`, and the count in this sentence went stale in the
+        # commit that added the fifth -- named by the trip's own countersignature as
+        # housekeeping for round 3, because a number in a comment that nothing derives
+        # is this repository's fourth-most-repeated defect.)* A merge those refuse is
+        # refused whether or
         # not anything could be written down, and answering `cannot_record_override`
         # there gives the wrong reason for the right outcome: a caller trying to
         # acknowledge past the kill row must be told **predicate_merge, non-overridable**,
@@ -4606,6 +4695,39 @@ class Registry:
             # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
             incoming = tuple(row.get("aliases") or ())
             extra_import_warnings: list[str] = []
+            # **An import REPLACES a standing row's aliases, and dropping one was
+            # silent** (row 6c, round 1 kill-row `m1` and round 2 kill-row `m4`, closed
+            # in round 3). `aliases=tuple(row.get("aliases") or ())` below is a wholesale
+            # write, so every word the standing row answered to and the incoming row does
+            # not name is **erased with no refusal, no warning and no event** --
+            # including a word ruling **R75** transferred there in the same store.
+            #
+            # **[Observed]** `retire("alpha", successor="beta")` transfers `zeta` onto
+            # `beta` and files `aliases_transferred`; an ordinary
+            # `import_types([{"name": "beta", "aliases": []}])` then leaves
+            # `beta.aliases == ()` with `warnings == ('predicate_requires_review',)` --
+            # and the `aliases_transferred` event **still standing**, asserting a fact
+            # the store no longer holds. A word that resolved at confidence 1.0 stops
+            # resolving, and §5.3 calls that confidence a guarantee.
+            #
+            # Not a refusal: removing an alias is a legitimate act and an import is a
+            # vocabulary arriving *already decided*, which is §2.5's own reason this call
+            # refuses almost nothing. What it owes is the two things §5.8 asks of any
+            # correction -- **say it, and record it as a new event rather than as an
+            # edit**. `aliases_removed` is the **thirty-sixth** warning value and the
+            # matching event; the event is what stops the transfer's own record standing
+            # alone. `C12-19`.
+            dropped_aliases: tuple[str, ...] = ()
+            if standing is not None:
+                dropped_aliases = tuple(
+                    w
+                    for w in (standing.aliases or ())
+                    if not any(same_word(w, i) for i in incoming)
+                )
+                if dropped_aliases:
+                    extra_import_warnings.append(
+                        "aliases_removed:" + ",".join(dropped_aliases)
+                    )
             # **The row's own NAME is a word too, and this door never asked** (row 4d,
             # round 1). The alias block below runs only `if incoming:`, so a row whose
             # NAME a live entry already answers to -- carrying no aliases of its own --
@@ -4756,6 +4878,30 @@ class Registry:
                     name=name,
                     detail={"system": system, "foundry_status": foundry_status},
                 )
+                if dropped_aliases:
+                    # **§5.8's rule applied to the REMOVAL half:** *a correction is a new
+                    # event, never an edit.* `aliases_transferred` and `aliases_added`
+                    # record every word this registry gives a row; nothing recorded a
+                    # word taken away, so `provenance` told a reader the row answers to a
+                    # word it no longer answers to and the story ended there. Its own
+                    # event value rather than a detail key on `imported`, for §2.3's
+                    # Cause B: one value carrying two facts is a value meaning neither.
+                    self._append_event(
+                        namespace,
+                        "aliases_removed",
+                        imported_by,
+                        kind=rec.kind,
+                        name=name,
+                        detail={
+                            "aliases_removed": list(dropped_aliases),
+                            "kept": list(incoming),
+                            "reason": (
+                                f"an import of {name!r} from {system!r} replaced this "
+                                f"row's aliases; the words listed here are no longer "
+                                f"answered by it (INTERFACE.md 5.8, 5.9)"
+                            ),
+                        },
+                    )
             out.append(self._written(self._entry(stored)))
         return out
 
@@ -7767,7 +7913,12 @@ class Registry:
         return {ns for ns in out if isinstance(ns, str)}
 
     def _retired_blast_radius(
-        self, namespace: str, effects: Sequence[Effect], inputs: dict | None = None
+        self,
+        namespace: str,
+        effects: Sequence[Effect],
+        inputs: dict | None = None,
+        *,
+        observed: Sequence[Effect] | None = None,
     ) -> list[str]:
         """``edge_family_retired:<name>`` for every declared edge effect whose family is
         retired **at invocation time**. ACTIONS.md 2.5 rule **2.5-11**, ruling **R71**.
@@ -7832,18 +7983,63 @@ class Registry:
                 # set as the fallback for an invocation carrying no inputs at all, which
                 # is the case the declaration door's reading was written for.
                 where = tuple(candidates) or (namespace,)
-            for scope in where:
-                rec = self.adapter.get_type(scope, effect.family, kind="edge")
-                if rec is None or rec.status != "retired":
-                    continue
-                value = f"edge_family_retired:{effect.family}"
-                if value not in out:
-                    # One per FAMILY, not one per effect and not one per namespace: a
-                    # family declaring both `add_edge` and `retract_edge` on one retired
-                    # family has one retired family, and 2.5's own `effect_undeclared`
-                    # counts surplus effects because those are separate facts. This is
-                    # one fact.
-                    out.append(value)
+                # **`C19-83`'s fix REINTRODUCED the false positive it was written to
+                # remove, and round 2's fix-auditor lens found it in round 1's own fix.**
+                # `_input_namespaces` unions every namespace **any** input mentions, so
+                # an input that has nothing to do with the edge drags its namespace into
+                # the candidate set. **[Observed]** `person_links` ACTIVE in `beacon`
+                # where the edge lands, retired in `tenant_a` which only an unrelated
+                # `cfg` input names: `('edge_family_retired:person_links',)` at both
+                # doors, about a family live where the edge went. That is the *exact*
+                # second direction `C19-83` exists to close, one field along.
+                #
+                # **The ledger door knows where the edge actually went, and asking it is
+                # the whole fix.** `record_invocation` is handed `observed_effects`; an
+                # observed effect matching this declaration by `(op, family, kind)` and
+                # landing in one of the candidates says which namespace the input-
+                # determined declaration RESOLVED to, so it is judged there and nowhere
+                # else. `preflight` has no such fact -- the invocation has not happened
+                # -- and falls through to the rule below.
+                if observed:
+                    landed = tuple(
+                        dict.fromkeys(
+                            o.namespace
+                            for o in observed
+                            if o.op == effect.op
+                            and o.family == effect.family
+                            and o.kind == effect.kind
+                            and o.namespace in candidates
+                        )
+                    )
+                    if landed:
+                        where = landed
+            # **Rule U over the candidate set, and this is the half `preflight` needs.**
+            # Where the landing namespace is unknowable, a family that is retired in one
+            # candidate and ACTIVE in another has a live home the edge may reach, and
+            # *we do not know where it lands* is not *it was retired*. So the warning is
+            # carried only when every candidate that HAS the family has retired it; a
+            # candidate where it is unregistered is not evidence in either direction
+            # (rule 2.5-7's door judges that, at the declaration). One candidate --
+            # every explicitly-scoped effect, and every input-determined one the ledger
+            # resolved -- reduces to the plain question. `C19-87`.
+            found = [
+                rec
+                for rec in (
+                    self.adapter.get_type(scope, effect.family, kind="edge")
+                    for scope in where
+                )
+                if rec is not None
+            ]
+            if not found or any(rec.status != "retired" for rec in found):
+                continue
+            value = f"edge_family_retired:{effect.family}"
+            if value not in out:
+                # One per FAMILY, not one per effect and not one per namespace: a
+                # family declaring both `add_edge` and `retract_edge` on one retired
+                # family has one retired family, and 2.5's own `effect_undeclared`
+                # counts surplus effects because those are separate facts. This is
+                # one fact.
+                out.append(value)
         return out
 
     def _why_unknown_tier(self, namespace: str, tier: str | None) -> str:
@@ -8666,7 +8862,16 @@ class Registry:
         # judged, and a warning about a blast radius the actor never declared would be a
         # sentence about the wrong moment. `preflight` carries the same list.
         warnings.extend(
-            self._retired_blast_radius(namespace, effects_of_record, inputs)
+            self._retired_blast_radius(
+                namespace,
+                effects_of_record,
+                inputs,
+                # The ledger door knows where each edge LANDED, so an input-determined
+                # declaration is judged in the namespace the invocation resolved it to
+                # rather than across every namespace any input happened to mention.
+                # `preflight` cannot pass this and does not pretend to. `C19-87`.
+                observed=list(observed_effects),
+            )
         )
 
         # ACTIONS.md 2.7 -- the NAME-level schema governing THIS family's inputs. R10's
@@ -9015,6 +9220,9 @@ class Registry:
             )
         ]
         review_modes: dict[tuple[str, str], bool] = {}
+        #: rows with no `declared_policy.approval_mode` of their own, judged against the
+        #: family's mode TODAY. Counted so the fallback can be STATED -- see below.
+        judged_live = 0
         if unreviewed is not None:
             kept = []
             for rec in rows:
@@ -9050,6 +9258,7 @@ class Registry:
                             fam is not None and fam.approval_mode == "review"
                         )
                     is_review = review_modes[key]
+                    judged_live += 1
                 # BOTH halves above the store: the family's MODE (another row's
                 # attributes, which no primitive can see) and the row's own reviewed
                 # state, which the primitive pushes down and this re-checks for the
@@ -9123,6 +9332,26 @@ class Registry:
             )
         elif filtered:
             why = "a filter suppressed rows; this is a floor, not a total"
+        if judged_live:
+            # **The Rule-U fallback above was UNWARNED, and the comment claimed
+            # otherwise** (row 6c, round 2, fix-auditor lens, MINOR). It says *"the
+            # report says the set is a floor either way"* -- true only because
+            # `complete=False` is on for any filter, which is a sentence about the
+            # FILTER and not about this. On a backend keeping no `declared_policy` the
+            # original defect `C19-84` closed is **fully live** for every such row: the
+            # queue still moves when a steward edits an unrelated field, and
+            # `why_incomplete` said nothing about it.
+            #
+            # Rule U's own standard, applied to the fix rather than to the guard: a
+            # fallback that is invisible is a fallback nobody can act on. The COUNT is
+            # given because *some of these rows* and *all of these rows* are different
+            # facts to an operator draining a queue. `C19-89`.
+            clause = (
+                f"{judged_live} of {len(rows)} row(s) carry no `declared_policy."
+                f"approval_mode` and were judged against the family's mode TODAY, which "
+                f"an amendment can move -- rule 3-8's guarantee does not reach them"
+            )
+            why = f"{why}; {clause}" if why else clause
         return InvocationReport(
             invocations=tuple(built),
             # `known: int | None` and not `int`, because a backend entitled to say *"we
@@ -9138,6 +9367,58 @@ class Registry:
             # existence rather than about anything a caller did.
             warnings=(),
         )
+
+    def _scope_census(
+        self, namespace: str | None
+    ) -> tuple[list[TypeRecord], bool, str | None]:
+        """Every ``kind="action"`` row in ``namespace``, **whatever its status**, paged
+        to exhaustion. ``(records, complete, why)``. Row 6c, round 3, `C19-88`.
+
+        Used by :meth:`projection` for one question only -- *which* empty an all-zero
+        answer is -- and deliberately not for the selectable pool, which stays
+        active-only because a retired family is not selectable and counting one would
+        change the arithmetic §10 exists for.
+
+        **The look is reported, never turned into a fact about the store.** A scan that
+        could not finish returns ``complete=False`` with the backend's own sentence, so
+        the caller is told *we could not read the scope* rather than *the scope is
+        empty* -- Rule U in the field `C19-86` added to STOP a confident empty.
+        """
+        records: list[TypeRecord] = []
+        seen: set[tuple[str, str, str]] = set()
+        after: str | None = None
+        cursors: set[str] = set()
+        complete, why = True, None
+        while True:
+            page = self.adapter.find_types(
+                TypeQuery(
+                    namespace=namespace,
+                    kind="action",
+                    include_retired=True,
+                    after=after,
+                )
+            )
+            for record in page.records:
+                key = (record.namespace, record.kind, record.name)
+                if key not in seen:
+                    seen.add(key)
+                    records.append(record)
+            if not page.complete and page.next_after is None:
+                complete = False
+                why = page.why_incomplete or "the backend could not answer the query"
+                break
+            after = page.next_after
+            if after is None:
+                break
+            if after in cursors:
+                complete = False
+                why = (
+                    "this backend returned a pagination cursor it had already returned "
+                    "(PACKAGE.md 3.4 primitive 6)"
+                )
+                break
+            cursors.add(after)
+        return records, complete, why
 
     # ===================================================== ACTIONS.md 6.4 / 10 projection
     def projection(
@@ -9172,6 +9453,34 @@ class Registry:
                 f"inside it; got budget={budget}, reserved={reserved}"
             )
         listing = self.list_types("action", namespace=namespace)
+        # **The STATUS CENSUS is a second, exhaustive read, and running it off the
+        # active-only listing made `C19-86`'s own sentence a falsehood for two of the
+        # four causes it enumerates** (row 6c, round 2, fix-auditor lens, MAJOR).
+        # `list_types` defaults to `include_retired=False`, so `scope_rows` counted
+        # ACTIVE rows only -- which makes it the same number as `scope_active`, leaves
+        # the `scope_active == 0` branch **unreachable on all three legs**, and tells an
+        # all-retired and an all-proposed scope that they *"hold no `kind="action"` row
+        # of any status"*. **[Observed]** `list_types("action", namespace="tenant_a")`
+        # -> `[]` while `include_retired=True` -> `[('publish_doc', 'retired')]`, and
+        # the retired-only sentence was **byte-identical** to the typo'd-scope one. A
+        # report whose job is saying *which* empty this is earns nothing if it cannot
+        # tell them apart.
+        #
+        # **And the round-2 finding's own enumeration named a cause that cannot exist,
+        # which is worth recording rather than quietly dropping.** It listed an
+        # *all-proposed* scope as a third indistinguishable case. **[Observed]** no code
+        # path in this package ever persists a `TypeRecord` with `status="proposed"` --
+        # a pending proposal is a row in the PROPOSAL store, and `find_types` on a
+        # namespace holding one answers `[]`. So an all-proposed scope really does hold
+        # no `kind="action"` row and the empty-scope sentence is literally true of it;
+        # the four causes are three, and `scope_active == 0` is reached by RETIRED rows,
+        # which is what makes the branch live.
+        #
+        # It is a separate read rather than a widened one because the POOL must stay
+        # active-only -- a retired family is not selectable and counting it would change
+        # the arithmetic this call exists for -- and it is **paged to exhaustion**,
+        # because `list_types` reads one page and this question is a census. `C19-88`.
+        census, census_complete, census_why = self._scope_census(namespace)
         # **Every `kind="action"` row in the scope, whatever its status** -- used only to
         # tell an EMPTY scope from a scope with nothing surfaced. Row 6c, round 1,
         # integrator lens: a typo'd `namespace` produced zeroes, `fits` naming every
@@ -9182,8 +9491,8 @@ class Registry:
         # still `proposed`, and a scope that simply declares no surfaces) were
         # indistinguishable in `why_incomplete`, and only the last of them is the one
         # R70 protects.
-        scope_rows = len(listing.types)
-        scope_active = sum(1 for e in listing.types if e.status == "active")
+        scope_rows = len(census)
+        scope_active = sum(1 for rec in census if rec.status == "active")
         pool = [
             ActionFamily.from_attributes(
                 e.name, e.namespace, dict(e.attributes or {}), e.status
@@ -9326,7 +9635,19 @@ class Registry:
         # families simply declare no surfaces. Saying nothing about which is the empty
         # this call exists to make visible, in the report that says *everything fits*.
         scope_why: str | None = None
-        if scope_rows == 0:
+        if not census_complete:
+            # **And *we could not read the scope* is not *the scope is empty*.** A
+            # backend that could not finish the listing produces `scope_rows == 0` for a
+            # reason that has nothing to do with the namespace, and stamping the
+            # empty-scope sentence on it would be Rule U's forbidden confident answer in
+            # the field this report added to STOP one. Round 2's own lesson at the third
+            # guard: the look is reported, never turned into a fact about the store.
+            scope_why = (
+                "the scope could not be read to exhaustion, so an all-zero answer here "
+                "is not evidence about what the namespace holds: "
+                + (census_why or "the backend could not answer the query")
+            )
+        elif scope_rows == 0:
             scope_why = (
                 f"namespace {namespace!r} holds no `kind=\"action\"` row of any status, "
                 f"so every count here is zero because the SCOPE is empty rather than "
@@ -9335,9 +9656,11 @@ class Registry:
                 else "this store holds no `kind=\"action\"` row of any status"
             )
         elif scope_active == 0:
+            statuses = sorted({rec.status for rec in census})
             scope_why = (
                 f"every `kind=\"action\"` row in this scope is retired or still "
-                f"proposed ({scope_rows} row(s), 0 active), so nothing was selectable"
+                f"proposed ({scope_rows} row(s), 0 active, statuses {statuses}), so "
+                f"nothing was selectable"
             )
         return ProjectionReport(
             surface=surface,
