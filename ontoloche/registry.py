@@ -2173,19 +2173,66 @@ class Registry:
             # EIGHTH trip). `get_type` is a byte match, so a RETIRED `commentable_`
             # left `commentable` free -- and `_alias_holder`, keyed in round 2, scans
             # active rows only. See `_word_rows`.
-            variants, variant_why = self._word_rows(namespace, name, kind=kind)
+            variants, variant_why = self._word_rows(
+                namespace, name, kind=kind, match_aliases=True
+            )
             # **Only a RETIRED variant stands in for the name here.** A LIVE one is
             # `_alias_holder`'s `alias_collision` -- non-overridable, and the answer
             # `C4-13` requires -- and handing it back as *"the name is already taken,
             # here is the entry"* would quietly downgrade a refusal to a courtesy.
             # `C4-13` caught that within one suite run.
-            variants = [
-                r for r in variants if r.name != name and r.status == "retired"
-            ]
-            if variants:
-                existing = variants[0]
-            elif variant_why is not None:
-                alias_check_why = variant_why
+            retired_here = [r for r in variants if r.status == "retired"]
+            named = [r for r in retired_here if same_word(r.name, name)]
+            if named:
+                existing = named[0]
+            else:
+                # **The kill row's FOURTEENTH trip: a word a TOMBSTONE still answers to,
+                # minted as a brand-new row's NAME.** The eighth trip closed the retired
+                # half of the name door above; the retired half of the ALIAS door was
+                # asked by nothing. `_alias_holder` and `_alias_clash` both read
+                # `_active_page`, so they are active-only by design, and `_word_rows`
+                # compared names only -- which left one quadrant of the 2x2 open:
+                #
+                #     |          | ACTIVE rows                   | RETIRED rows        |
+                #     | name     | `_alias_holder` / `get_type`  | `_word_rows`, trip 8|
+                #     | aliases  | `_alias_holder`               | **nothing**         |
+                #
+                # **[Observed, five ordinary calls, no merge, no `force`, no
+                # acknowledgement, on sqlite, both paging doubles and the async
+                # mirror]** `import_types` writes the free word `zeta` onto the live
+                # `alpha`; `alpha` is retired with NO successor -- an ordinary,
+                # permitted governance act -- and its tombstone keeps `('zeta',)` by
+                # §5.8's design; `propose_type("zeta")` is **accepted with no warning at
+                # all** and approved active; ordinary growth declares it. The store now
+                # refuses `merge_types("alpha","zeta")` `predicate_merge`
+                # NON-OVERRIDABLY *and* refuses `reinstate("alpha")` `alias_collision`
+                # NON-OVERRIDABLY -- **the registry itself saying the state is one call
+                # from two active rows on one word, with the tombstone permanently
+                # un-reinstatable.** The guard was at the wrong end: it blocks the row
+                # that wants its word back, not the call that took it.
+                #
+                # Answered exactly as the tombstone's NAME is answered one branch up --
+                # the holder comes back, nothing is written -- because standing rule (c)
+                # is that a tombstone's `name` and its `aliases` are the same kind of
+                # unconsumed permission. Its own value rather than
+                # `name_previously_retired`, because *this word was a retired row's
+                # name* and *a retired row still answers to this word* are two facts and
+                # one word for two facts is §2.3's Cause B. `C4-15`.
+                answering = [
+                    r
+                    for r in retired_here
+                    if any(same_word(a, name) for a in (r.aliases or ()))
+                ]
+                if answering:
+                    holder = answering[0]
+                    return self._entry(
+                        holder,
+                        extra_warnings=(
+                            f"word_previously_retired:{holder.name}",
+                        ),
+                    )
+                if variant_why is not None:
+                    alias_check_why = variant_why
         if existing is not None:
             if existing.status == "retired":
                 # A retired name is not reusable. Silently reusing a retired word is
@@ -2591,6 +2638,39 @@ class Registry:
                     "overridable": False,
                 },
             )
+        # **...and a word a TOMBSTONE still answers to is not free either -- the kill
+        # row's FOURTEENTH trip, at the THIRD mint door** (row 6c, round 3).
+        # `_alias_holder` above reads ACTIVE rows by design, so the window this guard
+        # exists for -- *the word was free when the proposal was made* -- is exactly the
+        # window in which the holder can be RETIRED instead of live. **[Observed]**
+        # `propose_type("zeta")` while the word is free, `import_types` writing `zeta`
+        # onto the live `alpha`, `retire("alpha")`, then `approve` on the pending
+        # proposal: **`zeta` active, warnings `()`** -- and `reinstate("alpha")` refused
+        # `alias_collision` for ever after. R40 forces every `kind="predicate"` down this
+        # two-step path, so this is the door the kill row's own subject must use.
+        #
+        # Answered as the other two mint doors answer it: the holder comes back, nothing
+        # is written. A REFUSAL is not used here even though the neighbouring active
+        # case refuses, because §5.9's rule for a retired word is a courtesy that hands
+        # the caller the row it needs -- `name_previously_retired`'s own treatment -- and
+        # the two branches disagreeing about one fact is what the eighth trip's
+        # countersignature calls one door disagreeing with itself. `C5-13`.
+        word_rows, word_why = self._word_rows(
+            rec.namespace, rec.name, kind=rec.kind, match_aliases=True
+        )
+        answering = [
+            r
+            for r in word_rows
+            if r.status == "retired"
+            and not same_word(r.name, rec.name)
+            and any(same_word(a, rec.name) for a in (r.aliases or ()))
+        ]
+        if answering:
+            return self._entry(
+                answering[0],
+                extra_warnings=(f"word_previously_retired:{answering[0].name}",),
+            )
+        holder_why = holder_why or word_why
         if holder_why is not None:
             # See `propose_type`: reported, never suppressed, and never a refusal that
             # would ban the call on a paging backend.
@@ -3434,11 +3514,22 @@ class Registry:
             #
             # In the same transaction as the tombstone, because a retirement whose
             # redirect half is missing is precisely the state R75's design test found.
-            if repoint_onto is not None and repoint_words:
+            # **A retirement whose words were ALL skipped still has something to say,
+            # and gating the whole block on `repoint_words` made this file's own
+            # sentence false** (row 6c, round 3, fix-auditor lens, MINOR -- inside this
+            # round's own fix). `C9-32` claims the skipped words are *"stated rather than
+            # silently filtered"*, and §5.9 says so in the specification -- and both were
+            # true only when at least one word ALSO survived. **[Observed]** a tombstone
+            # whose aliases are exactly `('taggable',)` (the successor's own name) or
+            # exactly `('commentable',)` (its own) transferred nothing, warned nothing
+            # and filed nothing: the pure case, where the statement is the entire value.
+            # `C9-35`.
+            if repoint_onto is not None and (repoint_words or repoint_dropped):
                 merged_aliases = tuple(
                     dict.fromkeys(tuple(repoint_onto.aliases or ()) + repoint_words)
                 )
-                if merged_aliases != tuple(repoint_onto.aliases or ()):
+                added = merged_aliases != tuple(repoint_onto.aliases or ())
+                if added:
                     self.adapter.put_type(
                         TypeRecord(
                             **{
@@ -3448,6 +3539,10 @@ class Registry:
                             }
                         )
                     )
+                # The statement is filed whether or not a word survived the filter: an
+                # event saying *these words were deliberately not moved* is exactly the
+                # value in the pure case.
+                if added or repoint_dropped:
                     # An alias write with no history is the thing this project refuses:
                     # `merge_types` records `aliases_added` on the survivor and so does
                     # this. A reader asking *"why does the successor answer to this
@@ -3491,7 +3586,11 @@ class Registry:
                             ),
                         },
                     )
-                    transferred_to = repoint_onto.name
+                    # ...but the WARNING claims a transfer, so it is set only where one
+                    # happened. A warning that fires for a write nobody performed is the
+                    # `retire_no_op` defect pointed the other way.
+                    if added:
+                        transferred_to = repoint_onto.name
         # **The transfer is announced AT THE CALL** (row 6c, round 1, integrator lens,
         # MINOR, left open through round 2 and closed here). The write lands on the
         # SUCCESSOR and this call returns the TOMBSTONE, so a caller who retired one
@@ -4659,14 +4758,42 @@ class Registry:
             standing = self.adapter.get_type(namespace, name, kind=row.get("kind", kind))
             if standing is None:
                 # The eighth trip, at the second write door. See `_word_rows`.
+                # **...and the FOURTEENTH at the same door, one field along** (row 6c,
+                # round 3). `match_aliases=True` asks *does any row ANSWER TO this
+                # word?* rather than *is this word a row's name?*, so a word a tombstone
+                # still holds as an alias is no longer free here either. Shipping this
+                # at `propose_type` alone would be *a fix applied at one call site of
+                # three*, which is the single sentence of the ninth, tenth and eleventh
+                # trips -- and `import_types` is a NAME door in its own right, observed
+                # minting the identical row in the trip's own reproduction.
                 variants, _variant_why = self._word_rows(
-                    namespace, name, kind=row.get("kind", kind)
+                    namespace, name, kind=row.get("kind", kind), match_aliases=True
                 )
-                variants = [
-                    r for r in variants if r.name != name and r.status == "retired"
+                retired_here = [r for r in variants if r.status == "retired"]
+                named = [
+                    r for r in retired_here if r.name != name and same_word(r.name, name)
                 ]
-                if variants:
-                    standing = variants[0]
+                if named:
+                    standing = variants[0] if False else named[0]
+                else:
+                    answering = [
+                        r
+                        for r in retired_here
+                        if any(same_word(a, name) for a in (r.aliases or ()))
+                    ]
+                    if answering:
+                        # Nothing is written, and the holder comes back with the word --
+                        # `name_previously_retired`'s treatment at this door, for the
+                        # fact one field along. `C12-21`.
+                        out.append(
+                            self._entry(
+                                answering[0],
+                                extra_warnings=(
+                                    f"word_previously_retired:{answering[0].name}",
+                                ),
+                            )
+                        )
+                        continue
             if standing is not None and standing.status == "retired" and status != "retired":
                 out.append(
                     self._entry(standing, extra_warnings=("name_previously_retired",))
@@ -4718,7 +4845,30 @@ class Registry:
             # matching event; the event is what stops the transfer's own record standing
             # alone. `C12-19`.
             dropped_aliases: tuple[str, ...] = ()
-            if standing is not None:
+            # **The diff is against the row `put_type` will actually OVERWRITE, and
+            # taking `standing` at face value fabricated an event about a different row**
+            # (row 6c, round 3, fix-auditor lens, MAJOR -- inside this round's own fix,
+            # one commit old). `standing` falls back to the EIGHTH trip's variant-spelling
+            # row above (`r.name != name`), which is correct for the
+            # `name_previously_retired` and `live_consumers` guards -- they ask *"is this
+            # WORD spoken for?"* -- and wrong for an alias diff, which asks *"what is this
+            # ROW losing?"*. With an incoming `deprecated` row the
+            # `name_previously_retired` branch is skipped, so the diff ran against a row
+            # this call never touches.
+            #
+            # **[Observed]** `beta_` retired holding `zzz_word`; an import of a
+            # `deprecated` `beta` answered `('aliases_removed:zzz_word',)` and filed the
+            # event on `beta` -- while `beta_` **still held the word** and `beta` had
+            # never held it. A FABRICATED correction in the audit trail §5.8 exists to
+            # keep truthful, which is the class `C12-19` was minted to remove, committed
+            # by `C12-19` itself. `_word_rows`' own docstring names `borough_` and
+            # `commentable_` as spellings two agencies normalising column headers
+            # produce, so UC3 reaches this in the ordinary case. `C12-20`.
+            if (
+                standing is not None
+                and standing.name == name
+                and standing.kind == row.get("kind", kind)
+            ):
                 dropped_aliases = tuple(
                     w
                     for w in (standing.aliases or ())
@@ -7114,10 +7264,29 @@ class Registry:
                 out.append(f"declared_predicate_merged:{declared}:{moved}")
         return out
 
-    def _word_rows(self, namespace: str, word: str, kind: str | None = None):
+    def _word_rows(
+        self,
+        namespace: str,
+        word: str,
+        kind: str | None = None,
+        *,
+        match_aliases: bool = False,
+    ):
         """Every row whose NAME is the same word, **retired included**. Row 4d, round 3.
 
         ``(records, why the scan did not finish)``.
+
+        **`match_aliases=True` widens the question from *is this word a row's NAME?* to
+        *does any row ANSWER TO this word?*, and the difference is the kill row's
+        FOURTEENTH trip** (row 6c, round 3). The eighth trip closed the retired half of
+        the **name** door with this function; nothing ever asked the retired half of the
+        **alias** door, so a word a tombstone still answers to was minted as a brand-new
+        row's name with no refusal and no warning -- leaving the tombstone permanently
+        un-reinstatable, which is the governance act ruling **R11** created `reinstate`
+        to provide. Standing rule (c) -- *a tombstone's `name` and `aliases` are an
+        unconsumed permission* -- and the register had been applying it to `name` alone.
+        It is off by default because the three transfer-side callers ask a narrower
+        question and answering a wider one there would change what a guard compares.
 
         **The kill row's EIGHTH trip.** `propose_type`'s *"a retired name is not
         reusable"* was `get_type(namespace, name)` — an exact BYTE match — and
@@ -7154,7 +7323,15 @@ class Registry:
             page = self.adapter.find_types(
                 TypeQuery(namespace=namespace, kind=kind, include_retired=True, after=after)
             )
-            records.extend(r for r in page.records if same_word(r.name, word))
+            records.extend(
+                r
+                for r in page.records
+                if same_word(r.name, word)
+                or (
+                    match_aliases
+                    and any(same_word(a, word) for a in (r.aliases or ()))
+                )
+            )
             if not page.complete and page.next_after is None:
                 why = page.why_incomplete or (
                     "the backend could not answer this query in full"
@@ -8008,11 +8185,68 @@ class Registry:
                             if o.op == effect.op
                             and o.family == effect.family
                             and o.kind == effect.kind
-                            and o.namespace in candidates
+                            and o.namespace is not None
                         )
                     )
                     if landed:
                         where = landed
+                        # **A LANDING is a fact and a candidate is a maybe, and applying
+                        # one quantifier to both deleted a true warning** (row 6c, round
+                        # 3, fix-auditor lens, MAJOR -- inside this round's own fix, one
+                        # commit old). The all-retired rule below is Rule U about a set
+                        # of *possible* namespaces; `landed` is a set of namespaces the
+                        # edge **actually reached**, and an edge that reached a withdrawn
+                        # family is warned about however many live families it also
+                        # reached. **[Observed, sqlite and the async mirror]** one
+                        # invocation landing `person_links` in `tenant_a` (retired) and
+                        # in `default` (active) answered `()` where the tenant_a-only
+                        # landing answers `('edge_family_retired:person_links',)` -- which
+                        # is `C19-83`'s FIRST direction, *no warning at all while the edge
+                        # landed exactly where the word is withdrawn*, restored by the fix
+                        # for its second.
+                        #
+                        # It is also the answer to *can a host suppress this?* -- yes,
+                        # and this is where it could: nothing verifies an observed effect
+                        # against the edge store, so one appended `add_edge` in a live
+                        # namespace silenced a true warning. `C19-91`.
+                        #
+                        # **And the first cut required the observed namespace to be one
+                        # the INPUTS already named, which made the ledger's own knowledge
+                        # subordinate to the guess it exists to correct** (round 3,
+                        # integrator lens, MAJOR -- the same fix, the same commit, from
+                        # the other end). `landed` was empty in exactly the case where the
+                        # correction matters, and the input-derived set decided. **[Observed,
+                        # sqlite and the async mirror, both directions at
+                        # `record_invocation`]** family ACTIVE in `beacon` and retired in
+                        # `tenant_a`, inputs naming only `tenant_a`, the edge reported in
+                        # `beacon`: `edge_family_retired` **about a family live where the
+                        # edge went** -- round 2's `M1` sentence verbatim, at the door whose
+                        # own comment says *"the ledger door knows where the edge actually
+                        # went, and asking it is the whole fix"*. And the mirror: family
+                        # retired in `tenant_b`, inputs naming `tenant_a`, the edge reported
+                        # in `tenant_b`: **no warning at all**, which is R71's own reason for
+                        # existing.
+                        #
+                        # An observed edge effect matching the declaration by
+                        # `(op, family, kind)` **is** where the edge landed, whatever the
+                        # inputs said -- a namespace outside the candidate set is the case
+                        # for trusting the report MORE, not less. A host reporting a bogus
+                        # namespace is a separate fact and `effect_undeclared` already
+                        # carries it, side by side with this one.
+                        any_landing_retired = any(
+                            rec is not None and rec.status == "retired"
+                            for rec in (
+                                self.adapter.get_type(
+                                    scope, effect.family, kind="edge"
+                                )
+                                for scope in landed
+                            )
+                        )
+                        if any_landing_retired:
+                            value = f"edge_family_retired:{effect.family}"
+                            if value not in out:
+                                out.append(value)
+                            continue
             # **Rule U over the candidate set, and this is the half `preflight` needs.**
             # Where the landing namespace is unknowable, a family that is retired in one
             # candidate and ACTIVE in another has a live home the edge may reach, and
@@ -9109,6 +9343,18 @@ class Registry:
                     ),
                 },
             )
+        # **The event says whether this invocation was ever IN a queue** (row 6c, round
+        # 3, integrator lens, MINOR). A review of an `auto`-mode invocation is accepted
+        # and should be: refusing to record a review a person performed is the same
+        # answer §2.5 calls *the worst available* one call along, and a steward may
+        # legitimately review anything. What was wrong is that the resulting event was
+        # **indistinguishable from a genuine drain** -- **[Observed]** `queue before: []`
+        # and an `invocation_reviewed` standing on a row §5.2 never enqueued.
+        #
+        # The mode of RECORD is the operand, not the family's mode today, for rule 3-8's
+        # own reason: this event describes the moment the gate judged. Two facts in two
+        # keys rather than one word carrying both, which is §2.3's Cause B. `C19-96`.
+        recorded_mode = (rec.declared_policy or {}).get("approval_mode")
         self._append_event(
             rec.namespace,
             "invocation_reviewed",
@@ -9116,7 +9362,11 @@ class Registry:
             kind="action",
             name=rec.family,
             invocation_id=invocation_id,
-            detail={"reviewed_by": reviewed_by},
+            detail={
+                "reviewed_by": reviewed_by,
+                "approval_mode_of_record": recorded_mode,
+                "was_queued": recorded_mode == "review",
+            },
         )
         return self._invocation(
             rec, compensated_by=self._compensated_by(invocation_id, rec.namespace)
@@ -9223,7 +9473,14 @@ class Registry:
         #: rows with no `declared_policy.approval_mode` of their own, judged against the
         #: family's mode TODAY. Counted so the fallback can be STATED -- see below.
         judged_live = 0
+        #: ...over the rows this call EXAMINED, captured before `rows` is rebound to the
+        #: kept ones. **Dividing by the post-filter count printed `5 of 0 row(s)`** -- an
+        #: arithmetic impossibility attached to an empty queue, in the clause whose whole
+        #: justification is that *some* and *all* are different facts (row 6c, round 3,
+        #: found independently by the fix-auditor and the integrator lenses). `C19-93`.
+        examined = 0
         if unreviewed is not None:
+            examined = len(rows)
             kept = []
             for rec in rows:
                 # **The mode of RECORD, not today's mode -- rule 3-8's own field, and
@@ -9347,7 +9604,7 @@ class Registry:
             # given because *some of these rows* and *all of these rows* are different
             # facts to an operator draining a queue. `C19-89`.
             clause = (
-                f"{judged_live} of {len(rows)} row(s) carry no `declared_policy."
+                f"{judged_live} of {examined} row(s) examined carry no `declared_policy."
                 f"approval_mode` and were judged against the family's mode TODAY, which "
                 f"an amendment can move -- rule 3-8's guarantee does not reach them"
             )
@@ -9452,7 +9709,6 @@ class Registry:
                 f"projection needs a non-negative budget and a reserved that fits "
                 f"inside it; got budget={budget}, reserved={reserved}"
             )
-        listing = self.list_types("action", namespace=namespace)
         # **The STATUS CENSUS is a second, exhaustive read, and running it off the
         # active-only listing made `C19-86`'s own sentence a falsehood for two of the
         # four causes it enumerates** (row 6c, round 2, fix-auditor lens, MAJOR).
@@ -9493,12 +9749,29 @@ class Registry:
         # R70 protects.
         scope_rows = len(census)
         scope_active = sum(1 for rec in census if rec.status == "active")
+        # **The POOL is built from the CENSUS, and reading it from `list_types` while
+        # the census read the same scope to exhaustion was a MAJOR of round 3's
+        # fix-auditor lens** -- inside this round's own fix, one commit old. `list_types`
+        # reads **one page**, so on any honestly-paging backend the arithmetic ran over a
+        # fraction of the scope while the exhaustive answer sat in the same call.
+        #
+        # **[Observed, `DegradedAdapter(page_cap=1, page_cursor=True)`, three active
+        # families in `dpr`]** `counts={'console': 1}`, `known=1`, and a `why_incomplete`
+        # that said nothing about the truncation -- against a scope of three. And the
+        # typo judgement ran off the same page: `projection(order=('admin',))` **refused
+        # `action_family_unknown`** for a group `purge_doc` carries, an active registered
+        # family the census had just read. That is *we could not find it* turned into a
+        # refusal, in the method whose own comment forbids exactly that, and it is R70's
+        # own Q72 arriving through paging rather than through a co-tenant.
+        #
+        # One read now, and the consistency is by construction rather than by review.
+        # `C19-92`.
         pool = [
             ActionFamily.from_attributes(
-                e.name, e.namespace, dict(e.attributes or {}), e.status
+                rec.name, rec.namespace, dict(rec.attributes or {}), rec.status
             )
-            for e in listing.types
-            if e.status == "active"
+            for rec in census
+            if rec.status == "active"
         ]
         pool = [f for f in pool if f.declared]
 
@@ -9569,7 +9842,12 @@ class Registry:
         # than refusing, which is this register's standing direction -- never turn *we
         # could not find it* into a refusal.
         declares_any_surface = any(f.reachability for f in pool)
-        if declares_any_surface and not any(
+        # **...and never on a scope this call could not finish reading.** A truncated
+        # scan has not said *no family here carries that group*; it has only said it
+        # could not say, and turning that into `action_family_unknown` is the one answer
+        # this method's own comment forbids twice over. Rule U on the LOOK rather than on
+        # its result -- `C12-13`'s and `C4-12`'s lesson, at a fifth reader. `C19-92`.
+        if declares_any_surface and census_complete and not any(
             group in f.reachability for f in pool for group in order
         ):
             return Refusal(
@@ -9618,16 +9896,42 @@ class Registry:
         # call: for every family in `would_evict`, read its `predicates` and ask
         # `consumers` who gates on them.
         at_risk: list[str] = []
+        # **One consumer report per evicted FAMILY, not one per predicate per family**
+        # (row 6c, round 3, integrator lens, MINOR). The recomputation is inside the
+        # predicate loop, so a family declaring four predicates read the consumer table
+        # four times for an answer that does not change -- **[Observed]** five
+        # `find_consumers` calls where two suffice, with the resulting
+        # `consumers_at_risk` **identical**, verified against `consumers(...).gates_on`.
+        # A cost rather than a wrong answer, on the call §10.1 measures at 222 families.
+        #
+        # **And the Rule U half, which IS an answer:** a family the listing named and
+        # `get_type` cannot return contributes **nothing** and said nothing, so *no
+        # consumer is at risk* and *we could not look* were the same tuple. §10's own
+        # `complete=False` covers the casualty list being a floor; it does not cover the
+        # registry failing to read a row it had just enumerated, so that is named.
+        # `C19-95`.
+        unreadable_families: list[str] = []
         for group in evict:
             for fam in grouped[group]:
                 rec = self.adapter.get_type(fam.namespace, fam.name, kind="action")
-                for predicate in (rec.predicates if rec is not None else ()) or ():
-                    report = self._consumer_report(rec)
+                if rec is None:
+                    unreadable_families.append(f"{fam.namespace}:{fam.name}")
+                    continue
+                report = self._consumer_report(rec)
+                for predicate in (rec.predicates or ()):
                     at_risk.extend(
                         c.id for c in report.gates_on if c.gate == predicate
                     )
 
-        unknown_groups = [group for group in order if counts[group] == 0]
+        # **...and it says nothing at all over a read that did not finish** (row 6c,
+        # round 3, integrator lens, BLOCKING, and the fix-auditor's F2 from the other
+        # side). *"groups no family in this scope carries"* is a POSITIVE claim about the
+        # whole scope, and on a truncated read it named groups five families carried.
+        # An unfinished look reports the look, which the `scope_why` branch above now
+        # does. `C19-92`.
+        unknown_groups = (
+            [group for group in order if counts[group] == 0] if census_complete else []
+        )
         # **Rule U on the SCOPE, and only the last of these is what R70 protects.** An
         # all-zero answer has four causes and they are not interchangeable: a namespace
         # that holds no `kind="action"` row at all (a typo'd scope), one whose families
@@ -9643,8 +9947,8 @@ class Registry:
             # the field this report added to STOP one. Round 2's own lesson at the third
             # guard: the look is reported, never turned into a fact about the store.
             scope_why = (
-                "the scope could not be read to exhaustion, so an all-zero answer here "
-                "is not evidence about what the namespace holds: "
+                "the scope could not be read to exhaustion, so these counts are a FLOOR "
+                "and nothing here is evidence about what the namespace holds: "
                 + (census_why or "the backend could not answer the query")
             )
         elif scope_rows == 0:
@@ -9660,6 +9964,23 @@ class Registry:
             scope_why = (
                 f"every `kind=\"action\"` row in this scope is retired or still "
                 f"proposed ({scope_rows} row(s), 0 active, statuses {statuses}), so "
+                f"nothing was selectable"
+            )
+        elif not pool:
+            # **The FOURTH cause, found by round 3's integrator lens and left ungraded
+            # there because *"a bare `kind="action"` row is a shape no shipped call
+            # produces on purpose"*.** Rule 10-11 enumerates three empties and this is a
+            # fourth: every active row in the scope is a `kind="action"` row that does
+            # not DECLARE a family (`ActionFamily.declared` is false -- an absent or
+            # unparseable eight-key block). **[Observed]** `counts={'publish': 0}`,
+            # `fits=('publish',)` and **no scope sentence at all**, because
+            # `scope_rows == 1` and `scope_active == 1` skip both branches above.
+            # An unreachable-on-purpose shape still reaches a REPORT, and a report with
+            # nothing to say about its own zero is the thing this field exists to end.
+            # `C19-92`.
+            scope_why = (
+                f"this scope holds {scope_active} active `kind=\"action\"` row(s) and "
+                f"none of them DECLARES a family (ACTIONS.md 2.2's eight keys), so "
                 f"nothing was selectable"
             )
         return ProjectionReport(
@@ -9691,5 +10012,12 @@ class Registry:
                     else ""
                 )
                 + (f"; {scope_why}" if scope_why else "")
+                + (
+                    f"; {len(unreadable_families)} evicted family/families could not be "
+                    f"re-read to compute their consumers, so this list is short by an "
+                    f"unknown amount: {sorted(unreadable_families)}"
+                    if unreadable_families
+                    else ""
+                )
             ),
         )
