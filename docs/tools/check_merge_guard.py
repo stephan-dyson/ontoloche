@@ -2374,7 +2374,16 @@ def _one_word_holders_everywhere(registry: Registry) -> dict[str, list[str]]:
     seventh trip), and counting a row's NAME as well as its aliases (the eighth).
     """
     holders: dict[str, list[str]] = {}
-    for kind in ("predicate", "entity"):
+    # **Every kind a collapsing caller can touch, and limiting this to two was a
+    # BLOCKING of round 2.** `retire(successor=)` covers EDGE families by ruling R19 and
+    # ACTION families by ACTIONS.md 2.1 -- a family *is* a `TypeEntry` -- and both carry
+    # `aliases`. **[Observed, round 2, by mutation]** with the twelfth trip's guard
+    # removed, `retire(alpha_edges -> beta_edges)` then `-> gamma_edges` left
+    # `{'beta_edges': ('zeta',), 'gamma_edges': ('zeta',)}` -- `C16-06` verbatim -- and
+    # this scan returned `{}`. The fixture worked and the DETECTOR was half-blind, which
+    # is the eighth dress of *a checker only asks the questions its fixtures can pose*
+    # wearing the other half: a checker only FINDS what its detector looks at.
+    for kind in ("predicate", "entity", "edge", "action"):
         listing = registry.list_types(kind)
         for entry in listing.types:
             if entry.status != "active":
@@ -2464,8 +2473,52 @@ def _repeat_reinstate(registry: Registry) -> str | None:
     return None
 
 
+def _repeat_retire_edge(registry: Registry) -> str | None:
+    """The twelfth trip's shape on a `kind="edge"` FAMILY, not a predicate.
+
+    **Widening the detector was not enough and this fixture is why** (round 2's
+    BLOCKING, closed here). `retire(successor=)` covers edge families by ruling R19 and
+    action families by ACTIONS.md 2.1 -- a family *is* a `TypeEntry` -- and both carry
+    `aliases`. The detector now scans every kind; a detector that scans a kind no
+    fixture ever writes is a detector that still cannot fail. *A checker only asks the
+    questions its fixtures can pose* -- the eighth dress, and the answer is a fixture.
+
+    No predicate extents here, so refusals #1 and #2 have nothing to fire on and the
+    only thing standing between two ordinary retirements and two live rows on one word
+    is the `rec.status` guard itself.
+    """
+    # A BARE `kind="edge"` entry, through the ordinary door. EDGES.md's rule is the one
+    # ACTIONS.md inherits -- *a MISSING declaration is not a breach* -- so no attributes
+    # are needed to make these rows, and reaching past `propose_type` to write one would
+    # be the synthetic-record shape Part A refuses by name.
+    for name in ("alpha_edges", "beta_edges", "gamma_edges"):
+        _seed(registry, name, kind="edge", definition="one and the same relationship")
+    rows = registry.import_types(
+        [{"name": "alpha_edges", "status": "active", "aliases": ["zeta"],
+          "definition": "one and the same relationship"}],
+        kind="edge",
+    )
+    if not rows or "zeta" not in (rows[0].aliases or ()):
+        return _NOT_REACHABLE + (
+            "this backend did not keep the imported alias "
+            f"({list(rows[0].warnings) if rows else 'no row'})"
+        )
+    first = registry.retire(
+        "alpha_edges", "superseded by beta", retired_by="user:sd",
+        successor="beta_edges", force=True,
+    )
+    if isinstance(first, Refusal):
+        return _NOT_REACHABLE + f"the first retirement is refused here ({first.reason})"
+    registry.retire(
+        "alpha_edges", "actually gamma", retired_by="user:sd",
+        successor="gamma_edges", force=True,
+    )
+    return None
+
+
 REPEAT_PROBES = {
     "retire": _repeat_retire,
+    "retire(edge)": _repeat_retire_edge,
     "merge_types": _repeat_merge,
     "import_types": _repeat_import,
     "reinstate": _repeat_reinstate,
@@ -2478,16 +2531,33 @@ def check_repeated_calls() -> tuple[list[str], list[str], list[str]]:
     lines: list[str] = []
     unreachable: list[str] = []
     for leg, build, knowable in _legs():
-        for caller, probe in REPEAT_PROBES.items():
+        # **The doubles run here too, and axis eight had them while this one did not**
+        # (round 2). A door opened twice on a backend whose reads are capped is the
+        # fifth trip's shape and the twelfth's at once; asking the question on the
+        # honest legs alone is the gap this file keeps finding in itself.
+        shapes: list[tuple[str, Any]] = [("", None)]
+        if knowable:
+            shapes += [
+                ("partial", lambda a: DegradedAdapter(a, page_cap=2, page_cursor=True)),
+                ("truncated", lambda a: DegradedAdapter(a, page_cap=2)),
+            ]
+        for shape, wrap in shapes:
+          for caller, probe in REPEAT_PROBES.items():
             registry = build()
+            row = f"{caller} / {shape}" if shape else caller
             try:
                 blocked = probe(registry)
+                if blocked is None and wrap is not None:
+                    registry = Registry(
+                        wrap(registry.adapter),
+                        policies={"default": NamespacePolicy(approval_policy="auto")},
+                    )
             except Exception as exc:  # pragma: no cover - a probe that cannot run
                 blocked = _NOT_REACHABLE + f"the probe raised {type(exc).__name__}: {exc}"
             if blocked is not None:
-                lines.append(f"  {leg:15s} {caller:13s} called twice          NOT REACHABLE")
+                lines.append(f"  {leg:15s} {row:26s} called twice   NOT REACHABLE")
                 unreachable.append(
-                    f"{leg} / {caller} / called twice: {blocked[len(_NOT_REACHABLE):]}"
+                    f"{leg} / {row} / called twice: {blocked[len(_NOT_REACHABLE):]}"
                 )
                 continue
             shared = {
@@ -2497,16 +2567,16 @@ def check_repeated_calls() -> tuple[list[str], list[str], list[str]]:
             }
             if shared:
                 problems.append(
-                    f"{leg} / {caller} / called twice: opening this door a SECOND time "
+                    f"{leg} / {row} / called twice: opening this door a SECOND time "
                     f"left more than one ACTIVE row answering to a word -- {shared}. "
                     f"That is `C16-06`'s whole-store invariant and mechanism 4, and the "
                     f"guard on this call was evaluated ONCE for a call that ran twice. "
                     f"*The write a call performs must be idempotent in the state the "
                     f"guard read* -- the kill row's TWELFTH trip"
                 )
-                lines.append(f"  {leg:15s} {caller:13s} called twice          FAILED")
+                lines.append(f"  {leg:15s} {row:26s} called twice   FAILED")
             else:
-                lines.append(f"  {leg:15s} {caller:13s} called twice          one word, one row")
+                lines.append(f"  {leg:15s} {row:26s} called twice   one word, one row")
     return problems, lines, unreachable
 
 

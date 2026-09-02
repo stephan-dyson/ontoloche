@@ -3194,7 +3194,7 @@ async def test_c19_73_a_precondition_names_a_predicate_by_the_registrys_notion_o
     assert out.verdict == "allowed"
 
 @NEEDS_ATTRIBUTES
-@pytest.mark.requires_capability("stores_edges")
+@pytest.mark.requires_capability("stores_edges", "stores_events")
 async def test_c19_75_preflight_warns_when_a_declared_edge_family_has_been_retired(
     adapter, make_registry
 ):
@@ -3250,7 +3250,7 @@ async def test_c19_75_preflight_warns_when_a_declared_edge_family_has_been_retir
     assert both.warnings == ("edge_family_retired:person_links",)
 
 @NEEDS_INVOCATIONS
-@pytest.mark.requires_capability("stores_edges")
+@pytest.mark.requires_capability("stores_edges", "stores_events")
 async def test_c19_76_record_invocation_warns_on_a_retired_declared_edge_family(
     adapter, make_registry
 ):
@@ -3466,11 +3466,19 @@ async def test_c19_81_the_review_queue_drains_end_to_end(adapter, make_registry)
     performs it is the failure `C19-50` could not pose.
     """
     registry = await make_registry(adapter)
-    if not registry.caps.stores_events:
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        # **BOTH flags, and naming one of the two was the defect.**
+        # `review_invocation` refuses `cannot_record_override` on
+        # `not (stores_events and stores_invocation_events)`, so a backend that keeps
+        # events but declines INVOCATION events reached the drain and got a `Refusal`.
+        # PACKAGE.md 8b.5: a capability used as SCAFFOLDING for a subject that is
+        # something else is declared, not assumed -- and the declaration has to name
+        # every flag the scaffolding actually needs.
         pytest.skip(
-            "PACKAGE.md 3.2 -- a review IS an event and this backend keeps none, so "
-            "`review_invocation` refuses `cannot_record_override` rather than claiming "
-            "a review nothing recorded"
+            "PACKAGE.md 3.2 -- a review IS an event and this backend cannot keep one "
+            "(stores_events / stores_invocation_events), so `review_invocation` "
+            "refuses `cannot_record_override` rather than claiming a review nothing "
+            "recorded"
         )
     await action_family(registry, "infer_person_relationships", approval_mode="review")
     gate = await registry.preflight("infer_person_relationships", {}, actor="ai:nightly")
@@ -3573,7 +3581,7 @@ async def test_c19_82_a_ref_the_flat_form_cannot_carry_is_refused_at_both_doors(
     assert parse_ref(out.inputs["who"]) == opaque
 
 @NEEDS_INVOCATIONS
-@pytest.mark.requires_capability("stores_edges")
+@pytest.mark.requires_capability("stores_edges", "stores_events")
 async def test_c19_83_an_input_determined_effect_is_judged_over_the_inputs_namespaces(
     adapter, make_registry
 ):
@@ -3724,10 +3732,12 @@ async def test_c19_85_review_invocation_honours_its_namespace_and_needs_a_review
             await registry.review_invocation(filed.invocation_id, reviewed_by=empty)
 
     # The narrowing half: the right scope still drains, and the record says WHO.
-    if not registry.caps.stores_events:
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        # Both flags -- see `C19-81`. The scope and reviewer rules above need neither.
         pytest.skip(
-            "PACKAGE.md 3.2 -- a review IS an event and this backend keeps none; the "
-            "scope and reviewer rules above are asserted on every leg"
+            "PACKAGE.md 3.2 -- a review IS an event and this backend cannot keep one "
+            "(stores_events / stores_invocation_events); the scope and reviewer rules "
+            "above are asserted on every leg"
         )
     right = await registry.review_invocation(
         filed.invocation_id, reviewed_by="user:boss", namespace="dpr"
