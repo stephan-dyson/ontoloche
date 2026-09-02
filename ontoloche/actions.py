@@ -336,10 +336,40 @@ def flat_form_problem(ref: Any) -> str | None:
             return f"{field} is a {type(value).__name__} and not a string"
         for separator in _FLAT_FORM_SEPARATORS:
             if separator in value:
+                # **The sentence is per CASE, and one sentence for both was a confident
+                # falsehood about half of them** (row 6c, round 2, fix-auditor lens,
+                # MAJOR). The two failures this guard catches are not the same failure:
+                #
+                # * a segment carrying ``#`` (or a NAME carrying ``:``) makes `ref_key`
+                #   write a string `parse_ref` reads back as a **different reference** --
+                #   **[Observed]** ``TypeRef("beacon","entity","person#p-1")`` ->
+                #   ``"beacon:entity:person#p-1"`` -> ``InstanceRef(person, "p-1")``,
+                #   an object that never existed, with no exception anywhere;
+                # * a NAMESPACE carrying ``:`` makes `ref_key` write a string `parse_ref`
+                #   **raises** on -- **[Observed]** ``"org:beacon:entity:person"`` ->
+                #   ``ValueError`` naming four segments. Nothing is misread; the ledger
+                #   row is simply unreadable.
+                #
+                # Telling the second caller its reference *"reads back as a DIFFERENT
+                # reference"* is a `why` that sends it looking for a misreading that
+                # does not happen, in the field this refusal exists to make actionable.
+                # `C19-90`. *(Where the constraint should BIND is a separate question and
+                # is not this layer's to answer -- `INTERFACE.md` §2 types `namespace` as
+                # an unconstrained `str` and every other door accepts `org:beacon`, so a
+                # deployment can register everything there and never invoke a single
+                # action, with nothing at the declaration door warning it. Raised as
+                # **Q81** rather than taken.)*
+                unreadable = field == "namespace" and separator == ":"
+                consequence = (
+                    "a string `parse_ref` RAISES on, so the ledger row it writes cannot "
+                    "be read back at all"
+                    if unreadable
+                    else "a string `parse_ref` reads back as a DIFFERENT reference"
+                )
                 return (
                     f"{field}={value!r} contains {separator!r}, which ACTIONS.md 2.3's "
                     f"flat identity form spends as a separator -- `ref_key` would write "
-                    f"a string `parse_ref` reads back as a DIFFERENT reference"
+                    f"{consequence}"
                 )
     return None
 
