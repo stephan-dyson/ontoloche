@@ -201,9 +201,26 @@ def adapter(adapter_factory, request, backend):
                 "`attribute_census` reports complete=False with a why; this test needs "
                 "the extension itself."
             )
-    marker = request.node.get_closest_marker("requires_capability")
-    if marker is not None:
-        caps = made.capabilities()
+    # **`iter_markers`, not `get_closest_marker`, and the difference was a RED on main**
+    # (row 6c). `get_closest_marker` returns exactly ONE mark, so **stacking two
+    # `@requires_capability` decorators silently discarded all but the innermost** --
+    # a test declaring `@NEEDS_ATTRIBUTES` *and* `@requires_capability("stores_edges")`
+    # was skipped for edges and RUN with `stores_attributes=False`, where its fixture
+    # cannot exist. Three ids did that, `check_capability_matrix.py` went from
+    # conformant to five failing configurations, and nothing between the decorator and
+    # the run said a declaration had been dropped.
+    #
+    # **A declaration this harness silently ignores is the same shape the register
+    # refuses everywhere else** -- one word for two facts, a permission cashed twice, a
+    # guard reading an operand nobody passed. `iter_markers` honours every declaration,
+    # so a test that names four flags is skipped for four flags, and stacking is a
+    # legitimate way to say *this needs the edge store AND the attribute store* rather
+    # than a trap. It is also the shape that makes the composite constants
+    # (`NEEDS_ATTRIBUTES`, `NEEDS_INVOCATIONS`) composable at all.
+    caps = None
+    for marker in request.node.iter_markers("requires_capability"):
+        if caps is None:
+            caps = made.capabilities()
         for flag in marker.args:
             if not getattr(caps, flag):
                 pytest.skip(
