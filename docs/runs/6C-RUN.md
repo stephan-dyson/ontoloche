@@ -10,7 +10,7 @@
 
 | | before (row 6b) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **346** — 338 through the five rulings, then 8 more from round 1's two lenses |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **347** — 338 through the five rulings, 8 from round 1's two lenses, 1 from round 2's |
 | sync suite, one run, three legs | `757 passed` | **PENDING** |
 | async suite, one run, three legs | `796 passed` | **PENDING** |
 | `Refusal.reason` values | 30 | **31** — `unknown_invocation`, the value §7 argued for and declined on a premise this row's fifth call expired |
@@ -18,7 +18,7 @@
 | `ACTIONS.md` calls | 4 printed (5 shipped) | **5 printed, 5 shipped** — §6.5, and the heading corrected in the same change |
 | `check_spec_drift.py` ACTIONS gates | 12 shapes / 4 calls / 10 vocabularies | **12 shapes / 5 calls / 2 module functions / 10 vocabularies** |
 | `check_merge_guard.py` axes | 7 | **9** — the alias re-point (R75) and **the same call, twice** (the twelfth trip), each over its shapes on every leg plus two paging doubles, **both proved by mutation** |
-| `ROADMAP.md` kill-row trips | 11 | **12** — and it is this row's own regression, proved by BISECT rather than by reading a diff |
+| `ROADMAP.md` kill-row trips | 11 | **13** — the twelfth is this row's own regression; the thirteenth is that trip's class at the SIBLING caller, and it bisects in two: one variant live at 6b's landing, one introduced by R75. Both proved by BISECT rather than by reading a diff |
 
 ---
 
@@ -130,7 +130,7 @@ Every change amended its spec and its ids **in the same commit**, which is what 
 | round | lenses | BLOCKING | MAJOR | MINOR | kill-row trips | ids after |
 |---|---|---|---|---|---|---|
 | **1** | kill row, briefed with all eleven · beacon integrator | **1** | 7 | 5 | **1 — the twelfth** | 346 |
-| **2** | fix-auditor on round 1's own fixes · kill row, briefed with all twelve *(in flight)* | **1** | 4 | 2 | — *(so far)* | 346 |
+| **2** | fix-auditor on round 1's own fixes · kill row, briefed with all twelve | **2** | 6 | 4 | **1 — the thirteenth** | 347 |
 
 ### 6.1 Round 1 — the kill row's TWELFTH trip, and it is this row's own regression
 
@@ -175,7 +175,18 @@ The remaining round-2 findings are recorded with their fixes in §6.4 as they la
 | `C9-30`'s filter is one-sided — the retired row's own name still transfers | fix-auditor | open |
 | the twelfth trip's fix prescribes a remedy `reinstate` refuses | fix-auditor | open |
 | `C19-84`'s Rule-U fallback is unwarned | fix-auditor | open |
-| kill row, round 2 | kill row | in flight |
+| **the kill row's THIRTEENTH trip** — `merge_types` cashes a tombstone's words once per CALL, not once per ROW | kill row | **fixed**, `C10-20`, non-overridable, and the ninth axis's `_repeat_merge` now repeats into a different target — mutation-proved |
+| Q56's staleness gate is blind to the words R75 started writing | kill row | **raised as a question**, not taken — `_identity_stale` is the founder's Q56 territory and the scope fence bars changing what an identity guard compares |
+| `list_types(predicate=<a transferred alias>)` answers a confident zero | kill row | **raised as a question** — R54's door, same fence |
+| an ordinary `import_types` erases an R75 transfer and leaves its event standing | kill row | open |
+
+### 6.5 What round 2 changed about the register's own rules
+
+The thirteenth trip is the twelfth's class at the sibling caller, and the difference between them is the rule:
+
+> **A tombstone's `name` and `aliases` are an UNCONSUMED PERMISSION.** §5.8 keeps a tombstone's words by design, so nothing in the state is spent when a caller transfers them. Trip 12 answered that **per caller** — *have I run before?* — and `retire_no_op:already_retired` is one caller's special case. The obligation is **per row**: *who holds these words now?* Every caller that transfers a tombstone's words inherits that question, and `merge_types` was the one that never asked it.
+
+And it widens standing rule (b) of the twelfth countersignature. That rule says a change adding a writer of an identity field lands **with** the checker axis that can pose its new failure mode. R75 added `retire` as a writer of `aliases`; the axis landed a round later and **still could not pose the sibling caller's version of the same failure**, because its `merge_types` fixture repeated into one target while its `retire` fixture used two. So: **the axis a new writer lands with must drive every OTHER writer of that field too.**
 
 ---
 

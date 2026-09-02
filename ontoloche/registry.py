@@ -4205,6 +4205,65 @@ class Registry:
         # missing.** This is the fifth non-overridable identity guard and it belongs with
         # the other four.
 
+        # **The words this merge is about to WRITE, asked of the whole namespace --
+        # `C16-06`'s invariant, and this is the kill row's THIRTEENTH trip.**
+        #
+        # Trip 7 closed *"C16-06 unasked at four write doors"* -- `propose_type`,
+        # `approve`, `reinstate`, `import_types` (`C4-12`, `C9-23`, `C12-12`).
+        # **`merge_types` is the fifth door and it asked nothing**, because
+        # `_identity_breach(left, right)` was assumed to cover the transfer: it compares
+        # the two OPERANDS and never asks whether the words being MOVED are already held
+        # somewhere else. Counted rather than described: this method contained zero calls
+        # to `_alias_clash`, `_alias_holder` and `_word_rows`.
+        #
+        # **[Observed, sqlite, both paging doubles and the async mirror, five ordinary
+        # calls, no alias and no import]** `merge_types(alpha -> beta)`, ordinary
+        # vocabulary growth, then `merge_types(alpha -> gamma)`: `beta.aliases ==
+        # gamma.aliases == ('alpha',)`, **two ACTIVE rows answering to one word**, with
+        # `resolve_type("alpha")` answering `gamma` at **1.0** on a pair `merge_types`
+        # itself refuses `predicate_merge` **non-overridably under all five
+        # acknowledgements**.
+        #
+        # **It is the TWELFTH trip's class at the sibling caller.** Trip 12's rule is
+        # *the write a call performs must be idempotent in the state the guard read*, and
+        # `retire` was made idempotent per caller (`retire_no_op:already_retired`). A
+        # tombstone keeps its words by design (INTERFACE.md 5.8), so `left.name` and
+        # `left.aliases` are an **unconsumed permission** that `merge_types` will cash for
+        # any `right` a caller names, once per call, forever. The obligation belongs to
+        # the ROW's words rather than to the caller, which is why this guard asks *who
+        # holds them now* instead of *have I run before*.
+        #
+        # **Non-overridable, and `retired_operand` must not buy past it.** That value is
+        # an EVIDENCE acknowledgement about a row's `status`; this is an IDENTITY
+        # outcome, and `C9-20` is the ruling that keeps the two apart. *A guard that can
+        # be acknowledged past is a warning wearing a refusal's name.*
+        #
+        # **Rule U on the LOOK, not on its result** (`C12-13`, `C4-12`): a scan that
+        # could not finish has not said the words are free, and refusing on a short page
+        # would ban `merge_types` on every paging backend -- the lesson row 4d learned
+        # three times. It warns and proceeds.
+        moving = tuple(a for a in (left.name,) + tuple(left.aliases) if a)
+        holder, clash_why = self._alias_clash(target_ns, right.name, right.kind, moving)
+        if holder is not None and not same_word(holder, left.name):
+            return Refusal(
+                "alias_collision",
+                {
+                    "from": from_,
+                    "into": into,
+                    "holder": holder,
+                    "words": list(moving),
+                    "overridable": False,
+                    "why": (
+                        f"merging {from_!r} into {into!r} would write "
+                        f"{list(moving)} onto {into!r}, and {holder!r} is an ACTIVE "
+                        f"entry that already answers to one of those words -- two live "
+                        f"entries with one word between them is INTERFACE.md 5.9b's "
+                        f"`alias_collision` and `C16-06`'s whole-store invariant, at the "
+                        f"fifth write door and the kill row's THIRTEENTH trip"
+                    ),
+                },
+            )
+
         # An acknowledgement that cannot be recorded is refused -- but only AFTER the
         # four non-overridable guards above. A merge those refuse is refused whether or
         # not anything could be written down, and answering `cannot_record_override`
