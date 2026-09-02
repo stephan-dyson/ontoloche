@@ -10,15 +10,15 @@
 
 | | before (row 6b) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **PENDING** |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **346** — 338 through the five rulings, then 8 more from round 1's two lenses |
 | sync suite, one run, three legs | `757 passed` | **PENDING** |
 | async suite, one run, three legs | `796 passed` | **PENDING** |
 | `Refusal.reason` values | 30 | **31** — `unknown_invocation`, the value §7 argued for and declined on a premise this row's fifth call expired |
-| `warnings` values / carriers | 32 values, ten carriers | **32 values, eleven carriers** — R71 gives `edge_family_retired` two more (`Preflight`, `Invocation`) rather than minting a variant of it |
+| `warnings` values / carriers | 32 values, ten carriers | **34 values, eleven carriers** — R71 gives `edge_family_retired` two more carriers (`Preflight`, `Invocation`) rather than minting a variant of it; `retire_no_op` is minted by the twelfth trip's fix |
 | `ACTIONS.md` calls | 4 printed (5 shipped) | **5 printed, 5 shipped** — §6.5, and the heading corrected in the same change |
 | `check_spec_drift.py` ACTIONS gates | 12 shapes / 4 calls / 10 vocabularies | **12 shapes / 5 calls / 2 module functions / 10 vocabularies** |
-| `check_merge_guard.py` axes | 7 | **8** — the alias re-point, over both alias shapes on three legs plus two paging doubles, proved by mutation |
-| `ROADMAP.md` kill-row trips | 11 | **PENDING** |
+| `check_merge_guard.py` axes | 7 | **9** — the alias re-point (R75) and **the same call, twice** (the twelfth trip), each over its shapes on every leg plus two paging doubles, **both proved by mutation** |
+| `ROADMAP.md` kill-row trips | 11 | **12** — and it is this row's own regression, proved by BISECT rather than by reading a diff |
 
 ---
 
@@ -125,7 +125,57 @@ Every change amended its spec and its ids **in the same commit**, which is what 
 
 ## 6. The adversarial loop
 
-*(section written at landing)*
+**Stop rule** (standing constraint 7): two consecutive clean rounds, or three rounds plus an honest convergence note. **Round 1 was not clean; round 2 is in flight.** This section is written as each lens returns rather than at landing, so the row is resumable from the repository rather than from a session.
+
+| round | lenses | BLOCKING | MAJOR | MINOR | kill-row trips | ids after |
+|---|---|---|---|---|---|---|
+| **1** | kill row, briefed with all eleven · beacon integrator | **1** | 7 | 5 | **1 — the twelfth** | 346 |
+| **2** | fix-auditor on round 1's own fixes · kill row, briefed with all twelve *(in flight)* | **1** | 4 | 2 | — *(so far)* | 346 |
+
+### 6.1 Round 1 — the kill row's TWELFTH trip, and it is this row's own regression
+
+Full record, countersigned: [`2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md). In one sentence: **`retire` read `.status` twice and both times on the successor**, so ruling R75's alias write was cashed a second time on a repeat retirement and left **two active rows answering to one word**.
+
+**The lens proved the provenance by BISECT rather than by reading a diff** — a shadow package built at `664d3a5^` answers the identical script with zero holders where HEAD had two — and the supervisor's countersignature makes that the standard from here. Its second new rule is the one this row paid for: **a change that adds a writer of an identity field lands WITH the checker axis that can pose its new failure mode, in the same commit.** R75's write landed at `664d3a5` and axis nine landed a round later, and that ordering is what let the trip exist.
+
+**The integrator lens produced five findings and every one was in the READ half, or in what the code does when nobody passed the optional argument** — the fourth consecutive row that sentence has been true of this lens. The sharpest was not the permissive default R72 was written against but its inverse: a `TypeRef` whose `name` carried a `#` was stored and read back as an **`InstanceRef` naming an object that never existed**, with no exception anywhere — *a confident reading of the wrong thing*, which is the seventh trip's shape arriving in a parser.
+
+### 6.2 Round 1 was ALSO red on `main`, and the row's own record did not say so
+
+`check_capability_matrix.py` — `nonbinding` under **R2**, so the conformance verdict is untouched, and a red on `main` regardless — reported **five configurations that cannot pass the suite** where 6b's landing had eighteen conformant. It was caught by the supervisor reading the log rather than by the worker, whose background command reported the **wrapper's** exit code and not pytest's. *A verdict read off the wrong process is a verdict nobody took.*
+
+**Bisected, not inferred.** At `ddf2f5e` (6b's landing, this row's parent) all eighteen configurations are conformant, exit 0: the regression is row 6c's.
+
+**The cause is one line and it is a class rather than an instance.** `conftest`'s capability gate read `get_closest_marker("requires_capability")`, which returns exactly **one** mark — so **stacking two `@requires_capability` decorators silently discarded all but the innermost.** Three ids stacked, were skipped for the flag they named innermost, and RAN in configurations where their fixture cannot exist.
+
+> **A declaration this harness silently ignores is the shape the register refuses everywhere else**: one word for two facts, a permission cashed twice, a guard reading an operand nobody passed. `iter_markers` honours every declaration, which makes stacking a legitimate way to say *this needs the edge store AND the attribute store* rather than a trap, and makes the composite constants composable at all. **Fixed in both conftests** — the async one is not generated by `tools/unasync.py`, so it is the call site a fix reaches last, which is this project's most-repeated defect.
+
+**And the red named itself badly, which is its own finding.** The matrix runs each configuration with `-q --tb=no` and parses only the tally, so five failing configurations is all it can say — true, and three steps from the cause. Re-running the same configurations through the same entry point with `-ra` named the three ids in seconds. A bookkeeping test now asserts the cause directly, so the next regression of this class arrives as *the capability gate must honour every declaration* rather than as a number.
+
+### 6.3 Round 2 — the fix-auditor, and the register's prediction held
+
+The tenth trip's countersignature made this lens a standing requirement rather than a choice: *"every round after a fix round begins with a lens pointed at that fix."* It returned **1 BLOCKING, 4 MAJOR, 2 MINOR — and every single finding is inside round 1's fixes**, which is the fifth row running that this project's counted policy has been right about where its next defect lives.
+
+**The BLOCKING is the ninth axis itself**, added by round 1 to close the twelfth trip. Its detector iterated `("predicate", "entity")` only — and `retire(successor=)` covers **edge** families by ruling R19 and **action** families by ACTIONS.md §2.1, both of which carry `aliases`. **[Observed, by mutation]** with the trip's guard removed, two ordinary retirements left `{'beta_edges': ('zeta',), 'gamma_edges': ('zeta',)}` — `C16-06` verbatim — and the axis built to catch exactly that returned `{}`.
+
+> **Widening the detector was necessary and not sufficient, and the difference is the eighth dress of this file's oldest sentence.** *A checker only asks the questions its fixtures can pose* — and a **detector** that scans a kind no **fixture** ever writes still cannot fail. The axis gains `retire(edge)`, a bare `kind="edge"` fixture through the ordinary door, plus the two paging doubles axis eight already had. Proved by mutation: the `retire(edge)` row goes `FAILED` and the checker exits 1.
+
+The remaining round-2 findings are recorded with their fixes in §6.4 as they land. **The kill-row lens of round 2 died mid-flight on a session limit after reporting only that its first probe reproduced; it has been re-issued rather than counted, because this register's own evidence is that a missed lens is a missed finding rather than a missed formality** — row 6b's round-2 kill-row lens died the same way and its re-issue found the eleventh trip on the first target it looked at.
+
+### 6.4 What round 2 has changed so far
+
+*(written as each fix lands; the row does not close while this section is open)*
+
+| finding | lens | state |
+|---|---|---|
+| the ninth axis blind to `kind="edge"` | fix-auditor | **fixed**, detector *and* fixture, mutation-proved |
+| `_retired_blast_radius` warns on an unrelated input's namespace | fix-auditor | open |
+| `projection`'s scope sentence asserts a falsehood for a retired-only and a proposed-only scope | fix-auditor | open |
+| the flat-form refusal binds at the invocation door while every other door accepts the namespace | fix-auditor | open |
+| `C9-30`'s filter is one-sided — the retired row's own name still transfers | fix-auditor | open |
+| the twelfth trip's fix prescribes a remedy `reinstate` refuses | fix-auditor | open |
+| `C19-84`'s Rule-U fallback is unwarned | fix-auditor | open |
+| kill row, round 2 | kill row | in flight |
 
 ---
 
