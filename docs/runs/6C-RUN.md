@@ -108,6 +108,7 @@ Every change amended its spec and its ids **in the same commit**, which is what 
 | **R72** | `ACTIONS.md` §2.3 prints `ref_key` **and** `parse_ref` | **`C19-77`**, **`C19-78`** |
 | **R73** | `ACTIONS.md` §6 heading four → five, **6-9 / 6-10 / 6-11** new, §6.5 new, §7's declining argument amended; `INTERFACE.md` §5.12 thirty → thirty-one | **`C19-79`**, **`C19-80`**, **`C19-81`** |
 | **R75** | `INTERFACE.md` §5.9/§5.12's *"every alias the retired row carries is re-pointed"* now describes a write that exists | **`C9-26`**, **`C9-27`**, **`C9-28`** |
+| **the loop** *(rounds 1–3)* | `ACTIONS.md` **2.5-12**, **2.5-13**, **6-12**, **6-13**, **10-11**, **10-12** new or amended; `INTERFACE.md` §5.4 **34 → 36 values** and §5.9's R75 paragraph gains what the write left open | rounds 1–2: `C9-29` … `C9-31`, `C10-20`, `C19-82` … `C19-86`. **Round 3: `C9-32`, `C9-33`, `C9-34`, `C12-19`, `C19-87`, `C19-88`, `C19-89`, `C19-90`** |
 
 ### 4.1 Which existing ids had to change, and this is the notice the brief requires
 
