@@ -144,7 +144,7 @@ Every change amended its spec and its ids **in the same commit**, which is what 
 |---|---|---|---|---|---|---|
 | **1** | kill row, briefed with all eleven · beacon integrator | **1** | 7 | 5 | **1 — the twelfth** | 346 |
 | **2** | fix-auditor on round 1's own fixes · kill row, briefed with all twelve | **2** | 6 | 4 | **1 — the thirteenth** | 347 |
-| **3** *(next, the cap)* | fix-auditor on round 2's fixes · kill row with all thirteen · integrator on R70/R71/R73 — **§6.6** | | | | | |
+| **3** *(the cap)* | fix-auditor on round 2's AND item 1's fixes · kill row with all thirteen · integrator on R70/R71/R73 | **2** | 3 | 7 | **1 — the FOURTEENTH** | **366** |
 
 ### 6.1 Round 1 — the kill row's TWELFTH trip, and it is this row's own regression
 
@@ -176,9 +176,9 @@ The tenth trip's countersignature made this lens a standing requirement rather t
 
 The remaining round-2 findings are recorded with their fixes in §6.4 as they land. **The kill-row lens of round 2 died mid-flight on a session limit after reporting only that its first probe reproduced; it has been re-issued rather than counted, because this register's own evidence is that a missed lens is a missed finding rather than a missed formality** — row 6b's round-2 kill-row lens died the same way and its re-issue found the eleventh trip on the first target it looked at.
 
-### 6.4 Every finding of rounds 1 and 2, with its disposition
+### 6.4 Every finding of all THREE rounds, with its disposition
 
-**This table is the row's working state, and it is written for a reader with no memory of the session that produced it.** The probes that found these lived in a session scratchpad and are **not durable**; what is durable is the contract id beside each fixed finding, which reproduces it, and the observed evidence quoted beside each open one, which is enough to reconstruct the probe. An open row is work, not a note.
+**This table is the row's working state, and it is written for a reader with no memory of the session that produced it.** *(Rounds 1 and 2 first, then round 3 and the item that closed every one of their `OPEN` rows.)* The probes that found these lived in a session scratchpad and are **not durable**; what is durable is the contract id beside each fixed finding, which reproduces it, and the observed evidence quoted beside each open one, which is enough to reconstruct the probe. An open row is work, not a note.
 
 #### Round 1 — kill-row lens (briefed with eleven trips)
 
@@ -240,6 +240,49 @@ The remaining round-2 findings are recorded with their fixes in §6.4 as they la
 
 **What it explicitly did NOT probe, and said must not be read as cleared:** **R70 `projection`** (read only — the greedy-prefix arithmetic and the per-predicate `_consumer_report` recomputation in the `consumers_at_risk` loop are unexamined by execution), **R71 `_retired_blast_radius`**, and **R73 `review_invocation`'s namespace scoping**. Also not run: the full three-leg suite and Postgres, under the machine's resource gate.
 
+#### Round 3 — kill-row lens (briefed with all THIRTEEN trips, aimed at `import_types` and `reinstate` under standing rule (c))
+
+| # | finding | disposition |
+|---|---|---|
+| B1 | **the FOURTEENTH trip** — a word a TOMBSTONE still answers to as an **alias** is free at **all three doors that MINT a name**: `propose_type`, `approve` and `import_types`. **[Observed, five ordinary calls]** minted with empty warnings, after which the store refuses **both** `merge_types` and `reinstate` non-overridably — the tombstone permanently un-reinstatable, which is ruling **R11**'s own governance act | **fixed** — `word_previously_retired:<holder>`, `C4-15`, `C5-13`, `C12-21`; **tenth** checker axis, mutation-proved. Provenance by BISECT: **predates row 6c entirely**; R75 widened the blast radius rather than introducing it |
+
+**What it probed and found SOUND, so round 4 need not re-pose it:** `reinstate`'s per-row question, asked unconditionally through `_alias_clash(rec.name, rec.kind, dormant)` and refusing `alias_collision` non-overridably at **every** cash-point it could construct — the `retire → retire-successor → reinstate → retire → reinstate` cycle, two tombstones on one word, merge-produced tombstones, both directions of the variant-B chain: **no `reinstate` trip**. `C16-06`'s two-active-holders invariant under a **fuzz**: exhaustive depth-3 over 27 operations (**19,683 sequences**) plus **6,000** random depth-6 sequences over 66 operations — `retire`, `retire(successor=)`, `reinstate`, `merge_types`, four `import_types` shapes, `propose_type`+`approve`, consumer registration, vocabulary growth and variant spellings — **no breach**, and mutation-proved by disabling `merge_types`' `_alias_clash` to reproduce trips 12/13. The empty-identity-key axis (`状态` written byte-identically onto two live predicates: `resolve_type` answers `none / None / 0.0`, **no 1.0 collapse**, Q68's shipped default holds). `identity_stale` reaching the import alias door. And `C12-20` already closed in the worktree it read.
+
+**One suspicion it could NOT construct, reported as such rather than as a finding:** `merge_types`' new `C10-20` guard escapes on `not same_word(holder, left.name)`, and `_alias_clash` returns only the **first** active holder in page order — so a genuine third live holder that sorts *after* a row whose name is a spelling of `left.name` would be swallowed. **[Inferred]** — the prerequisite state could not be built, because every door that would create a second live holder already refuses. It needs an ordering-controlled double and is carried to §6.6 rather than counted here.
+
+**What it did NOT probe, and said must not be read as cleared:** Postgres, `sqlite_minimal` and the full suite (the resource gate); cross-namespace anything, including per-namespace variants of trip 14; `approve`'s pending-proposal window as a door **in its own right** for other word classes; `attributes`, edge instances, `record_use` and the whole ACTIONS layer.
+
+#### Round 3 — fix-auditor lens (pointed at round 2's fixes **and** at item 1's, some of them hours old)
+
+**The register's counted policy held for the SIXTH row running, and this time it is sharper than that: every single finding is inside a fix made in THIS ROW, and six of the eight are inside fixes made in this ROUND.**
+
+| # | finding | disposition |
+|---|---|---|
+| M1 | **`C19-87`'s quantifier deleted a true warning.** Rule U's *every candidate has retired it* was applied to `landed` as well as to `candidates` — but **a landing is a fact and a candidate is a maybe**. **[Observed, sqlite + async mirror]** one invocation landing `person_links` in `tenant_a` (retired) **and** in `default` (active) answered `()` where the `tenant_a`-only landing warns. `C19-83`'s FIRST direction, restored by the fix for its second — and the answer to *can a host suppress this?*: one appended `add_edge` did it | **fixed** — `C19-91` |
+| M2 | **`projection`'s POOL was ONE un-paged `list_types` read while `_scope_census` paged the same scope to exhaustion in the same call** *(graded BLOCKING by the integrator lens, which found it independently — see below)* | **fixed** — `C19-92` |
+| M3 | **`C12-19` filed a FABRICATED correction.** `standing` falls back to the eighth trip's variant-spelling row; with an incoming `deprecated` row the `name_previously_retired` branch is skipped, so the alias diff ran against a row the call never touches. **[Observed]** `beta_` retired holding `zzz_word`, an import of a `deprecated` `beta` answered `aliases_removed:zzz_word` and filed the event on `beta` — while `beta_` **still held the word** and `beta` never had | **fixed** — `C12-20` |
+| m1 | `C9-32`'s claim and §5.9's sentence — *the skipped words are stated rather than silently filtered* — were both true only when at least one word **also survived**, because the block was gated on `repoint_words` | **fixed** — `C9-35` |
+| m2 | `C19-89`'s clause printed **`5 of 0 row(s)`**: pre-filter count over post-filter denominator *(found independently by the integrator lens)* | **fixed** — `C19-93` |
+| m3 | **`C19-90` was right about ONE of three identity segments.** A `:` anywhere before the `#` yields four segments, so `parse_ref` **raises** for `name`, `kind` and an `EdgeRef.family` too; all three said *"reads back as a DIFFERENT reference"* | **fixed** — `C19-94`, and the consequence is **asked** of `parse_ref` now rather than classified |
+| m4 | **axis nine's asymmetry survived at two of its five fixtures.** The thirteenth trip's record names *"the asymmetry between two fixtures in one axis"* as the entire gap and `_repeat_merge` was corrected; `_repeat_import` and `_repeat_reinstate` still repeated into the **same** row, which is idempotent by coincidence and can pose nothing | **fixed** — both repeat into a different target now, **both mutation-proved** (no live defect at either door: `import_refused:alias_collision` and `alias_collision` are the shipped answers) |
+| m5 | the new `not census_complete` sentence said *"an all-zero answer"* over counts that were not zero | **fixed** — it is about the READ now, `C19-92` |
+
+**What it verified SOUND:** `C12-19` on the row it was written for; `C9-33`'s call-site warning; `C9-32`'s two-sided filter; `C19-87`'s explicitly-scoped path (no host-supplied list can move it) and its no-inputs fallback; `C19-89`'s gating when `unreviewed` was not asked; `_scope_census`'s termination on every double, including the repeated-cursor guard; `C10-20`'s invariant at the sibling doors; both new warning values with their §5.4 rows; `EdgeRef` opacity; and that the `import_refused:*` branches drop `extra_import_warnings`, so nothing claims a removal that did not happen.
+
+#### Round 3 — integrator lens (R70 `projection` EXECUTED, R71 `_retired_blast_radius`, R73 `review_invocation`)
+
+| # | finding | disposition |
+|---|---|---|
+| B1 | **`projection` pages one read of the scope and not the other.** **[Observed, `DegradedAdapter(page_cap=3, page_cursor=True)`, 9 families]** `counts={'ingest': 3, 'publish': 0, 'report': 0}` against a truth of `6/2/3`; `over_by=0` — *everything fits* about a scope §10 exists to say does not; `why_incomplete` **positively asserting** *"groups no family in this scope carries: ['publish','report']"* about two groups **five families carry**; and a truncated pool **refusing a live group as a typo** (`Refusal(action_family_unknown)` for a group an active registered family declares). Reproduced on the async mirror. Honestly noted as **not reachable on the two shipped SQL backends today** — a contract-level defect a third-party backend author hits first | **fixed** — `C19-92`; the pool is the census, one read, and the typo refusal and the unknown-groups claim are both gated on it finishing |
+| M1 | **`C19-87` made the ledger's own knowledge subordinate to the guess it was meant to correct.** `o.namespace in candidates` meant `landed` was empty in exactly the case where the correction matters. **[Observed, both directions, sqlite + async]** false positive: family ACTIVE in `beacon` where the edge landed, warned because the inputs named a namespace where it is retired — *round 2's `M1` sentence verbatim, at the door whose own comment says the ledger knows where the edge went*. False negative: the edge landed in `tenant_b` where the family is retired, inputs named `tenant_a`, **no warning at all** | **fixed** — `C19-91`; an observed effect matching by `(op, family, kind)` **is** where the edge landed, whatever the inputs said |
+| m1 | `C19-89`'s clause is arithmetically impossible — `5 of 0 row(s)` *(the fix-auditor's `m2`, found independently)* | **fixed** — `C19-93` |
+| m2 | `consumers_at_risk` recomputes `_consumer_report` **once per predicate per evicted family** — five `find_consumers` where two suffice, answer verified identical. And an evicted family `get_type` cannot return contributed **nothing and said nothing** | **fixed** — `C19-95`, both halves |
+| m3 | `review_invocation` accepts a review of an `auto`-mode invocation never in any queue, and the event was **indistinguishable from a genuine drain** | **fixed** — `C19-96`. Accepting it is correct (refusing to record a review a person performed is §2.5's *worst available answer*); the event carries the mode of record and `was_queued` |
+
+**What it drove and found SOUND:** **R73's namespace scoping, end to end and on every shape it could construct** — a tenant-scoped operator cannot drain another tenant's queue, cannot drain it by omitting the argument, and every failed attempt left both queues intact (`review(A1, namespace='tenant_b')` → `Refusal(unknown_invocation)`, queues unchanged); two reviews of one invocation append two events with `reviewed_by` following the latest; empty/whitespace `reviewed_by` raises. **`projection`'s arithmetic on every COMPLETE read** — over a 12-publisher / 53-family store with repeats and unknown groups in `order` and `reserved` at 0/2/8: `fits ∩ would_evict == ∅`, `fits + would_evict == dict.fromkeys(order)`, `known == sum(admitted.values())`, `admitted[g] ≤ counts[g]`, `over_by == max(0, total − capacity)`, rule 10-10's repeat charged once. **The census (`C19-88`) telling the three empties apart.** **`_retired_blast_radius` everywhere except the `observed` gate** — no inputs at all, opaque inputs refused at both doors before any namespace question, one warning per family rather than per effect, an unregistered family silent (Rule U), and preflight and record agreeing on every one.
+
+**One thing it found and did not grade, taken anyway:** a scope of **active** `kind="action"` rows that DECLARE no family produced `counts={'publish': 0}`, `fits=('publish',)` and **no scope sentence at all** — a fourth empty cause rule 10-11 does not enumerate. Not graded because *"a bare `kind="action"` row is a shape no shipped call produces on purpose"*; taken because an unreachable-on-purpose shape still reaches a **report**, and a report with nothing to say about its own zero is what that field exists to end (`C19-92`).
+
 #### Round 3, item 1 — every `OPEN` row closed, and two of round 2's own fix shapes corrected in the closing
 
 **All ten `OPEN` rows above are closed** *(commit `dcb1c5a`)*, and the one half that is argued rather than fixed is argued because the finding itself said it needed a ruling: `C19-82`'s **binding layer** is `INTERFACE.md`'s door, and this row's fence bars taking it. It is **Q81**.
@@ -272,6 +315,43 @@ And it widens standing rule (b) of the twelfth countersignature. That rule says 
 **Resource gate for round 3's lenses:** single-process SQLite, the `DegradedAdapter` doubles and the async mirror are unrestricted. Postgres and the full three-leg suite are gated on the fleet's four-reading check; a lens must not run either.
 
 **Stop:** two consecutive clean rounds, or — since that is now unreachable within the cap — **three rounds plus an honest convergence note**, which §6 must carry in the shape rows 4c, 4d, #6 and 6b wrote theirs: what the rounds found, whether the findings shrank, what a fourth round would most likely find, and the statement that the row was stopped rather than finished.
+### 6.7 The convergence note — and the row was STOPPED rather than finished
+
+**Standing constraint 7's stop rule is two consecutive clean rounds, or three rounds plus an honest convergence note. No round of this row was clean, so the second branch is the one that applies, and this is that note.**
+
+#### What the three rounds found
+
+| round | lenses | BLOCKING | MAJOR | MINOR | kill-row trips | ids after |
+|---|---|---|---|---|---|---|
+| **1** | kill row (eleven trips) · beacon integrator | 1 | 7 | 5 | **1 — the TWELFTH** | 346 |
+| **2** | fix-auditor · kill row (twelve trips) | 2 | 6 | 4 | **1 — the THIRTEENTH** | 347 |
+| **3** | fix-auditor · kill row (thirteen trips) · integrator | **2** | **3** | **7** | **1 — the FOURTEENTH** | **366** |
+
+Round 3's row is **distinct findings**: three lenses reported fourteen, and two of them were found **twice, independently** — `projection`'s un-paged pool (the integrator graded it BLOCKING, the fix-auditor MAJOR) and `C19-89`'s impossible denominator. That two lenses aimed at different things collided on one defect is worth more than either report: it is the first time in this row that a finding arrived with its own replication.
+
+#### Did the findings shrink? No — and saying otherwise would be the comfortable reading
+
+**The count did not fall: 13, 12, 12.** What moved is the **mix**: MAJOR went 7 → 6 → 3 while MINOR went 5 → 4 → 7, and both BLOCKING of round 3 are trips or near-trips rather than ordinary defects. Read charitably that is a loop finding smaller things; read honestly it is a loop that has not run out of things to find.
+
+**And one number did not move at all: every round produced a kill-row trip.** Three rounds, three trips — the twelfth, the thirteenth and the fourteenth — in a row whose subject was *amendments to a specified surface*.
+
+#### Where the defects live, counted rather than asserted
+
+**Every single round-3 finding is inside a fix made in this row, and six of the twelve are inside fixes made in round 3 itself, most of them hours old at the time the lens read them.** That is the sixth consecutive row for which this register's counted policy — *the next defect lives in the last fix* — has been right, and this row is its sharpest instance: `C19-87` broke `C19-83`'s first direction while closing its second; `C12-19` filed the fabricated correction it was minted to prevent; `C19-90` was right about one identity segment of three; `C9-32`'s own claim about stating skipped words was false in the pure case. **A fix is the most dangerous code in this repository, and it is dangerous in a specific way: it is written by someone holding one example in mind.**
+
+#### What a fourth round would most likely find, and this is a prediction rather than a hope
+
+1. **Defects in round 3's fourteen new ids and its tenth axis** — by the counted policy, this is where the next one is, and the policy has been right six rows running. The specific shapes to point a lens at: `_word_rows(match_aliases=True)` now reads aliases at three doors that never read them, and `_scope_census` now feeds `projection`'s pool as well as its sentence.
+2. **The one suspicion round 3's kill-row lens could not construct**: `merge_types`' `C10-20` escape on `not same_word(holder, left.name)` against `_alias_clash`'s **first-holder-in-page-order** return. It needs an ordering-controlled double, and it is the only [Inferred] finding this row is carrying forward.
+3. **Cross-namespace variants of trip 14**, which no lens has touched: `namespace` is untouched across all fourteen trips, and that is now the longest-standing unexamined claim in the register.
+4. **The ACTIONS layer under a kill-row lens.** Three rounds pointed that lens at `INTERFACE.md`'s doors; an action family **is** a `TypeEntry`, so every trip's shape has an untested twin one kind along.
+
+#### The honest statement
+
+**The row was STOPPED rather than finished.** It is at constraint 7's cap with a BLOCKING found in its final round, a fourteenth kill-row trip fixed in its final commit, and a named, unconstructed suspicion carried forward. Nothing here says the surface is clean; what it says is that three rounds were run, everything they found was fixed or argued, and the argument for a fourth is on the record for whoever rules on it.
+
+> **What is different about this row's last two trips, and it is the one thing that has changed for the better.** The twelfth trip was this row's own regression. The thirteenth split — one variant the row's own, one live at 6b's landing. **The fourteenth is entirely pre-existing, in doors no row of this lineage had touched, and it was found by a lens briefed to look somewhere else.** Two rounds running, the loop has reached past its own diff. That is the strongest argument on the record against `stop` — and it is also, read the other way, an argument that fourteen trips in fourteen rounds says something about the guard surface rather than about any one row. Both readings are the founder's, and the `stop` option is put explicitly for the tenth time.
+
 ---
 
 ## 7. What the build taught
