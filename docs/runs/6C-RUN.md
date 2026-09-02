@@ -10,15 +10,15 @@
 
 | | before (row 6b) | after |
 |---|---|---|
-| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **347** — 338 through the five rulings, 8 from round 1's two lenses, 1 from round 2's |
+| contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **366** — 338 through the five rulings, 9 from round 1's two lenses, 1 from round 2's, and **18 from round 3**, every one of which is a defect in a fix this row had already made |
 | sync suite, one run, three legs | `757 passed` | **PENDING** |
 | async suite, one run, three legs | `796 passed` | **PENDING** |
 | `Refusal.reason` values | 30 | **31** — `unknown_invocation`, the value §7 argued for and declined on a premise this row's fifth call expired |
-| `warnings` values / carriers | 32 values, ten carriers | **34 values, eleven carriers** — R71 gives `edge_family_retired` two more carriers (`Preflight`, `Invocation`) rather than minting a variant of it; `retire_no_op` is minted by the twelfth trip's fix |
+| `warnings` values / carriers | 32 values, ten carriers | **37 values, eleven carriers** — R71 gives `edge_family_retired` two more carriers (`Preflight`, `Invocation`) rather than minting a variant of it; the other four are minted by trips and by the loop: `retire_no_op` (twelfth trip), `aliases_transferred` and `aliases_removed` (round 3 item 1, the two halves R75's write left open), and `word_previously_retired` (the **fourteenth** trip) |
 | `ACTIONS.md` calls | 4 printed (5 shipped) | **5 printed, 5 shipped** — §6.5, and the heading corrected in the same change |
 | `check_spec_drift.py` ACTIONS gates | 12 shapes / 4 calls / 10 vocabularies | **12 shapes / 5 calls / 2 module functions / 10 vocabularies** |
-| `check_merge_guard.py` axes | 7 | **9** — the alias re-point (R75) and **the same call, twice** (the twelfth trip), each over its shapes on every leg plus two paging doubles, **both proved by mutation** |
-| `ROADMAP.md` kill-row trips | 11 | **13** — the twelfth is this row's own regression; the thirteenth is that trip's class at the SIBLING caller, and it bisects in two: one variant live at 6b's landing, one introduced by R75. Both proved by BISECT rather than by reading a diff |
+| `check_merge_guard.py` axes | 7 | **10** — the alias re-point (R75), **the same call, twice** (the twelfth trip), and **a tombstone's words at the mint doors** (the fourteenth), each over its shapes on every leg plus two paging doubles, **all proved by mutation**; axis nine's five repeat fixtures now repeat into DIFFERENT targets, which two of them did not |
+| `ROADMAP.md` kill-row trips | 11 | **14 — one per round.** The twelfth is this row's own regression; the thirteenth bisects in two (one variant live at 6b's landing, one introduced by R75); the **fourteenth predates row 6c entirely**, in three doors no row of this lineage had touched, found by a lens briefed to look at two other calls. All three proved by BISECT rather than by reading a diff |
 
 ---
 
