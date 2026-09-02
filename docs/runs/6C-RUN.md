@@ -11,8 +11,8 @@
 | | before (row 6b) | after |
 |---|---|---|
 | contract ids ([`PACKAGE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) §6.2) | 327 | **366** — 338 through the five rulings, 9 from round 1's two lenses, 1 from round 2's, and **18 from round 3**, every one of which is a defect in a fix this row had already made |
-| sync suite, one run, three legs | `757 passed` | **PENDING** |
-| async suite, one run, three legs | `796 passed` | **PENDING** |
+| sync suite, one run, three legs | `757 passed` | **837 passed**, exit 0 — postgres + sqlite + `sqlite_minimal` in one run |
+| async suite, one run, three legs | `796 passed` | **874 passed**, exit 0, same three legs |
 | `Refusal.reason` values | 30 | **31** — `unknown_invocation`, the value §7 argued for and declined on a premise this row's fifth call expired |
 | `warnings` values / carriers | 32 values, ten carriers | **37 values, eleven carriers** — R71 gives `edge_family_retired` two more carriers (`Preflight`, `Invocation`) rather than minting a variant of it; the other four are minted by trips and by the loop: `retire_no_op` (twelfth trip), `aliases_transferred` and `aliases_removed` (round 3 item 1, the two halves R75's write left open), and `word_previously_retired` (the **fourteenth** trip) |
 | `ACTIONS.md` calls | 4 printed (5 shipped) | **5 printed, 5 shipped** — §6.5, and the heading corrected in the same change |
@@ -345,6 +345,16 @@ Round 3's row is **distinct findings**: three lenses reported fourteen, and two 
 2. **The one suspicion round 3's kill-row lens could not construct**: `merge_types`' `C10-20` escape on `not same_word(holder, left.name)` against `_alias_clash`'s **first-holder-in-page-order** return. It needs an ordering-controlled double, and it is the only [Inferred] finding this row is carrying forward.
 3. **Cross-namespace variants of trip 14**, which no lens has touched: `namespace` is untouched across all fourteen trips, and that is now the longest-standing unexamined claim in the register.
 4. **The ACTIONS layer under a kill-row lens.** Three rounds pointed that lens at `INTERFACE.md`'s doors; an action family **is** a `TypeEntry`, so every trip's shape has an untested twin one kind along.
+
+#### The landing run, and the one red it produced
+
+**Three legs, one run each: sync `837 passed`, async `874 passed`, both exit 0**, over postgres, sqlite and `sqlite_minimal`. Floors were 757 / 796.
+
+**The first attempt came back with one red and it is worth recording, because it is this row's own defect class arriving from the other end.** `check_capability_matrix.py` reported `stores_events=False` **FAILS, 1 failed** — and round 1 of this row had already learned that a matrix red names itself in seconds if you re-run the one configuration with `-ra` instead of reading a tally. It did: `test_c19_96`, written hours earlier, drives `review_invocation`, which refuses `cannot_record_override` where a review cannot be recorded. That is **correct behaviour and the test's scaffolding rather than its subject**, so the fix is a *declaration*, not code.
+
+> **The symmetry is the finding.** Round 1's own red was `get_closest_marker` silently keeping one of two stacked `@requires_capability` marks, so three ids ran in configurations whose fixtures cannot exist; this row wrote the `iter_markers` fix that made stacking honest, and then **omitted the declaration** that fix exists to honour. A harness that ignores a declaration and a test that makes none are the same defect from opposite ends, and both were caught by the gate built for the first one. Matrix back to **18/18 conformant**, exit 0.
+
+**And a housekeeping fact that is NOT this row's, checked because the brief asks for it:** the `oo-pg` container holds **193** leftover `oo_%` schemas. **[Observed]** the count is unchanged across a fresh Postgres test at this HEAD, so the fixture's teardown (D-4d-9) works today and these are accumulated from earlier runs. Left in place rather than dropped: they block nothing, and 193 schema drops on a shared container is not a change to make unasked.
 
 #### The honest statement
 
