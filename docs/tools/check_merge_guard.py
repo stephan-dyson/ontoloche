@@ -2456,9 +2456,25 @@ def _repeat_merge(registry: Registry) -> str | None:
 
 
 def _repeat_import(registry: Registry) -> str | None:
-    """The same aliased row imported twice."""
+    """The same WORD imported onto a SECOND row.
+
+    **The asymmetry the thirteenth trip named, at the third of five fixtures** (round 3,
+    fix-auditor lens). That record's diagnosis was that `_repeat_merge` repeated into the
+    SAME target while `_repeat_retire` used two, and *"the asymmetry between two fixtures
+    in one axis was the entire gap"* -- so `_repeat_merge` was corrected and these two
+    were left as they were. Importing one row twice is **idempotent by coincidence**: it
+    writes the same aliases back onto the same row and can never leave two rows holding
+    one word, which is the invariant this axis exists to hold.
+
+    Standing rule (c): *a word already given away is an unconsumed permission, and the
+    caller that gives it away again must ask who holds it now.* The second import names a
+    DIFFERENT row, so the axis can finally pose it. `import_types` refuses
+    `import_refused:alias_collision` today; the point of the fixture is that a regression
+    would now turn a row red instead of exiting 0.
+    """
     _seed(registry, "beta", kind="predicate", definition="one and the same thing")
-    _seed(registry, "aaa_note", predicates=["beta"])
+    _seed(registry, "gamma", kind="predicate", definition="one and the same thing")
+    _seed(registry, "aaa_note", predicates=["beta", "gamma"])
     row = {"name": "beta", "status": "active", "aliases": ["zeta"],
            "definition": "one and the same thing"}
     rows = registry.import_types([row], kind="predicate")
@@ -2467,21 +2483,47 @@ def _repeat_import(registry: Registry) -> str | None:
             "this backend did not keep the imported alias "
             f"({list(rows[0].warnings) if rows else 'no row'})"
         )
-    registry.import_types([row], kind="predicate")
+    registry.import_types(
+        [{"name": "gamma", "status": "active", "aliases": ["zeta"],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
     return None
 
 
 def _repeat_reinstate(registry: Registry) -> str | None:
-    """`reinstate` twice on one retired row."""
+    """A retired row's WORD given away, and then the row reinstated.
+
+    **The fifth of five fixtures, and the same asymmetry** (round 3, fix-auditor lens).
+    `reinstate` twice on one row is idempotent by coincidence: the second call finds the
+    row already active and answers `reinstate_no_op:not_retired` without writing, so it
+    cannot pose *who holds this row's words now?* -- which is the whole of standing rule
+    (c), and `reinstate` is one of the two callers the round-3 kill-row lens was aimed at.
+
+    Here the retired row's word is transferred to a live row while the row is dormant,
+    and the reinstatement then has to ask. `alias_collision` is the answer today; a
+    regression turns this row red.
+    """
     _seed(registry, "alpha", kind="predicate", definition="one and the same thing")
-    _seed(registry, "aaa_note", predicates=["alpha"])
+    _seed(registry, "beta", kind="predicate", definition="one and the same thing")
+    _seed(registry, "aaa_note", predicates=["alpha", "beta"])
+    imported = registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zeta"],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
+    if not imported or "zeta" not in (imported[0].aliases or ()):
+        return _NOT_REACHABLE + "this backend did not keep the imported alias"
     gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
     if isinstance(gone, Refusal):
         return _NOT_REACHABLE + f"this backend cannot retire here ({gone.reason})"
-    first = registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
-    if isinstance(first, Refusal):
-        return _NOT_REACHABLE + f"the first reinstate is refused here ({first.reason})"
-    registry.reinstate("alpha", "again", reinstated_by="user:sd")
+    # the dormant row's word, given to a live one while it sleeps
+    registry.import_types(
+        [{"name": "beta", "status": "active", "aliases": ["zeta"],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
+    registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
     return None
 
 
@@ -2592,6 +2634,163 @@ def check_repeated_calls() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ======================================================================== axis 10
+#
+# **THE TOMBSTONE'S WORDS, AT THE DOORS THAT MINT A NAME.** The kill row's FOURTEENTH
+# trip (row 6c, round 3), and the axis this file owed under standing rule (b) as the
+# thirteenth countersignature widened it: *the checker axis a new writer of an identity
+# field lands with drives every OTHER writer of that field in the same commit.*
+#
+# Every axis above asks about a word an **ACTIVE** row holds. The eighth trip closed the
+# retired half of the **name** door (`_word_rows`) and this file grew `_variant_store`
+# for it; nothing ever asked the retired half of the **alias** door, and two counts said
+# why:
+#
+#   1. `_alias_only_store` -- the fixture behind BOTH name-mint doors of axis four --
+#      contains **zero** `retire(` calls, so it can pose *"can a new row take a word an
+#      ACTIVE row holds as an alias?"* and never *"...a word a RETIRED row still holds?"*;
+#   2. `include_retired` appeared **zero** times in this whole file, and both `C16-06`
+#      detectors filter to active rows -- so the gate was structurally unable to see a
+#      tombstone's words at all, which is exactly the class standing rule (c) is about.
+#
+# **The probe is not `C16-06`.** Two active rows never appear here: the tombstone is
+# retired throughout. What the trip costs is `reinstate` -- the store ends one ordinary
+# call from mechanism 4, refusing BOTH `merge_types` (`predicate_merge`) and `reinstate`
+# (`alias_collision`) non-overridably, so the tombstone can never be brought back and
+# ruling **R11**'s governance act is permanently unavailable. So the axis asks the
+# question in the register's own terms: **after the mint door, can the holder still be
+# reinstated?**
+
+
+def _tombstone_word_store(registry: Registry) -> str | None:
+    """A RETIRED row that still answers to a word no row of that name ever held.
+
+    `_alias_only_store` with one more ordinary, permitted call -- and that call is the
+    entire difference between a question this file could pose and one it could not.
+    INTERFACE.md 5.8 keeps a tombstone's words by design, so the word is spoken for and
+    nothing in the state says so.
+    """
+    built = _alias_only_store(registry)
+    if built is not None:
+        return built
+    gone = registry.retire(
+        "searchable", "no longer used", retired_by="user:sd", force=True
+    )
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire the holder ({gone.reason})"
+    if "commentable" not in (gone.aliases or ()):
+        return _NOT_REACHABLE + (
+            "this backend did not keep the tombstone's aliases, so there is no "
+            "unconsumed permission here"
+        )
+    return None
+
+
+def check_tombstone_words() -> tuple[list[str], list[str], list[str]]:
+    """Axis 10 -- the FOURTEENTH trip. Every mint door, against a tombstone's alias."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    doors = ("propose_type", "import_types", "approve")
+    for leg, build, _knowable in _legs():
+        for door in doors:
+            registry = build()
+            pending = None
+            if door == "approve":
+                # The word is FREE when the proposal is made and spoken for by the time
+                # it is approved -- ruling R40 forces every `kind="predicate"` down this
+                # two-step path, so it is the door the kill row's own subject must use.
+                pending = registry.propose_type(
+                    "commentable", "a capability", EVIDENCE, "user:sd", kind="predicate"
+                )
+                if isinstance(pending, (Refusal, TypeEntry)):
+                    unreachable.append(
+                        f"{leg} / {door} / tombstone word: this backend cannot hold a "
+                        f"pending proposal, so there is no window to go stale in"
+                    )
+                    lines.append(
+                        f"  {leg:15s} {door:17s} {'tombstone word':24s} NOT REACHABLE"
+                    )
+                    continue
+            built = _tombstone_word_store(registry)
+            if built is not None:
+                unreachable.append(
+                    f"{leg} / {door} / tombstone word: " + built[len(_NOT_REACHABLE):]
+                )
+                lines.append(
+                    f"  {leg:15s} {door:17s} {'tombstone word':24s} NOT REACHABLE"
+                )
+                continue
+
+            if door == "propose_type":
+                answer = registry.propose_type(
+                    "commentable", "a capability", EVIDENCE, "user:sd", kind="predicate"
+                )
+                # **The `reinstate` probe alone cannot fail at THIS door, and finding
+                # that out took one mutation run** -- axis four's own recorded lesson,
+                # arriving again one axis along. Ruling R40 makes
+                # `propose_type(kind="predicate")` return a PENDING proposal, so on a
+                # backend that can hold one **nothing is minted here** and `reinstate`
+                # still succeeds: the row reads `held` for the wrong reason and the
+                # collision arrives one call later, at `approve`. So this door asserts
+                # what the CALLER is owed at the door they knocked on -- the tombstone
+                # back, carrying `word_previously_retired`, and no proposal created.
+                if not isinstance(answer, TypeEntry) or not any(
+                    w.startswith("word_previously_retired")
+                    for w in (answer.warnings or ())
+                ):
+                    problems.append(
+                        f"{leg} / {door} / tombstone word: this door answered a "
+                        f"{type(answer).__name__} for a word the RETIRED 'searchable' "
+                        f"still holds as an alias, instead of handing back the holder "
+                        f"with `word_previously_retired`. A tombstone's `name` and "
+                        f"`aliases` are an unconsumed permission (standing rule (c)), "
+                        f"and the name half has answered this way since the EIGHTH trip"
+                    )
+                    lines.append(
+                        f"  {leg:15s} {door:17s} {'tombstone word':24s} FAILED"
+                    )
+                    continue
+            elif door == "import_types":
+                registry.import_types(
+                    [{"name": "commentable", "kind": "predicate",
+                      "definition": "a capability", "status": "active"}],
+                    namespace="default", kind="predicate",
+                )
+            else:
+                registry.approve(pending.id, "user:sd")
+
+            # **The probe is `reinstate`, and it is the register's own words.** A live
+            # row named `commentable` means the tombstone can never come back: the
+            # store refuses `reinstate` `alias_collision` NON-OVERRIDABLY, so ruling
+            # R11's governance act is gone for that row, permanently, through calls that
+            # every guard permitted.
+            back = registry.reinstate(
+                "searchable", "we were wrong", reinstated_by="user:sd"
+            )
+            if isinstance(back, Refusal):
+                minted = [
+                    t.name
+                    for t in registry.list_types("predicate", include_retired=True).types
+                    if t.name == "commentable"
+                ]
+                problems.append(
+                    f"{leg} / {door} / tombstone word: this door minted "
+                    f"{minted or ['(nothing, and reinstate still refused)']} over a word "
+                    f"the RETIRED 'searchable' still answers to, and `reinstate` is now "
+                    f"refused {back.reason!r} -- the tombstone can never be brought back, "
+                    f"which is the governance act ruling R11 created `reinstate` to "
+                    f"provide. A tombstone's `name` and `aliases` are an unconsumed "
+                    f"permission (standing rule (c)); this door spent one"
+                )
+                lines.append(f"  {leg:15s} {door:17s} {'tombstone word':24s} FAILED")
+            else:
+                lines.append(f"  {leg:15s} {door:17s} {'tombstone word':24s} held")
+
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -2668,6 +2867,11 @@ def main() -> int:
             "  and THE SAME CALL, TWICE -- the kill row's twelfth trip: a guard "
             "evaluated once for a call that can run twice:",
             check_repeated_calls,
+        ),
+        (
+            "  and A TOMBSTONE'S WORDS AT THE MINT DOORS -- the kill row's FOURTEENTH "
+            "trip: every axis above asks about a word an ACTIVE row holds:",
+            check_tombstone_words,
         ),
     ):
         print()

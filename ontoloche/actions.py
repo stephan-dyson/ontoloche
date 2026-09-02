@@ -359,7 +359,26 @@ def flat_form_problem(ref: Any) -> str | None:
                 # deployment can register everything there and never invoke a single
                 # action, with nothing at the declaration door warning it. Raised as
                 # **Q81** rather than taken.)*
-                unreadable = field == "namespace" and separator == ":"
+                # **Which consequence this is, ASKED rather than reasoned about.** The
+                # first cut hard-coded `field == "namespace" and separator == ":"` and was
+                # right about one of the three identity segments (row 6c, round 3,
+                # fix-auditor lens, MINOR -- inside this round's own fix). A `:` anywhere
+                # in the pre-`#` part puts FOUR colon-separated segments in front of the
+                # `#`, so `parse_ref` **raises** for a `:` in `name` and in `kind` and in
+                # an `EdgeRef.family` too; only `#` produces a reading of the wrong thing.
+                # **[Observed]** all three said *"reads back as a DIFFERENT reference"*
+                # while `parse_ref` raised `ValueError ... 4 colon-separated segment(s)`.
+                #
+                # So the function ASKS instead of classifying: it writes the flat form
+                # this reference would produce and reads it back. A case analysis over
+                # `(field, separator)` is a second home for `parse_ref`'s grammar, which
+                # is `EDGES.md` §2.4's own objection -- and it is the thing that went
+                # stale here within one commit. `C19-94`.
+                try:
+                    parse_ref(ref_key(ref))
+                    unreadable = False
+                except ValueError:
+                    unreadable = True
                 consequence = (
                     "a string `parse_ref` RAISES on, so the ledger row it writes cannot "
                     "be read back at all"

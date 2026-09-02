@@ -955,3 +955,118 @@ async def test_c12_19_an_import_that_removes_a_standing_alias_says_so_and_record
     assert not [
         w for w in quiet[0].warnings if w.startswith("aliases_removed")
     ], ("a signal that never turns off is noise", quiet[0].warnings)
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+async def test_c12_20_the_alias_diff_runs_against_the_row_this_call_overwrites(
+    adapter, make_registry
+):
+    """Row 6c, round 3's own fix-auditor lens, MAJOR — *a defect in `C12-19`, one commit
+    old, and it fabricates the very thing `C12-19` was minted to stop fabricating.*
+
+    `standing` falls back to the EIGHTH trip's **variant-spelling** row (``r.name !=
+    name``). That is right for the `name_previously_retired` and `live_consumers` guards
+    — they ask *is this WORD spoken for?* — and wrong for an alias diff, which asks
+    *what is this ROW losing?* With an incoming `deprecated` row the
+    `name_previously_retired` branch is skipped, so the diff ran against a row the call
+    never touches.
+
+    **[Observed, before the fix]** ``beta_`` retired holding ``zzz_word``; an import of a
+    `deprecated` ``beta`` answered ``('aliases_removed:zzz_word',)`` and filed the event
+    on ``beta`` — while ``beta_`` **still held the word** and ``beta`` never had. A
+    fabricated correction in the audit trail `INTERFACE.md` §5.8 exists to keep truthful.
+
+    `_word_rows`' own docstring names ``borough_`` and ``commentable_`` as spellings two
+    agencies normalising column headers produce, so UC3 reaches this ordinarily.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "beta_", kind="predicate", definition="one and the same thing")
+    written = await registry.import_types(
+        [{"name": "beta_", "status": "active", "aliases": ["zzz_word"],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
+    if not written or "zzz_word" not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the imported alias")
+    assert not isinstance(
+        await registry.retire("beta_", "withdrawn", retired_by="user:sd", force=True), Refusal
+    )
+
+    out = await registry.import_types(
+        [{"name": "beta", "status": "deprecated", "aliases": [],
+          "definition": "one and the same thing"}],
+        kind="predicate",
+    )
+    assert out and isinstance(out[0], TypeEntry), out
+    assert not [
+        w for w in out[0].warnings if w.startswith("aliases_removed")
+    ], ("`beta` never held `zzz_word`; `beta_` did, and this call did not touch it",
+        out[0].warnings)
+
+    every = {t.name: tuple(t.aliases or ()) for t in
+             (await registry.list_types("predicate", include_retired=True)).types}
+    assert every.get("beta_") == ("zzz_word",), ("the word is still where it was", every)
+    assert every.get("beta", ()) == (), every
+
+    fabricated = [
+        e
+        for e in (await registry.provenance("beta", namespace="default")).history
+        if e.event == "aliases_removed"
+    ]
+    assert not fabricated, (
+        "an event asserting a removal that did not happen is the class C12-19 was "
+        "minted to remove, committed by C12-19 itself",
+        fabricated,
+    )
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+async def test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types(
+    adapter, make_registry
+):
+    """THE KILL ROW'S FOURTEENTH TRIP, at the third mint door.
+
+    `import_types` is a NAME door in its own right — it was the second door of the
+    EIGHTH trip for the same reason — and it minted the identical row in the trip's own
+    reproduction. Shipping the fix at `propose_type` alone would be *a fix applied at
+    one call site of three*, which is the single sentence of the ninth, tenth and
+    eleventh kill-row trips.
+
+    **[Observed]** ``alpha`` retired still answering to ``zzz_moved`` by §5.8's design;
+    ``import_types([{"name": "zzz_moved"}])`` wrote a live row with no refusal and no
+    warning, and ``reinstate("alpha")`` was refused ``alias_collision`` for ever after —
+    so ruling **R11**'s governance act was permanently unavailable through calls every
+    guard permitted.
+
+    The holder comes back with `word_previously_retired`, nothing is written, which is
+    `name_previously_retired`'s own treatment at this door for the fact one field along.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "alpha", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["alpha"])
+    written = await registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zzz_moved"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or "zzz_moved" not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = await registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    assert "zzz_moved" in (gone.aliases or ()), gone.aliases
+
+    out = await registry.import_types(
+        [{"name": "zzz_moved", "status": "active", "definition": "a foreign word"}],
+        kind="predicate",
+    )
+    assert out and isinstance(out[0], TypeEntry), out
+    assert out[0].name == "alpha", ("the holder comes back, not a new row", out[0].name)
+    assert "word_previously_retired:alpha" in out[0].warnings, out[0].warnings
+    assert not [
+        t for t in (await registry.list_types("predicate", include_retired=True)).types
+        if t.name == "zzz_moved"
+    ], "nothing is written"
+
+    back = await registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
+    assert isinstance(back, TypeEntry), (
+        "R11's governance act must still be available", back
+    )

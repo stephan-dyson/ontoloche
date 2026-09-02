@@ -1641,3 +1641,59 @@ def test_c9_34_no_consumer_evidence_says_what_it_could_not_see_about_this_kind(
     why = out.detail["why"]
     assert "predicate's extent" not in why, ("an entity has no extent", why)
     assert "entity" in why, ("the sentence names the kind it could not see", why)
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c9_35_a_retirement_that_skipped_every_word_still_says_so(
+    adapter, make_registry
+):
+    """Row 6c, round 3's own fix-auditor lens, MINOR — *a defect in this round's own
+    fix, one commit old.*
+
+    `C9-32` claims the skipped words are stated rather than silently filtered, and
+    `INTERFACE.md` §5.9 says so in the specification. Both were true only when at least
+    one word ALSO survived, because the whole write block was gated on `repoint_words`.
+
+    **[Observed]** a tombstone whose aliases are exactly the successor's own name
+    transferred nothing, warned nothing and filed nothing — the pure case, where the
+    statement is the entire value there is.
+
+    The `aliases_transferred` **warning** stays gated on an actual write: it claims a
+    transfer, and a warning fired for a write nobody performed is `retire_no_op`'s
+    defect pointed the other way.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "commentable", kind="predicate", definition="a capability")
+    seed(registry, "taggable", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["commentable", "taggable"])
+    seed(registry, "bbb_memo", predicates=["commentable", "taggable"])
+    # the retired row's ONLY alias is its OWN name -- every word is skipped by `C9-32`'s
+    # filter, so the transfer writes nothing and the statement is all there is.
+    rows = registry.import_types(
+        [{"name": "commentable", "status": "active", "aliases": ["commentable"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    assert rows and tuple(rows[0].aliases or ()) == ("commentable",), rows[0].aliases
+
+    out = registry.retire(
+        "commentable", "taggable says it better", retired_by="user:sd",
+        successor="taggable", force=True,
+    )
+    assert isinstance(out, TypeEntry), out
+    survivor = [t for t in registry.list_types("predicate").types if t.name == "taggable"][0]
+    assert survivor.aliases == (), ("C9-28 and C9-32 both hold", survivor.aliases)
+    assert not [
+        w for w in out.warnings if w.startswith("aliases_transferred")
+    ], ("nothing was transferred, so nothing claims one was", out.warnings)
+
+    skipped = [
+        e
+        for e in registry.provenance("taggable", namespace="default").history
+        if e.event == "aliases_transferred"
+    ]
+    assert skipped, (
+        "the pure case is where the statement is the whole value, and it was silent"
+    )
+    assert skipped[0].detail["aliases_added"] == []
+    assert skipped[0].detail["aliases_not_added"] == ["commentable"], skipped[0].detail

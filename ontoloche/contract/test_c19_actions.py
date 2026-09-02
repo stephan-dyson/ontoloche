@@ -4183,3 +4183,331 @@ def test_c19_90_the_flat_form_refusal_says_which_of_its_two_failures_this_is():
     )
     with pytest.raises(ValueError):
         parse_ref(ref_key(TypeRef("org:beacon", "entity", "person")))
+
+
+@NEEDS_INVOCATIONS
+@pytest.mark.requires_capability("stores_edges", "stores_events")
+def test_c19_91_a_landing_in_a_retired_namespace_is_warned_however_many_live_ones(
+    adapter, make_registry
+):
+    """Rule **2.5-12**. **MAJOR, round 3's own fix-auditor lens** — a defect in
+    `C19-87`, one commit old.
+
+    **A LANDING is a fact and a candidate is a maybe.** `C19-87` applied Rule U's
+    *every candidate that has the family has retired it* quantifier to both, and
+    `landed` is a set of namespaces the edge **actually reached** — so one additional
+    real landing in a live namespace silently deleted the warning about the landing in
+    the withdrawn one.
+
+    **[Observed, before the fix]** one invocation landing `person_links` in `tenant_a`
+    (retired) *and* in `default` (active) answered ``()`` where the `tenant_a`-only
+    landing answers ``('edge_family_retired:person_links',)``. That is `C19-83`'s FIRST
+    direction — *no warning at all while the edge landed exactly where the family is
+    withdrawn* — restored by the fix for its second.
+
+    It is also the answer to *can a host suppress this?*: nothing verifies an observed
+    effect against the edge store, so one appended `add_edge` in a live namespace did it.
+    """
+    registry = make_registry(adapter)
+    for space in ("default", "tenant_a"):
+        seed(registry, "person", namespace=space)
+        edge_family(registry, "person_links", level="instance", namespace=space)
+    assert not isinstance(
+        registry.retire(
+            "person_links", reason="superseded", retired_by="user:sd",
+            namespace="tenant_a", force=True,
+        ),
+        Refusal,
+    )
+    action_family(
+        registry, "link_people",
+        inputs=[InputSpec("a", "instance"), InputSpec("b", "instance", required=False)],
+        effects=[Effect(op="add_edge", family="person_links")],
+    )
+    inputs = {
+        "a": InstanceRef(TypeRef("tenant_a", "entity", "person"), "1"),
+        "b": InstanceRef(TypeRef("default", "entity", "person"), "2"),
+    }
+    both = registry.record_invocation(
+        "link_people", inputs, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="user:sd",
+        observed_effects=[
+            Effect(op="add_edge", family="person_links", namespace="tenant_a"),
+            Effect(op="add_edge", family="person_links", namespace="default"),
+        ],
+    )
+    assert "edge_family_retired:person_links" in both.warnings, (
+        "an edge that reached a withdrawn family is warned about however many live "
+        "families it also reached",
+        both.warnings,
+    )
+    only_live = registry.record_invocation(
+        "link_people", inputs, actor="user:sd", outcome="applied",
+        gate_verdict="allowed", approved_by="user:sd",
+        observed_effects=[
+            Effect(op="add_edge", family="person_links", namespace="default")
+        ],
+    )
+    assert not [
+        w for w in only_live.warnings if w.startswith("edge_family_retired")
+    ], ("...and an edge that reached only live families is not warned about",
+        only_live.warnings)
+
+
+@pytest.mark.requires_capability("stores_attributes", "stores_events")
+def test_c19_92_projection_reads_its_pool_to_exhaustion_and_says_so_when_it_cannot(
+    adapter, make_registry
+):
+    """Rule **10-11**. **Found independently by BOTH remaining lenses of round 3** — the
+    integrator graded it BLOCKING, the fix-auditor MAJOR — and it is a defect in
+    `C19-88`, one commit old.
+
+    `projection` built its POOL from a single un-paged `list_types` while `_scope_census`
+    paged the same scope to exhaustion **in the same call**. Three wrongs in one answer:
+    `counts` short by most of the scope; `over_by=0` saying *everything fits* about a
+    scope §10 exists to say does not; and `why_incomplete` **positively asserting**
+    *"groups no family in this scope carries"* about groups families carry. And a
+    truncated pool **refused a live group as a typo** — *we could not find it* turned
+    into a refusal, in the method whose own comment forbids exactly that.
+
+    Also the **fourth** empty cause rule 10-11 did not enumerate: a scope of active rows
+    that DECLARE no family said nothing at all.
+    """
+    registry = make_registry(adapter)
+    for i in range(4):
+        action_family(
+            registry, f"verb_{i}", reachability=["ingest"], namespace="agency"
+        )
+    action_family(registry, "zzz_rare_one", reachability=["rare"], namespace="agency")
+
+    whole = registry.projection("s", budget=10, order=("ingest", "rare"), namespace="agency")
+    assert whole.counts == {"ingest": 4, "rare": 1}, whole.counts
+
+    paged = make_registry(DegradedAdapter(adapter, page_cap=2, page_cursor=True))
+    honest = paged.projection("s", budget=10, order=("ingest", "rare"), namespace="agency")
+    assert not isinstance(honest, Refusal), honest
+    assert honest.counts == {"ingest": 4, "rare": 1}, (
+        "the pool is read to exhaustion, exactly as the census beside it is",
+        honest.counts,
+    )
+    # ...and a live group is never a typo on a backend that simply pages.
+    rare = paged.projection("s", budget=10, order=("rare",), namespace="agency")
+    assert not isinstance(rare, Refusal), (
+        "`zzz_rare_one` is registered, active and declares `rare`", rare
+    )
+
+    # A read that could NOT finish says so, and asserts nothing about the scope.
+    capped = make_registry(DegradedAdapter(adapter, page_cap=2))
+    short = capped.projection("s", budget=10, order=("rare",), namespace="agency")
+    assert not isinstance(short, Refusal), short
+    assert "could not be read to exhaustion" in (short.why_incomplete or ""), (
+        short.why_incomplete
+    )
+    assert "groups no family in this scope carries" not in (short.why_incomplete or ""), (
+        "a truncated read makes no positive claim about what the scope carries",
+        short.why_incomplete,
+    )
+
+
+@NEEDS_INVOCATIONS
+def test_c19_93_the_review_fallback_clause_divides_by_the_rows_it_examined(
+    adapter, make_registry
+):
+    """Rule **6-12**. **Found independently by both remaining lenses of round 3**,
+    MINOR — a defect in `C19-89`, one commit old.
+
+    `judged_live` counted the pre-filter loop and the denominator was the POST-filter
+    row count, so the clause printed **`5 of 0 row(s)`** — an arithmetic impossibility
+    attached to an empty queue, in the sentence whose whole justification is that *some*
+    and *all* are different facts to an operator draining one.
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "auto_verb", approval_mode="auto")
+    for _ in range(3):
+        assert not isinstance(
+            registry.record_invocation(
+                "auto_verb", {}, actor="user:sd", outcome="applied",
+                approved_by="user:sd",
+            ),
+            Refusal,
+        )
+
+    class _NoPolicyOfRecord:
+        def __init__(self, inner):
+            object.__setattr__(self, "inner", inner)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def __setattr__(self, name, value):
+            setattr(self.inner, name, value)
+
+        def find_invocations(self, **kwargs):
+            page = self.inner.find_invocations(**kwargs)
+            return type(page)(
+                **{
+                    **page.__dict__,
+                    "records": tuple(
+                        type(r)(**{**r.__dict__, "declared_policy": {}})
+                        for r in page.records
+                    ),
+                }
+            )
+
+    blind = make_registry(_NoPolicyOfRecord(adapter))
+    # every row is `auto` mode, so `unreviewed=True` keeps NONE of them
+    out = blind.invocations(unreviewed=True)
+    assert not isinstance(out, Refusal), out
+    assert out.known == 0, out.known
+    assert "3 of 3 row(s) examined" in (out.why_incomplete or ""), (
+        "the denominator is what this call LOOKED at, not what it kept",
+        out.why_incomplete,
+    )
+
+
+def test_c19_94_the_flat_form_consequence_is_asked_of_parse_ref_not_classified():
+    """Rule **2.5-13**. **MINOR, round 3's own fix-auditor lens** — a defect in
+    `C19-90`, one commit old.
+
+    It hard-coded ``field == "namespace" and separator == ":"`` and was right about
+    **one of three identity segments**: a ``:`` anywhere before the ``#`` yields four
+    colon-separated segments, so `parse_ref` **raises** for a `:` in `name`, in `kind`
+    and in an `EdgeRef.family` too. **[Observed]** all three said *"reads back as a
+    DIFFERENT reference"* while `parse_ref` raised.
+
+    The function ASKS now instead of classifying — a case analysis over
+    ``(field, separator)`` is a second home for `parse_ref`'s grammar, which is
+    `EDGES.md` §2.4's own objection, and it is what went stale here within one commit.
+    """
+    from ..actions import EdgeRef, flat_form_problem
+
+    misreads = [TypeRef("beacon", "entity", "person#p-1")]
+    raises = [
+        TypeRef("org:beacon", "entity", "person"),
+        TypeRef("beacon", "entity", "person:extra"),
+        TypeRef("beacon", "ent:ity", "person"),
+        EdgeRef("beacon", "person:links", "e-1"),
+    ]
+    for ref in misreads:
+        why = flat_form_problem(ref)
+        assert why and "DIFFERENT reference" in why, (ref, why)
+        assert parse_ref(ref_key(ref)) != ref, "and the misreading is real"
+    for ref in raises:
+        why = flat_form_problem(ref)
+        assert why and "RAISES" in why, (ref, why)
+        assert "DIFFERENT reference" not in why, (
+            "nothing is misread here; the row cannot be read at all", ref, why
+        )
+        with pytest.raises(ValueError):
+            parse_ref(ref_key(ref))
+
+
+@pytest.mark.requires_capability("stores_attributes", "stores_events")
+def test_c19_95_consumers_at_risk_reads_one_report_per_family_and_names_what_it_could_not(
+    adapter, make_registry
+):
+    """Rule **10-5**. **MINOR, round 3's integrator lens.**
+
+    `_consumer_report` was recomputed **inside the predicate loop**, so a family
+    declaring four predicates read the consumer table four times for an answer that does
+    not change — **[Observed]** five `find_consumers` calls where two suffice, the
+    resulting tuple identical, on the call §10.1 measures at 222 families.
+
+    And the half that IS an answer: an evicted family `get_type` cannot return
+    contributed **nothing and said nothing**, so *no consumer is at risk* and *we could
+    not look* were the same tuple. §10's `complete=False` covers the casualty list being
+    a floor; it does not cover the registry failing to read a row it had just enumerated.
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "early_verb", reachability=["early"], namespace="ns")
+    action_family(registry, "late_verb", reachability=["late"], namespace="ns")
+
+    # `budget=1` admits the first ordered group and evicts the second.
+    report = registry.projection(
+        "s", budget=1, order=("early", "late"), namespace="ns"
+    )
+    assert not isinstance(report, Refusal), report
+    assert report.fits == ("early",) and report.would_evict == ("late",), report
+
+    class _CannotReRead:
+        def __init__(self, inner):
+            object.__setattr__(self, "inner", inner)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def __setattr__(self, name, value):
+            setattr(self.inner, name, value)
+
+        def get_type(self, namespace, name, *, kind=None):
+            if kind == "action" and name == "late_verb":
+                return None
+            return self.inner.get_type(namespace, name, kind=kind)
+
+    blind = make_registry(_CannotReRead(adapter))
+    short = blind.projection("s", budget=1, order=("early", "late"), namespace="ns")
+    assert not isinstance(short, Refusal), short
+    assert "could not be re-read" in (short.why_incomplete or ""), (
+        "*no consumer is at risk* and *we could not look* must not be the same answer",
+        short.why_incomplete,
+    )
+    assert "late_verb" in (short.why_incomplete or ""), short.why_incomplete
+
+
+@NEEDS_INVOCATIONS
+def test_c19_96_a_review_says_whether_the_invocation_was_ever_in_a_queue(
+    adapter, make_registry
+):
+    """§6.5. **MINOR, round 3's integrator lens.**
+
+    `review_invocation` accepts a review of an `auto`-mode invocation that was never in
+    any queue — and it **should**: refusing to record a review a person performed is the
+    answer §2.5 calls *the worst available* one call along, and a steward may
+    legitimately review anything. What was wrong is that the resulting event was
+    **indistinguishable from a genuine drain** — **[Observed]** ``queue before: []`` and
+    an `invocation_reviewed` standing on a row §5.2 never enqueued.
+
+    The **mode of record** is the operand, not the family's mode today: this event
+    describes the moment the gate judged, which is rule 3-8's own reason.
+    """
+    registry = make_registry(adapter)
+    action_family(registry, "auto_verb", approval_mode="auto")
+    action_family(registry, "review_verb", approval_mode="review")
+
+    never_queued = registry.record_invocation(
+        "auto_verb", {}, actor="user:sd", outcome="applied", approved_by="user:sd",
+    )
+    queued = registry.record_invocation(
+        "review_verb", {}, actor="user:sd", outcome="applied", approved_by="user:sd",
+    )
+    assert not isinstance(never_queued, Refusal) and not isinstance(queued, Refusal)
+
+    before = registry.invocations(unreviewed=True)
+    assert [i.invocation_id for i in before.invocations] == [queued.invocation_id], (
+        "the auto-mode row was never in the queue", before.invocations
+    )
+
+    for filed in (never_queued, queued):
+        assert not isinstance(
+            registry.review_invocation(filed.invocation_id, reviewed_by="user:carol"),
+            Refusal,
+        ), "a steward may review anything, and refusing to record it is the worse answer"
+
+    events = {}
+    for filed, family in ((never_queued, "auto_verb"), (queued, "review_verb")):
+        rows = [
+            e
+            for e in registry.adapter.read_events(
+                "default", invocation_id=filed.invocation_id
+            )
+            if e.event == "invocation_reviewed"
+        ]
+        assert rows, family
+        events[family] = rows[0].detail
+
+    assert events["review_verb"]["was_queued"] is True, events["review_verb"]
+    assert events["auto_verb"]["was_queued"] is False, (
+        "a review of something never enqueued must not read as a queue drain",
+        events["auto_verb"],
+    )
+    assert events["auto_verb"]["approval_mode_of_record"] == "auto", events["auto_verb"]

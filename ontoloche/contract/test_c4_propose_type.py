@@ -445,3 +445,84 @@ def test_c4_14_a_word_the_key_cannot_read_is_not_the_same_word(adapter, make_reg
     # ...and a word the key CAN read still matches across spellings.
     assert same_word("B\u00fcrgeramt", "b\u00fcrgeramt")
     assert not same_word("---", "!!!")
+
+
+def _tombstone_holding(registry, word="zzz_moved"):
+    """A RETIRED predicate that still answers to ``word``, and nothing named ``word``.
+
+    The kill row's FOURTEENTH trip's fixture: four ordinary, permitted calls, the last
+    of which is a retirement with **no successor**. §5.8 keeps the tombstone's words.
+    """
+    seed(registry, "alpha", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["alpha"])
+    written = registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": [word],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or word not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    assert word in (gone.aliases or ()), (
+        "INTERFACE.md 5.8 -- a tombstone keeps its words by design", gone.aliases
+    )
+    return gone
+
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c4_15_a_word_a_tombstone_answers_to_is_not_free_at_propose_type(
+    adapter, make_registry
+):
+    """THE KILL ROW'S FOURTEENTH TRIP, at the first mint door.
+
+    Row 6c, round 3 — standing rule (c) applied where the register had been applying it
+    to `name` alone. §5.8 keeps a tombstone's words **by design**, so a retired row's
+    `name` and its `aliases` are both an **unconsumed permission**. The EIGHTH trip
+    closed the retired half of the NAME door (`_word_rows`, `C10-19`); the retired half
+    of the ALIAS door was asked by nothing, because `_alias_holder` and `_alias_clash`
+    both read active rows only — by design, since `alias_collision` is about two LIVE
+    entries.
+
+    **[Observed, five ordinary calls, no merge, no `force` on the mint, no
+    acknowledgement, with `check_merge_guard.py` exiting 0]** the tombstone's alias was
+    minted as a brand-new row's name **with no warning at all** — and the store then
+    refused **both** `merge_types` (`predicate_merge`) and `reinstate`
+    (`alias_collision`) NON-OVERRIDABLY. **The registry itself says the state is one
+    call from two active rows on one word, with the tombstone permanently
+    un-reinstatable** — which is the governance act ruling **R11** created `reinstate`
+    to provide. The guard was at the wrong end: it blocked the row that wants its word
+    back, not the call that took it.
+
+    **Provenance by BISECT** (standing rule (a)): live at `ddf2f5e` and at `664d3a5^`,
+    so it **predates row 6c entirely**; R75 did not introduce it but **widened its blast
+    radius** from one tombstone to every successor in a retirement chain.
+    """
+    registry = make_registry(adapter)
+    tombstone = _tombstone_holding(registry)
+
+    # CONTROL -- the tombstone's own NAME has been answered this way since trip 8.
+    control = registry.propose_type(
+        "alpha", "a second alpha", [DATA_EVIDENCE], "user:sd", kind="predicate"
+    )
+    assert isinstance(control, TypeEntry) and "name_previously_retired" in control.warnings
+
+    out = registry.propose_type(
+        "zzz_moved", "a brand new thing", [DATA_EVIDENCE], "user:sd", kind="predicate"
+    )
+    assert isinstance(out, TypeEntry), (
+        "the caller is owed the holder at the door they knocked on, not a proposal", out
+    )
+    assert out.name == tombstone.name, out.name
+    assert f"word_previously_retired:{tombstone.name}" in out.warnings, out.warnings
+    assert not [
+        t for t in registry.list_types("predicate", include_retired=True).types
+        if t.name == "zzz_moved"
+    ], "nothing is written"
+
+    # ...and the whole point: the tombstone can still be brought back.
+    back = registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
+    assert isinstance(back, TypeEntry), (
+        "R11's governance act must still be available", back
+    )

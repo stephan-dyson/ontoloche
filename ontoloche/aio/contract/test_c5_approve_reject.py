@@ -222,3 +222,62 @@ async def test_c5_12_a_backend_with_no_proposal_table_refuses_to_decide(adapter,
     rejected = await blind.reject("any-id-at-all", "user:sd", "no")
     assert isinstance(rejected, Refusal)
     assert rejected.reason == "proposals_not_stored"
+
+@pytest.mark.requires_capability(
+    "stores_aliases", "indexes_membership", "stores_events", "stores_proposals"
+)
+async def test_c5_13_a_word_a_tombstone_answers_to_is_not_free_at_approve(
+    adapter, make_registry
+):
+    """THE KILL ROW'S FOURTEENTH TRIP, at the door **ruling R40 forces the kill row's own
+    subject down**.
+
+    `propose_type` asks the question at proposal time; this writes the row, sometimes
+    days later. `_write_approved` re-checks `_alias_holder`, which reads **active** rows
+    by design — so the window this guard exists for is exactly the window in which the
+    holder can become **retired** instead of live, and R40 makes every
+    `kind="predicate"` pass through it.
+
+    **[Observed]** ``propose_type("zzz_moved")`` while the word is free; `import_types`
+    writing it onto the live ``alpha``; ``retire("alpha")``; then `approve` on the
+    pending proposal: **``zzz_moved`` active, warnings ``()``** — and
+    ``reinstate("alpha")`` refused ``alias_collision`` for ever after.
+
+    Answered as the other two mint doors answer it — the holder comes back, nothing is
+    written — because the two branches disagreeing about one fact is what the eighth
+    trip's countersignature calls *one door disagreeing with itself*.
+    """
+    registry = await make_registry(adapter, approval_policy="review")
+    await seed(registry, "alpha", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["alpha"])
+
+    pending = await registry.propose_type(
+        "zzz_moved", "a brand new thing", [DATA_EVIDENCE], "user:sd", kind="predicate"
+    )
+    if isinstance(pending, (Refusal, TypeEntry)):
+        pytest.skip("this backend cannot hold a pending proposal, so there is no window")
+
+    written = await registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zzz_moved"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or "zzz_moved" not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = await registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+
+    out = await registry.approve(pending.id, "user:sd")
+    assert isinstance(out, TypeEntry), out
+    assert out.name == "alpha", ("the holder comes back, not a new row", out.name)
+    assert "word_previously_retired:alpha" in out.warnings, out.warnings
+    assert not [
+        t for t in (await registry.list_types("predicate", include_retired=True)).types
+        if t.name == "zzz_moved"
+    ], "nothing is written"
+
+    back = await registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
+    assert isinstance(back, TypeEntry), (
+        "R11's governance act must still be available", back
+    )

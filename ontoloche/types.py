@@ -421,6 +421,25 @@ WARNING_VALUES = (
     # vocabulary arriving already decided. What it owes is what INTERFACE.md 5.8 asks of
     # any correction: say it, and record it as a new event rather than as an edit.
     "aliases_removed",
+    # INTERFACE.md 5.4/5.9, **the kill row's FOURTEENTH trip**, row 6c's third
+    # adversarial round -- the thirty-seventh. `TypeEntry`, returned by `propose_type`,
+    # `approve` and `import_types` when the name being minted is a word a RETIRED row
+    # still answers to as an ALIAS. Carries that row's name. Nothing is written.
+    #
+    # The eighth trip closed the retired half of the NAME door (`_word_rows`); the
+    # retired half of the ALIAS door was asked by nothing, because `_alias_holder` and
+    # `_alias_clash` read active rows only by design. **[Observed, five ordinary calls]**
+    # a tombstone keeping `('zeta',)` by §5.8's design, `propose_type("zeta")` accepted
+    # with no warning at all -- and the store then refusing BOTH `merge_types` and
+    # `reinstate` non-overridably, so the tombstone can never be brought back. That is
+    # ruling R11's own governance act, permanently unavailable, through five permitted
+    # calls.
+    #
+    # Its own value and not `name_previously_retired`: *this word WAS a retired row's
+    # name* and *a retired row still ANSWERS TO this word* are two facts, and one word
+    # for two facts is INTERFACE.md 2.3's Cause B. Standing rule (c), applied where the
+    # register had been applying it to `name` alone.
+    "word_previously_retired",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
