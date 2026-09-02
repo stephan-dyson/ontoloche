@@ -2425,19 +2425,31 @@ def _repeat_retire(registry: Registry) -> str | None:
 
 
 def _repeat_merge(registry: Registry) -> str | None:
-    """`merge_types(alpha -> beta)` twice. The absorbed row is retired by the first."""
-    for name in ("alpha", "beta"):
+    """`merge_types(alpha -> beta)` then `merge_types(alpha -> gamma)` -- **a DIFFERENT
+    target, and repeating into the SAME one was this axis's own blind spot.**
+
+    The kill row's THIRTEENTH trip. The shipped fixture ran the second merge into `beta`
+    again, so the write was idempotent by coincidence and the axis reported `{}` with the
+    defect live. `_repeat_retire` had it right from the start -- two different successors
+    -- and **the asymmetry between two fixtures in one axis was the whole gap**.
+
+    Ordinary vocabulary growth between the merges makes `beta` and `gamma` genuinely
+    differ, so the pair the collapse produces is one `merge_types` refuses
+    `predicate_merge` non-overridably when it is asked directly.
+    """
+    for name in ("alpha", "beta", "gamma"):
         _seed(registry, name, kind="predicate", definition="one and the same thing")
     for member in ("aaa_note", "bbb_memo"):
-        _seed(registry, member, predicates=["alpha", "beta"])
+        _seed(registry, member, predicates=["alpha", "beta", "gamma"])
     first = registry.merge_types(
         "alpha", "beta", reason="one word for one meaning", merged_by="user:sd",
         acknowledge=list(ALL_ACKNOWLEDGEMENTS),
     )
     if isinstance(first, Refusal):
         return _NOT_REACHABLE + f"the first merge is refused here ({first.reason})"
+    _seed(registry, "ccc_draft", predicates=["beta"])
     registry.merge_types(
-        "alpha", "beta", reason="again", merged_by="user:sd",
+        "alpha", "gamma", reason="actually gamma", merged_by="user:sd",
         acknowledge=list(ALL_ACKNOWLEDGEMENTS),
     )
     return None

@@ -972,3 +972,88 @@ async def test_c10_19_the_eighth_trip_a_retired_name_reused_under_another_spelli
         [Evidence(kind="data", summary="a sample")], "user:sd", kind="predicate",
     )
     assert not isinstance(other, Refusal) and other.name == "commentary"
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+async def test_c10_20_a_merge_may_not_write_a_word_another_live_row_already_answers_to(
+    adapter, make_registry
+):
+    """**The kill row's THIRTEENTH trip**, and `merge_types` is the FIFTH write door.
+
+    Trip 7 closed *"`C16-06`'s invariant unasked at four write doors"* — `propose_type`,
+    `approve`, `reinstate`, `import_types` (`C4-12`, `C9-23`, `C12-12`).
+    **`merge_types` asked nothing**, because `_identity_breach(left, right)` was assumed
+    to cover the transfer: it compares the two **operands** and never asks whether the
+    words being **moved** are already held somewhere else. Counted rather than
+    described — this method contained zero calls to `_alias_clash`, `_alias_holder` and
+    `_word_rows`.
+
+    **[Observed, sqlite, both paging doubles and the async mirror — five ordinary calls,
+    no alias, no import, no `force`]** `merge_types(alpha -> beta)`, ordinary vocabulary
+    growth, then `merge_types(alpha -> gamma)`: `beta.aliases == gamma.aliases ==
+    ('alpha',)`, **two ACTIVE rows answering to one word**, and `resolve_type("alpha")`
+    answering `gamma` at **1.0** — the confidence `INTERFACE.md` §5.3 calls a guarantee —
+    on a pair `merge_types` itself refuses `predicate_merge` **non-overridably under all
+    five acknowledgements**.
+
+    **It is the TWELFTH trip's class at the sibling caller.** Trip 12's rule is *the
+    write a call performs must be idempotent in the state the guard read*, and `retire`
+    was made idempotent **per caller**. A tombstone keeps its words by design (§5.8), so
+    `left.name` and `left.aliases` are an **unconsumed permission** that `merge_types`
+    will cash for any `right` a caller names, once per call, forever — so the obligation
+    belongs to the **row's words**, not to the caller, and this guard asks *who holds
+    them now* rather than *have I run before*.
+
+    **Non-overridable, and `retired_operand` may not buy past it**: that value is an
+    EVIDENCE acknowledgement about a row's `status`, and this is an IDENTITY outcome —
+    `C9-20`'s own distinction, at a door nobody had applied it to.
+    """
+    registry = await make_registry(adapter)
+    for name in ("alpha", "beta", "gamma"):
+        await seed(registry, name, kind="predicate", definition="one and the same thing")
+    for member in ("aaa_note", "bbb_memo"):
+        await seed(registry, member, predicates=["alpha", "beta", "gamma"])
+    acknowledge = [
+        "definitions_diverge", "no_consumer_evidence", "retired_operand",
+        "predicate_merge", "kind_mismatch",
+    ]
+
+    first = await registry.merge_types(
+        "alpha", "beta", reason="one word for one meaning", merged_by="user:sd",
+        acknowledge=acknowledge,
+    )
+    assert isinstance(first, MergeResult), first
+
+    # Ordinary vocabulary growth: `beta` and `gamma` now genuinely differ.
+    await seed(registry, "ccc_draft", predicates=["beta"])
+
+    second = await registry.merge_types(
+        "alpha", "gamma", reason="actually gamma", merged_by="user:sd",
+        acknowledge=acknowledge,
+    )
+    assert isinstance(second, Refusal), second
+    assert second.reason == "alias_collision", second.reason
+    assert second.detail["overridable"] is False, (
+        "every acknowledgement was supplied; an identity outcome is not bought with an "
+        "evidence acknowledgement"
+    )
+    assert second.detail["holder"] == "beta"
+
+    live = {
+        t.name: tuple(t.aliases) for t in (await registry.list_types("predicate")).types
+    }
+    holders = sorted(n for n, aliases in live.items() if "alpha" in aliases)
+    assert holders == ["beta"], ("C16-06: one word, one live row", live)
+
+    # The narrowing half: an ordinary merge is untouched — refusing everything passes a
+    # test that only tests refusals.
+    plain = await make_registry(adapter)
+    for name in ("p_one", "q_two"):
+        await seed(plain, name, kind="predicate", definition="one and the same thing")
+    for member in ("n_one", "n_two"):
+        await seed(plain, member, predicates=["p_one", "q_two"])
+    ok = await plain.merge_types(
+        "p_one", "q_two", reason="same meaning", merged_by="user:sd",
+        acknowledge=acknowledge,
+    )
+    assert isinstance(ok, MergeResult), ok
+    assert ok.aliases_added == ("p_one",)
