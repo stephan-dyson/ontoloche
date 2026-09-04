@@ -606,3 +606,84 @@ outcomes reachable cannot pose the question of whether two of them are reachable
    opposite ends and neither could.**
 8. **Cross-namespace instance resolution.** `namespace` is untouched at this surface as it has been at the
    type surface across all fourteen trips.
+
+### 6.3 Round 1, lens 3 — **the public data. NOT YET: 3 BLOCKING, 9 MAJOR, 2 MINOR.**
+
+**This lens found the trip independently, from a different direction, and proved the gate blind to it by
+MUTATION** — which is the strongest form of evidence this project accepts and the one the register's own
+axes are held to.
+
+#### 6.3a The mutation proof, and it is the finding behind the finding
+
+**[Observed]** the lens moved design test 1's entire Rule-U block from **before** the ambiguity/existence
+branches to **after** them — *deleting the load-bearing sentence of §3.4* — and re-ran the unmodified probe:
+
+```
+16/16 checks pass
+R78 VERDICT: CONFIRMED
+```
+
+**Byte-identical verdict.** The row's own gate cannot see its own most important rule being removed. That is
+the ninth consecutive dress of *a checker only asks the questions its fixtures can pose*, and it lands on
+this row's own probes rather than on an inherited one.
+
+#### 6.3b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **P1** | **BLOCKING** | **The trip, reached independently** (= K1, §6.2a): cap the scan past the first of the twelve and rule 3-3 has nothing to compare — `existing / #155049 / 1.0 / complete=False`, eleven unread rows carrying the same label at 1.0. The lens's own diagnosis is the one that matters: **rule 3-5 as written already forbids it** (*"whatever the candidates found"*) **and §3.4's prose argues only the empty case, and the only implementation this row ships implements only the empty case** — `if not top and not complete:` | **ACCEPTED.** Two lenses, two constructions, one root cause. §3.4's prose is corrected to what rule 3-5 already says, a T1.2-under-cap case joins design test 1, and §13 route 1 cites rule 3-5 rather than rule 3-3 |
+| **P2** | **BLOCKING** | **Rule 2-8 (`label` may narrow) + rule 3-7 (`proposal` needs `complete=True`) is a duplicate factory, with no contortion recording it.** §2.1 specifies what an *ignoring* backend reports and says **nothing** about a *narrowing* one — no `complete=False`, no `why`, and `instance_filters` governs `host_filter` names only. **[Observed]** two conformant backends over design test 4's own batch: the ignoring host routes 23 banded rows to a human; the narrowing host answers **`proposal` with `candidates_seen=0` and `complete=True`** for all 23. `unknowable` cannot fire — nothing was truncated. **This is §5.1's own argument one layer down, where the spec did not look** | **ACCEPTED.** `label` becomes non-narrowing by rule; all narrowing goes through `host_filter` |
+| **P3** | **BLOCKING** | **§3's `predicate` is a call parameter defaulting to `None` while rule 6-14 declares it on the entry — and the default is R59's reversal condition.** **[Observed]** same CA+CO fixture, one caller passing the entry's predicate and one omitting the keyword: **5 of 5 shared names resolve differently**, and every caller-B answer hands the CA caller a CO `InstanceRef` in `candidates`. **[Observed]** design test 3 only ever tested the call-parameter path. **§5.1 refuses a per-call THRESHOLD on exactly this reasoning and then admits a per-call PREDICATE two sections earlier** | **ACCEPTED, and it is the round's most embarrassing finding**: the document argues the rule and then breaks it in its own printed signature |
+| **M1** | MAJOR | **Design test 2's `unknowable` check cannot go red, and §3.1's "two independent routes" claim is therefore false.** **[Observed]** the probe computes `outcome = "unknowable" if not p_trunc.complete else "resolvable"` — a restatement of the check three lines above — and **calls no resolver at all**; a rule-3-5-**violating** resolver inserted over the same truncated page answers `'proposal'` and the probe still prints `10/10 checks pass` | **ACCEPTED. The claim is withdrawn and the probe is made to call a resolver.** A second route asserted and not run is exactly what this project's drift checker exists to catch, pointing inward |
+| **M2** | MAJOR | **`host_filter` buys affordability with duplicates, and §2.1 celebrates it without recording the cost.** The spec never says *which set* `complete` is about. **[Observed]** over the 725-row narrowed slice, **3,330 of 3,330** landed rows resolve `proposal` with `complete=True` — one of them at an address the same host table holds **122** rows for | **ACCEPTED.** `complete` is defined as *about the set the query named, `host_filter` included*, and a `proposal` off a narrowed set carries a warning naming the filter |
+| **M3** | MAJOR | **"38 of 38" is a property of one dedup line, not of the data.** **[Observed]** `ingest_gate_probe.py` builds its host with `seen.setdefault(address, r)` — one instance per address — while the instance in `erm2-nwe9` is a service request keyed by `unique_key`; **46%** of the fetched rows share an address, and the probe discards **32%** of them. Un-deduped, the same batch gives **`{'ambiguous': 13, 'existing': 25}`** | **ACCEPTED.** §5 prints the real number and says what the fixture does. *A headline number that is an artefact of a fixture line is the thing this project's own §5.1 argument is about* |
+| **M4** | MAJOR | **ING5 quantified on UC3, and the label choice does not merely hide a decision — it defeats the gate.** **[Observed]** `uvpi-gqnh`, 683,788 DPR instances: `address` → 408,701 distinct, **59.7% of instances share an address with another**, so 59.7% of landed rows are `ambiguous` and rule 4-5 forces every one into `review`; `spc_common` → 132 class words → `not_an_instance`; `tree_id` → the opaque host id, which is not *"the human-facing string a landed row would carry"* | **ACCEPTED.** The measured cost goes into ING5 |
+| **M5** | MAJOR | **`Condition` cannot compare two attributes of one record, and the nearest expressible form is accepted at declaration and `False` for every record.** UC2's own pre-registered pathology — **5,338 of 416,948 rows (1.2803%)** carry a correction date before the survey date — has the gate `Correction Date >= Survey Date`. **[Observed]** `Condition(op='gte', attribute='Correction Date', value='Survey Date')` is **ACCEPTED** at declaration and answers `holds=False` for valid and inverted rows alike, because every ISO date sorts below `'S'`. **That is design test 3's own 3.3b mechanism C, reached by a predicate that passes rules 6-1…6-13 with a non-empty `why`** | **ACCEPTED** as a recorded contortion and a routed question. A thirteenth term is a §-row change and is not taken on a design test's authority |
+| **M6** | MAJOR | **`kind` is pinned to `"entity"` with no reason and no contortion, which silently drops half of UC2.** `INTERFACE.md` §10's CMS design test registers six types, **two of them `value_set`** — and *"which of the six statuses is this cell?"* is an instance question over a landed row, is what UC2 was chosen to test, and this protocol cannot ask it. The constraint is **inherited** from `EDGES.md` §2.1 — *but an inherited constraint that removes a fixture's stated pathology is a contortion, not a non-issue* | **ACCEPTED** |
+| **M7** | MAJOR | **Primitive 22 has no tenancy surface at all.** Rule 6-17 constrains the *candidate* primitive; `get_instance` takes no `predicate` and no `host_filter`, so rule 6-15 has nothing to evaluate over. **[Observed]** a CA caller can confirm a CO row by key. Design test 3 never calls it | **ACCEPTED**, and it answers F13/K-adjacent *"what calls primitive 22?"* at the same time |
+| **M8** | MAJOR | **`instance_filters` (a set of NAMES) cannot govern `host_filter` (an opaque EXPRESSION), so rules 2-7, 2-9, 2-10 and `C20-03` have no decidable test.** **[Observed]** `grep -c` returns **0** for both flags across all four probes | **ACCEPTED.** `host_filter` becomes a named-filter mapping so `instance_filters` can actually cover it |
+| **M9** | MAJOR | **`not_an_instance`'s cost is real, one-sided and measured, and T1.4 picked the one value the hand-written list contains.** **[Observed]** of CMS's 23 headers, **22 are not caught**; of `erm2-nwe9`'s values, **16,001 distinct street names carrying 861,161 rows (3.9%)** — `'BROADWAY'` 24,154, `'5 AVENUE'` 12,821 — are classes that pass as instances and become well-formed provenance-bearing proposals. False positives: **0 of 14,498** | **ACCEPTED.** Both numbers go into §3.3 |
+| **p-m1** | MINOR | §12's `9,764,249` carries no date, unlike §2.1's and §2.2's — the document's own finding, unapplied to its own §12 | **ACCEPTED** |
+| **p-m2** | MINOR | **§2.1's timing figures are not reproducible on the day they were taken.** **[Observed]** an unmodified re-run: `one 50000-row page took 8.39s`, `27.4 minutes`, against the cited `1.26s` / `4.1 minutes`. **The argument survives — both are far past per-row affordable — but the printed number is 6.7x off within hours** | **ACCEPTED.** Printed as a range, with the two-decimal precision dropped |
+
+#### 6.3c What the lens attacked and could NOT break
+
+1. **Every CMS number the spec cites**, re-derived from the real 165,336,194-byte file: `419479 / 14627 /
+   14498 / 104`, `MATCH: True True True True True`. The 1.28% date inversion reproduces exactly
+   (5,338 of 416,948 = **1.2803%**); `Deficiency Corrected` has exactly six values. **Nothing pre-registered
+   is wrong.**
+2. **R78 itself.** *"I could not find an outcome that needs an instance store. The seam holds; T1.7's
+   `[('entity','facility')]` is real and the mutation did not disturb it."* **Three lenses have now tried to
+   break R78 from three directions and none could.**
+3. **The five-outcome set.** T1.5 is a genuine constructed failure and the fifth outcome is genuinely forced
+   by it — only the *second* route (M1) was fabricated.
+4. **`ambiguous` before `existing` as a rule.** Removing it **does** make design test 1 go red — the rule is
+   tested. *Its premise (a complete scan) is what fails*, which is P1 and not a defect in the rule.
+5. **Kleene composition and the `is_null` / `eq` split.** All reproduce; the SQL-agreement argument holds.
+6. **The rule→id accounting.** 62 distinct ids, 62 rule rows, `C20-01`…`C20-62`, no gaps, no duplicates.
+7. **§9's reservation of `instance_source_absent`.** Consistent with R11 and with the drift checker's scope;
+   **Q85 correctly routes the disagreement rather than deciding it.**
+8. **The absence of `not` and `matches`.** *"I tried to construct a real CMS or NYC host predicate needing
+   either and could not — every case I built reduced to `ne`/`not_in` or to M5's attribute-to-attribute gap,
+   which is a different missing thing."*
+
+### 6.4 Round 1, totalled — **11 BLOCKING, 20 MAJOR, 6 MINOR across three lenses**
+
+**Three lenses, three verdicts of NOT YET, and no lens returned nothing.** The findings converge rather than
+scatter, which is the useful case: **two independent lenses reached the same trip from opposite directions**
+(K1 / P1), **two independently invoked standing rule (d)** (F4's batch enumeration, K7's two orderings), and
+**all three tried to break R78 and none could.**
+
+**What round 1 says about the row, stated before the fixes so it cannot be tidied afterwards:**
+
+1. **The seam is right and the rules around it were half-written.** Every BLOCKING finding is a rule that
+   guarded the case that prompted it and not the case beside it — §3.4's emptiness but not its candidate set;
+   §5's threshold but not its predicate; §4's existing instances but not proposed ones. That is standing rule
+   (d) three times in one round, in a row whose brief cited the register that minted it.
+2. **The row's own probes were the weakest artefact it shipped.** A mutation deleting §3.4's load-bearing
+   sentence left `16/16` green (M1/P1); design test 2's headline outcome was computed from a flag rather than
+   from a resolver (M1); design test 4's headline number was an artefact of one `setdefault` line (M3).
+   **Eleven countable absences** (§6.2c). The fixes are worth less than the probe rewrite that proves them.
+3. **The document contradicted itself twice in ways a reader would act on** — §3.4's prose against rule 3-5,
+   and §5.1's argument against §3's own printed signature. Both are the same failure: *a claim made in prose
+   and not carried into the shape beside it.*
