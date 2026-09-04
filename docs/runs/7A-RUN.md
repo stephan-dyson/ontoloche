@@ -1933,3 +1933,100 @@ asserts the count was derived. **That is not four independent defects. It is one
 was pointed at and does not re-read the neighbours.** The register has now written that sentence at every row
 from 3e onward, and this row has written it three times in three rounds.
 
+---
+
+### 6.13 Round 3, lens 2 to return — **the kill row. NOT YET: 5 BLOCKING, 2 MAJOR, 2 MINOR, and it nominates an EIGHTH CELL.**
+
+*(Written to disk before any fix.)* **[Observed]** baseline reproduced first: **104**, and every finding is
+live over a green 104. No repo file was modified.
+
+**Standing rule (a), provenance.** `grep -rc "resolve_instance" ontoloche/` → **0 files**; `HostTable` has no
+writer. Every construction is against the specification and the kit — **with one exception: K8's misreading is
+demonstrated in SHIPPED code.** The door that *mints* the bad string is spec+kit; the reader that *misreads*
+it ships today.
+
+#### 6.13a `I-8` nominated — **mis-directed: the closure is walked FORWARD ONLY, and the function this row cites as normative walks BOTH ways**
+
+**This is R84's second clause failing in the very section written to satisfy it.** §3.4a declares itself
+*"written from `registry.py`'s `_identity_closure` … a rule rather than a courtesy"* and implements that
+function's **three termination rules** while implementing **one of its three relations.**
+
+**[Observed]**, re-verified by the worker at [`registry.py`](../../ontoloche/registry.py) line 5380 — the
+docstring of the function §3.4a cites:
+
+> *The closure is walked in **both** directions and they are different questions: **forward** — `assignee` was
+> retired with `owner` as its successor …; **backward** — a walk from `owner` must find the edges written
+> against `assignee`, which is the direction `merge_types` actually produces and **the one a caller reaches
+> after doing the right thing**. **Aliases are consulted too**, because `merge_types` writes both a successor
+> and an alias for one absorption and a hand-written alias is one the successor scan would miss.*
+
+**[Observed]** in `INGEST.md` the only `predecessor` hits are rule 3-15's **negative** use; `alias` and
+`backward` are **zero** — and `alias` is **zero** in the kit.
+
+**The construction, one partially-migrated store, one facility, two names of ONE identity:**
+
+```
+caller names the RETIRED name  -> existing  ref=cms:entity:facility#155049  conf=1.0 scanned=10   CORRECT
+caller names the SURVIVOR      -> proposal  conf=0.4571 known=5 scanned=9
+   closure('ltc_facility') -> effective='ltc_facility'  hops=()      <-- the extent is a SUBSET
+ACT under the survivor: land(...) -> 'proposed', mode='auto'
+   the host writes 'cms:entity:ltc_facility#L9'
+   -> a SECOND row for cms:entity:facility#155049, in `auto` mode, with no human
+```
+
+**The survivor is the name every new caller uses after a retirement**, so this is the **ordinary**
+post-retirement path, not an exotic one. Rule 3-19 widened the extent **along the axis that was already
+covered** and left the axis the shipped code exists to cover.
+
+**Why the lens calls it an eighth cell rather than a construction inside one, and the worker agrees.** All
+seven existing cells describe doors **disagreeing** with one another, or a door **unable to prove**. Here the
+read, the key and the write **all agree**, and they agree on a set that is a strict **subset** of the
+identity — one implementation, consistent at every door, consistently deciding over the wrong set. It most
+resembles `I-2` (mis-walked), but `I-2` is about **depth** (one hop, reported complete) and this is about
+**direction**. **Nominated as `I-8` — mis-directed. The classification is the supervisor's, the trip count is
+FOURTEEN and is not incremented.**
+
+#### 6.13b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **K4** | **BLOCKING** | **The closure is walked forward only — §6.13a.** | **ACCEPTED, and it is the fix to make first**, because its correct answer is already written down. `type_closure` walks **successors ∪ predecessors ∪ aliases**, both directions, as `_identity_closure` does; §3.4a and rule 3-19 say **identity closure** and cite the function's three **relations** by name, not only its three termination rules |
+| **K1** | **BLOCKING** | **`I-7`'s guard compares only the two ENDPOINTS, so one extra `retire()` silences it.** **[Observed]** control at 1 hop → `unknowable` naming the changed predicate; **add one hop to an endpoint declaring exactly what the caller declared** → `existing conf=1.0 governed_by='cms:ltc_v2'`, `hops=('ltc_facility','ltc_v2')` — and the ref handed out lives under `ltc_facility`, whose **own** predicate says the caller may not see it. Same with a differing MatchPolicy mid-chain | **ACCEPTED.** The three rules minted in one change to close `I-7` **contradict each other**: 5-10 and 6-18 say *"a closure **hop** into an entry declaring a different one"* (per-hop, correct); **3-18 says *"the successor's entry"* (endpoint), and the kit implements 3-18.** Rule 3-19 admits the intermediate's rows into the extent, so **the entry whose rows are being judged is the one entry never consulted.** A governance act that ADDS a retirement must not turn `unknowable` into `existing`. A construction inside **`I-7`** |
+| **K8** | **BLOCKING** | **The successor NAME reaches the flat form by the WRITE door, and rule 2-14 fences only the READ door.** **[Observed]** `retire(facility, successor='ltc#v2')` → no host *record* carries it, so rule 2-14's guard sees `[None, None, None, None]` → `effective_type` becomes `CandidateRef.type_name` → `Invocation.type_name` → `minted_ref='cms:entity:ltc#v2#155050'`. Then the **shipped** reader: `parse_ref(...)` → `InstanceRef(type=TypeRef(name='ltc'), id='v2#155050')`, and `ref_key` of *that* returns the identical string with `flat_form_problem` → `None`. The guard itself knows: `flat_form_problem(TypeRef(name='ltc#v2'))` names the defect exactly | **ACCEPTED. §13's route-table row 12 re-opened by this round's own §3.4a fix**, and it is round 1's K8 / `C19-82` at a door rule 2-14 does not fence — `effective_type` reaches the flat form **without ever being a record**. §7.2 makes the successor's entry a third party's to register and nothing constrains the successor **string**. Rule 7-5 gains the obligation, refused at declaration |
+| **K2** | **BLOCKING** | **Rule 2-16's distinctness key omits the one dimension rule 3-19 added, and both landed in `83f6a75`.** The migration window rule 3-19's own justification names: **[Observed]** `MID-MIGRATION (3-19 on) -> ambiguous conf=1.0 known=2 complete=True` over `cms:entity:facility#155049` and `cms:entity:ltc_facility#155049` — **one facility**; the pre-3-19 endpoint-only read answered `existing known=1` and was **correct**. Rule 2-16 is blind: the two keys differ in `type_name`, so `duplicates found: []`. The act then proposes and the host writes a **third** row | **ACCEPTED.** `I-6`'s rule closes **under**-counting (two rows, one id) and leaves **over**-counting (one thing, two closure names) wide open. `known` counts host **rows**, not host **things**, and after 3-19 those differ. **This is ING11's cost, arriving as a defect rather than as the recorded contortion** — and ING11 said it was unmeasured. A construction inside **`I-6`** |
+| **K7** | **BLOCKING** | **A11 was ACCEPTED in round 2 and NOT landed.** **[Observed]**, re-verified: §3.2 line 356 still reads *"stronger than any arithmetic between the two numbers and **needs no second constraint to hold**"*, while [`ingest_probe_kit.py`](../tools/ingest_probe_kit.py) line 762 carries `c.score >= policy.propose_below`. Two candidates at an **exact** tie below `propose_below` answer `proposal` where rules 3-3 / 5-8 as written say `ambiguous`. **New, by mutation:** removing the floor so the kit matches the rules **reddens a check on the real 14,627-row CMS file** | **ACCEPTED.** *A conformant implementer reading `INGEST.md` writes the other behaviour and fails the row's own design test.* **The floor is load-bearing on real data and exists nowhere in the document** — the kill row's own set test defeated by an undocumented constraint |
+| **K6** | MAJOR | **Z5 was ACCEPTED in round 2 and NOT landed.** The band branch still caps `known` and `candidates` at 5 over a **finished** read, and the reviewer's `<n>` inherits it. **[Observed] by mutation:** removing the cap leaves **104/104 green** — the cap is untested in both directions | **ACCEPTED.** Rule 3-4 binds this branch (its outcome **is** `ambiguous`) and says *"every tied candidate is returned"*; §8 prints `known: int` with no cap |
+| **K10** | MAJOR | **Rule 5-11, minted THIS round as `I-7`'s carrier, has ZERO checks — proved by two mutations.** **[Observed]**, re-verified by the worker: `governed_by` occurs **0** times across all five design tests. `governed_by = ""` → **104/104 green**; `governed_by` naming the **declared** entry rather than the one that judged → **104/104 green** | **ACCEPTED, and by the row's own standard — *"a check that cannot go red is a decoration"* — rule 5-11 is a decoration.** It was minted to make rule 5-7 **falsifiable** and is itself **unfalsifiable**. **A standing-rule-(d) failure inside §6.10c, the enumeration written to satisfy standing rule (d)** — §6.10c lists four doors 5-11 binds and not one asserts it |
+| **K9** | MINOR | A namespace-shaped successor makes the ledger row unreadable: `minted_ref='cms:entity:nyc:facility#155051'` → `parse_ref` **RAISES**. Same door as K8, louder failure | **ACCEPTED**, closed by K8's fix |
+| **K11** | MINOR | **The countable-absence count over the fix set is EIGHT** (eleven → nine → eight): zero `governed_by`; zero `alias`; zero `can_count` (still, from round 2's A5); zero resolutions from a caller naming the **survivor** (K4's quadrant); zero fixtures holding rows under two names of one closure (K2's quadrant); **exactly one** two-hop chain, whose three entries are all `replace(base, …)` — **identical policy and predicate at every hop** (K1's quadrant); zero band-branch `known` assertions; zero constructions where a key or closure crosses a namespace | **ACCEPTED.** **Three of the eight are the quadrants of the three BLOCKING findings above** — the row's own sentence for the eleventh time: *the fixture that would pose the question does not exist* |
+
+#### 6.13c What the lens attacked and could NOT break
+
+1. **Cycles and the cap.** Rules 3-17 and 3-16 both hold, with honest `why`s.
+2. **Namespace at the closure surface — the fifteenth attempt, and it held again.** `type_closure` consults
+   `vocab.entry(namespace, …)` and nothing else; **no hop crosses a namespace.** Consistent with all fourteen
+   trips.
+3. **`I-5`'s window, three ways** — propose-then-abandon and propose-then-**drain**-without-writing both
+   answer `'pending'`. **Only `minted_ref` stands the guard down.** Standing rule (c) holds at this door.
+4. **`Z6`'s fence** holds in `auto` mode.
+5. **The R78 seam.** **Six lenses have now failed to force an instance row into the registry.**
+6. **Rule U's ordering** — no confident outcome could be got through a `complete=False` by any route; the six
+   absorbers fire before the tied set is built.
+7. **`I-4`'s key on the TYPE half.** `act_key` is one function and the act, guard, read and write all call it;
+   **the two doors could not be made to disagree about the type.** *(The label half is round 3's B1, a
+   different function.)*
+
+#### 6.13d What this lens says about the fix set
+
+**Two of its five BLOCKING (K7, K6) are round-2 findings this row marked ACCEPTED and did not land**, and
+**[Observed]** §6.10b's fix table lists `I-1`…`I-7`, B1, B5 and Z6 — **A11 and Z5 appear in neither the fix
+table nor any deferral list.** With the beacon lens's B3 (nine more of the same), that is **eleven accepted
+dispositions across two lenses that bound no commit.** §6.10a is titled *"What was NOT done, and why it
+matters"* and names none of them.
+
+**And three of the five (K4, K1, K2) are defects the fix set CREATED or left half-made in one change** — K4
+by implementing one of three relations, K1 by minting three rules that contradict each other, K2 by widening
+the extent past the distinctness key that landed beside it. **Prediction P3 is confirmed**: rule 3-19, the
+newest rule and the only one that made a set *bigger*, is where the new defects live — and ING11, which said
+its cost was unmeasured, is where K2 was found.
+
