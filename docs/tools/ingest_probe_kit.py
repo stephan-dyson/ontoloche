@@ -410,7 +410,8 @@ class Closure:
 def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
                  *, cap: int = CHAIN_CAP, one_hop: bool = False,
                  keep_predecessor: bool = False, forward_only: bool = False,
-                 no_aliases: bool = False) -> Closure:
+                 no_aliases: bool = False, no_cap: bool = False,
+                 no_cycle_guard: bool = False) -> Closure:
     """The CHAIN, not one hop -- and it stops honestly when it cannot finish.
 
     This is the one implementation of `INGEST.md` 3.4a, and every door that reads,
@@ -438,12 +439,12 @@ def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
     hops: list[str] = []
     while entry is not None and entry.successor:
         nxt = entry.successor
-        if nxt in seen:                                   # rule 3-17: cycle
+        if nxt in seen and not no_cycle_guard:            # rule 3-17: cycle
             return Closure(effective, entry, False,
                            f"the successor chain from {type_name!r} cycles at "
                            f"{nxt!r}; this identity cannot be resolved to one type",
                            tuple(hops), (type_name,), ("forward",))
-        if len(hops) >= cap:                              # rule 3-16: the cap
+        if len(hops) >= cap and not no_cap:               # rule 3-16: the cap
             return Closure(effective, entry, False,
                            f"the successor chain from {type_name!r} passed the cap "
                            f"of {cap} hops without reaching a live type",
@@ -469,6 +470,8 @@ def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
                            f"declares {nxt!r} in {namespace!r}: the extent this "
                            f"identity would be decided over is not readable",
                            tuple(hops), (type_name,), ("forward",))
+        if no_cycle_guard and len(hops) > 64:
+            break                    # the harness's own stop, not a rule
         hops.append(nxt)
         seen.add(nxt)
         effective, entry = nxt, nxt_entry
@@ -671,7 +674,9 @@ def resolve_instance(
                            one_hop=(_mutate == "chain_one_hop"),
                            keep_predecessor=(_mutate == "chain_keeps_predecessor"),
                            forward_only=(_mutate == "closure_forward_only"),
-                           no_aliases=(_mutate == "closure_no_aliases"))
+                           no_aliases=(_mutate == "closure_no_aliases"),
+                           no_cap=(_mutate == "chain_no_cap"),
+                           no_cycle_guard=(_mutate == "chain_no_cycle"))
     effective_type = closure.effective
     for hop in closure.hops:
         warnings.append(f"instance_type_succeeded:{hop}")
@@ -719,7 +724,7 @@ def resolve_instance(
         return InstanceResolution(
             "not_an_instance", None, None, None,
             f"{candidate!r} names a class or a column, not one thing of that class",
-            (), 0, True, "", 0, tuple(warnings), tier, governed_by)
+            (), 0, True, "", 0, tuple(warnings), ("" if _mutate == "tier_dropped" else tier), governed_by)
 
     # --- rules 2-3/2-11/3-19: the identity read exhausts, over the WHOLE closure --
     # `I-3`. The endpoint alone is a SMALLER SET than the identity's extent: a row
@@ -757,7 +762,7 @@ def resolve_instance(
 
     # --- rule 2-14: the flat-form guard, at the surface handing out refs ---
     for rec in records:
-        problem = flat_form_ok(rec)
+        problem = None if _mutate == "flat_form_off" else flat_form_ok(rec)
         if problem:
             return Refusal("instance_source_absent",
                            {"why": f"unfaithful reference: {problem}"})
@@ -830,7 +835,7 @@ def resolve_instance(
     def _unknowable(reason: str, why: str) -> InstanceResolution:
         return InstanceResolution(
             "unknowable", None, None, None, reason, tuple(scored[:5]),
-            len(scored[:5]), False, why, scanned, tuple(warnings), tier, governed_by)
+            len(scored[:5]), False, why, scanned, tuple(warnings), ("" if _mutate == "tier_dropped" else tier), governed_by)
 
     def _rule_u() -> InstanceResolution | None:
         """3.4, and the ORDER is the rule: before the candidate set is interpreted.
@@ -885,6 +890,17 @@ def resolve_instance(
                 return blocked
         return result
 
+    if _mutate == "one_of_tied" and len(tied) > 1:
+        # rule 3-4 / `C20-18`: EVERY tied candidate is returned. Returning one while
+        # still reporting `known` is the shape trips 11 and 12 took.
+        tied = tied[:1] + tied[1:]
+        return _mutated_guard(InstanceResolution(
+            "ambiguous", None,
+            CandidateRef(namespace, "entity", effective_type, candidate, "ambiguous",
+                         context.act_id),
+            tied[0].score, "one of the tied set", (tied[0],), 2, complete,
+            why_incomplete, scanned, tuple(warnings), tier, governed_by))
+
     if len(tied) > 1:
         return _mutated_guard(InstanceResolution(
             "ambiguous", None,
@@ -893,12 +909,12 @@ def resolve_instance(
             tied[0].score,
             f"{len(tied)} host rows answer to {candidate!r} and nothing here separates "
             "them", tuple(tied), len(tied), complete, why_incomplete, scanned,
-            tuple(warnings), tier, governed_by))
+            tuple(warnings), ("" if _mutate == "tier_dropped" else tier), governed_by))
     if tied and tied[0].score >= policy.match_at:
         return _mutated_guard(InstanceResolution(
             "existing", tied[0].ref_key, None, tied[0].score,
             f"exactly one host row answers to {candidate!r}", tuple(tied), 1, complete,
-            why_incomplete, scanned, tuple(warnings), tier, governed_by))
+            why_incomplete, scanned, tuple(warnings), ("" if _mutate == "tier_dropped" else tier), governed_by))
     if scored and scored[0].score >= policy.propose_below:
         return _mutated_guard(InstanceResolution(          # rule 5-9: the band
             "ambiguous", None,
@@ -908,7 +924,16 @@ def resolve_instance(
             f"the best candidate scored {scored[0].score}, between propose_below "
             f"{policy.propose_below} and match_at {policy.match_at}: not confident "
             "enough to be the same thing", tuple(scored[:5]), len(scored[:5]), complete,
+            why_incomplete, scanned, tuple(warnings), ("" if _mutate == "tier_dropped" else tier), governed_by))
+    if _mutate == "registry_mints":
+        # rule 1-1 / `C20-01`: this project stores no instance rows and MINTS NO
+        # INSTANCE IDENTIFIERS. It is the rule the whole R78 verdict rests on, and
+        # round 3's P1 found it assertable-and-undetectable.
+        return _mutated_guard(InstanceResolution(
+            "existing", f"{namespace}:entity:{effective_type}#minted-by-registry",
+            None, 1.0, "the registry minted an identifier", (), 1, complete,
             why_incomplete, scanned, tuple(warnings), tier, governed_by))
+
     return _mutated_guard(InstanceResolution(
         "proposal", None,
         CandidateRef(namespace, "entity", effective_type, candidate, "proposal",
@@ -916,7 +941,7 @@ def resolve_instance(
         (scored[0].score if scored else None),
         f"nothing in {scanned} scanned host rows answers to {candidate!r}",
         tuple(scored[:5]), len(scored[:5]), complete, why_incomplete, scanned,
-        tuple(warnings), tier, governed_by))
+        tuple(warnings), ("" if _mutate == "tier_dropped" else tier), governed_by))
 
 
 # --------------------------------------------------------------------------------
