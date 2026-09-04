@@ -2030,3 +2030,159 @@ the extent past the distinctness key that landed beside it. **Prediction P3 is c
 newest rule and the only one that made a set *bigger*, is where the new defects live — and ING11, which said
 its cost was unmeasured, is where K2 was found.
 
+---
+
+### 6.14 Round 3, lens 3 to return — **the fix auditor. NOT YET: 8 BLOCKING, 11 MAJOR, 3 MINOR.**
+
+*(Written to disk before the fix.)* **[Observed]** baseline 104 first; worktree clean. **This is the round's
+largest set, which confirms pre-registered prediction P2**, and it reached `I-8` independently of the kill-row
+lens (its E1), from the migration side rather than the vocabulary side.
+
+**The three findings that are this row's own errors, verified by the worker against the files:**
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **E5** | **BLOCKING** | **`INGEST.md` §5.3 does not exist**, and **[Observed]**, re-verified, it is cited **eight times in the same file** — by §3.4, rules 3-18 and 5-10, and §6.3a. R86 required the no-inheritance decision be *stated as the row's own and recorded*; four normative rules pointed a build row at an empty heading | **ACCEPTED and CLOSED.** §5.3 is written, and it also decides what **E10** found undecided |
+| **E6** | **BLOCKING** | **`type_closure` contradicts `_identity_closure` on all four axes while citing it as normative.** **[Observed]**, re-verified: shipped `_IDENTITY_CHAIN_CAP = **16**` against the kit's 8; and on a cycle and on a dangling successor the shipped function **continues with `complete=True`** where the kit answers `unknowable`. So §6.10c's claim for rule 3-15 — *"and the shipped `_identity_closure`, **which already implements it**"* — **is false; it implements the opposite** | **ACCEPTED.** The cap is now the shipped 16. The two divergences are **deliberate** and are recorded as **ING12** rather than left as prose, per R87: the shipped function answers *"which names mean this"* for a read that can act on a partial answer; this one answers *"may I mint an identity"*, which cannot |
+| **E7** | **BLOCKING** | **§9 says eighty-one over eighty-five** — and §9's own printed verification command returns **86**, because it matches the bare `C20-` inside the sentence documenting it. **No number in the triple is right** | **ACCEPTED.** The sentence now counts **rule rows**, which is what it is about, and records why the id command over-counts itself |
+| **E1** | **BLOCKING** | `I-8` reached independently — the caller naming the survivor reads a smaller set than the caller naming the retired name | **ACCEPTED**, closed with the kill-row lens's K4 |
+| **E2** | **BLOCKING** | **Primitive 22 is a door of the identity the fix reached nowhere.** **[Observed]** `get_instance_checked` mentions `type_closure`: **False**; the same identity is `FOUND` under the declared name and `ABSENT` under the effective one, and it applies the **predecessor's** predicate where `resolve_instance` answers `unknowable` | **ACCEPTED, OPEN.** A rule-(d) failure **by number** for 3-14…3-19, 5-10 and 6-18: §6.10c names none of them at this door. **Not closed in this round's fix** — see §6.16 |
+| **E3** | **BLOCKING** | **Six fixes survive removal with all 104 green** — `3-16`, `3-17`, `4-3-eff`, `4-13`, `5-11`, and **rule 2-14**, one of round 1's headline fixes. **§13's route 12 rests on rule 2-14 and rule 2-14 has no check that can go red** | **ACCEPTED.** `5-11`, `4-3-eff` and `4-13` now have checks (§5.7). `3-16`, `3-17` and `2-14` are **OPEN** — §6.16 |
+| **E4** | **BLOCKING** | **§6.10e's RECORDED method reports a disabled fix as green — proved by running it.** Every probe does `sys.path.insert(0, …parent)`, so `docs/tools` wins over `PYTHONPATH` and the mutated kit is never imported. **[Observed]** the recorded procedure returns `36/36 checks pass` with `I-1`'s Rule-U block disabled | **ACCEPTED, and it is `M1`/`A9`'s shape a second time inside the paragraph that records the first.** §6.10e's numbers were produced by the corrected in-source harness §6.10e-i describes; **the method sentence in §6.10e described the superseded one**, so the record was not reproducible from itself. Corrected in §6.16 |
+| **E22** | **BLOCKING** | **§6.9c's eight required mutations were not run — none of them.** The row's own stop-condition section obliged round 2's fixes to ship red checks for `C20-01`, `C20-04`, `C20-05`, `C20-18`, `C20-25`, `C20-58`, rule 2-12 and rule 2-5 | **ACCEPTED, OPEN, and it is the sharpest process finding of the round** — §6.10e proved the **nine cells** and **none of the eight rules the row obliged itself to prove**, then claimed it met *"the standard D4 said the row was not meeting"* |
+| **E23** | MAJOR | **The fix commit does not state the survivor count §6.9c required.** *"Nine of nine red"* is a red count over nine self-selected mutations; the same fix set under the auditor's 21 mutations reports **six** survivors | **ACCEPTED.** The two are different claims and only the first had been made |
+
+**E8–E21** are accepted with them: §4.3's pre-fix prose (**closed**), rule `readable` and `consumers_known`
+crossing a hop ungoverned (**open**), `unknowable` over-firing on a reworded `why` (**closed by §5.3**), rule
+3-19 re-opening `I-6` (**closed by rule 2-17**), `act_key` ignoring `Closure.complete` (**open**), §13 untouched
+(**open**), §8's printed shape missing `governed_by` (**closed**), §9's ordinals (**open**), A4 naming none of
+what rule 4-11 needs (**closed**), §8.1's withdrawn sentence still present (**open**), the `I-3` mutation arm
+bypassing the act (**closed**), aliases (**closed by rule 3-21**), rule rows out of ordinal order (**closed**),
+UC1 absent from §14 (**open**).
+
+### 6.15 Round 3, lens 4 to return — **the public data. NOT YET: 4 BLOCKING, 5 MAJOR, 1 MINOR.**
+
+*(Written to disk before the fix.)* **This lens ran 33 valid mutations and reports SIXTEEN survivors**, which
+is the number §6.16 is written against.
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **P1** | **BLOCKING** | **Seven of §6.9c's eight named rules are still undetectable at 104**, each removed in source: `C20-01`, `C20-04`, `C20-05`, `C20-18`, `C20-25`, `C20-58`, `C20-08` all **SURVIVE**; only rule 2-12 reddens. And **[Observed]** on a live path — 209 real Colorado facilities — the `C20-01` mutation answers `existing ref='cms:entity:facility#minted-by-registry' conf=1.0`, **a registry-minted instance identifier**, with all 104 green | **ACCEPTED, OPEN, and it is E22 measured.** *Rule 1-1 — the rule the entire R78 verdict rests on — remains assertable-and-undetectable one round after being named* |
+| **P2** | **BLOCKING** | **Rule 3-19 turns one real host row into k+1 candidates, and rule 2-16 is blind by construction.** **[Observed]** live `erm2-nwe9`: one hop → `ambiguous known=2` with `reason='2 host rows answer to "1767 BATH AVENUE"'` over **one** host row (`DISTINCT host unique_keys behind those candidates: 1`), scaling to `known=3` and `known=4` at two and three hops. Design test 2's own adapter stamps `q.type_name` onto every record, because `erm2-nwe9` has no column saying which registry type a row is | **ACCEPTED and CLOSED by rule 2-17** — records sharing `(namespace, kind, instance_id)` across member names are **one candidate**. This is the kill-row family: `I-6` reached through `I-3`'s own fix, and *a rule that guarded the case that prompted it and not the case beside it* |
+| **P3** | **BLOCKING** | **Eight accepted round-2 dispositions did not land in the spec**, two BLOCKING: D5 (*"seven real CMS pairs"* — the corrected **31/31** verified again and simply not applied), d-m1 (`0.02`), D6, D7 (`'5 AVENUE'`), D8 (ING5's 59.7% as a rate), D9 (`discriminators`), Z8 (14,427 / 155), and **D2 reproduces exactly today**: 500 real California names into an empty host → `{'unknowable': 500}`, `ledger rows: 0` | **ACCEPTED, OPEN.** With the beacon lens's B3 and the kill-row lens's K7/K6, **nineteen accepted dispositions across three rounds bound no commit** |
+| **P4** | **BLOCKING** | **D1 reproduces, and round 2's fix made the collision rate WORSE.** **[Observed]** live: address collision 82.2% → **83.7% after rule 4-10's normaliser**; one act over the 3,342-row slice gives `{'proposed': 1044, 'reused': 2298}` — **68.8% of a real batch never resolved**, against D1's measured 46.5% | **ACCEPTED, OPEN, and it is the round's most important open finding.** *The fix was to the label's spelling, not to the assumption the finding was about* — §5.2 says in terms that `erm2-nwe9`'s instance is a service request keyed by `unique_key`, and rules 4-10/4-11 still assume *same label ⇒ same thing* |
+| **P5** | MAJOR | **Rule 3-18 guards the endpoints only while rule 3-19 puts every hop in the extent.** **[Observed]** the identical governance change fires on **400 of 400** at the endpoint and **0 of 400** one hop earlier, with 458 real host rows under the middle type inside the caller's extent | **ACCEPTED and CLOSED** — rule 3-18 now compares **every member** of the closure (the kill-row lens's K1 from the other side) |
+| **P6** | MAJOR | **Six more survivors past the row's nine and past D4's set**, including `C20-85` and `C20-77` *minted three commits ago under the stated standard that every fix lands with a check that goes red*. And **N11**: deleting §3.2's `ambiguity_margin` half leaves 104 green **and changes 0 of 599 real abbreviated CMS labels**, because its real population is **0.11%** | **ACCEPTED.** `5-11` now has a check; `3-16`/`3-17` remain open. **N11 is the sharper half**: §3.2's argument rests on a clause that is specified, argued from, and effectively unexercised on real data |
+| **P7** | MAJOR | §9's accounting wrong again, in the sentence added to stop it being wrong; and the reserved ordinals collide with the tuple | **ACCEPTED.** The count is closed; **the ordinals are OPEN** |
+| **P8** | MAJOR | **Rule 3-19's read cost is (hops+1)× and §2.1 was never updated.** **[Observed]** live: 1 → 4 `read_types` gives 725 → 2,900 rows and 0.3s → 1.5s; **[Inferred]** at `CHAIN_CAP` the unnarrowed case is ~1,764 requests ≈ **32 minutes for one landed row**. §2.1's timing range falsified a **third** time, at 1.1 s | **ACCEPTED, OPEN.** §2.1's affordability argument is stated for **one** read and rule 3-19 multiplies it by the closure length |
+| **P9** | MAJOR | **ING11's cost measured — and ING11's own sentence about it is wrong.** **[Observed]** under a **dual-write** migration the `ambiguous` rate tracks the migrated fraction **linearly to 100%** and is still 100% when the migration finishes: **the queue does not drain when the migration ends**, only when the host *deletes* the predecessor rows — a separate act ING11 does not name. A **move** migration costs nothing | **ACCEPTED, OPEN.** ING11 now carries the fix auditor's 400-label *move* measurement (zero cost) and must also carry this **dual-write** curve, which is the opposite result on the ordinary safe migration |
+| **P10** | MINOR | **The seven-cell table's mutation coverage rests on one probe** — eight of nine cells redden only `ingest_act_probe.py` | **ACCEPTED, OPEN.** *A family whose coverage lives in one fixture is the shape M1, A9 and §6.10e-i all have* |
+
+#### 6.15a What THREE lenses could not break — carried forward
+
+1. **The R78 seam, from the sixth and seventh directions.** No outcome needs an instance store; `HostTable`
+   has no writer; the shipped registry held no instance row in any run. **What is broken is the DETECTION,
+   not the seam** — and P1 is that in one sentence.
+2. **Every pre-registered CMS figure**, re-derived a third time, exact. So are the raw-vs-normalised counts,
+   D5's `31/31` under its own method, §5.2's fixture percentages, §3.3's classifier figures, and the shipped
+   vocabulary lengths.
+3. **§6.10e's nine-of-nine claim verifies** under an independent in-source harness — twice, by two lenses.
+4. **The three-valued `Condition`.** Every declaration-time refusal removed goes red.
+5. **Rule 3-18 at the endpoint and rule 4-7's fence** do exactly what §11 says: `unknowable` on 1,373 of
+   1,373 real labels, `ledger rows: 0`. **Loud, and correct.**
+
+---
+
+### 6.16 Round 3, totalled — and **the honest convergence note. The row is STOPPED at the cap, not finished.**
+
+| round | lenses | BLOCKING | MAJOR | MINOR | total |
+|---|---|---|---|---|---|
+| 1 | 3 | 11 | 20 | 6 | **37** |
+| 2 | 4 | 19 | 18 | 10 | **47** |
+| **3** | **4** | **21** | **23** | **7** | **51** |
+
+**Round 3: 4 BLOCKING (beacon) + 5 (kill row) + 8 (fix auditor) + 4 (public data) = 21.** Four lenses, four
+verdicts of **NOT YET**, and no lens returned nothing.
+
+#### 6.16a The two facts the founder is owed together, because they are different facts
+
+**FACT ONE — the findings did NOT shrink. 37 → 47 → 51, and BLOCKING went 11 → 19 → 21.** This row has now
+run three rounds and every one of them found more than the last. Row 6c's three rounds went 13, 12, 12 and it
+was **stopped rather than finished**; this row's went up. **A loop whose findings do not shrink is still
+productive**, and that is the honest reading of the cap: the row is stopped because the cap says three, not
+because it converged. It did not converge.
+
+**FACT TWO — and it is a different kind of fact — the loop is now PREDICTIVE.** §6.11's seven predictions were
+committed at `4f3b2eb` **before any lens returned**, checkable in `git log`. Scored:
+
+| # | prediction | outcome |
+|---|---|---|
+| **P1** | round 3 will NOT be clean | **CONFIRMED** — four of four NOT YET |
+| **P2** | the fix auditor will find the most, inside the fix diff | **CONFIRMED** — 8 BLOCKING, the round's largest, and E1/E3/E4/E22 are all inside `83f6a75` |
+| **P3** | **rule 3-19 is where the new defect lives** | **CONFIRMED, and by three lenses independently** — K2, E11 and P2 are all rule 3-19 against rule 2-16; P5/K1 is rule 3-19 against rule 3-18; P8 is its read cost |
+| **P4** | standing rule (d) will fail again and §6.10c will be incomplete | **CONFIRMED** — E2 names eight rules §6.10c does not list at primitive 22's door |
+| **P5** | the harness audit will find a check green for a reason other than the one it claims | **CONFIRMED** — E4, and it is in the paragraph recording the *first* instance |
+| **P6** | no lens will force an instance row into the registry | **CONFIRMED** — and P1 sharpens it: the seam holds, the **detection** does not |
+| **P7** | findings will not shrink; the row closes on the cap | **CONFIRMED** — 51, and this note |
+
+**Seven of seven.** [**R87**](../decisions/2026-09-04-7a-supervisor-ruling-R87.md) records why this matters
+and why it goes to the founder beside fact one rather than instead of it: *non-shrinking findings say the loop
+is still productive; a confirmed pre-registered prediction says the loop is now **predictive**.* The row named
+where its next defect would be, in writing, before looking, and was right — **and the falsifier §6.11 stated
+in advance was never triggered**, because no lens came back clean.
+
+**The uncomfortable half, stated because §6.11 said it would be.** Predicting your own next defect and then
+shipping it is not a success. **P3 was written by the same person who wrote rule 3-19 and did not fix it
+before the lenses ran.** What the loop is good at is *finding*; what this row has not demonstrated is
+*preventing*. That distinction belongs in the founder's `stop` calculus as much as the confirmation does.
+
+#### 6.16b What round 3 changed, and what it left OPEN
+
+**Closed in `33e7290`:** `I-8` in all three relations with a mutation each (K4/E1); the citation's
+adopt/decline enumeration and **ING12** (R87); §5.3, which four rules pointed at and which did not exist (E5);
+the cap at the shipped 16 (E6); §9's count, third correction (E7/B9/P7); rule 3-18 per **member** (K1/P5);
+rule 2-17, one row under two closure names is one candidate (K2/E11/P2); rule 5-12, the floor (K7); rule 3-22,
+the successor name's flat form (K8); rule 4-10 asking the gate's **relation** (B1); rule 4-13 reaching
+`existing` (B7); §4.3's pre-fix prose (B2/E8); amendment A4, which was factually wrong (B4/E16); §8's printed
+`governed_by` (E14); ING11's *move*-migration measurement.
+
+**OPEN at the cap, and named rather than quietly carried:**
+
+| # | open finding | why it is not closed here |
+|---|---|---|
+| **1** | **E22 / P1 — §6.9c's eight named rules still have no red check**, `C20-01` among them | The row obliged itself to this in round 2 and did not do it in round 3 either. **It is the first thing the build row must do**, and it is written into §8.1 rather than left in a run record |
+| **2** | **E3 / P6 — sixteen mutation survivors of 33**, including `3-16`, `3-17` and **rule 2-14**, which §13's route 12 rests on | Same cause. A survivor count, not a red count, is the measure — E23 |
+| **3** | **P4 — rules 4-10/4-11 still assume *same label ⇒ same thing***, and normalising raised the collision rate on real NYC data from 82.2% to 83.7%, with 68.8% of a real batch unresolved | **The honest fix is not another key**: `erm2-nwe9`'s instance is keyed by `unique_key` and the label is not an identity. This needs `InstanceContext.row_attributes` to be *read* (B8/M4) — a design change, not a patch, and it is **Q92** |
+| **4** | **E2 — primitive 22 resolves no closure** and applies the predecessor's predicate | A rule-(d) failure by number at a door the fix never reached; it is one rule and a probe, and it is **the second thing the build row must do** |
+| **5** | **P3 — eight round-2 dispositions, plus B3's nine and K7/K6, that bound no commit: nineteen across three rounds** | Recorded as §6.16c, because the pattern is worth more than the items |
+| **6** | **P8 — rule 3-19's read cost is (hops+1)×** and §2.1's affordability argument is stated for one read | Measured but unpriced; **Q93** |
+| **7** | **P9 — ING11's dual-write curve**: the queue does **not** drain when the migration ends | ING11 now carries the *move* measurement and must carry this one |
+| **8** | **P10 — eight of nine cells redden one probe only** | The family's coverage lives in one fixture, which is the shape this row has recorded three times |
+
+#### 6.16c Nineteen accepted dispositions that bound no commit — **the row's own worst pattern**
+
+Round 2 marked findings ACCEPTED and landed them in `INGEST.md` and the probes; round 3 found **nineteen**
+that reached neither. B3's nine (the relationship half for the second round running, `discriminators`, A1's
+storage surface, §4.1's printed shape, ING8's field count), P3's eight (D5's `31/31`, `0.02`, D6, D7, D8, D9,
+Z8, D2), and K7/K6 (A11 and Z5, in **neither** the fix table nor any deferral list).
+
+**This is A2's shape at the level of the process rather than of a document**, and A2's own disposition named
+it: *a disposition kept in one artefact and in none of the others*. The register's countable answer applies —
+**§6.10a is titled *"What was NOT done, and why it matters"* and named none of them**, so the obligation R85
+put on the commit needs its complement: **a fix commit lists what it declined, or a later round finds it and
+counts it.** Offered to the register as the natural extension of standing rule (d)'s countable form.
+
+#### 6.16d The stop condition, answered plainly
+
+**Standing constraint 7:** two consecutive clean rounds, or three rounds plus an honest convergence note.
+**There were no clean rounds.** The row closes at the cap with this note, and the note says:
+
+1. **It did not converge.** 37 → 47 → 51.
+2. **Every round found a defect inside the previous round's fix.** Round 2 found five BLOCKING inside round
+   1's two commits; round 3 found E1/E3/E4/E22 inside round 2's one.
+3. **The seam held every time.** Seven lenses across three rounds tried to force an instance row into the
+   registry and none could. **R78 is the one thing this row is sure of** — and P1 is the caveat that it is
+   sure by *reading*, because the rule that says so has no check.
+4. **The loop became predictive**, seven of seven, pre-registered.
+5. **The row ships `INGEST.md` as a v0 with eight open findings named above**, not as a finished document.
+   That is the honest state, and §8.1 carries it in the spec rather than only here.
