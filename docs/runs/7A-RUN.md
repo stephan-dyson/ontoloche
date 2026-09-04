@@ -482,7 +482,11 @@ state and shows the rule refusing it. Recorded in §5 of this document as what t
 
 **Provenance first, standing rule (a).** **[Observed]** `grep -rc "resolve_instance\|MatchPolicy\|find_instance_candidates" ontoloche/` returns **zero**: the instance-identity surface does not exist in shipped code, so there is no earlier commit to bisect against. Every finding below is established **by construction and measurement** against the artefacts `INGEST.md` itself cites as its evidence, plus the shipped `Registry`, `ref_key`, `parse_ref` and `flat_form_problem`.
 
-#### 6.2a The trip — **a truncated scan that FINDS a match answers `existing` at 1.0 on a label twelve facilities answer to**
+#### 6.2a `I-1` — **a truncated scan that FINDS a match answers `existing` at 1.0 on a label twelve facilities answer to**
+
+*Classified by [R83](../decisions/2026-09-04-7a-supervisor-ruling-R83.md): **not** a fifteenth kill-row trip — the
+trip count stays at **fourteen** — and recorded as the first of the `I-n` **instance-surface records**, a series
+that never merges with the trip count. The countersignature is at the end of this section.*
 
 **[Observed]**, one ordinary `scan_cap` — R58's own third state, the same mechanism design test 1's own T1.5 uses — set one row past the first of `"MILLER'S MERRY MANOR"`'s twelve CCNs:
 
@@ -536,6 +540,32 @@ against the commit.)*
 3. **Standing rule (d) is what should have caught it and did not**, and this is the second lens in one round
    to say so (see §6.1a). §3's ordering rule was minted at `resolve_instance` and the enumeration stopped
    there — see finding 7 below, where the row's **own two probes order the same rule opposite ways.**
+
+**COUNTERSIGNED 2026-09-04 — [R83](../decisions/2026-09-04-7a-supervisor-ruling-R83.md), and the record is `I-1`.**
+The supervisor read the record against the commits rather than against the paragraph above, and **adopted the
+worker's reading on the classification**: this is **not** a fifteenth kill-row trip, and **the count stays at
+fourteen** — verified **[Observed]** by `git diff --name-only a1b0364^..39d3718 -- ontoloche/` returning
+nothing, so the row constructs no state against shipped code at a shipped door. What R83 added is where the
+finding then lives, so that *not a trip* did not become *not recorded*:
+
+- **The record is labelled `I-1`** — the first of the **instance-surface records**, an `I-n` series kept in the
+  same register and **distinct from the trip count, with which it never merges**. It is written up at
+  [`2026-08-29-3c-rulings-R6-R12.md`, "The instance-surface records"](../decisions/2026-08-29-3c-rulings-R6-R12.md).
+- **`stop` is NOT put an eleventh time.** The ten puts attach to trips; this is not one, and a record that is
+  not a trip does not get to borrow a trip's weight. **Q56 remains the class-closing question and the
+  founder's**, with defaults in force unchanged.
+- **The cross-reference to the fifth trip is confirmed**, against the fifth trip's own record: *partial is not
+  equal*, with the read's own `why` discarded — same operand, same discarded signal, new surface.
+- **The register's rules already bind this surface even though its trips do not.** K4 is standing rule (c) one
+  surface down; K7 is standing rule (d) **measured**. That asymmetry is why the series exists.
+- **K6's shipped half is Q56's territory, not a trip's** (R83 §6). The successor redirect answering `existing`
+  at 1.0 is the specified behaviour with a founder-visible question already open on it; K6's defect is its
+  **unshipped** half. Recorded so the register is not asked this twice.
+- **The dedicated identity-surface row** recommended at the fourteenth countersignature §4 **gains an instance
+  half**: its lenses become the fourteen trip records *and* the `I-n` records.
+
+**Nothing in R83 reopens a disposition.** K1's fix as landed at `07af54f` / `39d3718` stands, and the loop's
+cap of 3 is unchanged with round 1 counting as round 1.
 
 #### 6.2b Every finding, with its disposition
 
