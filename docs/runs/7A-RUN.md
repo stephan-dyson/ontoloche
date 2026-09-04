@@ -867,3 +867,157 @@ findings, and that is exactly when the enumeration feels finished.**
 **And A2 is the one a reader meets first.** Every disposition of round 1 was kept in two artefacts and in
 neither of the two documents that carry the row's evidence. The run record still prints the vocabulary the
 spec now forbids.
+
+---
+
+### 6.6 Round 2, lens 2 — **the beacon integrator. NOT YET: 5 BLOCKING, 4 MAJOR, 4 MINOR.**
+
+**The verdict in one sentence:** *the capture path still does not go through — it no longer stops at the
+first call, it stops at the second **reference**, and rule 4-10 is where.*
+
+Round 1's beacon lens found the path stopped at the first call, because the thing being proposed could not be
+named as an input. `CandidateRef` genuinely closed that (§6.6c item 3). What round 1's fix did not do is give
+the *per-act* rules the scope the per-call rules already had. **[Observed]** baseline reproduced before
+anything: DT1 36/36, DT2 13/13, DT3 17/17, DT4 11/11, DT5 10/10 = **87/87**; the lens worked in an isolated
+worktree and modified no repo file, building four constructions against the real kit and the shipped package.
+
+#### 6.6a The kill-row family again — **three of the five BLOCKING findings end in two host rows answering to one identity, with rules 4-10 and 4-11 fully enforced**
+
+**1. `I-3` (proposed) — rule 4-10 has no type scope, and a capture act is multi-type by construction.**
+Rule 4-10 (`C20-70`) verbatim, and the worker re-verified it at `INGEST.md:586`: *"**Within one ingest act a
+label is resolved once**; later references to it in that act reuse the first `CandidateRef`"* — **no
+`(namespace, kind, type_name)`**. Rule 4-11, **one line below at `:587`, has one.** Implemented exactly as
+written, over one act carrying a `project` and a `task` that share a label:
+
+```
+land(project , 'Meridian') -> proposed  CandidateRef(type_name='project', label='Meridian')
+land(task    , 'Meridian') -> reused    CandidateRef(namespace='beacon', kind='entity',
+                                        type_name='project', label='Meridian',
+                                        resolution='proposal', act_id='act-c6')
+invocations recorded: 1  [('project', 'Meridian')]
+the two CandidateRefs are the SAME object: True
+the TASK ends up named by: type_name='project'
+```
+
+**Proved by mutation:** adding the type to the key gives `2` invocations and `SAME object: False`.
+**[Observed]** design test 5 cannot see it — `IngestAct.__init__` fixes `type_name` for the whole act, so a
+multi-type act is not constructible in it. And **§8 of this same document already knows the case**: `siblings`
+was typed in round 1 precisely because *"a capture resolving a task was handed a project name and a person
+name with nothing to tell them apart."* **Standing rule (d) inside the fix commit once more** — the qualifier
+was written onto 4-11 and not onto 4-10 beside it, in the same commit that typed `siblings` for this reason.
+
+**2. `I-4` (proposed) — rule 4-11 names a door that cannot answer its question.** Rule 4-11 asks
+`invocations(unreviewed=True)` *"who already holds a pending proposal for **this label** under this
+`(namespace, kind, type_name)`"*. **[Observed]**, re-verified by the worker against the shipped
+[`Registry.invocations`](../../ontoloche/registry.py) signature —
+`(*, family, namespace, actor, outcome, gate_verdict, effect_undeclared, unreviewed, since, limit=100)`:
+there is **no `label` filter, no `type_name` filter and no `kind` filter**. `ACTIONS.md` §6.3 says in terms
+*"It does not page"*, and **[Observed]** [`ontoloche/backends/_sql.py`](../../ontoloche/backends/_sql.py)
+line 1915 is `ORDER BY created_at, invocation_id LIMIT {limit}+1` — so the page is the **oldest 100**. One
+ordinary 250-row batch, the same facility at rows 150 and 250:
+
+```
+DT5's own ledger              -> complete=True   warnings=('instance_proposal_pending:inv-150',)
+                                 identities minted: 1
+the ledger ACTIONS SHIPS      -> complete=False  why='limit of 100 truncated the answer'
+                                 the repeat's warnings: ()
+                                 invocations carrying the pending warning: 0
+                                 identities minted on approval: 2
+```
+
+**And rule 4-11's read is an identity read**, so §3's own rules bind it: rule 2-11 says an identity read
+*"exhausts the cursor or reports truncated; it never reads one page and decides"*, and §3.4 says an unfinished
+one is `unknowable` **whatever it found**. Rule 4-11 reads one page of a non-paging call and decides. This is
+`I-1`'s operand — *partial is not equal* — at a **third** surface.
+
+**3. `I-5` (proposed) — rules 4-10/4-11 dedupe by the RAW STRING while §3 and §5 decide identity by the
+normaliser.** Two spellings of one real CMS facility, in one act, both rules on:
+
+```
+norm(A) == norm(B) -> True ('the sarah roberts french home')      similar(A,B) -> 1.0
+A == B  (rule 4-10 / 4-11's test)                                 -> False
+counterfactual: if row 1 were already written, row 2 resolves
+                outcome='existing' ref='cms:entity:facility#HOST-1' confidence=1.0
+
+one act, both rules ON:
+  land outcomes    = ['proposed', 'proposed']
+  ledger           = 2 invocations, warnings=[(), ()]
+  host writes      = ['HOST-1 / THE SARAH ROBERTS FRENCH HOME',
+                      'HOST-2 / The Sarah Roberts French Home.']
+  the NEXT resolution -> outcome='ambiguous' known=2 confidence=1.0 complete=True
+```
+
+**F4's exact outcome, with F4's fix fully enforced.** This is contortion **ING3** — *two notions of the same
+string* — arriving at the **act** layer, where it costs an identity rather than a refusal. A capture writes
+one name two ways in one meeting note as a matter of course.
+
+**4. `I-6` (proposed) — rule 4-10's per-act memory is written only on the `proposed` branch, and a warned
+invocation is still an approvable permission.**
+
+```
+act-0 lands the label once      -> 'proposed';  unreviewed=1
+act-1 lands the SAME label TWICE -> 'pending', 'pending'
+  resolve_instance host reads inside act-1 = 2   (one per resolution)
+  act-1's own rule-4-10 memory _minted = {}      <-- the label was resolved twice in one act
+queue: inv-1 mode='auto' warnings=()   inv-2/inv-3 ('instance_proposal_pending:inv-1',)
+drain it the ordinary way (§4.2: the host writes on approval, and NO rule in §4 refuses a
+write for an invocation carrying `instance_proposal_pending`)
+  host writes = ['HOST-1', 'HOST-2', 'HOST-3']
+  the NEXT resolution -> outcome='ambiguous' known=3 confidence=1.0
+```
+
+Rule 4-11's *"mints no second identity"* is a claim about the **invocation**, not about the **write**, and
+nothing binds the write door. That is contortion **ING2**'s advisory-at-the-only-enforcing-door arriving at
+rule 4-11, where ING2 records it only for rule 4-7.
+
+**Classification is not the worker's and not the lens's.** On [**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)'s
+reading all four are constructed against a **specification** and a **throwaway kit**, so they are proposed as
+instance-surface records and **the fourteen-trip count is not incremented**. `I-4` is the one closest to the
+line, because its measurement is of the **shipped** `invocations` signature and the **shipped**
+`ORDER BY created_at … LIMIT`. Routed to the supervisor.
+
+#### 6.6b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **B1** | **BLOCKING** | **Rule 4-10 has no type scope — §6.6a.1.** One act, `project 'Meridian'` and `task 'Meridian'`: the task **reuses the project's `CandidateRef`** and is never proposed | **ACCEPTED.** Rule 4-10 gains `(namespace, kind, type_name)`, as rule 4-11 one line below already has, and §4.3's rule 1 with it. Design test 5 gains a **multi-type act** — `IngestAct` takes `type_name` per `land`, not per act — and the check goes red without the qualifier |
+| **B2** | **BLOCKING** | **Rule 4-11 names a door that cannot answer its question — §6.6a.2.** **[Observed]**, re-verified: the shipped `invocations` has **no `label`, `type_name` or `kind` filter**, `limit=100`, and `_sql.py:1915` orders by `created_at` — the oldest page. On a 250-row batch the repeat carries **no** warning and **two** identities are minted | **ACCEPTED, and §4.4 gains a FOURTH amendment**: `invocations` needs a `label`/`type_name` filter and a completeness answer. Rule 4-11 gains its own Rule-U branch, because its read is an identity read and rule 2-11 already binds it. **§6.5c item 10's "caught by `invocations(unreviewed=True)`" is corrected on the record** — it was caught by design test 5's own `Ledger.unreviewed(...)`, which is not that call |
+| **B3** | **BLOCKING** | **Rules 4-10/4-11 dedupe by the raw string; §3 and §5 decide identity by the normaliser — §6.6a.3.** One document, two notions of *the same thing*, disagreeing **inside one act** | **ACCEPTED.** The per-act rules dedupe over whatever §3 calls the same thing, or the document states they are exact-string and prices it in **ING3** |
+| **B4** | **BLOCKING** | **The capture's relationship half has no path, no non-goal, no contortion and no question — and §12 tells the reader it is handled.** F5's disposition was *"the spec must say so rather than imply it"*. **[Observed]**, re-verified by the worker: `'relationship'` occurs **2** times in `INGEST.md` (the VISION quote and §12's row), `'add_edge'` **0**; §0.1's non-goals name no relationship; §10's ING1–ING10 contain none about edges; §11's Q85–Q90 contain none. The walk: two `proposal`s, then `InstanceRef(id=None)` → `TypeError`, `ref_key(CandidateRef)` → `AttributeError`, and `NodeRef = TypeRef \| InstanceRef`. §12 row 3 meanwhile answers *"**No.** Inherited, not designed — and the one part of §4 round 1 could not break"* | **ACCEPTED, and it is A2's shape inside round 1's own fix set**: a disposition kept in the run record and landed in **none** of §0.1, §10 or §11. §0.1 gains the non-goal, §10 gains the contortion with the walk pasted, §11 gains the question, and §12's row is corrected so a reader cannot conclude the relationship half is covered |
+| **B5** | **BLOCKING** | **Rule 4-10's per-act memory is written only on the `proposed` branch — §6.6a.4.** Three approvals for one label, `ambiguous known=3` after | **ACCEPTED.** Either rule 4-11's warning binds the approval door, or §10 records that it does not — ING2's shape, at the rule minted to close K4 |
+| **M1** | MAJOR | **`InstanceCandidate.discriminators` is documented as the opposite of what a reviewer needs, and implemented as a third thing.** **[Observed]**, re-verified at `INGEST.md:881`: `discriminators: dict # the host attributes that did NOT separate the tie`. On the real 12-way tie: `discriminators[0] = {'city':'WARSAW','state':'IN','zip':'46580','address':'1630 S COUNTY FARM RD'}`, and *"of those keys, the ones that DO separate the tie: `['address','city','zip']`"* | **ACCEPTED.** An implementer reading §8 literally filters to the non-separating set and hands the reviewer `{'state':'IN'}` — **deleting the only signal that resolves the tie**, on the queue rule 4-5 routes every ambiguous capture into. The comment is corrected and the kit's behaviour becomes the rule |
+| **M2** | MAJOR | **Amendment A1 names one surface, and the ledger's actual storage is a second one it does not name.** ACTIONS §2.3 / **R72**: *"what the ledger actually holds for each argument is the flat string `ref_key` writes"*. **[Observed]**, re-verified: `ref_key(CandidateRef)` → `AttributeError`; `ontoloche.actions.REF_SHAPES` → **`('type','instance','edge')`**; and inside §4.4 the strings `ref_key`, `parse_ref`, `REF_SHAPES` and *flat form* occur **zero** times | **ACCEPTED.** The ACTIONS row could land A1 exactly as written and the capture would still be unable to record an invocation. **Standing rule (d) in the section whose only job is to enumerate what must land** — A3's shape, one section along |
+| **M3** | MAJOR | **`CandidateRef.label` is a prose string in a reference shape, and no rule guards its flat form.** Rule 2-14 (`C20-65`) binds `InstanceRecord`'s three fields only. **[Observed]** on labels a meeting note actually produces — `'Q3: migration'`, `'sprint #14'`, `"Dana's 1:1"`, `'OKR #2: latency'` — the shipped `flat_form_problem` returns `None` for every one, because `ref_shape` is `None` for a shape ACTIONS does not know. **[Observed]**, re-verified: §4.1 contains `flat_form_problem` **zero** times | **ACCEPTED.** `C19-82` / **K8** — *a confident reading of the wrong thing* — arriving at the **fourth** reference shape, minted in the same fix round that closed it at the third |
+| **M4** | MAJOR | **`InstanceContext` is the call's second positional argument and NO rule in the document binds it.** **[Observed]** over `resolve_instance`'s source: `label_source` read **False**, `row_attributes` **False**, `siblings` **False**, `proposed_by` **False**, `act_id` **True**. **[Observed]** INGEST rules 1-1…7-4 mentioning `InstanceContext` or any field: **none**. A 12-way tie **with `siblings` supplied** still answers `ambiguous known=12` | **ACCEPTED.** F9 said the fields were never *run*; the amendment makes DT1 construct the object and assert nothing about its effect — **A9's shape, a check green for an unrelated reason.** ING8 prices the *emptiness* of two fields; nothing prices the *inertness* of all five |
+| **b-m1** | MINOR | **§4.1's printed `CandidateRef` and the kit's diverge, undetectably.** §4.1 prints `type: TypeRef`; the kit's is `CandidateRef(namespace, kind, type_name, label, resolution, act_id)`. `check_spec_drift.py` does not cover `INGEST.md` | **ACCEPTED.** The one shape this document *adds* is printed one way and implemented another |
+| **b-m2** | MINOR | **§4.1's own comment is false for half the values `resolution` may take.** `CandidateRef: # NEW … A thing that does NOT exist yet`, while `resolution` is *"`proposal` or `ambiguous`"* and `ambiguous` means **more than one held instance** answers. **[Observed]** the 12-way tie yields `CandidateRef(… resolution='ambiguous')` — twelve things that **do** exist, cached by rule 4-10 for reuse at every later reference | **ACCEPTED** |
+| **b-m3** | MINOR | **Design test 5 models two ACTIONS amendments and labels one.** Its `Invocation` carries `minted_ref` (labelled as amendment A2) **and** `approval_mode` and `warnings`, which are amendment **A3** and are labelled nowhere — so DT5's rule 4-5 and rule 4-6 checks are green against a ledger §4.4 says does not exist | **ACCEPTED**, and it is one more row §8.1's *"still unexercised"* table does not carry |
+| **b-m4** | MINOR | **ING8 counts four `InstanceContext` fields; §8 prints five.** **[Observed]**, re-verified: `INGEST.md:966` says *"two of `InstanceContext`'s **four** fields"*; the printed shape at `:854` carries `label_source`, `row_attributes`, `siblings`, `act_id`, `proposed_by` | **ACCEPTED** — an enumeration error inside the contortion that is the strongest evidence for **Q86** |
+
+#### 6.6c What the lens attacked and could NOT break
+
+1. **`not_an_instance` from prose is recorded honestly, and the measurement only extends it.** Against a
+   25-word real capture vocabulary: **[Observed]** `answered not_an_instance: 0 of 25` — all 25 `proposal`.
+   ING8 says exactly this and it is softened nowhere. **Round 3 should not re-measure it.**
+2. **ING8's `row_attributes` / `siblings` asymmetry is honestly stated.** Typing `siblings` did not and could
+   not change 104/104 vs 0/104 — tied candidates share a label, so their siblings are identical — and §8's
+   claim is about type-mixing, not tie-breaking. No overclaim. M4 is a different defect: **inertness, not
+   emptiness.**
+3. **`CandidateRef` genuinely closes F1's first-call stop.** The entity half now has an invocation to make;
+   `CandidateRef` has no `id` field at all and the reviewer could not make one acquire one. **Five lenses have
+   now failed to force an instance row into the registry** — `C20-01` / R78 hold from a fifth direction.
+4. **§4.2's provenance claim, re-checked for the relationship case.** `InvocationProvenance` carries actor,
+   tier, confidence, approver and `source_version`; nothing is missing. It stays the one part of §4 that holds
+   as written — the defect is that §12 makes it answer a question about *relationships* that it does not.
+5. **Rule 4-7 and rule 3-6 at the act door.** `land` over a truncated read → `unknowable`, ledger holds **0**
+   invocations. No route from `unknowable` to a proposal, in-act or across acts.
+6. **Rules 3-3 / 3-4 / 5-8 at the act layer.** Every duplicate above was produced *between* correct
+   resolutions, never by a wrong one; every post-hoc resolution correctly reported `ambiguous` with
+   `ref=None`. **The set test is not the weak point; the act scope is.**
+7. **`Effect(op="add_edge")` is not the missing piece.** The gate, the family, the namespace-from-inputs rule
+   and the provenance for a relationship write all ship. **What is missing is only the endpoint.** So B4 is a
+   scope-and-statement defect, not an ACTIONS capability gap — round 3 should not hunt an `add_edge`
+   amendment.
+8. **Deliberately not attacked by this lens:** §2.2's paging states, §6's twelve terms and their Kleene
+   composition, §6.2's null handling, design tests 2 and 3's live measurements, and the whole of §6.5's
+   A1–A16. No finding here duplicates one of those.
