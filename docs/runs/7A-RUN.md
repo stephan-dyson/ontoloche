@@ -1428,23 +1428,29 @@ CMS pairs where the worker independently re-derived **31** in `[0.97, 0.98)` and
 arithmetic the K2 argument is built on (d-m1). **The rules those arguments produced are right; the arithmetic
 under them is not.**
 
-#### 6.9b The instance-surface family — **countersigned as SIX records, and they are ONE TABLE**
+#### 6.9b The instance-surface family — **SEVEN cells over NINE constructions, countersigned**
 
-**[Observed]**, standing rule (a), re-established by lens 3: `git diff --name-only a1b0364^..HEAD --
-ontoloche/` returns nothing and `resolve_instance` occurs zero times in `ontoloche/`. Every construction is
-against the **specification** and the **throwaway kit**, at a surface with no shipped door.
+**[Observed]**, standing rule (a): `git diff --name-only a1b0364^..HEAD -- ontoloche/` returns nothing and
+`resolve_instance` occurs zero times in `ontoloche/` — **re-verified by the supervisor this cycle**. Every
+construction is against the **specification** and the **throwaway kit**, at a surface with no shipped door.
 [**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md) minted the series,
-[**R84**](../decisions/2026-09-04-7a-supervisor-ruling-R84.md) countersigned `I-2`, and
-[**R85**](../decisions/2026-09-04-7a-supervisor-ruling-R85.md) countersigned Records A–D as `I-3`…`I-6`.
-**The kill-row trip count is FOURTEEN and this row has incremented it nowhere. `stop` is not put; it attaches
-to trips.**
+[**R84**](../decisions/2026-09-04-7a-supervisor-ruling-R84.md) countersigned `I-2`,
+[**R85**](../decisions/2026-09-04-7a-supervisor-ruling-R85.md) countersigned `I-3`…`I-6` and named the table,
+and [**R86**](../decisions/2026-09-04-7a-supervisor-ruling-R86.md) settled the numbering this section routed.
+**The kill-row trip count is FOURTEEN across all nine constructions and this row has incremented it nowhere.
+`stop` is not put by any of them.**
 
-**R85's substance, and it is the reason this section is a table rather than a list.** The six records are not
-six defects. They are **one question asked at six doors** — *which host rows answer to this identity, and did
-the resolution see all of them?* — and in every one the answer is decided over a set that is **not the
-identity's extent**. They differ only in **how** the set went wrong:
+**R86's first ruling is the one that matters most: a record is a CELL, not a construction.** The four
+constructions R85 did not number do **not** become `I-7`…`I-10`. Numbering each construction separately is
+precisely the error the fourteenth countersignature diagnosed — trips 8, 12, 13 and 14 were counted as four
+separate things for three build rows before anyone saw they were four quadrants of one table, and that
+mis-seeing is what cost the programme three rounds. **Having just named the table, this register does not go
+back to counting doors.**
 
-| the set is wrong because it was… | record | the door | first seen |
+**The seven cells.** One question asked at seven doors: *which host rows answer to this identity, did the
+resolution see all of them, and by whose rules was the answer judged?*
+
+| the decision is wrong because the set was… | cell | the door | first seen |
 |---|---|---|---|
 | **truncated** — the scan stopped and said so, and the match path ignored the `why` | **`I-1`** | `resolve_instance`'s match path | round 1, K1 / P1 |
 | **mis-walked** — the chain was followed one hop and reported `complete=True` | **`I-2`** | rule 3-14, the identity read | round 2, A1 |
@@ -1452,46 +1458,69 @@ identity's extent**. They differ only in **how** the set went wrong:
 | **mis-keyed** — the act scopes on the raw label, the gate decides on `norm` | **`I-4`** | rules 4-10 / 4-11 | round 2, B3 / Z2 / D1 |
 | **mis-timed** — the guard's window closes when the proposal drains, before the write lands | **`I-5`** | rule 4-11's `unreviewed=True` | round 2, Z4 |
 | **mis-counted** — a page's own ids are not required to be distinct, so two rows collapse to one | **`I-6`** | §2 / §3.2's set test | round 2, Z7 |
+| **mis-governed** — **the set is right and the facts that govern the decision belong to another entry** | **`I-7`** | §5's policy and §6.3's predicate, across a closure hop | round 2, D3 |
 
-**Four further constructions are doors of the same six rows and are NOT separately numbered** — the `I-n`
-numbering is the supervisor's and R85 assigned four. They are recorded here so the fix set covers them and so
-no door is closed by accident:
+**Three constructions fall INSIDE existing cells, and R86 adopted this row's own mapping for all three** —
+which is itself a result: the table was already wide enough to hold them.
 
-| construction | which row of the table it is a door of | routed |
-|---|---|---|
-| **B1** — rule 4-10 has no type scope, so a `task` reuses a `project`'s `CandidateRef` | **mis-keyed** (`I-4`), on the *type* half of the key rather than the label half | §6.6a.1, `37e086a` |
-| **B2** — rule 4-11 asks a door with no `label` filter that returns the oldest 100 | **mis-timed** (`I-5`) and **truncated** (`I-1`) at once: an identity read that reads one page and decides | §6.6a.2, `37e086a` |
-| **B5** — rule 4-10's memory is written only on the `proposed` branch, and nothing binds the write | **mis-written** (`I-3`) | §6.6a.4, `37e086a` |
-| **D3** — rule 3-14 swaps the successor's `MatchPolicy` and `Condition` in under the caller | **mis-walked** (`I-2`) at the *governed-fact* half rather than the extent half | §6.8b, `c4ad8b8` |
+| construction | the cell it is a construction of |
+|---|---|
+| **B1** — rule 4-10 has no type scope, so a `task` reuses a `project`'s `CandidateRef` | **`I-4`**, on the *type* half of the key rather than the label half |
+| **B2** — rule 4-11 asks a door with no `label` filter that returns the oldest 100 | **`I-5`** and **`I-1`** at once — an identity read that reads one page and decides |
+| **B5** — rule 4-10's memory is written only on the `proposed` branch | **`I-3`** |
 
-#### 6.9b-i Standing rule (e), proposed by R85 and carried by this row
+#### 6.9b-i `I-7`, and this row's mapping of it was WRONG
 
-> **The extent an identity is decided over is the same set at every door that reads it, writes it, keys it,
-> gates it, or counts it — and a door that cannot prove it is the same set answers `unknowable` rather than
-> deciding.**
+**This section previously assigned D3 to `I-2`, *"mis-walked at the governed-fact half"*. R86 rejected that
+and the rejection is correct** — verified against D3's own construction rather than argued: **the chain walk
+succeeds and the extent is right.** Nothing about *which rows are in the set* goes wrong. What changes is
+**which rules the set is judged by** — the successor's `MatchPolicy` and `Condition` swapped in under a caller
+who named the predecessor. That is a different axis, and it produces a failure the other six cannot:
 
-That is the generalisation the six records converge on, and it is why they are closed in **one change**
-(§6.10) rather than one quadrant per round. **The fourteenth countersignature's lesson is the argument:**
-trips 8, 12, 13 and 14 were four quadrants of one table, closed **one at a time over three build rows**,
-because each round closed the quadrant it found and stopped. That cost the programme three rows' worth of
-loop. **This row has the whole table in front of it, in one round, before any code exists** — which is the
-second piece of hard evidence for running constraint 7's loop *before* a build row rather than only inside
-one, and it is a stronger one than `I-1` was.
+- **[Observed]** after one `retire(successor='ltc_facility')` over design test 3's CA+CO fixture, a
+  California caller sees `CO rows visible to this CALIFORNIA caller: 1` where the control saw **`0`** —
+  **R59's own stated reversal condition, reached by retiring a type rather than by omitting a keyword.**
+- **[Observed]** **73 of 1,373** real CMS labels resolve differently for **one** caller.
+- **§5.1's rule 5-6 is defeated in its own terms** — *two entries may declare different policies; two
+  **callers** may not* — because here **one caller gets both policies.**
 
-#### 6.9b-ii Standing rule (d) is now an obligation on the COMMIT, not on the author
+**Aggravating, and verified by R86 rather than accepted: rule 5-7 (`C20-41`) had no carrier.** **[Observed]**
+`InstanceResolution`'s printed shape contained **zero** occurrences of `policy`, and the shipped carrier
+`Invocation.declared_policy` declares `approval_mode`, `min_auto_tier` and `reversibility` — **not** the three
+match thresholds. *A rule about which policy governed an answer cannot be checked while the answer cannot say
+which policy governed it.* §6.10 closes the resolution half (rule **5-11**, `governed_by`) and names the
+ledger half as **amendment A5**, which `INGEST.md` cannot land alone.
 
-R84 sharpened rule (d) to cross the document boundary. R85 observes that the clause does not explain round 2's
-seven failures — **four of them (Z1, Z2, Z5, Z6) are doors inside the same document, which the original
-wording already covered.** The honest reading is not that the rule needs a third clause: **it is that a rule
-addressed to an author's diligence has failed seven times in one round while being cited by name.** So:
+#### 6.9b-ii Standing rule (e), in the AMENDED seven-cell form
+
+R85 proposed rule (e) over six cells and worded it about the *set* alone. The seventh cell is outside that
+wording, so **R86 amended the rule before it was ever recorded** rather than shipping it and patching it:
+
+> **The extent an identity is decided over, AND the facts that govern the decision, are the same at every
+> door that reads it, writes it, keys it, gates it or counts it — and a door that cannot prove BOTH answers
+> `unknowable` rather than deciding.**
+
+It is stated normatively at [`INGEST.md` §3.4](../specs/INGEST.md), with the seven-cell table beside it. **The
+fourteenth countersignature's lesson is the argument for closing them together:** trips 8, 12, 13 and 14 were
+four quadrants of one table closed one at a time over **three build rows**, because each round closed the
+quadrant it found and stopped. **This row has the whole table in front of it, in one round, before any code
+exists** — which is a stronger piece of evidence for running constraint 7's loop *before* a build row than
+`I-1` was.
+
+#### 6.9b-iii Standing rule (d) is now an obligation on the COMMIT, not on the author
+
+R84 sharpened rule (d) to cross the document boundary. R85 observed that the clause does not explain round 2's
+seven failures — **four of them (Z1, Z2, Z5, Z6) are doors inside the same document**, which the original
+wording already covered. The honest reading is not that the rule needs a third clause: **it is that a rule
+addressed to an author's diligence failed seven times in one round while being cited by name.** So:
 
 > **Every commit that mints a numbered rule carries, in the run record, the enumeration of the doors that rule
 > binds — named, not implied. A later round that finds an unenumerated door records it as a rule-(d) failure
 > BY NUMBER, and the count is reported in the round's totals.**
 
 **Round 2's count is seven** (§6.9a's table). It is reported because it was counted, and it was counted
-because a lens went looking — the argument for the loop, for the seventh time in this register. **§6.10's fix
-commit carries its own enumeration, and round 3's fix-auditor lens is pointed at exactly that enumeration.**
+because a lens went looking. **§6.10c is this row's own enumeration under the new obligation, and round 3's
+fix-auditor lens is pointed at exactly that enumeration.**
 
 #### 6.9c Round 2 is NOT clean, and round 3 is the cap
 
@@ -1511,3 +1540,136 @@ the register requires:
 **The honest thing to say before the fixes, so it cannot be tidied afterwards:** the findings did not shrink
 from round 1 to round 2, and the row should not expect round 3 to be clean either. What round 3 is for is to
 say **where** the remaining defects live, not to reach zero.
+
+---
+
+## 6.10 Round 2's fix set — **ONE change over the table, per R85 and R86**
+
+**This section is the enumeration standing rule (d) now obliges, and it is written here rather than only in
+the commit message so a later round can check it by number.**
+
+### 6.10a What was NOT done, and why it matters
+
+The state line at the end of round 2 said *"land Z1 first — it is the fix to make first."* **That was right
+about Z1 being load-bearing and wrong about the shape**, and [R85](../decisions/2026-09-04-7a-supervisor-ruling-R85.md)
+is explicit about the cost of the other reading: trips 8, 12, 13 and 14 were **four quadrants of one table,
+closed one at a time over three build rows**, because each round closed the quadrant it found and stopped.
+This row has the whole table in front of it in one round, before any code exists, so the fix is one change
+over the table with **standing rule (e)** stated normatively — [`INGEST.md` §3.4](../specs/INGEST.md).
+
+### 6.10b The change, row by row
+
+| row | record | what landed | rules |
+|---|---|---|---|
+| **truncated** | `I-1` | unchanged — round 1's fix holds and three lenses failed to get a confident answer through it | 3-5, 3-6 |
+| **mis-walked** | `I-2` | §3.4a: the successor **closure** — visited set, hop cap, cycle, and an early stop that is `complete=False` **with a `why`**. A dangling successor **never** falls back to the predecessor's entry (R84's rider, the eighth trip's shape). Written from `_identity_closure`, cited as the normative reference | **3-14** amended, **3-15**, **3-16**, **3-17** new |
+| **mis-governed** | **`I-7`** | §5.3 / §6.3a / §7.1a: **a successor does NOT inherit its predecessor's `MatchPolicy` or predicate.** A closure hop into an entry declaring either differently answers `unknowable` naming the changed fact. **The decision is the row's and is recorded rather than assumed** — §7.2 makes the successor's entry *someone else's to register*, so inheritance would let a third party's declaration silently govern a caller's answer. Raised as **Q91** with (a) as the default in force, because it changes what the registry declines to serve | **3-18**, **5-10**, **6-18**, **7-5** new |
+| **mis-governed**, the carrier | `I-7` | **rule 5-7 had no carrier at either end** (R86, verified). `InstanceResolution.governed_by` names the `(namespace, type_name)` whose entry judged the answer; the **ledger** half cannot be closed here and is named as **amendment A5** | **5-11** new |
+| **mis-written** | `I-3` | §3.4a.4: **the identity's extent is the WHOLE closure, not its endpoint.** A row written under a since-retired name is still this identity's row until the host migrates it; an endpoint-only read is a *smaller set than the extent*. The host writes under the **effective** type | **3-19** new, **4-3** amended |
+| **mis-keyed** | `I-4` | §4.3: the act's key is `(namespace, kind, the closure of type_name, the label under §3's own normaliser)` — **computed by the same function the gate uses**, because two implementations of one identity question is exactly what `I-4` is | **4-10** amended |
+| **mis-keyed**, type half | B1 | the same key change carries the type, so a second type answering to one label is proposed rather than handed the first's `CandidateRef` | **4-10** |
+| **mis-timed** | `I-5` | §4.3: the guard asks who holds a proposal **whose row has not been written**, not who holds an *unreviewed* one | **4-11** amended |
+| **mis-timed**, rider | B5 | the per-act memory is written on **every** branch answering with a `CandidateRef`, the pending branch included | **4-13** new |
+| **mis-counted** | `I-6` | §3.4b: a page's `instance_id`s are **distinct-or-`unknowable`** | **2-16** new |
+| — | Z6 | rule 4-7 fences **`not_an_instance`** as well as `unknowable` — the classifier *succeeding* is not a licence to propose | **4-7** amended |
+
+**And the artefact change that makes it one rule rather than one sentence:** the ingest **act and ledger moved
+into [`ingest_probe_kit.py`](../tools/ingest_probe_kit.py)**, joining the resolver. Round 2 found three doors
+of one question answered three ways because the act was a *second implementation* — which is precisely the
+lesson round 1 learned about the resolver and did not carry to the act beside it. `type_closure()` and
+`act_key()` are now single functions that the read, the write, the key and the guard all call. **That closes
+§6.7d's countable absence #1** (*§4's entire contract posed by one of the five design tests*) as a side effect
+of the design rather than as a separate fix.
+
+### 6.10c Standing rule (d)'s enumeration — **the doors each new rule binds, named**
+
+R85: *every commit that mints a numbered rule carries the enumeration of the doors that rule binds — named,
+not implied.* For the seven rules minted here:
+
+| rule | the doors it binds |
+|---|---|
+| **5-10** (`C20-82`) | `resolve_instance`'s policy read; §5's gate; `type_closure`'s hop; §7.2's registering host; **Q91**, which routes the decision to the founder |
+| **5-11** (`C20-85`) | `InstanceResolution` (the printed shape and the kit's); §5's rule 5-7; §4.4's amendment **A5**, which is the same fact at the ledger |
+| **6-18** (`C20-83`) | `evaluate`; the entry's predicate; `type_closure`'s hop; §6.3's registry-side evaluation; R59's tenancy reversal condition |
+| **7-5** (`C20-84`) | the host that declares a `successor`; §7.2's vocabulary registration; rules 3-18 / 5-10 / 6-18, which are what happens when the obligation is unmet |
+| **2-16** (`C20-75`) | `resolve_instance`'s read; §3.2's set test; §4.3's `<n>` count; the two host adapters (`HostTable`, `SocrataServiceRequests`) as the producers of a page |
+| **3-15** (`C20-76`) | `type_closure`; `resolve_instance`; `act_key`; rule 4-11's ledger question — **and the shipped `_identity_closure`, which already implements it** |
+| **3-16** (`C20-77`) | the same four, plus `registry.py`'s `_IDENTITY_CHAIN_CAP` as the shipped precedent |
+| **3-17** (`C20-78`) | the same four; `INTERFACE.md` §5.9, which does not forbid constructing a cycle |
+| **3-18** (`C20-79`) | `resolve_instance`; §5's `MatchPolicy` door; §6.3's predicate door; §7.2, which makes the successor's entry someone else's to register |
+| **3-19** (`C20-80`) | `resolve_instance`'s read; §4.2's host write; rule 4-11's ledger question; `act_key`; the `<n>` count |
+| **4-13** (`C20-81`) | `IngestAct.land`'s pending branch and its minting branch; rule 4-10's memory; rule 4-11's guard |
+
+**Amended rules and the doors the amendment reaches:** 5-7 (`InstanceResolution.governed_by`, the ledger's `declared_policy`, amendment A5); 3-14 (`type_closure`, `resolve_instance`, `act_key`,
+`_identity_closure`, `neighbors`/R38); 4-3 (the host write, the ledger row, rule 4-11's key); 4-7
+(`IngestAct.land`'s `unknowable` **and** `not_an_instance` branches); 4-10 (`act_key`, the per-act memory,
+rule 4-11's question, §3's normaliser); 4-11 (`Ledger.open_proposals`, `host_writes_for`'s `minted_ref`, and
+**the shipped `Registry.invocations`, which cannot answer it** — finding B2, now §4.4's fourth amendment).
+
+### 6.10d The accounting, and it is checked rather than asserted
+
+**[Observed] 2026-09-04**, over [`INGEST.md`](../specs/INGEST.md):
+
+```
+grep -o "C20-[0-9]*" | sort -u | wc -l   ->  85
+rule rows  (^| n-n |)                    ->  85
+min 01   max 85   gaps: none
+```
+
+**74 → 85 rules and ids** — 81 for the six extent cells, and four more (`5-10`, `5-11`, `6-18`, `7-5`) for
+`I-7` once R86 ruled it a seventh cell rather than a half of `I-2`. §9's sentence now says *eighty-one* and says how the number is derived, because
+round 2's A3 was that it said *seventy-six* over 74 — in the section whose only job is to enumerate. The
+reserved-value table regains its **ordinals** and gains the **two values round 1's own fix minted and reserved
+nowhere** (`consumers_unregistered`, `no_tenancy_predicate`), with **[Observed]** `len(types.WARNING_VALUES)`
+= 37 printed beside them so the count is reconcilable with the tuple that holds it — which is the whole of
+R11's mechanism and the thing A3 found deleted.
+
+### 6.10e The mutation sweep — **every cell goes RED, and the harness had to be fixed first**
+
+R85 and R86: *turn each of the mutations red, and say so with the numbers.* **[Observed] 2026-09-04**, each
+fix removed one at a time from a **copy** of the kit under a scratch directory with `PYTHONPATH` pointed at
+the repo, then all five design tests re-run. **Baseline 36 + 13 + 17 + 11 + 27 = 104 checks.**
+
+```
+  [RED] I-1 truncated    (rule U before the branches)
+        seam 34/36 · paging 12/13 · gate 10/11 · act 22/27
+  [RED] I-2 mis-walked   (the chain, not one hop)
+        seam 35/36 · paging 12/13 · gate 10/11 · act 21/27
+  [RED] I-2 rider        (a dangling successor keeps the predecessor's entry)
+        seam 35/36 · paging 12/13 · gate 10/11 · act 22/27
+  [RED] I-3 mis-written  (the extent is the whole closure)
+        seam 35/36 · paging 12/13 · gate 10/11 · act 22/27
+  [RED] I-4 mis-keyed    (the act's key is the gate's key)
+        act 26/27
+  [RED] I-5 mis-timed    (unwritten, not unreviewed)
+        act 26/27
+  [RED] I-6 mis-counted  (a page's ids are distinct)
+        seam 35/36 · paging 12/13 · gate 10/11 · act 22/27
+  [RED] I-7 mis-governed (the successor's facts are not the caller's)
+        seam 35/36 · paging 12/13 · gate 10/11 · act 22/27
+  [RED] Z6 not_an_instance mints nothing
+        act 26/27
+```
+
+**Nine of nine red.** Round 2's own D4 found **ten of twenty** mutations leaving all 87 green, including
+`C20-01` and `C20-04`; every fix this round lands with a check that goes red without it, which is the standard
+D4 said the row was not meeting.
+
+#### 6.10e-i The harness was wrong first, and that is the part worth recording
+
+**The first sweep reported `I-2` as SURVIVING — all 104 green — and it was the harness lying, not the fix.**
+The sweep disabled a fix by flipping the kit's `_mutate` **default**, and the design tests pass `_mutate=`
+**explicitly** on their fixed arm, so the default never reached the code under test. The corrected harness
+forces the mutation **in source**, and `I-1` immediately went red in **four** probes where the first harness
+had shown three.
+
+**This is `M1`'s shape and `A9`'s, in the row's own tooling, one round after the row recorded both** — *a
+check that is green for a reason other than the one it claims*. It is recorded here rather than quietly fixed
+because the register's own count is that this shape recurs, and because a mutation harness that cannot fail is
+the exact object §8.1 exists to be honest about. **A harness is an artefact and is subject to the same rule as
+the probes it runs**: round 3's fix-auditor lens should point at it as well as at the diff.
+
+**One consequence for the record.** §6.5c item 1 and §6.8c item 7 both state that `I-1`'s fix is real and
+mutation-proved. **That claim stands and is now better evidenced** — under the corrected harness the same
+mutation reddens four probes rather than three. No finding in §6.5–§6.8 is withdrawn by the harness defect;
+what changes is that the *sweep's* numbers, and only those, were re-derived after it was fixed.

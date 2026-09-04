@@ -30,125 +30,29 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ingest_probe_kit import (  # noqa: E402
-    CandidateRef, HostTable, InstanceContext, InstanceRecord, Vocabulary,
-    resolve_instance,
+    ACT_RULES, CandidateRef, HostTable, IngestAct, InstanceContext, InstanceRecord,
+    Invocation, Ledger, Vocabulary, act_key, resolve_instance, type_closure,
 )
 from ingest_seam_probe import (  # noqa: E402
     CHECKS, T1_2, T1_3, T1_3_CCN, _resolve_csv, check, cms_vocab, load_host_rows,
 )
 
 
-# --------------------------------------------------------------------------------
-# The LEDGER -- ACTIONS.md's, modelled only as far as section 4 needs it
-# --------------------------------------------------------------------------------
-
-
-@dataclass
-class Invocation:
-    invocation_id: str
-    family: str
-    namespace: str
-    type_name: str
-    label: str
-    outcome: str
-    approval_mode: str
-    warnings: tuple[str, ...]
-    reviewed_by: str | None = None
-    minted_ref: str | None = None          # the `results` slot amendment A2 asks for
-
-
-@dataclass
-class Ledger:
-    """`invocations(unreviewed=True)` and `review_invocation`, and nothing else."""
-
-    rows: list[Invocation] = field(default_factory=list)
-
-    def record(self, inv: Invocation) -> Invocation:
-        self.rows.append(inv)
-        return inv
-
-    def unreviewed(self, *, namespace: str | None = None, type_name: str | None = None,
-                   label: str | None = None) -> list[Invocation]:
-        out = [i for i in self.rows if i.reviewed_by is None]
-        if namespace is not None:
-            out = [i for i in out if i.namespace == namespace]
-        if type_name is not None:
-            out = [i for i in out if i.type_name == type_name]
-        if label is not None:
-            out = [i for i in out if i.label == label]
-        return out
-
-
-class IngestAct:
-    """One ingest act. INGEST 4.3, rules 4-10 and 4-11.
-
-    ``enforce`` is the MUTATION harness: with a rule named here disabled, the check that
-    closes it must go red.
-    """
-
-    def __init__(self, act_id: str, *, host: HostTable, vocab: Vocabulary,
-                 ledger: Ledger, namespace: str, type_name: str,
-                 enforce: frozenset[str] = frozenset({"4-10", "4-11"})) -> None:
-        self.act_id = act_id
-        self.host, self.vocab, self.ledger = host, vocab, ledger
-        self.namespace, self.type_name = namespace, type_name
-        self.enforce = enforce
-        self._minted: dict[str, CandidateRef] = {}     # rule 4-10's per-act memory
-        self.host_writes: list[str] = []
-
-    def land(self, label: str, *, tier: str = "sonnet") -> tuple[str, object]:
-        """Resolve one landed row and, where the rules allow, record a proposal."""
-        # --- rule 4-10: within one act, a label is resolved ONCE --------------
-        if "4-10" in self.enforce and label in self._minted:
-            return "reused", self._minted[label]
-
-        res = resolve_instance(
-            label, InstanceContext(act_id=self.act_id, proposed_by="ai:ingest"),
-            host=self.host, vocab=self.vocab, namespace=self.namespace,
-            type_name=self.type_name, tier=tier)
-
-        if res.outcome == "existing":
-            return "existing", res.ref
-        if res.outcome == "unknowable":
-            return "unknowable", None            # rule 4-7: no proposal, ever
-
-        warnings: list[str] = []
-        mode = "auto"
-        if res.outcome == "ambiguous":
-            # rule 4-5, with F7's input-name segment
-            warnings.append(
-                f"instance_ambiguous_at_proposal:{self.type_name}:{res.known}")
-            mode = "review"
-
-        # --- rule 4-11: who already holds a pending proposal for this word? ---
-        pending = self.ledger.unreviewed(namespace=self.namespace,
-                                         type_name=self.type_name, label=label)
-        if pending and "4-11" in self.enforce:
-            warnings.append(f"instance_proposal_pending:{pending[0].invocation_id}")
-            inv = self.ledger.record(Invocation(
-                f"inv-{len(self.ledger.rows) + 1}", "propose_instance", self.namespace,
-                self.type_name, label, res.outcome, mode, tuple(warnings)))
-            return "pending", inv                # mints NO second identity
-
-        inv = self.ledger.record(Invocation(
-            f"inv-{len(self.ledger.rows) + 1}", "propose_instance", self.namespace,
-            self.type_name, label, res.outcome, mode, tuple(warnings)))
-        self._minted[label] = res.candidate
-        return "proposed", inv
-
-    def host_writes_for(self, inv: Invocation, instance_id: str) -> InstanceRecord:
-        """The HOST mints the identifier and the ledger records it. Rules 4-2, 4-3."""
-        inv.minted_ref = (f"{self.namespace}:entity:{self.type_name}#{instance_id}")
-        self.host_writes.append(inv.minted_ref)
-        return InstanceRecord(self.namespace, "entity", self.type_name, instance_id,
-                              inv.label, {})
+# The LEDGER and the ACT now live in `ingest_probe_kit`, imported above.
+#
+# Round 2 found three doors of one question answered three ways -- the act keyed
+# identity on the raw label while the gate keyed it on `norm` (`I-4`), the act's
+# ledger key did not follow the successor chain the read follows (`I-3`), and the
+# guard's window closed when a proposal DRAINED rather than when its identity was
+# WRITTEN (`I-5`). A second implementation is how that happens, which is the same
+# lesson round 1 learned about the resolver. **Standing rule (e).**
 
 
 def main() -> int:
@@ -297,6 +201,222 @@ def main() -> int:
     check("5.5 rule 4-7: an `unknowable` resolution records no proposal at all",
           kind == "unknowable" and len(ledger.rows) == 0,
           f"{kind} / {len(ledger.rows)}")
+
+    # =====================================================================
+    # 5.6 -- THE TABLE. One check per row of the instance-surface family, and
+    #        each one goes RED under the mutation that reproduces the record.
+    #        R85: six records, one question, one change -- so one block.
+    # =====================================================================
+    print("\n5.6 -- the six instance-surface records, each proved by MUTATION")
+
+    def _chain_vocab(*, two_hop: bool = True, dangling: bool = False,
+                     other_policy: bool = False):
+        """`facility` retired toward `nursing_facility` (-> `ltc_facility`)."""
+        v = cms_vocab()
+        base = v.entry("cms", "facility")
+        v.declare("cms", "facility", replace(base, successor="nursing_facility"))
+        if dangling:
+            return v
+        nxt = replace(base, successor="ltc_facility") if two_hop else replace(base)
+        v.declare("cms", "nursing_facility", nxt)
+        tail = replace(base, policy=replace(base.policy, match_at=0.995,
+                                            why="a different governed policy")) \
+            if other_policy else replace(base)
+        v.declare("cms", "ltc_facility", tail)
+        return v
+
+    host = HostTable(list(without))
+    ctx = InstanceContext(act_id="t")
+
+    # --- I-2, mis-walked: the chain, not one hop -------------------------
+    for one_hop, tag in ((False, "CHAIN "), (True, "MUTATED (one hop)")):
+        r = resolve_instance(T1_3, ctx, host=host, vocab=_chain_vocab(),
+                             namespace="cms", type_name="facility", tier="sonnet",
+                             _mutate="chain_one_hop" if one_hop else None)
+        print(f"  I-2 {tag}: hops={[w for w in r.warnings if 'succeeded' in w]}")
+        if not one_hop:
+            check("5.6 I-2 rule 3-14: the successor CHAIN is followed to its end, "
+                  "not one hop -- and `_identity_closure` is what it is written from",
+                  "instance_type_succeeded:ltc_facility" in r.warnings,
+                  str(r.warnings))
+        else:
+            check("5.6 I-2 MUTATION: one hop stops at the intermediate name, which is "
+                  "the state two ordinary curation passes reach",
+                  "instance_type_succeeded:ltc_facility" not in r.warnings,
+                  str(r.warnings))
+
+    # --- I-2's rider: a dangling successor is an HONEST early stop -------
+    for keep, tag in ((False, "HONEST STOP"), (True, "MUTATED (keeps predecessor)")):
+        r = resolve_instance(T1_3, ctx, host=host, vocab=_chain_vocab(dangling=True),
+                             namespace="cms", type_name="facility", tier="sonnet",
+                             _mutate="chain_keeps_predecessor" if keep else None)
+        print(f"  I-2 rider {tag}: outcome={r.outcome!r} complete={r.complete}")
+        if not keep:
+            check("5.6 I-2 rider (R84 part 2, the EIGHTH trip's shape): a dangling "
+                  "successor stops the walk with `complete=False` and a `why`, rather "
+                  "than querying one type while holding another's entry",
+                  r.outcome == "unknowable" and not r.complete
+                  and "no entry declares" in r.why_incomplete, str(r.outcome))
+        else:
+            check("5.6 I-2 rider MUTATION: keeping the predecessor's entry DECIDES "
+                  "over a chain it could not walk -- one type queried while "
+                  "another's entry supplies the governed facts, which is the "
+                  "EIGHTH trip's shape (a guard holding one fact while deciding "
+                  "about another)",
+                  r.outcome != "unknowable" and r.complete,
+                  f"{r.outcome} complete={r.complete}")
+
+    # --- D3, the governed-fact half of mis-walked ------------------------
+    migrated = HostTable([replace(rec, type_name="ltc_facility")
+                          for rec in without])
+    for ignore, tag in ((False, "GOVERNED "), (True, "MUTATED (ignored)")):
+        r = resolve_instance(T1_3, ctx, host=migrated,
+                             vocab=_chain_vocab(other_policy=True),
+                             namespace="cms", type_name="facility", tier="sonnet",
+                             _mutate="governed_facts_ignored" if ignore else None)
+        print(f"  D3 {tag}: outcome={r.outcome!r}")
+        if not ignore:
+            check("5.6 D3 rule 3-18: a successor declaring a different MatchPolicy or "
+                  "predicate is a different extent, so the read does not decide",
+                  r.outcome == "unknowable" and "governed facts" in r.reason,
+                  f"{r.outcome} / {r.reason[:60]}")
+        else:
+            check("5.6 D3 MUTATION: ignoring it decides under governed facts the "
+                  "caller never declared",
+                  r.outcome != "unknowable", str(r.outcome))
+
+    # --- I-6, mis-counted: a page's instance_ids are distinct ------------
+    twins = [InstanceRecord("cms", "entity", "facility", "015009",
+                            "BURNS NURSING HOME, INC.", {"state": "AL"}),
+             InstanceRecord("cms", "entity", "facility", "015009",
+                            "BURNS NURSING HOME INC", {"state": "TX"})]
+    for ignore, tag in ((False, "DISTINCT "), (True, "MUTATED (ignored)")):
+        r = resolve_instance("BURNS NURSING HOME, INC.", ctx, host=HostTable(twins),
+                             vocab=cms_vocab(), namespace="cms",
+                             type_name="facility", tier="sonnet",
+                             _mutate="dup_ids_ignored" if ignore else None)
+        print(f"  I-6 {tag}: outcome={r.outcome!r} known={r.known} scanned={r.scanned}")
+        if not ignore:
+            check("5.6 I-6 rule 2-16: two host records under one `instance_id` make "
+                  "the extent uncountable, so the read answers `unknowable`",
+                  r.outcome == "unknowable" and "not countable" in r.reason,
+                  f"{r.outcome} / {r.reason[:60]}")
+        else:
+            check("5.6 I-6 MUTATION: ignoring it collapses the two to one and answers "
+                  "`existing` at 1.0 with known=1 -- the second row vanishes",
+                  r.outcome == "existing" and r.known == 1,
+                  f"{r.outcome} / known={r.known}")
+
+    # --- I-4, mis-keyed: the act's key is the gate's key ------------------
+    spellings = (T1_3, T1_3.title() + ".")
+    for on, tag in ((True, "NORM KEY"), (False, "MUTATED (raw label)")):
+        rules = ACT_RULES if on else (ACT_RULES - {"4-10-key"})
+        h = HostTable(list(without))
+        led = Ledger()
+        a = IngestAct("act-i4", host=h, vocab=cms_vocab(), ledger=led,
+                      namespace="cms", type_name="facility", enforce=rules)
+        got = [a.land(spellings[0]), a.land(spellings[1])]
+        print(f"  I-4 {tag}: {[k for k, _ in got]}  ledger={len(led.rows)}")
+        if on:
+            check("5.6 I-4 rule 4-10: the act scopes on the key the GATE decides on, "
+                  "so two spellings of one facility are one identity in one act",
+                  [k for k, _ in got] == ["proposed", "reused"], str(got[:1]))
+        else:
+            check("5.6 I-4 MUTATION: keying on the raw label proposes twice for one "
+                  "facility the gate itself calls `existing` at 1.0",
+                  [k for k, _ in got] == ["proposed", "proposed"], str(got[:1]))
+
+    # --- B1, the TYPE half of the same key -------------------------------
+    v_two = cms_vocab()
+    v_two.declare("cms", "wing", v_two.entry("cms", "facility"))
+    h = HostTable(list(without)
+                  + [replace(rec, type_name="wing") for rec in without[:200]])
+    a = IngestAct("act-b1", host=h, vocab=v_two, ledger=Ledger(),
+                  namespace="cms", type_name="facility")
+    k1, o1 = a.land(T1_3)
+    k2, o2 = a.land(T1_3, type_name="wing")
+    print(f"  B1 per-land type: {k1!r} then {k2!r}")
+    check("5.6 B1 rule 4-10: the key carries (namespace, kind, type_name), so a second "
+          "TYPE answering to one label is proposed rather than handed the first's ref",
+          k1 == "proposed" and k2 == "proposed", f"{k1}/{k2}")
+
+    # --- I-5, mis-timed: drained is not written --------------------------
+    for on, tag in ((True, "UNWRITTEN"), (False, "MUTATED (unreviewed only)")):
+        rules = ACT_RULES if on else (ACT_RULES - {"4-11-written"})
+        h = HostTable(list(without))
+        led = Ledger()
+        a1 = IngestAct("act-mon", host=h, vocab=cms_vocab(), ledger=led,
+                       namespace="cms", type_name="facility", enforce=rules)
+        kind1, inv1 = a1.land(T1_3)
+        inv1.reviewed_by = "user:curator"          # the drain, and nothing written yet
+        a2 = IngestAct("act-tue", host=h, vocab=cms_vocab(), ledger=led,
+                       namespace="cms", type_name="facility", enforce=rules)
+        kind2, _ = a2.land(T1_3)
+        print(f"  I-5 {tag}: {kind1!r} -> drained -> {kind2!r}")
+        if on:
+            check("5.6 I-5 rule 4-11: the guard asks who holds a proposal whose row is "
+                  "NOT YET WRITTEN, so draining one does not re-issue the permission",
+                  kind2 == "pending", str(kind2))
+        else:
+            check("5.6 I-5 MUTATION: asking `unreviewed=True` stands the guard down at "
+                  "the moment the permission is live and unconsumed -- rule (c)",
+                  kind2 == "proposed", str(kind2))
+
+    # --- I-3, mis-written: the extent is the CLOSURE, not its endpoint ----
+    # Z1's construction exactly: act 1 proposes and the host writes the row under the
+    # name in force. A governance act then retires that name, and the host migrates
+    # the rows it knows about -- leaving the freshly minted one behind, as Z1 observed.
+    for on, tag in ((True, "WHOLE CLOSURE"), (False, "MUTATED (endpoint only)")):
+        led = Ledger()
+        h1 = HostTable(list(without))
+        a1 = IngestAct("act-1", host=h1, vocab=cms_vocab(), ledger=led,
+                       namespace="cms", type_name="facility")
+        _, inv = a1.land(T1_3)
+        minted = a1.host_writes_for(inv, "HOST-1")
+        v2 = _chain_vocab(two_hop=False)           # facility -> nursing_facility
+        after_retire = HostTable(
+            [replace(rec, type_name="nursing_facility") for rec in without] + [minted])
+        a2 = IngestAct("act-2", host=after_retire, vocab=v2, ledger=led,
+                       namespace="cms", type_name="facility")
+        kind2, _ = a2.land(
+            T1_3, tier="sonnet") if on else (None, None)
+        if not on:
+            r = resolve_instance(T1_3, ctx, host=after_retire, vocab=v2,
+                                 namespace="cms", type_name="facility", tier="sonnet",
+                                 _mutate="extent_endpoint_only")
+            kind2 = "proposed" if r.outcome == "proposal" else r.outcome
+        print(f"  I-3 {tag}: the minted row stayed under 'facility'; "
+              f"the second act -> {kind2!r}")
+        if on:
+            check("5.6 I-3 rule 3-19: the identity's extent is the WHOLE closure, so a "
+                  "row written under a name that has since been retired is still found "
+                  "and no second identity is minted",
+                  kind2 == "existing", str(kind2))
+        else:
+            check("5.6 I-3 MUTATION: reading the closure's ENDPOINT alone is a smaller "
+                  "set than the identity's extent -- the row is unreadable and the act "
+                  "proposes a duplicate for a facility the same store holds",
+                  kind2 == "proposed", str(kind2))
+
+    # --- Z6: `not_an_instance` mints nothing, like `unknowable` -----------
+    for on, tag in ((True, "FENCED"), (False, "MUTATED (unfenced)")):
+        rules = ACT_RULES if on else (ACT_RULES - {"4-7-nai"})
+        led = Ledger()
+        a = IngestAct("act-nai", host=HostTable(list(without)), vocab=cms_vocab(),
+                      ledger=led, namespace="cms", type_name="facility",
+                      enforce=rules)
+        kind, _ = a.land("Provider Name")
+        print(f"  Z6 {tag}: land('Provider Name') -> {kind!r}; ledger={len(led.rows)}")
+        if on:
+            check("5.6 Z6 rule 4-7: `not_an_instance` is the OTHER outcome that mints "
+                  "nothing -- the classifier succeeded and said this is not a thing",
+                  kind == "not_an_instance" and len(led.rows) == 0,
+                  f"{kind}/{len(led.rows)}")
+        else:
+            check("5.6 Z6 MUTATION: unfenced, a column header becomes a well-formed "
+                  "provenance-bearing proposal in `auto` mode",
+                  kind == "proposed" and len(led.rows) == 1,
+                  f"{kind}/{len(led.rows)}")
 
     print("\n" + "=" * 78)
     failed = [c for c in CHECKS if not c[1]]
