@@ -43,7 +43,7 @@ reference shape**, **one declared policy**, **one condition language**, and **no
   from a different direction and could not** — see §1.
 - **No instance-level proposal loop of its own.** §4 makes an ingest proposal an **invocation of a
   host-declared action family**, using the ledger `ACTIONS.md` already ships. **No object is stored by this
-  document.** It does ask `ACTIONS.md` for three additive amendments, named in §4.4 — round 1 found the
+  document.** It does ask `ACTIONS.md` for five additive amendments, named in §4.4 — round 1 found the
   original claim of *"nothing new"* false, and §4 is the section it was false in.
 - **No change to `resolve_type`.** **R77**, non-negotiable. §3's call is a new call in this document.
 
@@ -277,6 +277,7 @@ NOT declare opaque — `namespace`, `kind`, `type_name` — that break it**, and
 | 2-12 | `host_filter` is a mapping of **declared keys** to opaque values. A free-form expression is a conformance failure, because `instance_filters` cannot govern one | `C20-63` |
 | 2-13 | `complete=True` over a `host_filter`-narrowed query is honest **and narrow**: any `proposal` decided on it carries `instance_narrowed_proposal:<keys>` | `C20-64` |
 | 2-14 | An `InstanceRecord` whose `namespace`, `kind` or `type_name` would make `ref_key` unfaithful is refused at the primitive, citing `flat_form_problem` | `C20-65` |
+| 2-16 | A candidate page's `instance_id`s are **distinct**, or the read is `unknowable` with a `why`: a page whose own ids do not distinguish its own rows makes the extent uncountable, and §3.2's set test would silently collapse two rows to one. §3.4b | `C20-75` |
 | 2-15 | `get_instance` is evaluated against the entry's declared `Condition` (§6) before its record is returned; a record the predicate fails is `None` with a `why`, and one it cannot decide is a refusal, never a silent pass | `C20-66` |
 
 ---
@@ -386,6 +387,29 @@ side of the seam; **Q86** asks whether this project should ship a matcher at all
 
 ### 3.4 Rule U, at this call — **completeness is checked before the candidate set is INTERPRETED**
 
+> **Standing rule (e).** *The extent an identity is decided over, **AND the facts that govern the
+> decision**, are the same at every door that reads it, writes it, keys it, gates it or counts it — and a door
+> that cannot prove **both** answers `unknowable` rather than deciding.*
+>
+> Proposed by ruling [**R85**](../decisions/2026-09-04-7a-supervisor-ruling-R85.md) over `I-1`…`I-6` and
+> **amended by [R86](../decisions/2026-09-04-7a-supervisor-ruling-R86.md) before it was ever recorded**, because
+> a seventh cell fell outside its first wording. The seven instance-surface records are not seven defects but
+> **one question asked at seven doors** — *which host rows answer to this identity, did the resolution see all
+> of them, and by whose rules was the answer judged?*
+>
+> | the decision is wrong because the set was… | cell |
+> |---|---|
+> | **truncated** — the scan stopped and said so, and the match path ignored the `why` | `I-1` |
+> | **mis-walked** — the chain was followed one hop and reported `complete=True` | `I-2` |
+> | **mis-written** — the read is bound by the chain and the write door is not | `I-3` |
+> | **mis-keyed** — the act scopes on the raw label, the gate decides on `norm` | `I-4` |
+> | **mis-timed** — the guard's window closes when the proposal drains, before the write lands | `I-5` |
+> | **mis-counted** — a page's ids are not required to be distinct, so two rows collapse | `I-6` |
+> | **mis-governed** — the set is right and the facts that govern the decision belong to another entry | `I-7` |
+>
+> Rule U is the rule at **this** door; §3.4a at the type-closure door; §3.4b at the counting door; §5.3 at the
+> **governing** door; §4.3 at the act, key, guard and write doors.
+
 *(This section is the one round 1 broke, and both of the lenses that broke it reached the same place from
 opposite directions. The original ordered the check before **the emptiness** was interpreted; rule 3-5's
 table row already said the wider thing — "whatever the candidates found" — and the prose, §13's route table
@@ -427,6 +451,46 @@ one call a caller would believe. Two rules close it: the identity read **resolve
 successor chain** before it queries (which `EDGES.md` rule 4.3-14 / **R38** already requires of `neighbors`,
 and which this document did not say), and a `proposal` requires the candidate space to have been non-empty.
 
+### 3.4a The successor CLOSURE — **the chain, not one hop, and the extent is the whole chain**
+
+**This section is written from [`ontoloche/registry.py`](../../ontoloche/registry.py)'s `_identity_closure`
+rather than from R38's words, and that is a rule rather than a courtesy.** Ruling
+[**R84**](../decisions/2026-09-04-7a-supervisor-ruling-R84.md) sharpened standing rule (d): *the enumeration
+crosses the document boundary — a rule minted in a specification must name the shipped callers it binds, and
+where a shipped caller already implements the rule, the specification cites that implementation as its
+normative reference rather than restating the ruling the implementation was derived from.*
+
+**Why the clause exists, and it is this document's own failure.** Round 1 minted rule 3-14 citing **R38** and
+implemented **none** of R38's three termination rules; the shipped `_identity_closure` implements all three,
+and had done since row 4d round 2, whose own comment reads *"**The chain, not one hop** … a vocabulary curated
+**twice** — the ordinary outcome after two passes — lost §5.10's promise."* `I-2` is a defect the type surface
+had **already closed** and this document re-opened by restating the ruling instead of citing the code.
+
+Four things follow, and the fourth is the one `I-3` forced:
+
+1. **The walk is a closure**, with a **visited set** (a cycle is not an error to construct), a **hop cap**, and
+   an honest early stop.
+2. **An early stop is `complete=False` WITH a `why`** — because rules 3-5 / 3-6 guard the completeness the read
+   *reports*, and a walk that stops silently reports `complete=True` with `why_incomplete=''`, which is exactly
+   how `I-2` passed round 1's headline fix.
+3. **A dangling successor never falls back to the predecessor's entry.** Querying one type while holding
+   another's governed facts is **the eighth trip's shape** — a guard holding one fact while deciding about
+   another — and R84 named it as a rider defect that does not get to ride out of this round unnamed.
+4. **The identity's extent is the WHOLE closure, not its endpoint.** A row written under a name that has since
+   been retired is still one of this identity's rows until the host migrates it. An endpoint-only read is a
+   **smaller set than the extent**, so it proposes a duplicate for a facility the same store already holds —
+   which is `I-3`, and which standing rule (e) forbids in one sentence.
+
+### 3.4b The extent must be COUNTABLE — `I-6`
+
+Rule 1-1 makes `instance_id` the host's and opaque, and until this change nothing required a candidate page's
+ids to be **distinct**. §3.2's set test dedupes on the flat `ref_key`, so two different host records under one
+id collapse to one candidate and the second **vanishes from `candidates` entirely** — `existing` at 1.0 with
+`known=1` over a store holding two rows. **ING5 already measured that a host keyed on a non-unique natural
+column is the ordinary case** (59.7% of `uvpi-gqnh`'s 683,788 instances share an address), so this is not an
+exotic host. A read whose own ids do not distinguish its own rows cannot count the extent, and therefore does
+not decide.
+
 **Rules of §3**
 
 | # | rule | id |
@@ -444,11 +508,16 @@ and which this document did not say), and a `proposal` requires the candidate sp
 | 3-11 | `tier` is required and is echoed back for provenance. `INTERFACE.md` §2.7 | `C20-25` |
 | 3-12 | An undecidable host predicate makes the resolution `unknowable`, never a narrower candidate set | `C20-26` |
 | 3-13 | `proposal` requires `scanned > 0`. A read of zero rows is `unknowable` with a `why`, never *"there is nothing like this"* | `C20-67` |
-| 3-14 | The identity read resolves `type_name` through the successor chain before querying, as `neighbors` does under **R38**; a retired `type_name` is answered under its successor with `instance_type_succeeded:<successor>` | `C20-68` |
+| 3-14 | The identity read resolves `type_name` through the successor **closure** before querying — **the chain, not one hop** — with a visited set and a hop cap, exactly as [`registry.py`](../../ontoloche/registry.py)'s `_identity_closure` does; each hop is reported as `instance_type_succeeded:<successor>`. **The shipped callers this rule binds are `_identity_closure` and `neighbors` (R38), named here per standing rule (d)'s second clause** | `C20-68` |
+| 3-15 | A successor no entry declares stops the walk with `complete=False` **and a `why`**; the predecessor's entry is **never** kept as a fallback — querying one type while holding another's governed facts is the eighth trip's shape | `C20-76` |
+| 3-16 | The walk carries a **hop cap**, and reaching it is `complete=False` with a `why`, never a silent answer | `C20-77` |
+| 3-17 | A **cycle** in the successor chain is `complete=False` with a `why`. §5.9 does not forbid constructing one, so the walk survives it | `C20-78` |
+| 3-18 | Where the closure moved and the successor's entry declares a **different `MatchPolicy` or a different predicate**, the resolution is `unknowable` with a `why` naming the changed fact — **`I-7`, and §5.3 is where the decision behind it is recorded.** The set is right here; what is wrong is whose rules judged it | `C20-79` |
+| 3-19 | **The identity's extent is the whole closure**: the read spans the declared name and every hop, because a row written under a since-retired name is still this identity's row until the host migrates it. Reading the endpoint alone is a smaller set than the extent — standing rule (e) | `C20-80` |
 
 ---
 
-## 4. The propose-at-ingest contract — **an invocation, one new reference shape, and three amendments this row may NOT land**
+## 4. The propose-at-ingest contract — **an invocation, one new reference shape, and five amendments this row may NOT land**
 
 **What an instance proposal IS: an invocation of a `kind="action"` family the host declared.** Most of it
 already ships in [`ACTIONS.md`](ACTIONS.md):
@@ -554,7 +623,12 @@ and no refs — and it is recorded in `approval_mode="review"` whatever the fami
 > that the review is a separate act, separately recorded, by whoever performs it** — and whether the registry
 > should refuse a self-review is **Q89**, not this document's to take.
 
-### 4.4 The three amendments this document ASKS OF `ACTIONS.md`, and may not make
+### 4.4 The FIVE amendments this document ASKS OF `ACTIONS.md`, and may not make
+
+*(Three at round 1. Round 2 added two, and both were found by a lens rather than by the author — **A4** by
+the beacon integrator constructing rule 4-11's own question against the shipped door, **A5** by
+[R86](../decisions/2026-09-04-7a-supervisor-ruling-R86.md) verifying that rule 5-7 had no carrier at either
+end.)*
 
 R3's rule is that a value is added in the change that introduces it; the same discipline applies to a shape.
 **[Observed], round 1**, three of `ACTIONS.md`'s shipped surfaces cannot express what §4 requires, and this
@@ -566,7 +640,10 @@ row ships no code, so all three are **named here and landed by the build row**:
 | **A2** | **`Invocation` has no field that carries a RESULT**, so rule 4-3's *"the `InstanceRef` the host minted is recorded on the invocation"* has no carrier. **[Observed], F2:** route A (the ref in the `host_state` effect's `why`, which is its identity per ACTIONS 2.5-9) makes a **correct** capture warn `effect_undeclared:host_state:created …` — *"a detector that fires on a correct run is not a detector"*, ACTIONS' own sentence, reproduced one document along. Route B (an optional `InputSpec` used as an output slot) works and is one container meaning two things | same | same |
 | **A3** | `record_invocation` takes neither `approval_mode` nor `warnings`, so rule 4-5 cannot put **one** invocation into `review`. **[Observed], F3:** `declared_policy` is copied from the family and the only shipped route to `review` is a governance act that moves **every subsequent row** there | same | same |
 
-**Until all three land, §4 is a specification of a contract that cannot yet be executed**, and saying so is
+| **A4** | **`invocations` has no `label`, `type_name` or `kind` filter and no completeness answer**, so rule 4-11 cannot ask its own question. **[Observed], B2:** the shipped signature is `(*, family, namespace, actor, outcome, gate_verdict, effect_undeclared, unreviewed, since, limit=100)`; `ACTIONS.md` §6.3 says *"It does not page"*; and [`_sql.py`](../../ontoloche/backends/_sql.py) orders by `created_at` and returns the **oldest** page — so on an ordinary 250-row batch the repeat carries **no** warning and **two** identities are minted. And the answer must carry **completeness**, because rule 4-11's read *is* an identity read: rule 2-11 forbids reading one page and deciding, and standing rule (e) makes an unprovable extent `unknowable` at this door as at every other | same | same |
+| **A5** | **The ledger cannot record WHICH policy governed.** Rule 5-7 says the policy in force is recorded on the invocation; **[Observed]** the shipped `Invocation.declared_policy` carries `approval_mode`, `min_auto_tier` and `reversibility` — **not** `match_at` / `propose_below` / `ambiguity_margin`. Rule 5-11 gives the **resolution** a carrier (`governed_by`); the **invocation** still has none, so a reviewer draining §4.3's queue cannot tell which entry's thresholds produced the row in front of them. This is `I-7`'s half that `INGEST.md` cannot close alone | same | same |
+
+**Until all five land, §4 is a specification of a contract that cannot yet be executed**, and saying so is
 the point: `ACTIONS.md` §14's *"a build row finds what a reading round cannot, by trying to write the test"*
 arriving one row earlier, because a reading round **did** find it — by trying to write the walk-through.
 
@@ -576,16 +653,17 @@ arriving one row earlier, because a reading round **did** find it — by trying 
 |---|---|---|
 | 4-1 | A propose-at-ingest act is an invocation of a `kind="action"` family; this document adds no object with a store and no primitive for it | `C20-27` |
 | 4-2 | The host writes the instance row. The family declares `Effect(op="host_state")` with its mandatory `why`, and this project performs no write | `C20-28` |
-| 4-3 | The `InstanceRef` the host minted is recorded on the invocation, in the `results` slot amendment **A2** adds — never in an effect's `why` and never in `inputs` | `C20-29` |
+| 4-3 | The `InstanceRef` the host minted is recorded on the invocation, in the `results` slot amendment **A2** adds — never in an effect's `why` and never in `inputs`. **The type it is written under is the EFFECTIVE one the resolution reports, never the declared one**, and rule 3-19 is what makes an older row still readable after a later retire | `C20-29` |
 | 4-4 | Provenance is `InvocationProvenance` unchanged: actor, tier, confidence, approver, `source_version`. No field is added | `C20-30` |
 | 4-5 | A proposal made over an `ambiguous` resolution carries `instance_ambiguous_at_proposal:<input_name>:<n>` and is recorded in `review` mode whatever the family declared | `C20-31` |
 | 4-6 | Those proposals are enumerable by `invocations(unreviewed=True)` and drained only by `review_invocation` | `C20-32` |
-| 4-7 | A resolution of `unknowable` yields **no** proposal | `C20-33` |
+| 4-7 | A resolution of `unknowable` **or of `not_an_instance`** yields **no** proposal. Both are outcomes that mint nothing, and the second is not a classifier that missed — it is the classifier **succeeding** and saying *this is not a thing*, so proposing over it in `auto` mode is how a column header becomes a host row | `C20-33` |
 | 4-8 | An ingest family may not declare `Effect(op="propose_type", kind="predicate")` — `ACTIONS.md` §2.5's allowlist, restated because ingestion is the highest-volume caller that could reach it | `C20-34` |
 | 4-9 | A thing being proposed is named by a `CandidateRef`, which has no `id` and never acquires one | `C20-69` |
-| 4-10 | **Within one ingest act a label is resolved once**; later references to it in that act reuse the first `CandidateRef` | `C20-70` |
-| 4-11 | **Before recording a propose invocation the loop asks `invocations(unreviewed=True)` who already holds a pending proposal for this label** under this `(namespace, kind, type_name)`; a second carries `instance_proposal_pending:<invocation_id>` and mints no second identity | `C20-71` |
+| 4-10 | **Within one ingest act an IDENTITY is resolved once**, and the key is `(namespace, kind, the closure of type_name, the label under §3's own normaliser)` — **the key the gate decides on, computed by the same function**. Keying on the raw label proposes twice for a thing the gate itself calls `existing` at 1.0 (`I-4`); keying without the type hands a second type's landing the first's `CandidateRef` (finding B1) | `C20-70` |
+| 4-11 | **Before recording a propose invocation the loop asks who already holds a proposal for this identity WHOSE ROW HAS NOT BEEN WRITTEN** — not who holds an *unreviewed* one. Draining a proposal is the right thing to do and it used to stand the guard down at exactly the moment the permission was live and unconsumed (`I-5`, standing rule (c)). The key is rule 4-10's. A second carries `instance_proposal_pending:<invocation_id>` and mints no second identity | `C20-71` |
 | 4-12 | `<n>` in `instance_ambiguous_at_proposal` is counted over a finished read; rule 3-6 makes an unfinished one unable to reach this door at all | `C20-72` |
+| 4-13 | The per-act memory of rule 4-10 is written on **every** branch that answers with a `CandidateRef` — the pending branch as well as the minting one. Writing it only where an identity is minted leaves the act unbound in exactly the case rule 4-11 just refused (finding B5) | `C20-81` |
 
 ---
 
@@ -673,7 +751,9 @@ fixture line is exactly what §5.1's own argument is about, and it was one.*
 | 5-4 | The gate answers in §3's five outcomes and mints no verdict vocabulary of its own | `C20-38` |
 | 5-5 | An unscored candidate, and a candidate off an unfinished read, are `unknowable` at the gate as at the call | `C20-39` |
 | 5-6 | Two entries in one namespace may declare different policies; two **callers** may not | `C20-40` |
-| 5-7 | The policy in force is recorded on the invocation, as `ACTIONS.md` rule 3-8 records the policy the gate judged | `C20-41` |
+| 5-7 | The policy in force is recorded on the invocation, as `ACTIONS.md` rule 3-8 records the policy the gate judged. **[Observed]** this rule had **no carrier** until rule 5-11: the printed `InstanceResolution` contained no `policy` and the shipped `Invocation.declared_policy` holds `approval_mode` / `min_auto_tier` / `reversibility`, not the three thresholds | `C20-41` |
+| 5-10 | **A successor does NOT inherit its predecessor's `MatchPolicy`.** Where a closure hop crosses into an entry declaring a different one, the resolution is `unknowable` (rule 3-18) rather than answered under rules the caller never named. §5.3 records the decision and why the other reading was refused | `C20-82` |
+| 5-11 | `InstanceResolution.governed_by` names the `(namespace, type_name)` whose entry supplied the `MatchPolicy` and the predicate this answer was judged by. **It is rule 5-7's carrier**, and an answer that cannot say which policy governed it makes rule 5-7 unfalsifiable | `C20-85` |
 | 5-8 | **`existing` requires exactly one member in the tied set of §3.2** — every candidate at or above `match_at` plus every candidate within `ambiguity_margin` of the top | `C20-73` |
 | 5-9 | A top candidate between `propose_below` and `match_at` is `ambiguous`, never `existing` and never `proposal` | `C20-74` |
 
@@ -767,6 +847,13 @@ meant. R59: **the tenancy predicate is the host's.** Both hold, and they are not
   each host `considered=1373` of 1,373 rows, and the predicate did every exclusion. *The separation is not
   that the host hid rows; it is that the exclusion happened where it can be counted.*
 
+### 6.3a A successor does not inherit the predicate either — **rule 6-18**
+
+The same decision as §5.3 and for the same reason, stated separately because a predicate is a *tenancy*
+fact and getting it wrong is **R59's own stated reversal condition** rather than a quality regression.
+**[Observed], D3:** after one `retire(successor='ltc_facility')` over design test 3's CA+CO fixture, a
+California caller sees `CO rows visible to this CALIFORNIA caller: 1` where the control saw `0`.
+
 ### 6.4 The one change R60 requires, and it lands with this document
 
 R60 says the four surfaces are amended **in one change**. This document is that change: `INGEST.md` §6 is the
@@ -796,6 +883,7 @@ what still has to happen before it can be used.
 | 6-14 | The condition is declared on the entry and rides propose→approve. **It is never a call parameter** | `C20-55` |
 | 6-15 | The registry evaluates it, over every record either primitive returns; a host-side `host_filter` is an optimisation and never the guarantee | `C20-56` |
 | 6-16 | A candidate the predicate could not decide makes the resolution `unknowable` (§3.4) and is never silently dropped | `C20-57` |
+| 6-18 | **A successor does not inherit its predecessor's predicate.** A closure hop into an entry declaring a different one is `unknowable` (rule 3-18), because a tenancy predicate the caller never named deciding a caller's answer is R59's reversal condition reached through a governance act | `C20-83` |
 | 6-17 | The candidate primitive takes no tenant parameter. R24 / R59 | `C20-58` |
 
 ---
@@ -819,6 +907,14 @@ obligation; meeting it belongs to the host, and until it is met every ingest pro
 carries `consumers_unregistered` in its `warnings` (§8), because **[Observed], F8:** the original rules 7-1
 and 7-4 named the resolution as their carrier and `InstanceResolution` had no field for either.
 
+### 7.1a The host that declares a successor declares its governed facts — **rule 7-5**
+
+§7.2 makes the entity vocabulary the host's to register, and **that is exactly why there is no
+inheritance**: a successor's entry may be declared by a different party from the predecessor's, so
+inheriting its `MatchPolicy` or predicate would let a third party's declaration silently govern a caller's
+answer. The obligation is therefore on the host: **declare the successor's governed facts, or accept that
+resolutions across that hop answer `unknowable`.**
+
 ### 7.2 The entity vocabulary is the host's to register
 
 `propose_type` / `approve` are shipped. A host that wants `task`, `project`, `person`, `org`, `meeting`,
@@ -839,6 +935,7 @@ a deployment is**, so the resolution carries `no_tenancy_predicate` rather than 
 | 7-1 | Ingest curation reports its blast radius from `consumers()`, and reports it as incomplete, never as safe — carried in `InstanceResolution.warnings` as `consumers_unregistered` | `C20-59` |
 | 7-2 | This document specifies no consumer-registration mechanism; it states the obligation | `C20-60` |
 | 7-3 | The entity vocabulary is registered by the host through the shipped calls; this document adds no path for it | `C20-61` |
+| 7-5 | A host declaring a `successor` on an entry declares the successor entry's `MatchPolicy` and predicate too, or resolutions crossing that hop answer `unknowable` (rules 3-18, 5-10, 6-18). §7.2 makes the entry someone else's to register, which is the reason the facts are not inherited | `C20-84` |
 | 7-4 | A namespace with no declared tenancy predicate runs unfiltered and the resolution carries `no_tenancy_predicate` | `C20-62` |
 
 ---
@@ -921,21 +1018,28 @@ record carries the count.
 
 ## 9. Rule → planned id mapping *(standing constraint 8)*
 
-**Seventy-six rules, seventy-six planned ids, `C20-01` … `C20-74`**, listed in each section's own table.
+**Eighty-one rules, eighty-one planned ids, `C20-01` … `C20-81`**, listed in each section's own table.
+**[Observed]** the count is derived by `grep -o "C20-[0-9]*" | sort -u | wc -l` over this file and is not
+asserted from memory — round 2's finding A3 was that the previous sentence said *seventy-six* over 74, in
+the section whose only job is to enumerate.
 The prefix is `C20` because `C19` is `ACTIONS.md`'s and is full. **The ids are *planned*:** this row ships no
 implementation, so no id is claimed, and the build row claims them in the change that makes each rule
 testable — standing constraint 8's rule applied to a spec that precedes its build by design (R60).
 
-**Five vocabulary values are RESERVED here and deliberately NOT minted**, on ruling **R11**'s precedent — *a
+**Seven vocabulary values are RESERVED here and deliberately NOT minted**, on ruling **R11**'s precedent — *a
 value is added in the change that introduces it, and nothing introduces it yet*:
 
 | value | carrier | note |
 |---|---|---|
 | `instance_source_absent` | `Refusal.reason`, the **thirty-second** | The **sixth capability refusal**, after `proposals_not_stored`, `cannot_record_override`, `consumer_source_read_only`, `edge_store_absent` and `action_store_absent`, and it exists for the reason the first of those does: an empty candidate page would read as *"there is nothing like this"* |
-| `instance_ambiguous_at_proposal:<input_name>:<n>` | `warnings` | §4.3's mechanical handle. The `<input_name>` segment was added by round 1's F7 |
-| `instance_proposal_pending:<invocation_id>` | `warnings` | §4.3 rule 4-11's handle — the pending-proposal question K4 forced |
-| `instance_narrowed_proposal:<keys>` | `warnings` | §2.1 rule 2-13's handle — M2's cheap `complete=True` made visible |
-| `instance_type_succeeded:<successor>` | `warnings` | §3.4 rule 3-14's handle — K6's retired-type case |
+| `instance_ambiguous_at_proposal:<input_name>:<n>` | `warnings`, the **thirty-fifth** | §4.3's mechanical handle. The `<input_name>` segment was added by round 1's F7 |
+| `instance_proposal_pending:<invocation_id>` | `warnings`, the **thirty-sixth** | §4.3 rule 4-11's handle — the pending-proposal question K4 forced |
+| `instance_narrowed_proposal:<keys>` | `warnings`, the **thirty-seventh** | §2.1 rule 2-13's handle — M2's cheap `complete=True` made visible |
+| `instance_type_succeeded:<successor>` | `warnings`, the **thirty-eighth** | §3.4a rule 3-14's handle — K6's retired-type case, and one is emitted per HOP of the closure |
+| `consumers_unregistered` | `warnings`, the **thirty-ninth** | §7 rule 7-1's handle. **[Observed]** `'consumers_unregistered' in types.WARNING_VALUES` is `False` and the kit emits it on every call — round 2's finding A3, and it is standing rule (d) failing inside the section whose only job is to enumerate: round 1's F8 fix minted the value and the commit that minted it did not name §9 |
+| `no_tenancy_predicate` | `warnings`, the **fortieth** | §7 rule 7-4's handle, minted by the same F8 fix and reserved nowhere until now (A3) |
+
+**[Observed] 2026-09-04**, `len(types.WARNING_VALUES)` is **37**, so the four warnings reserved here are the thirty-eighth, thirty-ninth and fortieth *after* the three already reserved above take thirty-five, thirty-six and thirty-seven — **the reservation is written with its ordinals so the count stays reconcilable with the tuple that holds it**, which is the whole of R11's mechanism and the thing round 2's A3 found deleted.
 
 **A malformed `Condition` mints nothing**: it is refused with **`attributes_schema_violation`**, which
 `ACTIONS.md` rule 2.4-6 already uses for a malformed `Precondition` declaration. **Minting a value for the
@@ -947,7 +1051,7 @@ against `types.REFUSAL_REASONS`, and §5.4's table against `types.WARNING_VALUES
 the tuple fails the checker; amending the tuple is product code, which this row does not ship. **Q85** asks
 the supervisor to rule it, because EDGES v0 and ACTIONS v0 both chose the other way.
 
-**Three shape amendments to `ACTIONS.md` are likewise named and not made** — §4.4's A1, A2 and A3 — for the
+**Five shape amendments to `ACTIONS.md` are likewise named and not made** — §4.4's A1–A5 — for the
 same reason and with the same routing.
 
 ---
@@ -966,6 +1070,7 @@ same reason and with the same routing.
 | **ING8** | **For a prose source, two of `InstanceContext`'s four fields are empty and the empty pair is the discriminating pair.** **[Observed], F6:** of the 104 shared-name ties, `row_attributes` separates **104/104** and `siblings` **0/104** — and a capture from meeting prose can fill `siblings` and cannot fill `row_attributes` or `label_source`. **[Observed], F10:** `not_an_instance` is likewise unreachable from prose — `'the team'`, `'next quarter'`, `'action items'`, `'TBD'`, `'the migration'` all resolve `proposal` — so **every extraction error from a prose source lands as a well-formed proposal.** ACT2's shape at a second surface, recorded rather than designed away, and it is the strongest argument for **Q86**'s option (c) |
 | **ING9** | **Self-review is not enforced and this document previously said it was.** **[Observed], F11:** `review_invocation(reviewed_by='ai:capture')` succeeds for the actor that ingested the row. `ACTIONS.md` §6.5 / R73 argued only that a `reviewed_by=` parameter on the write call would permit it; nothing anywhere enforces actor distinctness. **Q89** carries it |
 | **ING10** | **`Condition` cannot compare two attributes of one record, and the nearest expressible form is accepted at declaration and `False` for every record.** UC2's own pre-registered pathology — **[Observed] 5,338 of 416,948 rows (1.2803%)** carry a correction date before the survey date — has the gate `Correction Date >= Survey Date`. **[Observed], M5:** `Condition(op='gte', attribute='Correction Date', value='Survey Date')` is **ACCEPTED** at declaration and answers `holds=False` for valid and inverted rows alike, because every ISO date sorts below `'S'`. **That is design test 3's own mechanism-C failure, reached by a predicate that passes rules 6-1…6-13 with a non-empty `why`.** A thirteenth term (`cmp_attr`) is a §-row change and is **not** taken on a design test's authority; **Q90** routes it |
+| **ING11** | **Rule 3-19's own cost: while a host is MID-MIGRATION, one facility can appear under two names of one closure and the read correctly calls it `ambiguous`.** The extent spans the declared name and every hop (that is what closes `I-3`), so between a `retire(successor=)` and the host finishing its migration, a row present under both names is **two refs** and rule 3-3's set test sees two candidates. **This is not a defect and it is not designed away**: the extent genuinely is ambiguous mid-migration, and rule 4-5 routes it to a human, which is the correct destination for *“the store is halfway through changing its mind about what this type is called”*. The alternative — collapsing two refs that differ only by a name the host is retiring — is `I-6`'s defect chosen deliberately, and this document will not take it. The cost is a review queue that grows during a migration and drains when it finishes; **it is unmeasured, because no fixture in this row runs a partial migration**, and that is stated rather than estimated |
 
 ---
 
@@ -977,7 +1082,7 @@ same reason and with the same routing.
 precedent, which keeps `check_spec_drift.py` green and the scope fence intact. The counter-argument is R3's
 plain words: *a value is added in the change that introduces it*, and this change introduces the
 **specification** of it. EDGES v0 and ACTIONS v0 both chose the other way. **A ruling either way is cheap now
-and expensive after the build row.** The same question governs §4.4's three ACTIONS shape amendments.
+and expensive after the build row.** The same question governs §4.4's five ACTIONS shape amendments.
 
 **Q86 — Is a second notion of *the same string* acceptable, or does the project need one?** Contortion ING3,
 and round 1 turned it from a risk into a measurement: **[Observed]** this row's own normaliser refuses
@@ -1011,6 +1116,35 @@ pairs) is absurd and the alternative (a host-computed boolean column) is ING4 ar
 danger is precise: the nearest expressible form is accepted at declaration and silently false for 100% of
 records**, which is the shape §6 exists to prevent. R60 says a thirteenth is a §-row change with a contract
 id; it is not taken on a design test's authority.
+
+**Q91 — When a `retire(successor=)` hop changes the governed facts, should `resolve_instance` DECLINE to
+answer?** This is `I-7` ([**R86**](../decisions/2026-09-04-7a-supervisor-ruling-R86.md)), and it is raised in
+**Q56's shape** because it has Q56's property: *it changes what the registry declines to serve.*
+
+**The row's decision, and the standing default in force: no inheritance.** Rules **3-18**, **5-10**, **6-18**
+and **7-5** make a closure hop into an entry declaring a different `MatchPolicy` or a different predicate
+answer **`unknowable`**, with a `why` naming the changed fact. **The reasoning is this document's own §7.2:**
+the successor's entry is *someone else's to register*, so inheriting its governed facts would let a third
+party's declaration silently govern a caller's answer. **[Observed], D3**, that is not theoretical — after one
+`retire(successor='ltc_facility')` over design test 3's CA+CO fixture a California caller sees
+`CO rows visible to this CALIFORNIA caller: 1` where the control saw `0` (**R59's own stated reversal
+condition**, reached by a governance act rather than a missing keyword), and **73 of 1,373 real CMS labels
+resolve differently for one caller**. §5.1's rule 5-6 — *two entries may declare different policies; two
+**callers** may not* — is otherwise defeated **inside one caller**.
+
+**What the founder is being asked, and why it is not the row's.** The default buys safety with availability:
+an ordinary curation act now makes a live ingest loop answer `unknowable` for every label under the retired
+type until the host declares the successor's governed facts (rule 7-5). Three readings exist and this row is
+not entitled to choose between the second and third:
+
+| | reading | what it costs |
+|---|---|---|
+| **(a)** | **no inheritance, `unknowable`** — the row's default, **in force** | a retire stops the loop until the host acts. Safe and loud, and possibly too loud for a host that retires types routinely |
+| **(b)** | inherit silently | the failure D3 constructed, in production. **This row refuses (b)** and records the refusal rather than routing it |
+| **(c)** | inherit **with a warning** and keep answering | (b)'s availability with a handle on it — and it is **Q56's own shape**, where a `1.0` that should carry a warning is exactly what is open. If Q56 resolves toward warning-rather-than-refusing, (c) is what consistency requires here |
+
+**(a) and (c) differ only in whether the registry declines or warns, which is the question Q56 asks on the
+read side — so they should be answered together and by the same person.** The default in force is **(a)**.
 
 ---
 
@@ -1086,7 +1220,7 @@ brief cited the register that minted it.
 | the seam decided by design test 1 **before** anything else was written | §1, and [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §0 is the pre-registration, committed before the probe existed |
 | candidate-retrieval primitives, each with a capability flag, each paged per R58 | §2 — two primitives, two flags, three states measured live |
 | `resolve_instance` with the four-outcome shape **or a different closed set argued** | §3 — **five**, and T1.5 is the argument |
-| the propose-at-ingest contract | §4 — an invocation, one reference shape, three amendments named and routed |
+| the propose-at-ingest contract | §4 — an invocation, one reference shape, five amendments named and routed |
 | the match-vs-propose confidence gate as a governed fact | §5 — and §5.1 constructs the alternative's failure |
 | `Condition` as the loop consumes it, with the three sibling sections amended in one change | §6, §6.4 |
 | host obligations stated | §7 |

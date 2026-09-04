@@ -33,7 +33,20 @@ __all__ = [
     "EntryDeclaration", "Vocabulary", "HostTable", "Refusal",
     "evaluate", "resolve_instance", "norm", "similar", "OUTCOMES",
     "VALUE_OPS", "COMBINATORS", "assert_adapter_boundary", "flat_form_ok",
+    "type_closure", "act_key", "Invocation", "Ledger", "IngestAct",
+    "CHAIN_CAP", "ACT_RULES",
 ]
+
+#: INGEST.md 3.4a rule 3-16 -- the successor closure's hop cap, the way
+#: `ontoloche/registry.py`'s `_identity_closure` caps its own walk. R84's second
+#: clause: the specification cites the shipped implementation rather than restating
+#: the ruling it was derived from.
+CHAIN_CAP = 8
+
+#: INGEST.md 4.3. The act rules a construction may switch OFF, so every one of them
+#: has a check that goes red. Standing rule (e)'s doors, named.
+ACT_RULES = frozenset({"4-10", "4-11", "4-10-key", "4-11-written", "4-7-nai",
+                       "4-3-eff"})
 
 #: INGEST.md 3.1, rule 3-1. Closed at five.
 OUTCOMES = ("existing", "ambiguous", "proposal", "not_an_instance", "unknowable")
@@ -355,6 +368,80 @@ class Vocabulary:
         return self._entries.get((namespace, type_name))
 
 
+@dataclass(frozen=True)
+class Closure:
+    """The successor closure of one type name. INGEST 3.4a, rules 3-14 … 3-17."""
+
+    effective: str
+    entry: EntryDeclaration | None
+    complete: bool
+    why: str
+    hops: tuple[str, ...]
+
+
+def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
+                 *, cap: int = CHAIN_CAP, one_hop: bool = False,
+                 keep_predecessor: bool = False) -> Closure:
+    """The CHAIN, not one hop -- and it stops honestly when it cannot finish.
+
+    This is the one implementation of `INGEST.md` 3.4a, and every door that reads,
+    writes, keys, gates or counts an identity calls it (**standing rule (e)**). It
+    does what `ontoloche/registry.py`'s `_identity_closure` does and is written from
+    that code rather than from **R38**'s words, per **R84**'s second clause: a visited
+    set, a hop cap, and ``complete=False`` **with a why** when the walk stops early.
+
+    ``one_hop`` and ``keep_predecessor`` are the MUTATION harness for `I-2` and for
+    its rider defect. They are not designs.
+    """
+    entry = vocab.entry(namespace, type_name)
+    effective = type_name
+    seen = {type_name}
+    hops: list[str] = []
+    while entry is not None and entry.successor:
+        nxt = entry.successor
+        if nxt in seen:                                   # rule 3-17: cycle
+            return Closure(effective, entry, False,
+                           f"the successor chain from {type_name!r} cycles at "
+                           f"{nxt!r}; this identity cannot be resolved to one type",
+                           tuple(hops))
+        if len(hops) >= cap:                              # rule 3-16: the cap
+            return Closure(effective, entry, False,
+                           f"the successor chain from {type_name!r} passed the cap "
+                           f"of {cap} hops without reaching a live type",
+                           tuple(hops))
+        nxt_entry = vocab.entry(namespace, nxt)
+        if nxt_entry is None:                             # rule 3-15: dangling
+            if keep_predecessor:                          # MUTATION: the rider
+                return Closure(nxt, entry, True, "", tuple(hops + [nxt]))
+            return Closure(effective, entry, False,
+                           f"{type_name!r} was retired toward {nxt!r} and no entry "
+                           f"declares {nxt!r} in {namespace!r}: the extent this "
+                           f"identity would be decided over is not readable",
+                           tuple(hops))
+        hops.append(nxt)
+        seen.add(nxt)
+        effective, entry = nxt, nxt_entry
+        if one_hop:                                       # MUTATION: I-2 itself
+            break
+    return Closure(effective, entry, True, "", tuple(hops))
+
+
+def act_key(vocab: Vocabulary, namespace: str, kind: str, type_name: str,
+            label: str, *, raw: bool = False) -> tuple[str, str, str, str]:
+    """INGEST 4.3, rule 4-10. The key an ACT scopes on, and it is the key the GATE
+    decides on -- one function, because `I-4` is what happens when there are two.
+
+    The type half runs through `type_closure`, so a `retire(successor=)` between two
+    acts cannot make one identity answer to two keys (`I-3`). The label half runs
+    through `norm`, the scorer's own identity function (`I-4`). ``raw`` is the
+    mutation.
+    """
+    if raw:                                               # MUTATION: I-4
+        return (namespace, kind, type_name, label)
+    return (namespace, kind,
+            type_closure(vocab, namespace, type_name).effective, norm(label))
+
+
 # --------------------------------------------------------------------------------
 # The facade shapes -- INGEST 8
 # --------------------------------------------------------------------------------
@@ -405,6 +492,14 @@ class InstanceResolution:
     scanned: int
     warnings: tuple[str, ...]
     tier: str
+    #: INGEST 5.3 rule 5-11 -- `I-7`'s carrier, and rule 5-7's. The `(namespace,
+    #: type_name)` whose entry supplied the `MatchPolicy` and the predicate this
+    #: answer was judged by. R86 verified that rule 5-7 had NO carrier: the printed
+    #: shape contained no `policy` and the shipped `Invocation.declared_policy` holds
+    #: `approval_mode` / `min_auto_tier` / `reversibility`, not the three thresholds.
+    #: A rule about which policy governed an answer cannot be checked while the answer
+    #: cannot say which policy governed it.
+    governed_by: str = ""
 
 
 _CLASS_WORDS = {
@@ -488,15 +583,40 @@ def resolve_instance(
         return Refusal("instance_source_absent",
                        {"why": f"no entry declares {type_name!r} in {namespace!r}"})
 
-    # --- rule 3-14: follow the successor chain BEFORE querying -------------
-    effective_type = type_name
-    seen = {type_name}
-    while entry is not None and entry.successor and entry.successor not in seen:
-        warnings.append(f"instance_type_succeeded:{entry.successor}")
-        effective_type = entry.successor
-        seen.add(effective_type)
-        entry = vocab.entry(namespace, effective_type) or entry
-        break
+    # --- rules 3-14 … 3-18: the successor CLOSURE, before querying ---------
+    # `I-2`/`I-3`/D3. One implementation, shared with `act_key`, so the door that
+    # reads and the doors that write and key an identity resolve the SAME set --
+    # standing rule (e). R84: written from `_identity_closure`, not from R38's words.
+    declared = entry
+    closure = type_closure(vocab, namespace, type_name,
+                           one_hop=(_mutate == "chain_one_hop"),
+                           keep_predecessor=(_mutate == "chain_keeps_predecessor"))
+    effective_type = closure.effective
+    for hop in closure.hops:
+        warnings.append(f"instance_type_succeeded:{hop}")
+    chain_complete, chain_why = closure.complete, closure.why
+    if closure.entry is not None:
+        entry = closure.entry
+
+    # --- rule 3-18: the successor's GOVERNED FACTS are not the caller's ------
+    # D3: one `retire(successor=)` swapped the tenancy predicate and the MatchPolicy
+    # in under a caller who declared neither. The extent is then a different set and
+    # this door cannot prove otherwise, so it does not decide.
+    # rule 5-11: the entry whose governed facts judged this answer, named.
+    governed_by = f"{namespace}:{effective_type}"
+
+    governed_why = ""
+    if (_mutate != "governed_facts_ignored" and effective_type != type_name
+            and declared is not None and entry is not None):
+        changed = [name for name, a, b in (
+            ("MatchPolicy", declared.policy, entry.policy),
+            ("the tenancy predicate", declared.predicate, entry.predicate),
+        ) if a != b]
+        if changed:
+            governed_why = (
+                f"{type_name!r} was retired toward {effective_type!r}, which declares a "
+                f"different {' and a different '.join(changed)}: the extent this "
+                f"resolution would be decided over is not the extent the caller declared")
     assert entry is not None
 
     # --- rule 3-8: is this an instance at all? No host read ----------------
@@ -505,28 +625,41 @@ def resolve_instance(
         return InstanceResolution(
             "not_an_instance", None, None, None,
             f"{candidate!r} names a class or a column, not one thing of that class",
-            (), 0, True, "", 0, tuple(warnings), tier)
+            (), 0, True, "", 0, tuple(warnings), tier, governed_by)
 
-    # --- rules 2-3/2-11: the identity read exhausts or reports truncated ---
+    # --- rules 2-3/2-11/3-19: the identity read exhausts, over the WHOLE closure --
+    # `I-3`. The endpoint alone is a SMALLER SET than the identity's extent: a row
+    # written under a name that has since been retired is still one of this identity's
+    # rows until the host migrates it, and a read that cannot see it proposes a
+    # duplicate for a facility the same store already holds. Standing rule (e) is
+    # exactly this -- the same set at every door -- so the read spans the declared name
+    # and every hop of the closure.
+    read_types = [type_name] + [h for h in closure.hops if h != type_name]
+    if _mutate == "extent_endpoint_only":                # MUTATION: `I-3`
+        read_types = [effective_type]
     scanned = 0
     records: list[InstanceRecord] = []
-    after: str | None = None
-    complete = True
-    why_incomplete = ""
-    while True:
-        page = host.find_instance_candidates(
-            CandidateQuery(namespace=namespace, kind="entity",
-                           type_name=effective_type, label=candidate,
-                           host_filter=host_filter, limit=page_size, after=after))
-        scanned += len(page.records)
-        records.extend(page.records)
-        if not page.complete and page.next_after is None:
-            complete = False
-            why_incomplete = page.why_incomplete or "the identity read did not finish"
+    complete = chain_complete
+    why_incomplete = "" if chain_complete else chain_why
+    for read_type in (read_types if chain_complete else []):
+        after: str | None = None
+        while True:
+            page = host.find_instance_candidates(
+                CandidateQuery(namespace=namespace, kind="entity",
+                               type_name=read_type, label=candidate,
+                               host_filter=host_filter, limit=page_size, after=after))
+            scanned += len(page.records)
+            records.extend(page.records)
+            if not page.complete and page.next_after is None:
+                complete = False
+                why_incomplete = (page.why_incomplete
+                                  or "the identity read did not finish")
+                break
+            if page.next_after is None:
+                break
+            after = page.next_after
+        if not complete:
             break
-        if page.next_after is None:
-            break
-        after = page.next_after
 
     # --- rule 2-14: the flat-form guard, at the surface handing out refs ---
     for rec in records:
@@ -534,6 +667,23 @@ def resolve_instance(
         if problem:
             return Refusal("instance_source_absent",
                            {"why": f"unfaithful reference: {problem}"})
+
+    # --- rule 2-16: the read's `instance_id`s are DISTINCT, or it is unknowable -
+    # `I-6`. Two host records under one id collapse to one candidate in a set test
+    # that dedupes on the flat key, and the second row vanishes from `candidates`
+    # entirely -- so the extent is not countable and this door does not decide.
+    dup_why = ""
+    if _mutate != "dup_ids_ignored":
+        by_id: dict[tuple, int] = {}
+        for rec in records:
+            k = (rec.namespace, rec.kind, rec.type_name, rec.instance_id)
+            by_id[k] = by_id.get(k, 0) + 1
+        dups = sorted(k[3] for k, n in by_id.items() if n > 1)
+        if dups:
+            dup_why = (
+                f"the identity read returned {len(dups)} instance_id(s) more than once "
+                f"({', '.join(dups[:3])}): the host's ids do not distinguish its own "
+                f"rows, so the extent of this identity cannot be counted")
 
     # --- rules 6-15/6-16: the ENTRY's predicate, evaluated by the registry -
     undecided = 0
@@ -568,13 +718,23 @@ def resolve_instance(
     def _unknowable(reason: str, why: str) -> InstanceResolution:
         return InstanceResolution(
             "unknowable", None, None, None, reason, tuple(scored[:5]),
-            len(scored[:5]), False, why, scanned, tuple(warnings), tier)
+            len(scored[:5]), False, why, scanned, tuple(warnings), tier, governed_by)
 
     def _rule_u() -> InstanceResolution | None:
-        """3.4, and the ORDER is the rule: before the candidate set is interpreted."""
-        if not complete:
+        """3.4, and the ORDER is the rule: before the candidate set is interpreted.
+
+        Six absorbers now, one per row of the instance-surface table (R85). Each asks
+        the same question -- *is the set this door is about to decide over provably the
+        identity's extent?* -- and each answers `unknowable` rather than deciding.
+        """
+        if not complete:                                     # `I-1`, `I-2`
             return _unknowable(
                 f"the identity read did not finish: {why_incomplete}", why_incomplete)
+        if governed_why:                                     # D3
+            return _unknowable(f"the governed facts changed under the caller: "
+                               f"{governed_why}", governed_why)
+        if dup_why:                                          # `I-6`
+            return _unknowable(f"the extent is not countable: {dup_why}", dup_why)
         if undecided:
             why = predicate_why[0] if predicate_why else "the predicate was undecidable"
             return _unknowable(
@@ -621,12 +781,12 @@ def resolve_instance(
             tied[0].score,
             f"{len(tied)} host rows answer to {candidate!r} and nothing here separates "
             "them", tuple(tied), len(tied), complete, why_incomplete, scanned,
-            tuple(warnings), tier))
+            tuple(warnings), tier, governed_by))
     if tied and tied[0].score >= policy.match_at:
         return _mutated_guard(InstanceResolution(
             "existing", tied[0].ref_key, None, tied[0].score,
             f"exactly one host row answers to {candidate!r}", tuple(tied), 1, complete,
-            why_incomplete, scanned, tuple(warnings), tier))
+            why_incomplete, scanned, tuple(warnings), tier, governed_by))
     if scored and scored[0].score >= policy.propose_below:
         return _mutated_guard(InstanceResolution(          # rule 5-9: the band
             "ambiguous", None,
@@ -636,7 +796,7 @@ def resolve_instance(
             f"the best candidate scored {scored[0].score}, between propose_below "
             f"{policy.propose_below} and match_at {policy.match_at}: not confident "
             "enough to be the same thing", tuple(scored[:5]), len(scored[:5]), complete,
-            why_incomplete, scanned, tuple(warnings), tier))
+            why_incomplete, scanned, tuple(warnings), tier, governed_by))
     return _mutated_guard(InstanceResolution(
         "proposal", None,
         CandidateRef(namespace, "entity", effective_type, candidate, "proposal",
@@ -644,4 +804,189 @@ def resolve_instance(
         (scored[0].score if scored else None),
         f"nothing in {scanned} scanned host rows answers to {candidate!r}",
         tuple(scored[:5]), len(scored[:5]), complete, why_incomplete, scanned,
-        tuple(warnings), tier))
+        tuple(warnings), tier, governed_by))
+
+
+# --------------------------------------------------------------------------------
+# The ingest ACT and the LEDGER -- INGEST 4.3
+#
+# These lived in `ingest_act_probe.py` until round 2. They are here now for the same
+# reason the resolver is: round 2 found that the act keyed identity on the raw label
+# while the gate keyed it on `norm` (`I-4`), that the act's ledger key did not follow
+# the successor chain the read follows (`I-3`), and that the guard's window closed
+# when a proposal DRAINED rather than when its identity was WRITTEN (`I-5`). Three
+# doors, one question, three answers -- which is exactly what one implementation is
+# for. **Standing rule (e)**, in the artefact rather than in the prose.
+# --------------------------------------------------------------------------------
+
+
+@dataclass
+class Invocation:
+    invocation_id: str
+    family: str
+    namespace: str
+    type_name: str
+    label: str
+    outcome: str
+    approval_mode: str
+    warnings: tuple[str, ...]
+    kind: str = "entity"
+    reviewed_by: str | None = None
+    minted_ref: str | None = None          # the `results` slot amendment A2 asks for
+
+
+@dataclass
+class Ledger:
+    """`ACTIONS.md`'s ledger, modelled only as far as INGEST 4 needs it."""
+
+    rows: list[Invocation] = field(default_factory=list)
+
+    def record(self, inv: Invocation) -> Invocation:
+        self.rows.append(inv)
+        return inv
+
+    def unreviewed(self, *, namespace: str | None = None, type_name: str | None = None,
+                   label: str | None = None) -> list[Invocation]:
+        """What rule 4-11 asked until round 2, kept so `I-5`'s check can go red.
+
+        **This is not rule 4-11's question any more.** It is also not the shipped
+        `Registry.invocations`, which takes no `label`, `type_name` or `kind` filter,
+        does not page, and returns the OLDEST 100 -- finding B2, and the fourth
+        amendment `INGEST.md` 4.4 asks of `ACTIONS.md`.
+        """
+        out = [i for i in self.rows if i.reviewed_by is None]
+        if namespace is not None:
+            out = [i for i in out if i.namespace == namespace]
+        if type_name is not None:
+            out = [i for i in out if i.type_name == type_name]
+        if label is not None:
+            out = [i for i in out if i.label == label]
+        return out
+
+    def open_proposals(self, vocab: Vocabulary, namespace: str, kind: str,
+                       type_name: str, label: str, *,
+                       raw: bool = False,
+                       unreviewed_only: bool = False) -> list[Invocation]:
+        """Rule 4-11's question, and `I-5` is the reason it is worded this way.
+
+        *Who already holds a proposal for this identity whose row has NOT been
+        written?* -- not *who holds an UNREVIEWED one*. Draining a proposal is the
+        right thing to do and it used to stand the guard down at exactly the moment
+        the permission was live and unconsumed (standing rule (c)).
+
+        The key runs through `act_key`, so the question follows the successor closure
+        (`I-3`) and the scorer's normaliser (`I-4`). ``raw`` and ``unreviewed_only``
+        are the mutations.
+        """
+        want = act_key(vocab, namespace, kind, type_name, label, raw=raw)
+        out = []
+        for i in self.rows:
+            if unreviewed_only:                              # MUTATION: `I-5`
+                if i.reviewed_by is not None:
+                    continue
+            elif i.minted_ref is not None:
+                continue                                     # the identity EXISTS now
+            if act_key(vocab, i.namespace, i.kind, i.type_name, i.label,
+                       raw=raw) == want:
+                out.append(i)
+        return out
+
+
+class IngestAct:
+    """One ingest act. INGEST 4.3, rules 4-7 and 4-10 … 4-13.
+
+    ``enforce`` is the MUTATION harness: switch a rule off and the check that closes
+    it must go red. The ids are `ACT_RULES`.
+    """
+
+    def __init__(self, act_id: str, *, host: HostTable, vocab: Vocabulary,
+                 ledger: Ledger, namespace: str, type_name: str,
+                 enforce: frozenset[str] = ACT_RULES) -> None:
+        self.act_id = act_id
+        self.host, self.vocab, self.ledger = host, vocab, ledger
+        self.namespace, self.type_name = namespace, type_name
+        self.enforce = enforce
+        self._minted: dict[tuple, CandidateRef] = {}   # rule 4-10's per-act memory
+        self.host_writes: list[str] = []
+
+    def _key(self, type_name: str, label: str) -> tuple:
+        return act_key(self.vocab, self.namespace, "entity", type_name, label,
+                       raw=("4-10-key" not in self.enforce))
+
+    def land(self, label: str, *, type_name: str | None = None,
+             tier: str = "sonnet") -> tuple[str, object]:
+        """Resolve one landed row and, where the rules allow, record a proposal.
+
+        ``type_name`` is per-LAND, not per-act: finding B1 constructed one act
+        carrying a `project` and a `task` that share a label, and rule 4-10 without
+        the type in its key handed the task the project's `CandidateRef`.
+        """
+        tname = type_name or self.type_name
+        key = self._key(tname, label)
+
+        # --- rule 4-10: within one act, an IDENTITY is resolved once -----------
+        if "4-10" in self.enforce and key in self._minted:
+            return "reused", self._minted[key]
+
+        res = resolve_instance(
+            label, InstanceContext(act_id=self.act_id, proposed_by="ai:ingest"),
+            host=self.host, vocab=self.vocab, namespace=self.namespace,
+            type_name=tname, tier=tier)
+        if isinstance(res, Refusal):
+            return "refused", res
+
+        if res.outcome == "existing":
+            return "existing", res.ref
+        if res.outcome == "unknowable":
+            return "unknowable", None            # rule 4-7: no proposal, ever
+        if res.outcome == "not_an_instance" and "4-7-nai" in self.enforce:
+            # rule 4-7's SECOND outcome, finding Z6. The classifier SUCCEEDED and
+            # said this is not a thing; proposing over that answer in `auto` mode is
+            # how a column header becomes a host row.
+            return "not_an_instance", None
+
+        # rule 4-3: the type the host writes under is the EFFECTIVE one the
+        # resolution reports, never the declared one (`I-3`).
+        eff = (res.candidate.type_name if (res.candidate is not None
+                                           and "4-3-eff" in self.enforce) else tname)
+
+        warnings: list[str] = []
+        mode = "auto"
+        if res.outcome == "ambiguous":
+            warnings.append(f"instance_ambiguous_at_proposal:{eff}:{res.known}")
+            mode = "review"
+
+        # --- rule 4-11: who already holds an UNWRITTEN proposal for this key? --
+        pending = self.ledger.open_proposals(
+            self.vocab, self.namespace, "entity", tname, label,
+            raw=("4-10-key" not in self.enforce),
+            unreviewed_only=("4-11-written" not in self.enforce))
+        inv = Invocation(f"inv-{len(self.ledger.rows) + 1}", "propose_instance",
+                         self.namespace, eff, label, res.outcome, mode, (),
+                         kind="entity")
+        if pending and "4-11" in self.enforce:
+            warnings.append(f"instance_proposal_pending:{pending[0].invocation_id}")
+            inv.warnings = tuple(warnings)
+            self.ledger.record(inv)
+            # rule 4-13: the memory is written on EVERY branch that answers with a
+            # CandidateRef, not only on the one that mints (`I-3`'s rider, finding B5).
+            if res.candidate is not None:
+                self._minted[key] = res.candidate
+            return "pending", inv
+
+        inv.warnings = tuple(warnings)
+        self.ledger.record(inv)
+        if res.candidate is not None:
+            self._minted[key] = res.candidate
+        return "proposed", inv
+
+    def host_writes_for(self, inv: Invocation, instance_id: str) -> InstanceRecord:
+        """The HOST mints the identifier and the ledger records it. Rules 4-2, 4-3.
+
+        `I-5`: recording `minted_ref` is what closes rule 4-11's window, so the guard
+        stands down when the identity EXISTS rather than when a human drained a queue.
+        """
+        inv.minted_ref = f"{inv.namespace}:{inv.kind}:{inv.type_name}#{instance_id}"
+        self.host_writes.append(inv.minted_ref)
+        return InstanceRecord(inv.namespace, inv.kind, inv.type_name, instance_id,
+                              inv.label, {})
