@@ -421,6 +421,35 @@ def similar(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
+def get_instance_checked(
+    host: HostTable, vocab: Vocabulary, *, namespace: str, type_name: str,
+    instance_id: str,
+) -> InstanceRecord | Refusal | None:
+    """INGEST rule 2-15. Primitive 22 THROUGH the entry's declared `Condition`.
+
+    Round 1 finding M7: primitive 22 had no tenancy surface at all -- it took no
+    predicate and no filter, so rule 6-15's *"the registry evaluates it"* had nothing to
+    evaluate over, and a caller in one tenant could confirm another tenant's row by key.
+    The registry evaluates the entry's condition over the returned record: a record the
+    predicate FAILS is absent; one it cannot DECIDE is a refusal, never a silent pass.
+    """
+    if not host.capabilities.resolves_instances:
+        return Refusal("instance_source_absent",
+                       {"why": "this adapter answers no instance queries"})
+    entry = vocab.entry(namespace, type_name)
+    rec = host.get_instance(namespace, "entity", type_name, instance_id)
+    if rec is None or entry is None or entry.predicate is None:
+        return rec
+    verdict = evaluate(entry.predicate, rec, entry.readable)
+    if verdict.holds is True:
+        return rec
+    if verdict.holds is False:
+        return None
+    return Refusal("instance_source_absent",
+                   {"why": f"the declared predicate could not be decided on this "
+                           f"record: {verdict.why}"})
+
+
 def resolve_instance(
     candidate: str,
     context: InstanceContext,
