@@ -1221,3 +1221,210 @@ Lens 1 found three (A3, A6, A10). These are four more:
 **Seven failures of standing rule (d) in one round, every one inside the fixes of the round that invoked
 standing rule (d) as its own lesson.** That is the sharpest thing round 2 has to say, and §6.9 says it again
 with the totals.
+
+---
+
+### 6.8 Round 2, lens 4 — **the public data. NOT YET: 5 BLOCKING, 4 MAJOR, 1 MINOR, and TEN of twenty mutations survive.**
+
+**[Observed]** baseline reproduced first: 36/36, 13/13, 17/17, 11/11, 10/10 = **87/87**. Every mutation was
+applied to **copies**; no repo file was modified.
+
+**This lens's verdict has a shape the other three do not: the row's own gate cannot see its own FIRST TWO
+RULES being deleted.** Round 1's public-data lens proved the gate blind to §3.4's load-bearing sentence by
+mutation. Round 2's proves it blind to `C20-01` and `C20-04` — *this project stores no instance rows and mints
+no instance identifiers*, and *a write primitive for instances is a conformance failure* — **the two rules the
+R78 seam rests on.**
+
+#### 6.8a D4 — **ten of twenty mutations leave all 87 checks green, and the two worst are §1's own rules**
+
+**[Observed]**, each mutation applied to a copy of the one kit with all five design tests re-run:
+
+```
+M15  rule 1-1  C20-01  -- this project mints no instance identifiers
+     resolve_instance hands back a registry-invented ref on the live path where the
+     entry's predicate excluded every scanned row, over 209 real Colorado facilities:
+       outcome='existing' ref='cms:entity:facility#minted-by-registry' conf=1.0
+       scanned=209 complete=True
+     -> 36/36  13/13  17/17  11/11  10/10      SURVIVES
+
+M01  rule 2-1  C20-04  -- two primitives, both READS
+     added `put_instance` to HostTable                              SURVIVES 87/87
+M02  rule 2-2  C20-05  -- get_instance manufactures a record for an absent key   SURVIVES
+M03  rule 3-4  C20-18  -- returns 1 of 12 tied candidates, still reports known=12  SURVIVES
+M04  rule 3-11 C20-25  -- `tier` returned as ""; `.tier` asserted in no probe      SURVIVES
+M10  rule 6-17 C20-58  -- a `tenant` parameter added to CandidateQuery            SURVIVES
+M11  rule 2-12         -- the warning names host_filter VALUES instead of keys    SURVIVES
+M16  ING3 / C4-14      -- norm's ASCII-only collapse                             SURVIVES
+M17  rule 3-1  C20-15  -- a sixth value added to OUTCOMES                        SURVIVES (weak)
+M20  rule 3-9  C20-23  -- confidence=None, never 0.0                             SURVIVES (= A5)
+```
+
+**Ten of twenty survive; eight are survivors A5 did not name**, so §8.1's *"Nothing else in §2, §3, §4, §5 or
+§6 is unexercised after the amendments"* is false by **at least ten** rules rather than two.
+
+**And this qualifies a claim this run record has now made twice.** §6.5c item 8 and §6.7c item 5 both say
+*five lenses have failed to force an instance row into the registry*. **That remains true and it was
+established by READING** — `HostTable` genuinely has no writer as shipped, and this lens confirms it
+independently (§6.8c item 8). What M01 and M15 show is different and worse: **the row's own gate cannot detect
+either rule's deletion.** The seam holds; the *check* that it holds does not exist. That distinction is now
+written into §1 and §8.1 rather than left for a sixth lens to find.
+
+The ten that went red are listed in §6.8c so round 3 does not re-run them.
+
+#### 6.8b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **D1** | **BLOCKING** | **The kill-row family on the fixture the spec itself measured: rules 4-10/4-11 are a false-merge factory over real NYC data, because they key on `label` and §5.2/ING5 already prove the label is not an identity.** **[Observed]**, live `erm2-nwe9`, `agency=NYPD` / `complaint_type='Illegal Fireworks'` / `incident_zip=10032`, 3,342 real service requests: **`2746 of 3342 (82.2%) share their address with another REQUEST in the same slice`**, and `'1001 SAINT NICHOLAS AVENUE'` carries **twenty** distinct `unique_key`s. One act → `['proposed','reused',…]`, `ledger rows: 1` — **one `CandidateRef` for twenty genuinely distinct requests**. Across acts → `act-tuesday` gets `'pending'`, `identities minted: 1`. At batch scale, 842 real held requests and 800 real rows landed in one act: **`{'proposed': 316, 'existing': 112, 'reused': 372}` — 46.5% of a real ingest batch is never resolved, never scored, never recorded and never reviewed** | **ACCEPTED, and it is the third independent route to round 2's convergence** (with lens 2's B3 and lens 3's Z2). §5.2 states in terms that *the instance in `erm2-nwe9` is a service request keyed by `unique_key`*, and ING5 measures 59.7% address-sharing on `uvpi-gqnh` — **the document contradicts itself and the public data decides against 4-10/4-11 as written.** Design test 5 cannot see it because its fixture is a CMS provider name, where one label really is one thing, and `land()` is never called with a `host_filter` at all |
+| **D2** | **BLOCKING** | **A shape that does not survive UC3's own stated wedge: the store cannot be bootstrapped.** Rule 3-13 (`C20-67`, minted by round 1 to close K6) makes `scanned == 0` `unknowable`, and rule 4-7 forbids a proposal over an `unknowable`. **[Observed]** 800 real `erm2-nwe9` rows landed into an **empty** host: `{'unknowable': 800}`, `ledger rows written: 0`. Same over a *declared* `host_filter` key narrowing to zero rows: `outcome='unknowable' scanned=0 warnings=(…, 'instance_narrowed_proposal:incident_zip')` | **ACCEPTED.** `USE-CASES.md` UC3's natural task is *"land N datasets and get typed entities and relationships"* — **the first landed row of every dataset resolves `unknowable` for ever and no first instance can be proposed.** K6's case was a *retired type*; rule 3-13 as written binds **every** empty read, including the empty-store and empty-slice cases §2.1's own affordability argument creates. Rule 3-13 must distinguish *the type resolved to something with no rows* from *this namespace holds nothing yet* |
+| **D3** | **BLOCKING** | **Rule 3-14 silently swaps the SUCCESSOR's governed facts in under the caller — §6's tenancy predicate and §5's `MatchPolicy` both — and one ordinary `retire(successor=)` reaches R59's stated reversal condition.** **[Observed]**, design test 3's own CA+CO fixture with a California-only `Condition` on the entry the caller named: control → `existing #555338 CA`, `CO rows visible to this CALIFORNIA caller: 0`; **after one `retire(successor='ltc_facility')`** → `ambiguous known=2 warnings=('instance_type_succeeded:ltc_facility', …)`, `CO rows visible to this CALIFORNIA caller: 1 ['cms:entity:ltc_facility#065240']` — **5 of 5**, exactly P3's population and outcome, reached by retiring a type instead of omitting a keyword. Policy half, same data: **`73 of 1373 real CMS labels resolve DIFFERENTLY once 'facility' is retired`** | **ACCEPTED, and it is distinct from A1** (which is a two-hop chain giving two confident identity answers). Nothing in §5, §6 or §7 says a successor inherits its predecessor's `MatchPolicy` or `Condition`, and §7.2 makes the successor's entry **someone else's to declare**. §5.1's rule 5-6 — *two entries may declare different policies; two callers may not* — is defeated: **one caller gets both policies.** Aggravating and accepted with it: **rule 5-7 (`C20-41`) has no carrier** — `InstanceResolution` has no policy field and shipped `Invocation.declared_policy` carries `approval_mode`/`min_auto_tier`/`reversibility`, not the three thresholds. §4.4 names three amendments and does not name this one |
+| **D4** | **BLOCKING** | **Ten of twenty mutations leave all 87 green, and the two worst are rule 1-1 and rule 2-1 — §6.8a** | **ACCEPTED.** §8.1's closing sentence is withdrawn (already accepted at A5, now with the true magnitude), and **§1 gains an honest statement that the seam's two rules are asserted and unchecked.** Checks that go red are added for `C20-01`, `C20-04`, `C20-05`, `C20-18`, `C20-25`, `C20-58` and rule 2-12 |
+| **D5** | **BLOCKING** | **§3.2's *"Seven real CMS pairs land in it"* is wrong by at least 4.4x.** **[Observed]**, **re-derived independently by the worker** over all 14,627 distinct CCNs with the kit's own `similar(norm(a),norm(b))`, blocked on the first three normalised characters with a length window: **`pairs 0.97 <= s < 0.98 : 31`** and **`pairs 0.98 <= s < 0.99 : 31`**. The two the spec names are both in it, and among the rest: `'Springcreek Rehabilitation and Nursing Center'` vs `'SPRING CREEK …'` at 0.9890, `'Greenville Health and Rehabilitation Center'` vs `'GREENSVILLE …'` at 0.9885, `'VALLEY HEALTH CARE CENTER'` vs `'VALLEY HEALTHCARE CENTER'` at 0.9796, and `PARKVIEW`/`PARK VIEW CARE CENTER` in six states. **Blocking makes 31 a lower bound** | **ACCEPTED.** The number is the measured size of the near-miss population rules 3-3 / 5-8 exist to catch, it is cited in §3.2 **and** in §13 route 7, and it understates the row's own fixture pathology by more than four times. Both bands are printed with the method that derived them, and **ING6's *"the near-miss population is real"* is more real than the document says** |
+| **D6** | MAJOR | **M2's fix does not do what §2.1 claims: *"the reviewer can see what was not looked at"* is false over real NYC data.** **[Observed]** the label `'DYCKMAN STREET'` against three live `erm2-nwe9` slices — `incident_zip=10032` → `proposal scanned=3342`, `10040` → `ambiguous scanned=2921`, `10034` → `ambiguous` — **all three carrying the byte-identical warning `instance_narrowed_proposal:incident_zip`.** The 10032 proposal mints a new identity for a string the same host table answers to in two other slices | **ACCEPTED, and distinct from A12** (which is that the warning is appended to every outcome). Rule 2-12 keeps the values opaque **on purpose**, so the honest fix is to **withdraw §2.1's claim** and carry a *magnitude* the reviewer can act on — `scanned`, or the narrowed/unnarrowed ratio — rather than a key list |
+| **D7** | MAJOR | **§3.3's second illustrative number is not a member of the population it illustrates.** **[Observed]** the no-house-number population is `861,798 rows (3.85%)` over `16,005` distinct values today, `'BROADWAY' 24,166` — the headline figures reproduce — and the classifier that produced them **excludes anything starting with a digit**. `'5 AVENUE'` carries 12,827 rows and **starts with a digit**, so it is not one of the 16,005 | **ACCEPTED.** The measurement is right and the example is misfiled — and it matters, because `'5 AVENUE'` is precisely the case showing a house-number heuristic **cannot** work, presented as one the heuristic caught. The same sentence appears in this run record at §6.3b and is corrected there too |
+| **D8** | MAJOR | **ING5 converts *"share an address"* into *"resolve `ambiguous`"* 1:1, and `ambiguity_margin` makes the real rate higher and the tied sets 2.3x larger.** **[Observed]**, ING5's own `uvpi-gqnh`, one real zipcode (4,341 real DPR instances — the narrowed case §2.1 blesses), 150 real landed rows: `rows sharing an address: 1727 (39.8%)` → `{'ambiguous': 69, 'existing': 81}`, **`ambiguous rate 46.0% where ING5 predicts 39.8%`**, `tied-set sizes min=2 median=2 max=51`, `mean tied set 6.2 vs mean exact-duplicate group 2.7`. ING5's whole-table figures reproduce exactly (683,788 / 408,701 / 59.70% / 132) | **ACCEPTED.** **59.7% is a floor on the `ambiguous` rate, not the value**, and ING5 prints it as the value. The gap is `ambiguity_margin` pulling in near-miss addresses on the same street — the same mechanism D5 measures on CMS — so both the cost rule 4-5 imposes and the multiplicity `<n>` a reviewer sees are larger than the contortion says |
+| **D9** | MAJOR | **`discriminators` is printed as *"the host attributes that did NOT separate the tie"* and contains attributes that fully separate it — on 104 of 104 CMS ties by ING8's own measurement.** **[Observed]** the 12-way tie: `'city'` 12 distinct → SEPARATES ALL, `'zip'` 12 distinct → SEPARATES ALL, `'address'` 12 distinct → SEPARATES ALL; only `'state'` does not. ING8's 104/104 re-derived independently with exactly those four attributes | **ACCEPTED**, and it is lens 2's M1 reached from the data side — **two lenses independently.** The one field a human draining §4.3's queue is given to act on tells them the opposite of the truth on every CMS tie. Mutating it to `{}` goes red, so *something* is asserted; **nothing asserts what it means** |
+| **d-m1** | MINOR | **§3.2's K2 argument turns on a figure the document does not print.** §3.2 says *"with this document's own printed numbers — `match_at=0.97`, `ambiguity_margin=0.02`"*. **[Observed]**, re-verified by the worker: `0.02` occurs in `INGEST.md` **only inside that sentence** (line 346), and every probe declares `ambiguity_margin=0.03`. With 0.03 the band and the margin are equal and **there is no arithmetic gap** | **ACCEPTED.** The rule K2 produced (3-3 / 5-8, the set test) is correct and independently justified, and D5 shows the population it guards is real and larger than claimed — **only the motivating arithmetic is stated against a number the row does not carry**, and §13 route 7 repeats it |
+
+#### 6.8c What the lens attacked and could NOT break
+
+1. **Every pre-registered CMS figure, re-derived independently from the 165,336,194-byte file.**
+   `419479 / 14627 / 14498 / 104`, `headers: 23`, `Deficiency Corrected` distinct values **6**, and
+   `rows with BOTH dates: 416948, inverted: 5338, pct: 1.2803%`. **All exact.**
+2. **Design test 3's fixture claims.** `CA 1164 / CO 209 / sum 1373`; names spanning more than one state **84**;
+   and CA+CO really is the top pair — `CA CO 5, IN OH 3, IL TX 3, AL CO 2`. `MILLER'S MERRY MANOR` is 12 CCNs,
+   all `IN`.
+3. **Every spot figure §3.1 / §3.4 / §2.4 print.** `#745057` is the Texas veterans home; `#155049` is the
+   **first of the twelve in `instance_id` order**, which is what `cap=3541` names. K8's collision reproduces
+   exactly — both `ref_key`s are `cms:entity:facility#015009#2024-03-11`, `IDENTICAL: True`.
+4. **M9's CMS half, exactly.** `headers caught: 1 ['Provider Name']`, `not caught: 22`, **false positives 0 of
+   14,498**.
+5. **M9's UC3 half and Q90's arithmetic.** `16,005` distinct no-house-number values carrying `861,798` rows
+   today (round 1's 16,001 / 861,161 plus one day of 311 growth); `Q90: distinct (Survey Date, Correction
+   Date) pairs: 47,318` — the "absurd" workaround is exactly 47,318 pairs.
+6. **ING5's whole-table figures on `uvpi-gqnh`**, re-fetched: 683,788 / 408,701 / 59.70% / 132. Only the
+   *conversion* to an ambiguous rate is wrong (D8).
+7. **The three R58 page states over the live 9.7M-row partition, and design test 2's amended resolver.**
+   `unknowable complete=False scanned=2000` **from a real resolver**, with `MUTATED (Rule U last) -> ambiguous`.
+   **`I-1`'s fix is real and no confident answer could be got through it.**
+8. **The R78 seam itself, from a fifth direction.** No outcome *requires* an instance store;
+   `resolve_instance` returns `InstanceResolution | Refusal` and `HostTable` genuinely has no writer as
+   shipped. **What broke is not the seam but the row's ability to DETECT its violation** — D4.
+9. **The three-valued `Condition`, Kleene composition, and the `is_null` / `eq` split.** Every deletion goes
+   red, including `matches` added to `VALUE_OPS`, both warnings deleted, and `CandidateRef` given an id.
+10. **ING10 / M5 reproduces verbatim:** `Condition(op='gte', attribute='Correction Date', value='Survey Date')`
+    is accepted and returns `[False, False, False]` for inverted and valid rows alike.
+11. **§2.1's timing range, falsified a second time and in the other direction.** Today's unmodified design
+    test 2 printed `one 50000-row page took 12.45s` — **above** the printed ceiling of 8.4 s, on the same day
+    lens 1 measured 0.65 s **below** the printed floor. Not a new finding (A8 has it); recorded because two
+    independent falsifications in opposite directions inside one day is the argument for A8's disposition.
+
+**The ten mutations that went RED, so round 3 does not re-run them:** `discriminators` non-empty (§8);
+`CandidateRef` given an id (4-9 / `C20-69`); `no_tenancy_predicate` (7-4 / `C20-62`); `consumers_unregistered`
+(7-1 / `C20-59`); `matches` added (6-13 / `C20-54`); `scanned` counting pages (§8); `known` counting the set
+rather than the page (§2.2); truncated ⇒ `next_after=None` (2-4 / `C20-07`); `<n>` as the true multiplicity
+(4-12); the adapter scoring (2-6 / `C20-09` / `C0-04`).
+
+---
+
+### 6.9 Round 2, totalled — **19 BLOCKING, 18 MAJOR, 10 MINOR across four lenses. The findings did NOT shrink.**
+
+| lens | verdict | BLOCKING | MAJOR | MINOR | ids |
+|---|---|---|---|---|---|
+| 1 — the **fix auditor**, pointed at `07af54f`..`39d3718` | **NOT YET** | 5 | 7 | 4 | A1–A16 |
+| 2 — the **beacon integrator** | **NOT YET** | 5 | 4 | 4 | B1–B5, M1–M4, b-m1–b-m4 |
+| 3 — the **kill row** | **NOT YET** | 4 | 3 | 1 | Z1–Z8 |
+| 4 — the **public data** | **NOT YET** | 5 | 4 | 1 | D1–D9, d-m1 |
+| **round 2** | **NOT YET** | **19** | **18** | **10** | **47 findings** |
+
+**Round 1 was 11 BLOCKING / 20 MAJOR / 6 MINOR = 37. Round 2 is 47, and BLOCKING nearly doubled (11 → 19).**
+Four lenses, four verdicts of NOT YET, and no lens returned nothing. **This is row 6c's shape at a spec row**
+— *what changed each round was where the reviewers were pointed*, and the honest reading is stated here
+before the fixes so it cannot be tidied afterwards.
+
+#### 6.9a The four things round 2 says about the row
+
+**1. The register's prediction held, and it is now the sharpest statistic this row has.** The fix-auditor lens
+was pointed at exactly two commits and returned **five BLOCKING inside them**. Add lens 3's four and lens 4's
+findings against round-1-minted rules and the count is **seven failures of standing rule (d), every one inside
+the fixes of the round that invoked standing rule (d) as its own lesson**:
+
+| # | rule | minted at | the caller it also binds, unnamed by the commit | found by |
+|---|---|---|---|---|
+| 1 | the reserved-value accounting, §9 | F8's warnings fix | §9 itself — two minted values reserved nowhere | A3 |
+| 2 | the `31 of 100` number | §5.1 and §13 | §12, the third occurrence | A6 |
+| 3 | rule 2-14 / `flat_form_ok` | primitive 23 | the **shipped** `flat_form_problem` it cites | A10 |
+| 4 | rule 4-10 | the label that prompted it | `(namespace, kind, type_name)` — rule 4-11 one line below has it | B1 |
+| 5 | rules 4-10 / 4-11 | the word *label* | `norm`, the gate's own identity function | B3 / Z2 / D1 |
+| 6 | rule 3-14 | the identity **read** | the propose door and the host **write** | Z1 |
+| 7 | rule 4-7 | `unknowable` | `not_an_instance`, the other outcome that must mint nothing | Z6 |
+
+**A round's fixes are written by the person who has just read the findings, and that is exactly when the
+enumeration feels finished.**
+
+**2. Round 2 converged, and the convergence is the label.** Three lenses reached one defect from three
+directions — lens 2 from a capture writing one name two ways (**B3**), lens 3 from the CMS file's 71
+normalised keys carrying more than one raw spelling (**Z2**), lens 4 from `erm2-nwe9`'s 82.2% address-sharing
+and a batch in which **46.5% of rows are never resolved at all** (**D1**). Two more reached
+`discriminators` independently (**M1**, **D9**). Round 1's convergence was K1/P1 on a truncated scan; round
+2's is this: **rules 4-10 and 4-11 assume *same label ⇒ same thing*, and every fixture this row cites says
+otherwise.**
+
+**3. The row's probes are still the weakest artefact it ships, and now the measurement is exact.**
+**[Observed]** ten of twenty mutations leave all 87 checks green (**D4**), including `C20-01` and `C20-04` —
+*this project mints no instance identifiers* and *a write primitive for instances is a conformance failure*,
+**the two rules the R78 seam rests on**. The seam holds: five lenses have failed to force an instance row into
+the registry, and `HostTable` genuinely has no writer. **What does not exist is the check that it holds.**
+The countable-absence count over the *amended* kit is **nine** (§6.7d), three of them a previous trip's count
+shape, and §4's entire contract is posed by **one** of the five design tests — with one label, one type and
+one namespace.
+
+**4. Four numbers the document prints are wrong, and three of them are numbers the document argues from.**
+`Seventy-six` planned ids over **74** (A3); `18 of 100` where the spec elsewhere says 31 (A6); *seven* real
+CMS pairs where the worker independently re-derived **31** in `[0.97, 0.98)` and **31 more** in
+`[0.98, 0.99)` (D5); and `ambiguity_margin=0.02` where every probe declares **0.03**, which dissolves the
+arithmetic the K2 argument is built on (d-m1). **The rules those arguments produced are right; the arithmetic
+under them is not.**
+
+#### 6.9b The kill-row family in round 2 — **nine distinct constructions, and the trip count is still FOURTEEN**
+
+Every one is constructed against the **specification** and the **throwaway kit**, at a surface with no shipped
+door. **[Observed]**, standing rule (a), re-established by lens 3: `git diff --name-only a1b0364^..HEAD --
+ontoloche/` returns nothing and `resolve_instance` occurs zero times in `ontoloche/`. On
+[**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)'s reasoning they are **instance-surface
+records, not trips**, and **this row has incremented the kill-row count nowhere.**
+
+| # | the construction | the state it reaches | found by |
+|---|---|---|---|
+| 1 | the successor chain is followed for **one hop** | two `existing`/1.0 answers for one identity, both `complete=True` | A1 (§6.5a) |
+| 2 | rule 4-10 has **no type scope** | a `task` reuses a `project`'s `CandidateRef` and is never proposed | B1 (§6.6a.1) |
+| 3 | rule 4-11 asks a door with **no `label` filter** that returns the oldest 100 | two identities minted on a 250-row batch, no warning | B2 (§6.6a.2) |
+| 4 | the act keys on the **raw string**, the gate on `norm` | two host writes for one facility; 46.5% of a real NYC batch unresolved | B3 / Z2 / D1 |
+| 5 | rule 4-10's memory is written only on the `proposed` branch | three approvals, `ambiguous known=3` | B5 (§6.6a.4) |
+| 6 | rule 3-14 binds the **read** door and no door that **writes** | one `retire(successor=)` between two acts mints a second identity | Z1 (§6.7a A) |
+| 7 | a **drained** but unwritten proposal is invisible to rule 4-11 | the permission is re-issued *because* it was cashed | Z4 (§6.7a C) |
+| 8 | the tied set dedupes on `ref_key` | two host records under one `instance_id` collapse to one; the second vanishes | Z7 (§6.7a D) |
+| 9 | rule 3-14 swaps the **successor's governed facts** in under the caller | a California caller is handed Colorado refs, 5 of 5; 73 of 1,373 answers change | D3 (§6.8b) |
+
+**Numbering and classification are the supervisor's.** §6.5a and §6.6a carry `I-2`…`I-6` as *proposed* labels
+only; the final `I-n` assignment, and whether any of the nine is something other than an instance-surface
+record, is ruled rather than assumed. **Row 7a asserts only what it constructed.**
+
+#### 6.9c Round 2 is NOT clean, and round 3 is the cap
+
+**Stop condition** (standing constraint 7): two consecutive clean rounds, or three rounds plus an honest
+convergence note. Round 1 was NOT YET; round 2 is NOT YET. **Round 3 is the cap**, and it must be pointed as
+the register requires:
+
+1. **A fix-auditor lens first**, at round 2's fix diff — the same standing requirement that produced five
+   BLOCKING this round, in a round where the fix set is **larger** than round 1's.
+2. **Standing rule (d), enumerated rather than invoked.** Round 2 found seven failures of it. Round 3's
+   auditor checks that **each round-2 fix names every other caller it binds, in the commit that mints it** —
+   and this time the enumeration is written into the commit message rather than assumed.
+3. **A mutation sweep is now a required deliverable of the fix, not of the review.** D4 ran twenty mutations
+   and ten survived. Round 2's fixes must ship checks that go red for `C20-01`, `C20-04`, `C20-05`, `C20-18`,
+   `C20-25`, `C20-58`, rule 2-12 and rule 2-5, and the fix commit must state the survivor count it measured.
+
+**The honest thing to say before the fixes, so it cannot be tidied afterwards:** the findings did not shrink
+from round 1 to round 2, and the row should not expect round 3 to be clean either. What round 3 is for is to
+say **where** the remaining defects live, not to reach zero.
