@@ -383,3 +383,97 @@ ever be able to raise.
 
 **4.4 closes the loop back to design test 1.** A candidate the scan could not score is `unknowable` at
 the gate too — the gate never softens the fifth outcome into a fourth.
+
+---
+
+## 6. The adversarial loop
+
+**Cap 3 rounds** (standing constraint 7). Lenses: the **beacon integrator** (would the design partner's
+capture path go through this spec without a second resolution call?), the **public data** (does every shape
+survive CMS and NYC, and did any shape take its form because the partner has it?), and the **kill row**
+(does any resolution outcome let two instances answer to one identity through the confidence gate?). Every
+reviewer was briefed with [`../USE-CASES.md`](../USE-CASES.md) and required to **construct and run** each
+finding rather than argue it.
+
+**This section is written to disk as each lens returns** — row 6c's rule, adopted because a round's findings
+recorded only after the fixes are a round the record cannot audit.
+
+### 6.1 Round 1, lens 1 — **the beacon integrator. NOT YET: 4 BLOCKING, 7 MAJOR, 2 MINOR.**
+
+**The verdict in one sentence, and it is the sharpest thing this row has been told:** *the capture path does
+not go through this spec — it stops at the first call.* For the one case the design partner is actually
+missing — a project that does not exist yet — there is no invocation to make, because **the thing being
+proposed cannot be named as an input**.
+
+**All four BLOCKING findings are in §4, and they are one defect wearing four hats: §4's claim that a
+propose-at-ingest act needs NOTHING new from [`../specs/ACTIONS.md`](../specs/ACTIONS.md) is FALSE on the
+propose path — which is the only path §4 exists for.**
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **F1** | **BLOCKING** | **The gate cannot run before the host writes.** `InputSpec(ref="instance")` is validated at both doors (ACTIONS rule 6-6) and a thing being proposed has **no `InstanceRef` yet**. **[Observed]** omitting it → `Refusal(input_kind_mismatch, {"problem":"missing"})`; naming the type instead → `Refusal(input_kind_mismatch, {"declared":"instance","supplied":"type"})`; **inventing** an id → `Preflight allowed`, which rule `C20-01` forbids. Declaring the inputs optional is worse: `preflight` called with **nothing** returned `verdict='allowed'` — *the gate answered for a capture whose subject it never saw* | **ACCEPTED.** §4 gains a **fourth reference shape** and says so | 
+| **F2** | **BLOCKING** | **Rule 4-3 has no carrier.** **[Observed]** no field on `Invocation` carries a *result*. Route A — the minted ref in the `host_state` effect's `why` (its identity, ACTIONS 2.5-9) — makes a **correct** capture warn `effect_undeclared:host_state:created beacon:entity:task#t-9001…`, which is ACTIONS' own *"a detector that fires on a correct run is not a detector"* reproduced one document along. Route B — an optional `InputSpec` used as an output slot — works, and is one container meaning two things | **ACCEPTED.** Named as an amendment INGEST **asks of** ACTIONS, not one it can make |
+| **F3** | **BLOCKING** | **Rule 4-5 is not implementable with ACTIONS unchanged.** **[Observed]** `record_invocation`'s parameters contain neither `approval_mode` nor `warnings`; `declared_policy` is copied from the family, and the only shipped route to `review` is a governance act that moves **every subsequent row** there | **ACCEPTED.** Second required amendment |
+| **F4** | **BLOCKING** | **The kill criterion reaches the BATCH, and §13's five routes do not list it.** **[Observed]** two captures in one act both resolve the same label *before either is written*, both correctly answer `proposal` under rule 3-7 (`complete=True`), both are written — and the next capture resolves `ambiguous known=2 confidence=1.0` over `#p-9001` and `#p-9002`, permanently. **[Observed]** the string `idempot` occurs **zero** times in `INGEST.md` and `within the batch` **zero** times; all four `batch` hits are about scheduling | **ACCEPTED, and it is the most important finding of the round** — see §6.1a |
+| **F5** | MAJOR | **No relationship resolution, no dedupe, and no policy for one.** `CandidateQuery.kind` is *"always `entity` in v0"* and no call resolves an edge instance; **[Observed]** `add_edge` twice for one capture → two `edge_id`s, `neighbors known=2`. `InstanceRef.id` is non-optional, so *an edge to a thing not written yet* is inexpressible | **ACCEPTED** as a recorded contortion and a question — it is out of this row's scope and the spec must say so rather than imply it |
+| **F6** | MAJOR | **`InstanceContext` repeats ACT2 for prose, and the measurement is decisive.** **[Observed]** of the 104 shared-name ties, `row_attributes` separates **104/104** and `sibling_labels` **0/104** — the field that carries the signal is the one a capture cannot fill, and the field a capture *can* fill cannot break a tie by construction (tied candidates share a label, so their siblings are identical). `sibling_labels` is also **type-mixed**: resolving a task is handed a project name and a person name | **ACCEPTED.** The field is typed and the contortion recorded |
+| **F7** | MAJOR | **`instance_ambiguous_at_proposal:<n>` cannot say WHICH entity was ambiguous.** **[Observed]** a capture with a 3-way and a 2-way tie records `['instance_ambiguous_at_proposal:3','instance_ambiguous_at_proposal:2']` — two integers, no input name, no refs | **ACCEPTED.** One more segment, no new value |
+| **F8** | MAJOR | **Rules 7-1 and 7-4 name the resolution as their carrier and it has no field for them.** Rule 7-4 says *"the resolution says so"*; `InstanceResolution` has no `warnings`, and `why_incomplete` is `""` on a complete scan | **ACCEPTED** |
+| **F9** | MAJOR | **The evidence base does not reach the shapes §8 prints.** **[Observed]** `InstanceContext` (the call's second **positional** argument), `label_source`, `row_attributes`, `sibling_labels`, `resolves_instances`, `instance_filters`, `InstanceRecord.source_version`, `NotSupported` and `get_instance` were **never run** by any of the four design tests — and design test 1's own probe takes `min_confidence` as a **call parameter**, the exact shape rule 3-10 (`C20-24`) forbids | **ACCEPTED, and it is the round's second-most important finding**: the row's own probe contradicts the row's own rule |
+| **F10** | MAJOR | **`not_an_instance` is unreachable from prose.** **[Observed]** `'the team'`, `'next quarter'`, `'action items'`, `'TBD'`, `'the migration'` all → `proposal`; only `'Provider Name'` → `not_an_instance`. §3.3's mechanism is a class-word list built from column headers, and UC1 has no cells | **ACCEPTED** as a contortion, and §12's *"the partner's shape changed nothing"* is corrected |
+| **F11** | MAJOR | **§4.3 calls both consequences "mechanical" and the second is prose.** **[Observed]** `review_invocation(reviewed_by='ai:capture')` — the same actor that ingested — succeeds. ACTIONS §6.5/R73 argued only that a `reviewed_by=` **parameter on the write call** would allow self-review; it never claimed actor distinctness is enforced | **ACCEPTED.** The sentence is false as written |
+| **F12** | MINOR | **§12 tags `[Observed]` a claim this repository's own record tags `[Inferred]`**, from a source not in `docs/` | **ACCEPTED** — this is the one discipline the project cannot be loose about |
+| **F13** | MINOR | **Primitive 22 is called by nothing this document specifies.** `C20-05` is a rule about a primitive no caller reaches | **ACCEPTED**, and it has a real caller once named |
+
+### 6.1a F4 — the kill row's shape at the instance surface, reached in a SPEC before any code
+
+**Recorded to the standard the fourteen trip records set, because it is the same criterion one level down and
+the brief is explicit that this row's resolution outcome must not become a fifteenth by another name.**
+
+**The construction, [Observed], five ordinary steps and no guard bypassed:** one ingest act carries two rows
+whose labels resolve to the same thing. `resolve_instance` is called for each **before either is written** —
+which is the ordinary shape, because the host writes on approval. Both scans **finish** (`complete=True`), so
+rule 3-7 is satisfied and both correctly answer `proposal`. Both are approved. The store now holds two rows
+answering to one identity, and the *next* resolution reports it: `ambiguous known=2 confidence=1.0`.
+
+**Every rule in §3 fired correctly and the outcome is still two things answering to one identity.** That is
+the distinction the register's own trips turn on: this is not a guard that failed to look, it is **a guard
+that was never asked** — the state is created *between* two correct answers, and nothing in the document
+made the second call aware of the first.
+
+**Whose defect it is, stated plainly rather than argued.** It is **this document's**, introduced by this
+document, and it is **not** a fifteenth trip of the register's kill row: the register's fourteen are
+constructed against shipped code at the type-identity surface, and this is constructed against a
+specification with no implementation, at a surface that does not exist yet. **[Observed]** by construction:
+`git log` shows no code in this row, and the probe builds the state entirely out of `INGEST.md`'s own printed
+rules. The honest reading is the one the thirteenth countersignature used for its Variant A — *the loop
+reaching past its own diff* — inverted: **the loop reached the defect before the diff existed**, which is the
+whole reason a spec row runs an adversarial loop at all.
+
+**Standing rule (d) is what should have caught it and did not.** *A rule minted at the caller that prompted
+it is half-applied until the commit that mints it names every other caller it binds.* §3's ordering rule
+(`ambiguous` before `existing`) was minted at `resolve_instance` and the enumeration stopped there. The
+caller it also binds is **the ingest act**, which calls `resolve_instance` more than once and is the only
+place that knows the calls are related. The register's own rule named the gap and this row did not apply it.
+
+**Closed by:** a new rule in §4 with its own id, a sixth row in §13's table, and a probe that constructs the
+state and shows the rule refusing it. Recorded in §5 of this document as what the round cost.
+
+### 6.1b What the lens attacked and could NOT break — carried forward so round 2 is not re-tread
+
+1. **The reserved-value arithmetic.** **[Observed]** `types.REFUSAL_REASONS` is 31 and `types.WARNING_VALUES`
+   is 37, so §9's *"thirty-second refusal"* and *"thirty-eighth warning"* are exactly right and R11's
+   reservation argument holds.
+2. **§1's *"two primitives, no `put`"*.** The lens looked for a write the capture path forces this project to
+   perform and found none. **R78's seam survives the write side of a capture** — which is the claim §1.2 said
+   design test 1 had not tested, now tested from the other end by a reviewer trying to break it.
+3. **`C20-01`, no minted identifiers.** The registry produced no instance id; the reviewer had to invent one
+   by hand to get past `preflight`, which is the rule working.
+4. **Rules 3-3 / 3-4.** They fired correctly on the batch case — `ambiguous`, `known=2`, no `ref`. The
+   ordering rule is right; F4 is that it runs after the damage.
+5. **§4.2's provenance claim.** `InvocationProvenance` genuinely carries actor, tier, confidence, approver and
+   `source_version` for a capture. **No provenance field is missing** — §4.2 is the one part of §4 that holds
+   exactly as written.
+6. **`input_kind_mismatch` at both doors** holds under ingest load.
+7. **Deliberately not attacked by this lens:** §2.2's paging states, §6's twelve terms and their Kleene
+   composition, §6.2's null handling, and design tests 2 and 3's live measurements. Another lens takes those.
