@@ -4,17 +4,15 @@ match-vs-propose confidence gate, over real NYC 311 rows.
 
 `ROADMAP.md`'s Phase 3 homes instance resolution with the walkthrough's *"I already know
 38 of these"*. This test lands a batch in which a **known** fraction already exists and
-checks that each of the gate's three outcomes fires on the fraction it should -- and
-that the number is in the record rather than asserted.
+checks that each of the gate's outcomes fires on the fraction it should.
 
-**The design question it decides:** is the threshold a **call parameter** or a
-**declared, governed fact on the entry**? 4.3 runs the identical batch under two callers
-choosing different thresholds and counts the disagreements. A duplicate that exists
-because two callers picked different numbers is not a data problem, and it is not one
-the curation loop can see.
-
-The 200 landing rows are pulled live from ``erm2-nwe9`` and pinned into the run record
-by their ``unique_key``s, so the walk-through reproduces.
+**AMENDED BY ROUND 1.** **K3:** the gate had three verdicts of its own -- ``match`` /
+``propose`` / ``review`` -- and ``review`` was not one of the five that rule 3-1 closes,
+so this probe and design test 1 answered one landed row two ways. The gate now answers
+in `INGEST.md` 3.1's five outcomes, through the shared kit. **M3:** the headline number
+was a property of one ``setdefault`` line -- the host held one instance per *address*
+while the instance in ``erm2-nwe9`` is a service request keyed by ``unique_key``. Both
+numbers are now printed, and the un-deduped one is the honest headline.
 
 Run: ``py docs/tools/ingest_gate_probe.py``
 """
@@ -26,30 +24,35 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from ingest_seam_probe import (  # noqa: E402
-    CHECKS, CandidatePage, CandidateQuery, InstanceRecord, _norm, _similar, check,
+from ingest_probe_kit import (  # noqa: E402
+    EntryDeclaration, HostTable, InstanceContext, InstanceRecord, MatchPolicy,
+    Vocabulary, resolve_instance,
 )
+from ingest_seam_probe import CHECKS, check  # noqa: E402
 
 DATASET = "erm2-nwe9"
 RESOURCE = f"https://data.cityofnewyork.us/resource/{DATASET}.json"
+HOST_NARROWING = {"agency": "NYPD", "complaint_type": "Illegal Fireworks",
+                  "incident_zip": "11214"}
 
-#: The host's own narrowing, as design test 2 established it must be.
-HOST_NARROWING = ("agency='NYPD' AND complaint_type='Illegal Fireworks' "
-                  "AND incident_zip='11214'")
-
-#: The walkthrough's number, made literal.
 ALREADY_KNOWN = 38
-BAND = 24          # rows perturbed into the middle band
+BAND = 24
 BATCH = 100
 
-#: Deterministic, and every one of them is a real USPS/NYC abbreviation. Nothing here
-#: is a typo generator: this is the shape a second publisher's address column has.
+#: Declared on the ENTRY (rule 5-1), never on the call.
+NYC_POLICY = MatchPolicy(
+    match_at=0.97, propose_below=0.80, ambiguity_margin=0.03,
+    why="an address matching a held instance to 0.97 is that instance; below 0.80 it is "
+        "a different one; the band between is a human's call")
+
+#: Deterministic, and every one is a real USPS/NYC abbreviation. Not a typo generator:
+#: this is the shape a second publisher's address column has.
 ABBREVIATIONS = (
     (r"\bSTREET\b", "ST"), (r"\bAVENUE\b", "AVE"), (r"\bROAD\b", "RD"),
     (r"\bPLACE\b", "PL"), (r"\bBOULEVARD\b", "BLVD"), (r"\bEAST\b", "E"),
@@ -65,79 +68,55 @@ def abbreviate(text: str) -> str:
     return out
 
 
-@dataclass(frozen=True)
-class MatchPolicy:
-    """The gate, three-valued per R60. **Declared on the entry, never on the call.**
-
-    ``match_at`` and ``propose_below`` are the two thresholds and the band between them
-    is the third outcome -- a human's, not a default's.
-    """
-
-    match_at: float
-    propose_below: float
-    why: str
-
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.propose_below <= self.match_at <= 1.0):
-            raise ValueError("propose_below must not exceed match_at")
-        if not (self.why or "").strip():
-            raise ValueError("MatchPolicy.why is required and non-empty")
-
-    def verdict(self, score: float | None) -> str:
-        if score is None:
-            return "unknowable"
-        if score >= self.match_at:
-            return "match"
-        if score < self.propose_below:
-            return "propose"
-        return "review"
-
-
-class StaticHost:
-    def __init__(self, rows: list[InstanceRecord]) -> None:
-        self._rows = sorted(rows, key=lambda r: r.instance_id)
-
-    def find_instance_candidates(self, q: CandidateQuery) -> CandidatePage:
-        pool = [r for r in self._rows
-                if (r.namespace, r.kind, r.type_name) == (q.namespace, q.kind,
-                                                          q.type_name)]
-        return CandidatePage(records=tuple(pool), known=len(pool), complete=True,
-                             why_incomplete=None, next_after=None)
-
-
-def best_score(label: str, host: StaticHost) -> tuple[str | None, float | None]:
-    page = host.find_instance_candidates(
-        CandidateQuery(namespace="nyc", kind="entity", type_name="service_request"))
-    norm = _norm(label)
-    best: tuple[str | None, float] = (None, 0.0)
-    for rec in page.records:
-        s = _similar(norm, _norm(rec.label))
-        if s > best[1]:
-            best = (f"{rec.namespace}:{rec.kind}:{rec.type_name}#{rec.instance_id}", s)
-    return best[0], round(best[1], 4)
-
-
 def soda(params: dict) -> list[dict]:
+    where = " AND ".join(f"{k}='{v}'" for k, v in sorted(HOST_NARROWING.items()))
+    params = {**params, "$where": where}
     with urllib.request.urlopen(f"{RESOURCE}?{urllib.parse.urlencode(params)}",
                                 timeout=300) as fh:
         return json.load(fh)
 
 
+def nyc_vocab() -> Vocabulary:
+    v = Vocabulary()
+    v.declare("nyc", "service_request", EntryDeclaration(policy=NYC_POLICY))
+    return v
+
+
+def rec(row: dict) -> InstanceRecord:
+    return InstanceRecord("nyc", "entity", "service_request", row["unique_key"],
+                          row["incident_address"].strip().upper(),
+                          {"complaint_type": row.get("complaint_type"),
+                           "zip": row.get("incident_zip")})
+
+
+def run_batch(batch, host) -> tuple[dict, dict]:
+    vocab = nyc_vocab()
+    tally: dict[str, Counter] = {}
+    examples: dict[str, tuple[str, float]] = {}
+    for kind, label in batch:
+        r = resolve_instance(label, InstanceContext(act_id="dt4"), host=host,
+                             vocab=vocab, namespace="nyc",
+                             type_name="service_request", tier="sonnet")
+        tally.setdefault(kind, Counter())[r.outcome] += 1
+        examples.setdefault(f"{kind}:{r.outcome}", (label, r.confidence or 0.0))
+    return tally, examples
+
+
 def main() -> int:
-    print("DESIGN TEST 4 -- \"I already know 38 of these\", the confidence gate")
+    print('DESIGN TEST 4 -- "I already know 38 of these", the confidence gate')
     print(f"  live from {RESOURCE}, {date.today().isoformat()}")
     print(f"  host narrowing: {HOST_NARROWING}")
 
-    raw = soda({"$where": HOST_NARROWING, "$limit": 400, "$order": "unique_key",
+    raw = soda({"$limit": 400, "$order": "unique_key",
                 "$select": "unique_key,incident_address,complaint_type,incident_zip"})
     rows = [r for r in raw if r.get("incident_address")]
-    # distinct addresses, so "already known" is a fact about the instance and not an
-    # artefact of one address appearing twice in the source
     seen: dict[str, dict] = {}
     for r in rows:
         seen.setdefault(r["incident_address"].strip().upper(), r)
     distinct = sorted(seen.values(), key=lambda r: r["unique_key"])
-    print(f"  {len(raw)} rows fetched, {len(distinct)} with a distinct address")
+    shared = len(rows) - len(distinct)
+    print(f"  {len(raw)} rows fetched, {len(distinct)} with a distinct address, "
+          f"{shared} sharing one ({shared / max(len(rows), 1):.0%})")
     check("the live partition supplies enough distinct addresses for the batch",
           len(distinct) >= ALREADY_KNOWN + BAND + 20, f"{len(distinct)}")
 
@@ -145,96 +124,116 @@ def main() -> int:
     banded = distinct[ALREADY_KNOWN:ALREADY_KNOWN + BAND]
     novel = distinct[ALREADY_KNOWN + BAND:]
 
-    # The HOST already holds these, and the band rows too -- in their FULL spelling.
-    host_rows = [
-        InstanceRecord("nyc", "entity", "service_request", r["unique_key"],
-                       r["incident_address"].strip().upper(),
-                       {"complaint_type": r.get("complaint_type"),
-                        "zip": r.get("incident_zip")})
-        for r in known + banded
-    ]
-    host = StaticHost(host_rows)
-    print(f"  host holds {len(host_rows)} instances "
-          f"({ALREADY_KNOWN} exact + {BAND} that will land abbreviated)")
-
-    # The landing batch: 38 exact, BAND abbreviated, the rest genuinely new.
     batch: list[tuple[str, str]] = []
     batch += [("known", r["incident_address"].strip().upper()) for r in known]
-    batch += [("banded", abbreviate(r["incident_address"].strip()))
-              for r in banded]
+    batch += [("banded", abbreviate(r["incident_address"].strip())) for r in banded]
     for r in novel[: BATCH - ALREADY_KNOWN - BAND]:
-        batch.append(("novel", f"{r['incident_address'].strip().upper()} "
-                               f"REAR ANNEX {r['unique_key'][-4:]}"))
+        batch.append(("novel", f"{r['incident_address'].strip().upper()} REAR ANNEX "
+                               f"{r['unique_key'][-4:]}"))
     print(f"  landing batch: {len(batch)} rows "
           f"({sum(1 for k, _ in batch if k == 'known')} known / "
           f"{sum(1 for k, _ in batch if k == 'banded')} abbreviated / "
           f"{sum(1 for k, _ in batch if k == 'novel')} new)")
 
-    policy = MatchPolicy(
-        match_at=0.97, propose_below=0.80,
-        why="an address that matches a held instance to 0.97 is that instance; below "
-            "0.80 it is a different one; the band between is a human's call")
-    print(f"\n4.1 the gate, declared on the entry: match_at={policy.match_at} "
-          f"propose_below={policy.propose_below}")
-
-    tally: dict[str, dict[str, int]] = {}
-    examples: dict[str, tuple[str, float]] = {}
-    for kind, label in batch:
-        _, score = best_score(label, host)
-        v = policy.verdict(score)
-        tally.setdefault(kind, {}).setdefault(v, 0)
-        tally[kind][v] += 1
-        if kind not in examples or v == "review":
-            examples.setdefault(f"{kind}:{v}", (label, score or 0.0))
+    # --- 4.1 the DEDUPED host: one instance per address ---------------------
+    print(f"\n4.1 the gate on a host holding ONE instance per address "
+          f"(match_at={NYC_POLICY.match_at} propose_below={NYC_POLICY.propose_below})")
+    dedup_host = HostTable([rec(r) for r in known + banded])
+    tally, examples = run_batch(batch, dedup_host)
     for kind in ("known", "banded", "novel"):
-        print(f"  {kind:>7}: {dict(sorted(tally.get(kind, {}).items()))}")
+        print(f"  {kind:>7}: {dict(sorted(tally.get(kind, Counter()).items()))}")
     for k, (label, s) in sorted(examples.items()):
-        print(f"     {k:<16} e.g. {label[:52]!r} @ {s}")
-
-    matched = tally.get("known", {}).get("match", 0)
+        print(f"     {k:<20} e.g. {label[:46]!r} @ {s}")
+    matched = tally.get("known", Counter()).get("existing", 0)
     print(f"\n  the number: {matched} of {ALREADY_KNOWN} already-known rows matched")
-    check(f"all {ALREADY_KNOWN} already-known rows fire `match` and nothing else does "
-          f"from that group", matched == ALREADY_KNOWN
-          and set(tally.get("known", {})) == {"match"}, str(tally.get("known")))
-    check("the abbreviated rows land in the REVIEW band rather than silently matching "
-          "or silently proposing",
-          tally.get("banded", {}).get("review", 0) >= BAND * 0.5,
-          str(tally.get("banded")))
+    check(f"all {ALREADY_KNOWN} already-known rows fire `existing` and nothing else "
+          f"does from that group",
+          matched == ALREADY_KNOWN and set(tally.get("known", {})) == {"existing"},
+          str(dict(tally.get("known", Counter()))))
+    check("the abbreviated rows land in the AMBIGUOUS band rather than silently "
+          "matching or silently proposing",
+          tally.get("banded", Counter()).get("ambiguous", 0) >= BAND * 0.5,
+          str(dict(tally.get("banded", Counter()))))
     check("the genuinely new rows propose, and none of them matches",
-          tally.get("novel", {}).get("match", 0) == 0, str(tally.get("novel")))
-
-    # --- 4.2 all three outcomes fired ---------------------------------------
-    fired = {v for kind in tally for v in tally[kind]}
+          tally.get("novel", Counter()).get("existing", 0) == 0,
+          str(dict(tally.get("novel", Counter()))))
+    fired = {o for kind in tally for o in tally[kind]}
     print(f"\n4.2 outcomes that fired across the batch: {sorted(fired)}")
-    check("all three of the gate's outcomes fire on one batch of real rows",
-          {"match", "review", "propose"} <= fired, str(sorted(fired)))
+    check("the gate answers ONLY in INGEST 3.1's five outcomes -- no sixth verdict "
+          "(round 1, K3)", fired <= set(("existing", "ambiguous", "proposal",
+                                         "not_an_instance", "unknowable")),
+          str(sorted(fired)))
+    check("and all three of the gate's own outcomes fire on one batch of real rows",
+          {"existing", "ambiguous", "proposal"} <= fired, str(sorted(fired)))
 
-    # --- 4.3 the threshold as a CALL PARAMETER, constructed as a failure -----
-    print("\n4.3 the same batch under two callers who chose their own thresholds")
-    lax = MatchPolicy(0.86, 0.80, why="caller A")
-    strict = MatchPolicy(0.995, 0.80, why="caller B")
-    disagree = 0
-    both: list[tuple[str, str, str, float]] = []
+    # --- 4.3 the UN-DEDUPED host: the host's actual rows (round 1, M3) ------
+    print("\n4.3 the SAME batch against the host's ACTUAL rows -- round 1 finding M3")
+    print("    (`erm2-nwe9`'s instance is a service request keyed by unique_key, not an "
+          "address)")
+    real_host = HostTable([rec(r) for r in rows
+                           if r["incident_address"].strip().upper()
+                           in {k["incident_address"].strip().upper()
+                               for k in known + banded}])
+    tally2, _ = run_batch(batch, real_host)
+    for kind in ("known", "banded", "novel"):
+        print(f"  {kind:>7}: {dict(sorted(tally2.get(kind, Counter()).items()))}")
+    real_matched = tally2.get("known", Counter()).get("existing", 0)
+    real_amb = tally2.get("known", Counter()).get("ambiguous", 0)
+    print(f"\n  the honest number: {real_matched} of {ALREADY_KNOWN} matched, "
+          f"{real_amb} correctly refused to guess")
+    check("4.3 the deduped host answers 38 of 38 and the host's ACTUAL rows answer "
+          "fewer -- and the difference is `ambiguous`, which is the call working "
+          "rather than failing",
+          real_matched + real_amb == ALREADY_KNOWN and real_amb > 0,
+          f"existing={real_matched} ambiguous={real_amb}")
+    check("4.3 and NOT ONE of the multiplicities was collapsed into a false `existing`",
+          real_matched < ALREADY_KNOWN or shared == 0,
+          f"{real_matched} of {ALREADY_KNOWN}, {shared} rows share an address")
+
+    # --- 4.4 the threshold as a call parameter, constructed as a failure ----
+    print("\n4.4 the same batch under two ENTRIES declaring different thresholds")
+    print("    (which is what a per-CALL threshold would let two callers do)")
+    lax, strict = Vocabulary(), Vocabulary()
+    lax.declare("nyc", "service_request", EntryDeclaration(
+        policy=MatchPolicy(0.86, 0.80, 0.03, why="caller A")))
+    strict.declare("nyc", "service_request", EntryDeclaration(
+        policy=MatchPolicy(0.995, 0.80, 0.003, why="caller B")))
+    disagree, shown = 0, []
     for kind, label in batch:
-        _, score = best_score(label, host)
-        va, vb = lax.verdict(score), strict.verdict(score)
-        if va != vb:
+        a = resolve_instance(label, InstanceContext(act_id="A"), host=dedup_host,
+                             vocab=lax, namespace="nyc", type_name="service_request",
+                             tier="sonnet")
+        b = resolve_instance(label, InstanceContext(act_id="B"), host=dedup_host,
+                             vocab=strict, namespace="nyc",
+                             type_name="service_request", tier="sonnet")
+        if a.outcome != b.outcome:
             disagree += 1
-            if len(both) < 3:
-                both.append((label, va, vb, score or 0.0))
-    print(f"  {disagree} of {len(batch)} rows resolve DIFFERENTLY for the two callers")
-    for label, va, vb, s in both:
-        print(f"     {label[:46]!r} @ {s}: caller A -> {va}, caller B -> {vb}")
-    check("a per-call threshold makes one landed row resolve two ways into ONE "
-          "vocabulary -- so the threshold is a governed fact on the entry, not an "
-          "argument", disagree > 0, f"{disagree} rows")
+            if len(shown) < 3:
+                shown.append((label, a.outcome, b.outcome, a.confidence or 0.0))
+    print(f"  {disagree} of {len(batch)} rows resolve DIFFERENTLY")
+    for label, va, vb, s in shown:
+        print(f"     {label[:42]!r} @ {s}: A -> {va}, B -> {vb}")
+    check("4.4 a per-caller threshold makes one landed row resolve two ways into ONE "
+          "vocabulary -- so the threshold is a governed fact on the entry (rule 5-1)",
+          disagree > 0, f"{disagree} rows")
 
-    # --- 4.4 the fourth verdict, and it is not the gate's to soften ----------
-    print("\n4.4 an unscored candidate")
-    print(f"  policy.verdict(None) -> {policy.verdict(None)!r}")
-    check("a candidate the scan could not score is `unknowable`, not `propose` -- "
-          "design test 1's fifth outcome, at the gate",
-          policy.verdict(None) == "unknowable")
+    # --- 4.5 the fifth outcome, at the gate ---------------------------------
+    print("\n4.5 a candidate the read could not finish")
+    capped = HostTable([rec(r) for r in known + banded], scan_cap=5)
+    r5 = resolve_instance(batch[0][1], InstanceContext(act_id="dt4"), host=capped,
+                          vocab=nyc_vocab(), namespace="nyc",
+                          type_name="service_request", tier="sonnet")
+    r5_mut = resolve_instance(batch[0][1], InstanceContext(act_id="dt4"), host=capped,
+                              vocab=nyc_vocab(), namespace="nyc",
+                              type_name="service_request", tier="sonnet",
+                              _mutate="rule_u_last")
+    print(f"  over a truncated read -> outcome={r5.outcome!r} complete={r5.complete}")
+    print(f"  MUTATED               -> outcome={r5_mut.outcome!r}")
+    check("4.5 the gate never softens the fifth outcome into a fourth",
+          r5.outcome == "unknowable", r5.outcome)
+    check("4.5 MUTATION: the broken ordering answers confidently over an unfinished "
+          "read at the gate too -- the check goes red",
+          r5_mut.outcome != "unknowable", r5_mut.outcome)
 
     print("\n" + "=" * 78)
     failed = [c for c in CHECKS if not c[1]]

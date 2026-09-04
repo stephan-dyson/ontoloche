@@ -622,13 +622,14 @@ nothing may be minted meanwhile** — and rule 4-5 routes both to the same queue
 
 ### 5.1 Why the threshold is declared and not passed — **the failure, constructed**
 
-**[Observed], design test 4:** the identical batch, under two callers who each chose their own threshold,
-resolves **differently on 18 of 100 rows** — every one an address in the band:
+**[Observed], design test 4:** the identical batch, under two ENTRIES declaring different thresholds
+— which is exactly what a per-*call* threshold would let two callers do —
+resolves **differently on 31 of 100 rows**:
 
 ```
-'2260 BENSON AVE' @ 0.9091: caller A -> match, caller B -> review
-'1602 SHORE PKWY' @ 0.9091: caller A -> match, caller B -> review
-'130 BAY   47 ST' @ 0.8667: caller A -> match, caller B -> review
+'7502 18 AVENUE'   @ 1.0: caller A -> ambiguous, caller B -> existing
+'8004 20 AVENUE'   @ 1.0: caller A -> ambiguous, caller B -> existing
+'1767 BATH AVENUE' @ 1.0: caller A -> ambiguous, caller B -> existing
 ```
 
 Each caller is internally consistent. The store ends up holding duplicates **whose cause is which caller
@@ -1061,7 +1062,7 @@ one, and the four rows added by the loop are marked.
 | two candidates tie and the top one is returned | **Rules 3-3 / 3-4**: the tie test is a **set** test and `ref` is `None`. **[Observed]** on twelve real facilities scoring 1.0 |
 | a truncated scan finds nothing and a duplicate is proposed | **Rules 3-5 / 3-6 / 3-7**: `unknowable` is an outcome and `proposal` requires a finished read. **[Observed]** at `cms:entity:facility#745057` |
 | an undecidable tenancy predicate silently excludes the real match | **Rules 6-4 / 6-16**. **[Observed]** both readings constructed on 1,373 rows |
-| two callers with different thresholds each create a row | **Rule 5-1**. **[Observed]** 18 of 100 rows disagree when it is not the entry's |
+| two callers with different thresholds each create a row | **Rule 5-1**. **[Observed]** 31 of 100 rows disagree when it is not the entry's |
 | an ingest family proposes a `kind="predicate"` type at volume | **Rule 4-8**: `ACTIONS.md` §2.5's allowlist |
 | **a truncated scan FINDS a match and returns `existing` at 1.0** *(round 1, K1/P1 — the tie test evaluated over a partial extent, which is the register's fifth trip one surface down)* | **Rules 3-5 / 3-6**, as amended: completeness is checked before the candidate set is interpreted at all |
 | **the match band is wider than the ambiguity margin, so two candidates are both match-grade and one is named** *(round 1, K2 — seven real CMS pairs, no truncation)* | **Rules 3-3 / 5-8**: the tied set is every candidate at or above `match_at`, and `existing` requires exactly one |
