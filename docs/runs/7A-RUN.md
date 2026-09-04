@@ -2186,3 +2186,114 @@ counts it.** Offered to the register as the natural extension of standing rule (
 4. **The loop became predictive**, seven of seven, pre-registered.
 5. **The row ships `INGEST.md` as a v0 with eight open findings named above**, not as a finished document.
    That is the honest state, and §8.1 carries it in the spec rather than only here.
+
+#### 6.16e **COUNTERSIGNED — [R88](../decisions/2026-09-04-7a-supervisor-ruling-R88.md), without amendment**
+
+Three rounds, **eleven lens verdicts, not one clean round**, and the note above is countersigned as written.
+Three things R88 adds, and the first is the one this row cares about most.
+
+**1. R88 part one is a CORRECTION TO R87, and the register keeps the correction rather than the tidier
+version.** R87 recorded that the loop had become predictive and told the founder it went *beside* the
+non-shrink rather than instead of it — true, and it stands. But it framed the result favourably and stopped
+there. §6.16a named the half it left out, and R88 adopts it verbatim: *predicting your own next defect and
+then shipping it is not a success; **P3 was written by the same person who wrote rule 3-19 and did not fix it
+before the lenses ran**; what the loop is good at is finding, and what this row has not demonstrated is
+preventing.* **A countersignature that presents seven-of-seven as a win without that sentence is doing the
+thing this register warns about — a tidy story that reads as rigour.**
+
+**2. §6.16c is ACCEPTED into the register**, as the complement to R85's enumeration obligation. The pair now
+reads: **a minting commit enumerates the doors a rule binds; a fixing commit enumerates the findings it did
+not close** — *or a later round finds them and counts them.* Nineteen was this row's count.
+
+**3. `stop` is put to the founder for the ELEVENTH time, and the FIRST without a trip.** Every previous put
+was attached to a kill-row trip against shipped code; this row put none, and the count stayed at fourteen
+throughout. **So the question reaching the founder is not *"has the guard failed again?"* but *"is the
+adversarial loop still worth what it costs?"*** Both columns are at R88; the four *for* are the non-shrink,
+the defect-inside-the-fix at every round, the nineteen unbound dispositions, and prediction-is-not-prevention.
+The three *against* are the seam holding under seven lenses, eight cells of one family found **before any code
+exists at the cost of one spec row**, and the pre-registered seven-of-seven.
+
+**R88's recommendation — and it is built on this row's own sharpest self-criticism:** *do not stop the loop;
+**stop housing it in build rows***. A loop that can predict where its next defect will be is **wasted inside a
+row that writes the rule first and predicts second** — which is exactly the configuration §6.16a indicts,
+because P3 could only ever be *confirmed*, never *acted on*. **In a dedicated identity-surface row with no
+diff of its own, the prediction arrives BEFORE the rule is written, and that is the only configuration in
+which prediction becomes prevention.** The founder rules; this is a recommendation.
+
+---
+
+## 7. What this row taught
+
+**1. A citation is not an implementation, and this row learned it twice in one round.** R84 told the row to
+cite shipped code as its normative reference rather than restate the ruling behind it. §3.4a did cite
+`_identity_closure` — and took its **three termination rules and one of its three relations**, which is `I-8`,
+the worst-outcome cell of the family (`mode='auto'`, a second row written with no human). R87's clause is the
+lesson: *a normative citation binds you to ALL of it, and must enumerate by name what it adopts and what it
+declines.* **ING12 is that enumeration**, and writing it forced the row to articulate *why* it diverges —
+the shipped function answers *"which names mean this"* for a read that can act on a partial answer; this one
+answers *"may I mint an identity"*, which cannot. That sentence did not exist until the citation was audited.
+
+**2. The mutation harness is an artefact and takes the same rule as the probes it runs.** The row's first
+sweep reported a real defect as *surviving*, because it disabled a fix by flipping a default the design tests
+override explicitly (§6.10e-i). Round 3's E4 then found the **recorded method** was the superseded one, so the
+numbers were not reproducible from the record. **A harness that cannot fail is the same object as a check that
+cannot go red**, and the row had written that standard three rounds earlier.
+
+**3. A number the document argues from must be re-derived, not carried.** Four printed numbers were wrong
+across three rounds, and **the §9 count sentence was wrong three separate times** — 76-over-74, 81-over-85,
+89-over-90 — the last two in a sentence that *claimed the count had been derived*. The fix that finally held
+was to count the thing the sentence is about (rule **rows**) and to record why the obvious id command
+over-counts: **it matches itself inside the paragraph documenting it.**
+
+**4. `unknowable` is the load-bearing outcome, and it earned its place five times over.** It was predicted in
+§0.2 before the probe existed, and the row then found five *more* absorbers it needed: a broken chain, changed
+governed facts, an uncountable extent, a dangling successor, a successor name that corrupts the flat form.
+**Every one of the eight cells is the same sentence — *this door cannot prove the set is the identity's
+extent* — and standing rule (e) is that sentence generalised.**
+
+**5. Two implementations of one identity question is how a family gets born.** Round 1's kill-row lens found
+two resolvers ordering one rule opposite ways; the fix made one kit. Round 2 then found the **act** was a
+second implementation of the same question (`I-3`, `I-4`, `I-5`), and moving it into the kit closed a
+countable absence as a side effect of the design. Round 3 found the **act's key** was a third — `norm`
+equality against the gate's `similar >= match_at`. *The lesson is not "share code"; it is that an identity
+question asked at two doors will be answered two ways, and the register's own count says so.*
+
+**6. What the row could not do, stated because it matters more than what it could.** It could not make the
+loop **prevent**. It named where its next defect would live and shipped that defect anyway. **Nineteen
+findings it marked ACCEPTED bound no commit.** Both are in R88's *for stop* column and both are fair.
+
+---
+
+## 8. Questions for the supervisor — **Q91 onward**
+
+Q85–Q90 are `INGEST.md` §11's and stand as raised. Round 3 adds three, and **Q91 is the founder's**.
+
+**Q91 — when a `retire(successor=)` hop changes the governed facts, should `resolve_instance` DECLINE to
+answer?** Raised in **Q56's shape**, because it has Q56's property: *it changes what the registry declines to
+serve.* The row's decision — **no inheritance**, rules 3-18 / 5-10 / 6-18 / 7-5 — is the default in force and
+is recorded at `INGEST.md` §5.3 with the reasoning and the refused alternative. **[Observed]** its blast
+radius is total: after a retire that changes the policy, **1,373 of 1,373** real CMS labels answer
+`unknowable`. Readings (a) decline, (b) inherit silently — **refused by this row and the refusal recorded** —
+and (c) inherit with a warning. **(a) and (c) differ only in whether the registry declines or warns, which is
+what Q56 asks on the read side, so they should be answered together and by the same person.**
+
+**Q92 — rules 4-10 and 4-11 assume *same label ⇒ same thing*, and the public data says otherwise.** Round 2
+fixed the label's **spelling**; round 3's P4 measured that the assumption underneath is what fails, and that
+the fix made it **worse**: **[Observed]** live `erm2-nwe9`, address collision **82.2% → 83.7% after the
+normaliser**, and one act over a real 3,342-row slice gives `{'proposed': 1044, 'reused': 2298}` — **68.8% of
+the batch never resolved, never scored, never recorded.** §5.2 states in terms that this dataset's instance is
+a service request keyed by `unique_key`. **The honest fix is not another key**: it is for
+`InstanceContext.row_attributes` to be **read**, which round 3's B8 found no rule binds and no code consults —
+ING8 prices its *emptiness* for a prose source and nothing prices its *inertness*. That is a design change
+above this row.
+
+**Q93 — rule 3-19's read cost is (hops+1)× and §2.1's affordability argument is stated for ONE read.**
+**[Observed]** live: 1 → 4 `read_types` takes 725 → 2,900 rows and 0.3 s → 1.5 s; **[Inferred]** at the hop cap
+the unnarrowed case is ~1,764 requests, **≈32 minutes for one landed row**. The extent spanning the whole
+closure is what closes `I-3` and `I-8`, so the cost is not optional — but it is unpriced, and §2.1 is the
+argument a build row will plan against. Related: **[Observed]** §2.1's printed timing range has now been
+falsified **three times in two days**, twice below the floor and once above the ceiling, which is its own
+answer about pinning a live measurement in a spec.
+
+**Not raised as questions, because they are the build row's inputs** (R88 part four): the eight open findings
+at §6.16b, with **E22 first and E2 second**.
