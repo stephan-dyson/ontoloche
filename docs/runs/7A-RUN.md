@@ -477,3 +477,132 @@ state and shows the rule refusing it. Recorded in §5 of this document as what t
 6. **`input_kind_mismatch` at both doors** holds under ingest load.
 7. **Deliberately not attacked by this lens:** §2.2's paging states, §6's twelve terms and their Kleene
    composition, §6.2's null handling, and design tests 2 and 3's live measurements. Another lens takes those.
+
+### 6.2 Round 1, lens 2 — **the kill row. NOT YET: 4 BLOCKING, 4 MAJOR, 2 MINOR, and it found a trip.**
+
+**Provenance first, standing rule (a).** **[Observed]** `grep -rc "resolve_instance\|MatchPolicy\|find_instance_candidates" ontoloche/` returns **zero**: the instance-identity surface does not exist in shipped code, so there is no earlier commit to bisect against. Every finding below is established **by construction and measurement** against the artefacts `INGEST.md` itself cites as its evidence, plus the shipped `Registry`, `ref_key`, `parse_ref` and `flat_form_problem`.
+
+#### 6.2a The trip — **a truncated scan that FINDS a match answers `existing` at 1.0 on a label twelve facilities answer to**
+
+**[Observed]**, one ordinary `scan_cap` — R58's own third state, the same mechanism design test 1's own T1.5 uses — set one row past the first of `"MILLER'S MERRY MANOR"`'s twelve CCNs:
+
+```
+CONTROL   (uncapped)      outcome='ambiguous' ref=None conf=1.0 known=12 complete=True  scanned=14627
+
+TRUNCATED (scan_cap=3541, 11,086 rows unread, ELEVEN of the twelve among them)
+  outcome='existing' ref='cms:entity:facility#155049' conf=1.0 known=1 complete=False scanned=3541
+  why_incomplete='host scan cap of 3541 rows reached; the rest of this table cannot be read
+                  from this surface'
+  reason='one host row answers to "MILLER\'S MERRY MANOR"'
+```
+
+**`conf=1.0` is `INTERFACE.md` §5.3's guarantee, handed out for a string twelve distinct Indiana facilities
+answer to** — and the `reason` string says *"one host row answers to"* while eleven others do, unread. Eleven
+facilities' citations file into a twelfth's record: **§3.2's own sentence, arrived at through the door §3.2
+does not guard.**
+
+**Why both of §13's first two routes claim to close this and neither fires.**
+
+- Route 1 — *"two candidates tie and the top one is returned → rule 3-3"*. The tie test is evaluated over
+  `scanned=3541 of 14627`, **a partial extent**. That is **the register's FIFTH trip verbatim** (`_extent`
+  read one page, discarded the `why`, and two predicates whose first page matched compared equal), one
+  identity surface down.
+- Route 2 — *"a truncated scan finds nothing and a duplicate is proposed → rules 3-5 / 3-6 / 3-7"*. Its
+  `[Observed]` evidence is `cms:entity:facility#745057`, and **[Observed]** the only `scan_cap` in the whole
+  probe set is `cap = 14000` against a target at row **14,623 of 14,627** — truncation with the match
+  **unread**. The quadrant *truncation × match-found* is posed by nothing.
+
+**The root cause is a disagreement inside this document, and it is not subtle.** §3.4's prose reasons only
+about the empty case — *"is `unknowable`, never **not found**"*, *"a resolution that reached **no candidate**
+over a scan that did not finish"* — and states the ordering as *"the incompleteness is checked before the
+**emptiness** is interpreted."* Rule **3-5**'s table row says something strictly wider: *"whatever the
+candidates found."* **The prose and the rule table disagree; §13's route table inherited the narrow one; and
+the row's own probe implements the narrow one.** Rule 3-6 forbids `complete=False` beside `proposal` and says
+nothing about `existing`; rule 3-7 requires `complete=True` for `proposal` only.
+
+**The worker's reading, offered for countersignature rather than assumed.** *(A trip is never the worker's to
+judge alone; this record is written in the fourteen records' shape and left for the supervisor to read
+against the commit.)*
+
+1. **It is a defect of THIS document, introduced with the surface at `d9faebb`**, and not one inherited from
+   any shipped guard. **[Observed]** by the zero-grep above: there is nothing older to blame.
+2. **It is not a fifteenth trip of the register's kill row, and the difference is worth keeping.** The
+   register's fourteen are constructed against **shipped code** at the **type**-identity surface. This is
+   constructed against a **specification** at a surface that does not exist yet, by a loop the brief required
+   to run before the build row. **The loop reached the defect before the diff existed** — the inverse of the
+   thirteenth countersignature's *loop reaching past its own diff*, and it is the whole reason a spec row
+   runs an adversarial loop at all. Whether the register counts it is the supervisor's, not mine; what I will
+   not do is let it land unrecorded because the classification is arguable.
+3. **Standing rule (d) is what should have caught it and did not**, and this is the second lens in one round
+   to say so (see §6.1a). §3's ordering rule was minted at `resolve_instance` and the enumeration stopped
+   there — see finding 7 below, where the row's **own two probes order the same rule opposite ways.**
+
+#### 6.2b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **K1** | **BLOCKING** | **The trip, above.** §3.4 guards emptiness, not the candidate set | **ACCEPTED.** §3.4's ordering is restated over the **set**, and a rule beside 3-6/3-7 requires `complete=True` for `existing` and `ambiguous` too. Closes K5 and K9 as well |
+| **K2** | **BLOCKING** | **The match band is wider than the ambiguity margin**, so two rows are both `existing`-grade and the call names one. Rule 5-2 constrains only `propose_below <= match_at`; **nothing constrains `ambiguity_margin` against `1 - match_at`**, and with the row's own printed numbers (`match_at=0.97`, `ambiguity_margin=0.02`) the band is width **0.03 > 0.02** — an arithmetic gap in the spec's own figures. **[Observed]** seven real CMS pairs land in it, including `MAGNOLIA MANOR OF COLUMBUS NURSING CENTER - WEST` vs `- EAST` (two genuinely different Georgia facilities) and `'Mountain View Health Care'` (115688) vs `'MOUNTAIN VIEW HEALTHCARE'` (265412) at **0.9796** → `outcome='existing' conf=1.0 known=2 complete=True`, reason *"one host row answers to"*. **No truncation, no ties, ordinary data** | **ACCEPTED.** The tie test becomes a **set** test: every candidate at or above `match_at` is tied, and `existing` requires exactly one. That is stronger than the margin arithmetic and needs no second constraint |
+| **K3** | **BLOCKING** | **`review` is a gate verdict with no outcome in a vocabulary rule 3-1 closes at five.** **[Observed]** the two probes the document cites answer one landed row two ways — `MatchPolicy.verdict → 'review'`, `resolve_instance → 'proposal'` — on `'WILLOWBROOKE CT SKILLED CARE CENTER AT MEASE LI'` @ 0.9691. With nothing forbidding a re-ingest and no human draining the band: pass 1 proposes and the host mints `HOST-MINTED-1`; pass 2 then answers `existing` at 1.0; the final resolution reports `known=2` over the original and the duplicate. **Two host rows for one facility, from ordinary calls** | **ACCEPTED.** §5 must say which of the five a banded score returns, and §3/§5 must be one call rather than two artefacts |
+| **K4** | **BLOCKING** | **The propose path is not idempotent in the state the resolution read** — trip 12's standing rule, unapplied at the only write door this document has. Between proposal and host write the state is unchanged, so the permission can be cashed again. **[Observed]** three passes → three unreviewed invocations for one label, `warnings=[[], [], []]`, and the store then answers `ambiguous known=3`. **The concurrent variant needs no repeat call at all**: two workers read the same state, both answer `proposal`, both hosts write | **ACCEPTED.** This is **standing rule (c) one surface down**: *a pending ingest proposal is an unconsumed permission to mint an instance identity, and no door asks who already holds one for this word* |
+| **K5** | MAJOR | **§3.4's second `unknowable` absorber does not reach the match path either, and the leak is cross-tenant.** A host obeying rule 2-7 to the letter returns `complete=False` with a `why`; **[Observed]** the resolution answers `existing` at **1.0** on `cms:entity:facility#155102` — **another tenant's row**, from a page the host said could not be read as the set. **R59's own stated reversal condition, reached through the field R58's measurement forced** — contortion ING4's cost arriving as an outcome rather than as an opacity | **ACCEPTED**, closed by K1's fix |
+| **K6** | MAJOR | **An instance's type can be retired toward a successor underneath it.** **[Observed]** against the **shipped** `Registry`: after `retire('facility', successor='nursing_facility')`, `resolve_type('facility')` → `existing / nursing_facility / 1.0` while `resolve_instance(type_name='nursing_facility')` → `proposal / scanned=0 / complete=True` and the ledger ends holding both `#facility#015009` and `#nursing_facility#HOST-MINTED-1`. Three defects in one construction: the identity read does not follow the successor chain that `EDGES.md` rule 4.3-14 / **R38** requires of `neighbors`; `proposal` over `scanned=0` with `complete=True` is **a confident "there is nothing like this" from a scan that read no rows**; and the retired name answers `existing` at 1.0 forever, because `InstanceRecord.type_name` is the host's string | **ACCEPTED** |
+| **K7** | MAJOR | **Standing rule (d), measured: the row's own two probes order ONE rule opposite ways.** **[Observed]** design test 3's absorber (an undecidable predicate) is checked **before** scoring — `unknowable`, correct; design test 1's absorber (a truncated scan) is checked **only when nothing scored** — `existing` at 1.0 on a truncated read. One document, one row, one rule (§3.4), two orderings. The lens then enumerated the five places an identity is decided and showed §4 and §5 ask the ambiguity question at neither | **ACCEPTED.** The enumeration goes into §3.4 and §13, per standing rule (d) |
+| **K8** | MAJOR | **`ref_key` collides for two different instances and `INGEST.md` never points at the shipped guard.** **[Observed]** `type_name='facility'`/`id='015009#2024-03-11'` and `type_name='facility#015009'`/`id='2024-03-11'` produce the identical flat key, and it round-trips to the first. `flat_form_problem` — shipped, and `C19-82`'s own fix — catches the `type_name` and `namespace` cases and is enforced at ACTIONS' invocation door only; primitive 23 and `InstanceResolution.ref` hand a caller a ref without passing through it | **ACCEPTED.** One rule in §2 and a pointer in §8 |
+| **K9** | MINOR | **`instance_ambiguous_at_proposal:<n>` is counted over whatever extent the scan read.** **[Observed]** `scan_cap=3596` → `ambiguous known=3 complete=False` where the true multiplicity is **12**; a reviewer draining the queue sees `:3` for a twelve-way collision | **ACCEPTED**, closed for free by K1 and named so it is not lost if that fix is scoped narrowly |
+| **K10** | MINOR | **Contortion ING3's risk is already realised in the row's own scorer.** **[Observed]** `'状态'` and `'!!!'` → `not_an_instance` with `scanned=0`: `_norm` is `identity_key`'s ASCII-only collapse re-implemented, so a real Chinese-language facility name is refused as a class word. **`C4-14`'s defect in its other direction**, in the second notion of *the same string* that ING3 names | **ACCEPTED as evidence for Q86**, whose text now carries it rather than calling the risk theoretical. A probe defect, not a spec defect — §3.3 declines to define the classifier — and that is exactly why it belongs in the question |
+
+#### 6.2c The countable-absence count — **eleven**, and five of them are a previous trip's count verbatim
+
+Five consecutive trips in this register were explained by a *countable absence* in the gate rather than a
+subtle one. The lens ran the same count over the three ingest probes together:
+
+1. **Zero** fixtures pose *truncation × match-found*. `scan_cap` is set exactly **twice**, both at `14000`
+   against a target at row **14,623**. That is K1's entire quadrant.
+2. **Zero** `resolve_instance` call sites in `ingest_gate_probe.py` — §5's gate has **never been run through
+   §3's call**, which is why the two disagree (K3).
+3. **Zero** occurrences of `ambiguity_margin`, `ambiguous` or `tied` in the gate probe. **The probe that is
+   the confidence gate's entire evidence cannot pose the ambiguity question** — and §13's own sharpest
+   question is *does any resolution outcome let two instances answer to one identity **through the confidence
+   gate**?*
+4. **Zero** gate fixtures able to hold two rows for one label: the host is deduped by `seen.setdefault(...)`
+   (**the trip-12 `_alias_map` shape**) and `best_score` keeps the first of a tie by `s > best[1]`.
+5. **Zero** repeated calls of `resolve_instance` on one label against one store, across **12** call sites —
+   *the identical count that explained trip 12.*
+6. **Zero** `retire(`, **zero** `merge_types(`, **zero** `successor` — *the identical count that explained
+   trip 14* (K6).
+7. **Zero** `host_filter` — §2.1's load-bearing distinction and §3.4's second absorber are posed by nothing (K5).
+8. **Zero** `instance_filters`, **zero** `resolves_instances` — §2.3's two minted flags and rule 1-3's refusal
+   are exercised by nothing.
+9. **Zero** `record_invocation`, `invocations(`, `InvocationProvenance` — **§4, the whole propose-at-ingest
+   contract, has no probe at all** (K4).
+10. **Zero** `instance_ambiguous_at_proposal` — §4.3's own mechanical handle is never exercised.
+11. **Zero** `parse_ref` / `flat_form_problem` — §2 and §8's grammar over a host-supplied opaque id is checked
+    by nothing (K8).
+
+**The sentence this register has now written nine times, at this row:** *a probe set built to prove five
+outcomes reachable cannot pose the question of whether two of them are reachable at once.*
+
+#### 6.2d What the lens attacked and could NOT break
+
+1. **Rule 3-4 — `ref` is `None` on `ambiguous`.** Held under every construction (uncapped, half-capped,
+   filter-unapplied): `ambiguous / ref=None / known=12` every time. **The shape trips 11 and 12 took does not
+   reproduce here.**
+2. **Rule 3-8** — `not_an_instance` without reading the host table. Held, `scanned=0`.
+3. **Rules 5-2 / 5-3 at declaration.** Both refused in `__post_init__`, not at runtime.
+4. **Trip 8's empty-key collision at the instance layer.** **Not constructible**: the candidate side is
+   guarded, host labels that normalise empty score `0.0`, and **[Observed] zero of 14,627 real CMS labels
+   normalise to the empty key.** (Its *other* direction is real — K10 — but the two-instances-one-identity
+   form is not reachable.)
+5. **`parse_ref` round trip for the legal opaque id.** `'015009#2024'`, `'a:b:c'`, `'#'`, `''`, `'x#y:z#w'` —
+   all round-trip. **The grammar is sound for the field rule 1-1 actually declares opaque**; only the
+   unguarded `type_name` / `namespace` break it (K8).
+6. **§6.3's tenant-blindness (R59 / R24, rule 6-17), and the condition probe's ordering.** `if undecided:`
+   **before** scoring is correct, and rule 6-16 holds even with a 1.0 match present. **This is the one
+   absorber the row got right — and it is what proves the other two were reachable.**
+7. **§1's seam claim (R78).** *"I did not find a route by which an outcome requires an instance row in the
+   registry. The two-primitive count survives every construction above; every duplicate I produced was
+   written by the host, exactly as rule 4-2 says it would be."* **Two lenses have now tried to break R78 from
+   opposite ends and neither could.**
+8. **Cross-namespace instance resolution.** `namespace` is untouched at this surface as it has been at the
+   type surface across all fourteen trips.
