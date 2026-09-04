@@ -734,7 +734,7 @@ DT4 11/11, DT5 10/10 = **87/87**. It mutated **copies** of the probes in a scrat
 pointed at the repo, so the shipped `ontoloche` package was the real one and **no repo file was ever
 modified** — `git status --short` returned nothing throughout.
 
-#### 6.5a `I-2` (proposed) — **the successor chain is followed for ONE hop, and two ordinary curation passes give two confident answers at 1.0 for one identity**
+#### 6.5a `I-2` — **the successor chain is followed for ONE hop, and two ordinary curation passes give two confident answers at 1.0 for one identity**
 
 **This is inside round 1's own diff.** Rule **3-14** (`C20-68`) and route 11 of §13 were both minted at
 `07af54f` to close **K6**. The rule says the identity read resolves `type_name` *"through the successor
@@ -788,11 +788,37 @@ ONE WORD, ONE TYPE IDENTITY, TWO CONFIDENT ANSWERS AT 1.0:
 effective_type) or entry` keeps the **old** entry when the successor's entry is absent, so the read then
 queries `effective_type` while holding the predecessor's entry.
 
-**Classification is NOT the worker's.** It is constructed against a **specification** and a **throwaway kit**,
-not against shipped code at a shipped door — which is the exact distinction [**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)
-used to classify `I-1`. On that reading it is a second instance-surface record, **`I-2`**, and not a fifteenth
-trip; it is recorded here to the standard R83 set and **routed to the supervisor**, who rules. The kill-row
-trip count is **not** incremented anywhere by this record.
+**COUNTERSIGNED 2026-09-04 — [R84](../decisions/2026-09-04-7a-supervisor-ruling-R84.md). `I-2` is
+confirmed, the count stays at fourteen, and the ground is FIRMER than this record claimed.**
+
+The worker routed the classification rather than assuming it, and R84 verified the record against the two
+files it cites rather than against its paragraph — **[Observed]** the one-hop `break` at
+[`ingest_probe_kit.py`](../tools/ingest_probe_kit.py) lines 491–499, and the shipped comments at
+[`registry.py`](../../ontoloche/registry.py) line 1403 (*"The chain, not one hop (row 4d, round 2)"*) and
+line 1421 (*"Capped and cycle-guarded the way `_identity_closure` is"*). Three things R84 adds:
+
+1. **The argument this record made was the weaker one available.** It argued the negative — *constructed
+   against a specification and a throwaway kit*. The stronger statement, and R84's: **the shipped surface is
+   the CONTROL in this construction and it PASSES.** `_identity_closure` already walks the chain with a
+   visited set, a hop cap and an honest early stop. So this is not a defect the register could not reach at
+   the type surface — **it is one the type surface already closed, in row 4d round 2, which this document
+   re-opened by restating the ruling instead of citing the implementation.** A construction whose shipped
+   control passes is not a kill-row trip by any reading.
+2. **Standing rule (d) gains a second clause, and it is minted by this record.** *A rule minted at the caller
+   that prompted it is half-applied until the commit that mints it names every other caller it binds —* **and
+   the enumeration crosses the document boundary. A rule minted in a specification must name the shipped
+   callers it binds; and where a shipped caller already implements the rule, the specification cites that
+   implementation as its normative reference rather than restating the ruling the implementation was derived
+   from.** Rule 3-14 cites **R38** and implements none of R38's three termination rules; `_identity_closure`
+   implements all three. **The spec should have pointed at the code.**
+3. **The fix is constrained, so `I-2` is not closed narrowly** — see §6.10, where it lands as one row of the
+   table rather than as its own fix: rule 3-14 requires what `_identity_closure` requires (visited set, hop
+   cap, `complete=False` **with a `why`** on an early stop); **the rider defect in the same four lines is
+   closed in the same change** — `entry = vocab.entry(namespace, effective_type) or entry` keeps the
+   **predecessor's** entry when the successor's is absent, which is **the eighth trip's shape**, a guard
+   holding one fact while deciding about another; and rule 3-14's text **names the shipped caller it binds.**
+
+**`stop` is not put** — it attaches to trips. **The kill-row trip count is not incremented anywhere.**
 
 #### 6.5b Every finding, with its disposition
 
@@ -1040,12 +1066,28 @@ bisect: Z1, Z2, Z3, Z4, Z5, Z6 and Z7 are constructed against the **specificatio
 **87/87**, and every finding below was reached with those 87 still green. Mutations were on copies with
 `PYTHONPATH` pointed at the worktree; **no repo file was modified.**
 
-#### 6.7a The four kill-row-family records — written to the standard the fourteen trip records set
+#### 6.7a `I-3` … `I-6` — the four records, written to the standard the fourteen trip records set
 
-**The classification is the supervisor's.** All four are constructed against a specification and a throwaway
-kit with **no shipped door** — the exact distinction [**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)
-used to classify `I-1`. On that reading they are instance-surface records; **the kill-row count is not
-incremented anywhere by this round.**
+**COUNTERSIGNED 2026-09-04 — [R85](../decisions/2026-09-04-7a-supervisor-ruling-R85.md). Records A, B, C and
+D are `I-3`, `I-4`, `I-5` and `I-6`; the kill-row trip count stays at FOURTEEN and `stop` is not put.**
+
+R85 spot-checked this record's three countable-absence claims rather than accepting them — **[Observed]**
+`grep -c successor ingest_act_probe.py` → **0**, the same over `ingest_seam_probe.py` → **6**, and
+`grep -c 'reviewed_by *=' ingest_act_probe.py` → **1**. All three reproduce exactly.
+
+| record | in one line | id |
+|---|---|---|
+| **A / Z1** | rule 3-14 binds the identity READ and no door that WRITES | **`I-3`** |
+| **B / Z2** | the act's scope key is the raw label and the gate's is `norm` | **`I-4`** |
+| **C / Z4** | a drained-but-unwritten proposal is invisible to rule 4-11 | **`I-5`** |
+| **D / Z7** | the tied set dedupes on `ref_key`, so two host records under one `instance_id` collapse | **`I-6`** |
+
+**And R85's substance is that these are not four fixes.** See §6.10: the six instance-surface records are
+**one table — one question asked at six doors** — and they are closed in **one change**, not one quadrant per
+round in the order the lenses found them. This record's own sequencing note (*"Z1 … it is the fix to make
+first"*) is right that Z1 is load-bearing and **wrong about the shape**, and R85 says why: trips 8, 12, 13 and
+14 were four quadrants of one table closed one at a time over **three build rows**, because each round closed
+the quadrant it found and stopped.
 
 **Record A (Z1) — the successor chain binds the READ door and no door that WRITES.** **[Observed]**, full
 165,336,194-byte CMS file, the repo's unmodified probes and kit:
@@ -1386,29 +1428,70 @@ CMS pairs where the worker independently re-derived **31** in `[0.97, 0.98)` and
 arithmetic the K2 argument is built on (d-m1). **The rules those arguments produced are right; the arithmetic
 under them is not.**
 
-#### 6.9b The kill-row family in round 2 — **nine distinct constructions, and the trip count is still FOURTEEN**
+#### 6.9b The instance-surface family — **countersigned as SIX records, and they are ONE TABLE**
 
-Every one is constructed against the **specification** and the **throwaway kit**, at a surface with no shipped
-door. **[Observed]**, standing rule (a), re-established by lens 3: `git diff --name-only a1b0364^..HEAD --
-ontoloche/` returns nothing and `resolve_instance` occurs zero times in `ontoloche/`. On
-[**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)'s reasoning they are **instance-surface
-records, not trips**, and **this row has incremented the kill-row count nowhere.**
+**[Observed]**, standing rule (a), re-established by lens 3: `git diff --name-only a1b0364^..HEAD --
+ontoloche/` returns nothing and `resolve_instance` occurs zero times in `ontoloche/`. Every construction is
+against the **specification** and the **throwaway kit**, at a surface with no shipped door.
+[**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md) minted the series,
+[**R84**](../decisions/2026-09-04-7a-supervisor-ruling-R84.md) countersigned `I-2`, and
+[**R85**](../decisions/2026-09-04-7a-supervisor-ruling-R85.md) countersigned Records A–D as `I-3`…`I-6`.
+**The kill-row trip count is FOURTEEN and this row has incremented it nowhere. `stop` is not put; it attaches
+to trips.**
 
-| # | the construction | the state it reaches | found by |
+**R85's substance, and it is the reason this section is a table rather than a list.** The six records are not
+six defects. They are **one question asked at six doors** — *which host rows answer to this identity, and did
+the resolution see all of them?* — and in every one the answer is decided over a set that is **not the
+identity's extent**. They differ only in **how** the set went wrong:
+
+| the set is wrong because it was… | record | the door | first seen |
 |---|---|---|---|
-| 1 | the successor chain is followed for **one hop** | two `existing`/1.0 answers for one identity, both `complete=True` | A1 (§6.5a) |
-| 2 | rule 4-10 has **no type scope** | a `task` reuses a `project`'s `CandidateRef` and is never proposed | B1 (§6.6a.1) |
-| 3 | rule 4-11 asks a door with **no `label` filter** that returns the oldest 100 | two identities minted on a 250-row batch, no warning | B2 (§6.6a.2) |
-| 4 | the act keys on the **raw string**, the gate on `norm` | two host writes for one facility; 46.5% of a real NYC batch unresolved | B3 / Z2 / D1 |
-| 5 | rule 4-10's memory is written only on the `proposed` branch | three approvals, `ambiguous known=3` | B5 (§6.6a.4) |
-| 6 | rule 3-14 binds the **read** door and no door that **writes** | one `retire(successor=)` between two acts mints a second identity | Z1 (§6.7a A) |
-| 7 | a **drained** but unwritten proposal is invisible to rule 4-11 | the permission is re-issued *because* it was cashed | Z4 (§6.7a C) |
-| 8 | the tied set dedupes on `ref_key` | two host records under one `instance_id` collapse to one; the second vanishes | Z7 (§6.7a D) |
-| 9 | rule 3-14 swaps the **successor's governed facts** in under the caller | a California caller is handed Colorado refs, 5 of 5; 73 of 1,373 answers change | D3 (§6.8b) |
+| **truncated** — the scan stopped and said so, and the match path ignored the `why` | **`I-1`** | `resolve_instance`'s match path | round 1, K1 / P1 |
+| **mis-walked** — the chain was followed one hop and reported `complete=True` | **`I-2`** | rule 3-14, the identity read | round 2, A1 |
+| **mis-written** — the read is bound by the chain and the write door is not | **`I-3`** | §4.2 / §4.3, the host write | round 2, Z1 |
+| **mis-keyed** — the act scopes on the raw label, the gate decides on `norm` | **`I-4`** | rules 4-10 / 4-11 | round 2, B3 / Z2 / D1 |
+| **mis-timed** — the guard's window closes when the proposal drains, before the write lands | **`I-5`** | rule 4-11's `unreviewed=True` | round 2, Z4 |
+| **mis-counted** — a page's own ids are not required to be distinct, so two rows collapse to one | **`I-6`** | §2 / §3.2's set test | round 2, Z7 |
 
-**Numbering and classification are the supervisor's.** §6.5a and §6.6a carry `I-2`…`I-6` as *proposed* labels
-only; the final `I-n` assignment, and whether any of the nine is something other than an instance-surface
-record, is ruled rather than assumed. **Row 7a asserts only what it constructed.**
+**Four further constructions are doors of the same six rows and are NOT separately numbered** — the `I-n`
+numbering is the supervisor's and R85 assigned four. They are recorded here so the fix set covers them and so
+no door is closed by accident:
+
+| construction | which row of the table it is a door of | routed |
+|---|---|---|
+| **B1** — rule 4-10 has no type scope, so a `task` reuses a `project`'s `CandidateRef` | **mis-keyed** (`I-4`), on the *type* half of the key rather than the label half | §6.6a.1, `37e086a` |
+| **B2** — rule 4-11 asks a door with no `label` filter that returns the oldest 100 | **mis-timed** (`I-5`) and **truncated** (`I-1`) at once: an identity read that reads one page and decides | §6.6a.2, `37e086a` |
+| **B5** — rule 4-10's memory is written only on the `proposed` branch, and nothing binds the write | **mis-written** (`I-3`) | §6.6a.4, `37e086a` |
+| **D3** — rule 3-14 swaps the successor's `MatchPolicy` and `Condition` in under the caller | **mis-walked** (`I-2`) at the *governed-fact* half rather than the extent half | §6.8b, `c4ad8b8` |
+
+#### 6.9b-i Standing rule (e), proposed by R85 and carried by this row
+
+> **The extent an identity is decided over is the same set at every door that reads it, writes it, keys it,
+> gates it, or counts it — and a door that cannot prove it is the same set answers `unknowable` rather than
+> deciding.**
+
+That is the generalisation the six records converge on, and it is why they are closed in **one change**
+(§6.10) rather than one quadrant per round. **The fourteenth countersignature's lesson is the argument:**
+trips 8, 12, 13 and 14 were four quadrants of one table, closed **one at a time over three build rows**,
+because each round closed the quadrant it found and stopped. That cost the programme three rows' worth of
+loop. **This row has the whole table in front of it, in one round, before any code exists** — which is the
+second piece of hard evidence for running constraint 7's loop *before* a build row rather than only inside
+one, and it is a stronger one than `I-1` was.
+
+#### 6.9b-ii Standing rule (d) is now an obligation on the COMMIT, not on the author
+
+R84 sharpened rule (d) to cross the document boundary. R85 observes that the clause does not explain round 2's
+seven failures — **four of them (Z1, Z2, Z5, Z6) are doors inside the same document, which the original
+wording already covered.** The honest reading is not that the rule needs a third clause: **it is that a rule
+addressed to an author's diligence has failed seven times in one round while being cited by name.** So:
+
+> **Every commit that mints a numbered rule carries, in the run record, the enumeration of the doors that rule
+> binds — named, not implied. A later round that finds an unenumerated door records it as a rule-(d) failure
+> BY NUMBER, and the count is reported in the round's totals.**
+
+**Round 2's count is seven** (§6.9a's table). It is reported because it was counted, and it was counted
+because a lens went looking — the argument for the loop, for the seventh time in this register. **§6.10's fix
+commit carries its own enumeration, and round 3's fix-auditor lens is pointed at exactly that enumeration.**
 
 #### 6.9c Round 2 is NOT clean, and round 3 is the cap
 
