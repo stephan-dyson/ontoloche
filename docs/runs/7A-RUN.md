@@ -1836,3 +1836,100 @@ round 2's fixes already looked, and the convergence note must say so. **[Inferre
 where the findings halved and the round after still found a kill-row route: *a shrinking count is the weakest
 signal this register has.*
 
+---
+
+### 6.12 Round 3, lens 1 to return — **the beacon integrator. NOT YET: 4 BLOCKING, 5 MAJOR, 1 MINOR.**
+
+*(Written to disk before any fix. Four lenses were dispatched together; sections are numbered in return order.)*
+
+**The verdict in one sentence:** *the capture path no longer stops at the second reference — it stops at the
+key round 2 minted to FIX the second reference, and §4.3's own prose still specifies the defect the rule table
+says was closed.*
+
+**[Observed]** baseline reproduced first: 36 + 13 + 17 + 11 + 27 = **104**. The worktree was untouched
+(`git status --porcelain` empty) and every construction lives in the lens's own scratch directory.
+
+**Prediction P1 is confirmed and P4 with it** (§6.11, committed at `4f3b2eb` before any lens reported):
+round 3 is **not** clean, and standing rule (d) failed again inside the enumeration written under its own new
+obligation.
+
+#### 6.12a `I-4` again, in BOTH directions — the mis-keyed cell's own fix is what defeats it
+
+**Rule 4-10's central claim is *"the key the gate decides on, computed by the same function"*. It is FALSE.**
+The gate's identity relation is `similar(norm(a), norm(b)) >= match_at`; the act's key is **exact equality of
+`norm`**. Round 2's fix took the gate's **pre-processor**, not the gate.
+
+```
+SPLIT   'Meridian Migration' / 'Meridian Migraton'   (an ordinary typo in a meeting note)
+  the GATE : similar=0.9714 >= match_at 0.97 -> True
+  rule 4-10's KEY identical: False
+  counterfactual: resolve_instance('Meridian Migraton') over a store holding row 1
+                  -> existing  ref=beacon:entity:project#HOST-1  confidence=0.9714
+  ONE act, every act rule ON:
+     land -> proposed ; land -> proposed ; invocations: 2 warnings=[(), ()]
+     host writes: [#HOST-1, #HOST-2]
+     the NEXT resolution -> ambiguous known=2 confidence=1.0 complete=True
+
+MERGE   norm('東京 Project') == norm('大阪 Project') == 'project'
+        norm('Müller') == norm('Møller') == 'm ller'
+        norm('Проект Alpha') == norm('Договор Alpha') == 'alpha'
+  ONE act: land('東京 Project') -> proposed ; land('大阪 Project') -> reused
+     invocations recorded: 1   the OSAKA row is named by CandidateRef(label='東京 Project')
+  the resolver ALONE: resolve_instance('大阪 Project') over a store holding only Tokyo
+     -> existing  ref=…#p-tokyo  confidence=1.0  complete=True  scanned=1
+```
+
+**And §3 defines no normaliser at all.** **[Observed]** `grep -i 'normalis\|normaliz'` over §3 returns
+**nothing**; the three hits in the file are rule 4-10, **ING3** and **Q86** — and ING3 calls the only
+implementation *"`identity_key`'s ASCII-only collapse re-implemented"* and dismisses it as **"a probe defect
+and not a spec defect"**. **Round 2's fix promoted that probe defect into a normative rule.**
+
+**This is the kill-row family in both directions**, with every rule of §3, §4 and §5 firing correctly: two
+host rows answering to one identity (split), and one identity answering for two things (merge). Constructed
+against the **specification** and the **kit**, so on R83's reading they are proposed as constructions **inside
+`I-4`** — the mis-keyed cell whose fix they defeat. **The trip count is FOURTEEN and is not incremented.**
+Classification is the supervisor's.
+
+#### 6.12b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **B1** | **BLOCKING** | **Rule 4-10 keys on `norm` equality; the gate decides on `similar(...) >= match_at` — §6.12a.** Split and merge both constructed; §3 defines no normaliser | **ACCEPTED.** Rule 4-10 must key on whatever §3 calls *the same thing* — **the relation, not the pre-processor** — or §3 must define a normaliser and the document must price what it does to prose. **ING3's *"a probe defect, not a spec defect"* is no longer true** and is corrected: rule 4-10 cites the function normatively |
+| **B2** | **BLOCKING** | **§4.3's two numbered rules are the PRE-FIX text**, in the section titled *"One ingest ACT, and the two rules that make it one"*. **[Observed]**, re-verified by the worker at `INGEST.md:597-605`: *"Within one act, a **label** is resolved once. The first **proposal** for a label mints a `CandidateRef`…"* (no type scope = B1's round-2 defect, no normaliser = `I-4`, *"the first proposal"* = B5's defect) and *"…the loop queries `invocations(unreviewed=True)` for an **undrained** proposal…"* (= `I-5` verbatim). **These are the kit's own two mutation switches**, both of which turn design test 5 red. §13's route row is likewise unamended | **ACCEPTED, and it is the one to fix first.** The rule table and the section those rules live in say **different things about the same key** — which is §3.4's own recorded meta-shape (*"the prose, §13's route table and this row's own probe all implemented the narrow one"*) **recurring inside the commit that fixed it.** An implementer reads §4.3, not the id table |
+| **B3** | **BLOCKING** | **Nine of round 2's fourteen beacon findings were dispositioned ACCEPTED and landed in nothing — B4, the relationship half, for the SECOND ROUND RUNNING.** **[Observed]**, re-verified: `'relationship'` = **2** (the same two round 2 counted), `'add_edge'` = **0**, §0.1 relationship non-goals = **0**, §10 = 11 contortions none about relationships, §11 = 7 questions none about relationships, §12's row byte-identical. Same for **M1** (`discriminators` comment unchanged at `:978`), **M2**, **M3**, **b-m1**, **b-m4**. §6.10b's fix table has rows for B1 and B5 only, and §6.10a names none of the nine | **ACCEPTED, and it is the round's most damning finding about this row's own record.** B4's own disposition read *"it is A2's shape … a disposition kept in the run record and landed in none of §0.1, §10 or §11."* **Round 2's fix set did exactly that to B4 itself** — third occurrence of one shape. Either the nine land, or §6.10a names them as deferred with a reason; **a run record whose ACCEPTED dispositions do not bind the commit is not a record** |
+| **B4** | **BLOCKING** | **Amendment A4 is factually WRONG about the shipped shape, and its own stated consequence closes the capture path.** A4 says `invocations` has *"no completeness answer"*. **[Observed]**, re-verified by the worker against the shipped code: [`actions.py:792`](../../ontoloche/actions.py) `InvocationReport` carries `known` / `complete` / `why_incomplete`, and its own docstring says *"`complete` is `False` whenever a filter suppressed rows or `limit` truncated the answer — so EVERY filtered answer … is a floor rather than a total"*; [`registry.py:9590`](../../ontoloche/registry.py) is `elif filtered: why = "a filter suppressed rows; this is a floor, not a total"`. **Rule 4-11's read is filtered by construction**, so it is *always* `complete=False` — and A4's own sentence (*standing rule (e) makes an unprovable extent `unknowable` at this door as at every other*) therefore makes **every** propose-at-ingest `unknowable`, which rule 4-7 turns into **nothing recorded, ever** | **ACCEPTED, and this is the worker's error, not a lens's over-reading.** A4 must ask for a **completable** read — a scoped exhaustive one, or a `complete=True` on a filter the store can push down — not for filters plus a completeness answer it already has. **M2's shape one amendment along, in the section whose only job is to enumerate what must land.** And a `label` filter cannot express rule 4-11's key anyway: **[Observed]** the key runs through `norm` **and the closure**, and a filter over the raw stored columns sees neither — `label` filter finds 0, `type_name` filter finds 0, `act_key` finds 1 |
+| **B5** | MAJOR | **Rule 3-18's `unknowable` is a SILENT DROP at the capture path, and §11 calls it *"loud"*.** One `retire(successor=)` where the successor declares a different `MatchPolicy`; a 5-row capture batch: `'unknowable'` ×5, **`invocations recorded: 0`**, `unreviewed(): 0`, `open_proposals: 0`, per-act memory `{}`, `host writes: []`. The **resolution** carries a `why`; `land` throws it away. **[Observed]** `unknowable` inside §4 appears only in rule 4-7, in A4 and in a K9 aside — **no rule says what the loop does with one** | **ACCEPTED.** §11's Q91 prices default (a) as *"safe and **loud**"*; at the act it is **silent**, which is UC1's own **mechanism C** — a consumer silently dropping what it does not know — in the highest-volume path in the system. **Q91's cost table is corrected**, and §4 gains a rule making an `unknowable` **enumerable** as rule 4-5 does for `ambiguous` |
+| **B6** | MAJOR | **B5's write door is still unbound and §10 records nothing about it.** Three acts, one label, every rule on → `ledger` holds the two `instance_proposal_pending` warnings → drained the ordinary way → `host writes: [#HOST-1, #HOST-2, #HOST-3]` → `ambiguous known=3 confidence=1.0`. **[Observed]** zero §10 rows mention rule 4-11 | **ACCEPTED.** Round 2's B5 disposition was *"**either** rule 4-11's warning binds the approval door, **or** §10 records that it does not."* **Rule 4-13 was minted instead — which closes only the within-act half — and neither branch of the disposition was taken.** ING2's advisory-at-the-only-enforcing-door, at the rule minted to close K4 |
+| **B7** | MAJOR | **Rule 4-13's missing branch is `existing`.** Rule 4-10 says *"within one act an **IDENTITY** is resolved once"*; rule 4-13 binds *"every branch that answers with a `CandidateRef`"* — and `existing` answers with an `InstanceRef`. **[Observed]**, re-verified by the worker at [`ingest_probe_kit.py`](../tools/ingest_probe_kit.py) line 939, the `existing` branch returns without writing `self._minted[key]`. One note naming one **held** person eight times: `['existing']×8`, **`host reads: 16`**, per-act memory `{}`. The same note where the person is not held: `['proposed','reused'×7]`, `host reads: 2` | **ACCEPTED.** *The branch that resolves an identity most cheaply-provably is the one branch rule 4-10's scope never reaches* — and on the partner's shape (a note naming one project or person repeatedly) that is the **common** case. Rule 4-13 is worded around the `CandidateRef`; rule 4-10 around the **identity**; the two do not meet |
+| **B8** | MAJOR | **`InstanceContext` is still wholly inert — round 2's M4 was neither fixed nor recorded.** **[Observed]** the real 12-way tie with `row_attributes` **uniquely naming one of the twelve** answers `ambiguous known=12`, identical to the empty-context call; `resolve_instance` reads only `context.act_id`; no rule 1-1…7-5 names `InstanceContext` or any field; §8.1 gained no row for it | **ACCEPTED.** §8's justification for minting a **second** context object is unbacked by anything the document specifies. ING8 prices the **emptiness** of two fields for a prose source; **nothing prices the inertness of all five**, and F6's whole fix (typing `siblings`) is typed signal no door reads |
+| **B9** | MAJOR | **§9's count is wrong by four, and the sentence asserting it was DERIVED is false — A3's exact defect, third occurrence, inside the commit that claims to have closed it.** **[Observed]**, re-verified by the worker: §9 line 1021 says *"**Eighty-one** rules, eighty-one planned ids, `C20-01` … `C20-81`"*, and `grep -o "C20-[0-9]*" \| sort -u \| wc -l` returns **85**; the run record's own §6.10d prints *"85 / 85 / min 01 max 85"* | **ACCEPTED, and it is the worker's error in the sharpest possible place.** The four `I-7` rules (5-10, 5-11, 6-18, 7-5) were added **after** §9's sentence was rewritten, and the sentence **claims the count was derived by grep** — so the row asserted a derivation it did not re-run. **The spec and its own run record disagree by four in the one section whose only job is to enumerate** |
+| **b-m1** | MINOR | **A5 asks for a carrier without saying which fact it carries.** A5 cites the missing thresholds; rule 5-11's carrier records `(namespace, type_name)` — the **entry**, not the thresholds | **ACCEPTED.** The two halves of `I-7`'s carrier are specified as different shapes; one sentence in A5 naming rule 5-11's shape joins them |
+
+#### 6.12c What the lens attacked and could NOT break
+
+1. **`I-1`, `I-2` and its rider, `I-3`, `I-6`, `I-7` and Z6 are real and mutation-proved.** The fixed arm
+   re-ran at 104/104, and `type_closure` was read line by line looking for a fourth termination case — cycle,
+   cap, dangling and the honest early stop are all present with a `why`. **No walk could be made to decide
+   over a chain it could not finish.**
+2. **The successor closure is genuinely shared.** `resolve_instance`, `act_key` and `Ledger.open_proposals`
+   all call the one `type_closure`; the read and the key could not be made to disagree about the **type** half.
+   **Every divergence found was in the LABEL half — B1 — which is a different function.**
+3. **Rules 3-13 and 3-6 at the act door.** No route from `unknowable` to a proposal exists; the defect is what
+   happens **after** the refusal (B5), not the refusal.
+4. **`C20-01` / R78, from a SIXTH direction.** No write this project must perform was found on the capture
+   path; `CandidateRef` still has no `id` and cannot acquire one. **Six lenses have now failed to force an
+   instance row into the registry.**
+5. **Rules 3-3 / 3-4 / 5-8 at the act layer.** Every duplicate was produced *between* correct resolutions, and
+   every post-hoc resolution reported `ambiguous` with `ref=None` and the right `known`. **The set test is not
+   the weak point; the act's key is.**
+6. **§4.2's provenance claim** holds for a fourth reading.
+
+#### 6.12d What this lens says about the row
+
+**Three of its four BLOCKING are the row's own recorded shapes recurring inside the fix that closed them.**
+B2 is §3.4's prose-against-rule-table meta-shape; B3 is A2's *disposition kept in one artefact* — **applied to
+the very finding that named A2's shape**; B9 is A3's counting defect, third occurrence, in a sentence that
+asserts the count was derived. **That is not four independent defects. It is one: a fix round closes what it
+was pointed at and does not re-read the neighbours.** The register has now written that sentence at every row
+from 3e onward, and this row has written it three times in three rounds.
+
