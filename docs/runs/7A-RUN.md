@@ -1807,3 +1807,32 @@ the probes it runs**: round 3's fix-auditor lens should point at it as well as a
 mutation-proved. **That claim stands and is now better evidenced** — under the corrected harness the same
 mutation reddens four probes rather than three. No finding in §6.5–§6.8 is withdrawn by the harness defect;
 what changes is that the *sweep's* numbers, and only those, were re-derived after it was fixed.
+
+---
+
+### 6.11 Round 3's predictions — **PRE-REGISTERED, written before any lens returned**
+
+**This section is committed before round 3's four lenses report**, so the predictions are checkable in
+`git log` rather than asserted afterwards — the discipline §0 used for design test 1, applied to the loop
+itself. Round 3 is the **cap**: it closes with an honest convergence note whatever it finds.
+
+**Four lenses dispatched at `83f6a75`:** the **fix auditor** (pointed at the fix diff, at §6.10c's rule-(d)
+enumeration, **and at the mutation harness itself**), the **kill row**, the **public data**, the **beacon
+integrator**.
+
+| # | prediction | why | how it will be judged |
+|---|---|---|---|
+| **P1** | **Round 3 will NOT be clean.** At least one BLOCKING. | Six rows of this register have run this loop and **not one closed clean**; rounds 1 and 2 here went 11 → 19 BLOCKING. A round that came back clean immediately after a fix set this large would be evidence about the lenses, not about the row. | any lens returning NOT YET |
+| **P2** | **The fix auditor will find the most, and its findings will be inside `83f6a75`.** | The register's own count: 3e 4-of-10, row #4 round 3 2-of-4, 4d round 2 five inside round 1's fixes, 6b round 2 the tenth trip inside the ninth's fix, and **round 2 here five BLOCKING inside round 1's two commits**. | which lens has the highest BLOCKING count, and whether its findings cite the fix diff |
+| **P3** | **Rule 3-19 — the extent spanning the whole closure — is where the new defect lives.** | It is the newest rule, the only one that made a set **bigger**, and its cost is recorded as **ING11 and explicitly unmeasured**. Every previous round found the defect in the rule minted last. | a finding against 3-19, ING11, or the read's cost/multiplicity |
+| **P4** | **Standing rule (d) will fail again, and the enumeration at §6.10c will be incomplete.** | It failed **seven** times in round 2 while being cited by name, which is why R85 moved it onto the commit. §6.10c is the first enumeration written under the new obligation and it was written by the same person who wrote the rules. | any door named by a lens that §6.10c does not list |
+| **P5** | **The harness audit will find something, and it will be a check that is green for a reason other than the one it claims.** | That is M1's shape, A9's shape, and §6.10e-i's shape — **three times in two rounds**, the last one in the row's own tooling. | a finding against `_mutate`, `enforce`/`ACT_RULES`, or a paired check |
+| **P6** | **No lens will force an instance row into the registry.** R78 holds. | Five lenses have tried from five directions and failed; the seam's two-primitive count survived every construction. **[Assumed]** the sixth and seventh fail too. | any finding that an outcome requires an instance store |
+| **P7** | **The findings will NOT shrink to zero, and the row will be closed on the cap rather than because it converged.** | Rounds 1 and 2 grew, 37 → 47. Row 6c's three rounds went 13, 12, 12 and it was **stopped rather than finished**. | §6.13's convergence note, written against the totals |
+
+**What would falsify the row's own reading rather than confirm it.** If round 3 comes back **clean across all
+four lenses**, that is not a victory to be claimed — it is evidence that round 3's lenses were pointed where
+round 2's fixes already looked, and the convergence note must say so. **[Inferred]** from row #4's round 3,
+where the findings halved and the round after still found a kill-row route: *a shrinking count is the weakest
+signal this register has.*
+
