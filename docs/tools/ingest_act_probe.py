@@ -310,7 +310,7 @@ def main() -> int:
     # --- I-4, mis-keyed: the act's key is the gate's key ------------------
     spellings = (T1_3, T1_3.title() + ".")
     for on, tag in ((True, "NORM KEY"), (False, "MUTATED (raw label)")):
-        rules = ACT_RULES if on else (ACT_RULES - {"4-10-key"})
+        rules = ACT_RULES if on else (ACT_RULES - {"4-10-key", "4-10-relation"})
         h = HostTable(list(without))
         led = Ledger()
         a = IngestAct("act-i4", host=h, vocab=cms_vocab(), ledger=led,
@@ -417,6 +417,167 @@ def main() -> int:
                   "provenance-bearing proposal in `auto` mode",
                   kind == "proposed" and len(led.rows) == 1,
                   f"{kind}/{len(led.rows)}")
+
+    # =====================================================================
+    # 5.7 -- ROUND 3. `I-8`'s two relations get their OWN mutations (R87), and
+    #        K1, K2, K8, K10, B1 and B7 each get a check that can go red.
+    # =====================================================================
+    print("\n5.7 -- round 3's cells, each relation mutated separately")
+
+    def _retired(**kw):
+        """`facility` retired toward `ltc_facility`; the survivor is the live name."""
+        v = cms_vocab()
+        base = v.entry("cms", "facility")
+        v.declare("cms", "facility", replace(base, successor="ltc_facility"))
+        v.declare("cms", "ltc_facility", replace(base, **kw))
+        return v
+
+    # --- I-8, the BACKWARD relation -------------------------------------
+    # A caller naming the SURVIVOR -- the name every caller uses after a retirement.
+    part = HostTable([replace(rec, type_name="ltc_facility") for rec in without[:80]]
+                     + [InstanceRecord("cms", "entity", "facility", "155049",
+                                       T1_2, {"state": "IN"})])
+    for fwd, tag in ((False, "BOTH WAYS"), (True, "MUTATED (forward only)")):
+        r = resolve_instance(T1_2, ctx, host=part, vocab=_retired(),
+                             namespace="cms", type_name="ltc_facility", tier="sonnet",
+                             _mutate="closure_forward_only" if fwd else None)
+        print(f"  I-8 backward {tag}: outcome={r.outcome!r} scanned={r.scanned}")
+        if not fwd:
+            check("5.7 I-8 rule 3-20: the closure walks BACKWARD too, so a caller "
+                  "naming the SURVIVOR of a retirement sees the row still written "
+                  "under the retired name -- the ordinary post-retirement path",
+                  r.outcome == "existing", str(r.outcome))
+        else:
+            check("5.7 I-8 MUTATION (backward): forward-only reads a strict SUBSET of "
+                  "the identity and the act proposes a second row in `auto` mode",
+                  r.outcome == "proposal", str(r.outcome))
+
+    # --- I-8, the ALIAS relation, mutated SEPARATELY (R87) ---------------
+    alias_host = HostTable([InstanceRecord("cms", "entity", "ltc_alias", "155049",
+                                           T1_2, {"state": "IN"})])
+    v_al = cms_vocab()
+    v_al.declare("cms", "ltc_facility",
+                 replace(v_al.entry("cms", "facility"),
+                         aliases=frozenset({"ltc_alias"})))
+    for noal, tag in ((False, "ALIASES ON"), (True, "MUTATED (no aliases)")):
+        r = resolve_instance(T1_2, ctx, host=alias_host, vocab=v_al,
+                             namespace="cms", type_name="ltc_facility", tier="sonnet",
+                             _mutate="closure_no_aliases" if noal else None)
+        print(f"  I-8 alias {tag}: outcome={r.outcome!r} scanned={r.scanned}")
+        if not noal:
+            check("5.7 I-8 rule 3-21: aliases are consulted, because `merge_types` "
+                  "writes BOTH a successor and an alias and a hand-written alias is "
+                  "one the successor scan would miss",
+                  r.outcome == "existing", str(r.outcome))
+        else:
+            check("5.7 I-8 MUTATION (aliases): dropping the alias relation loses the "
+                  "row entirely -- a SEPARATE mutation from the backward one, because "
+                  "one mutation over 'the closure' cannot falsify either",
+                  r.outcome != "existing", str(r.outcome))
+
+    # --- K1: the governed facts, PER HOP --------------------------------
+    mid = cms_vocab()
+    base = mid.entry("cms", "facility")
+    other = replace(base, policy=replace(base.policy, match_at=0.995, why="different"))
+    mid.declare("cms", "facility", replace(base, successor="ltc_facility"))
+    mid.declare("cms", "ltc_facility", replace(other, successor="ltc_v2"))
+    mid.declare("cms", "ltc_v2", replace(base))
+    for ig, tag in ((False, "PER HOP"), (True, "MUTATED (ignored)")):
+        r = resolve_instance(T1_3, ctx, host=HostTable(list(without)), vocab=mid,
+                             namespace="cms", type_name="facility", tier="sonnet",
+                             _mutate="governed_facts_ignored" if ig else None)
+        print(f"  K1 {tag}: outcome={r.outcome!r}")
+        if not ig:
+            check("5.7 K1 rule 3-18: the governed facts are checked at EVERY member of "
+                  "the closure, so one extra `retire()` to an endpoint declaring what "
+                  "the caller declared cannot silence the guard",
+                  r.outcome == "unknowable", str(r.outcome))
+        else:
+            check("5.7 K1 MUTATION: comparing only the two ENDPOINTS decides under an "
+                  "intermediate's policy the caller never declared",
+                  r.outcome != "unknowable", str(r.outcome))
+
+    # --- K2: one identity under two closure names is ONE candidate -------
+    both_names = HostTable([
+        InstanceRecord("cms", "entity", "facility", "155049", T1_2, {"state": "IN"}),
+        InstanceRecord("cms", "entity", "ltc_facility", "155049", T1_2, {"state": "IN"})])
+    for keep, tag in ((False, "COLLAPSED"), (True, "MUTATED (kept apart)")):
+        r = resolve_instance(T1_2, ctx, host=both_names, vocab=_retired(),
+                             namespace="cms", type_name="facility", tier="sonnet",
+                             _mutate="closure_dupes_kept" if keep else None)
+        print(f"  K2 {tag}: outcome={r.outcome!r} known={r.known}")
+        if not keep:
+            check("5.7 K2 rule 2-17: mid-migration, one host row under two names of one "
+                  "closure is ONE candidate -- rule 3-19 widened the extent and rule "
+                  "2-16's key could not see the dimension it widened along",
+                  r.outcome == "existing" and r.known == 1,
+                  f"{r.outcome}/{r.known}")
+        else:
+            check("5.7 K2 MUTATION: kept apart they answer `ambiguous known=2` for ONE "
+                  "facility, and the act then writes a third row",
+                  r.outcome == "ambiguous" and r.known == 2,
+                  f"{r.outcome}/{r.known}")
+
+    # --- K8: the successor NAME must survive the flat form ---------------
+    bad = cms_vocab()
+    bad.declare("cms", "facility",
+                replace(bad.entry("cms", "facility"), successor="ltc#v2"))
+    r = resolve_instance(T1_3, ctx, host=HostTable(list(without)), vocab=bad,
+                         namespace="cms", type_name="facility", tier="sonnet")
+    print(f"  K8: a successor named 'ltc#v2' -> outcome={r.outcome!r}")
+    check("5.7 K8 rule 3-22: a successor NAME carrying ':' or '#' reaches the flat form "
+          "by the WRITE door, where rule 2-14's guard over RECORDS never sees it -- so "
+          "the closure refuses it rather than minting a ref `parse_ref` misreads",
+          r.outcome == "unknowable" and "different reference" in r.why_incomplete,
+          f"{r.outcome} / {r.why_incomplete[:50]}")
+
+    # --- K10: rule 5-11's carrier is ASSERTED -----------------------------
+    r = resolve_instance(T1_3, ctx, host=HostTable(list(without)), vocab=_retired(),
+                         namespace="cms", type_name="facility", tier="sonnet")
+    print(f"  K10: governed_by={r.governed_by!r}")
+    check("5.7 K10 rule 5-11: the resolution NAMES the entry whose governed facts "
+          "judged it, and it is the EFFECTIVE one rather than the declared one -- "
+          "round 3 found this rule had no check at all and was therefore a decoration",
+          r.governed_by == "cms:ltc_facility", repr(r.governed_by))
+
+    # --- B1: the act asks the GATE's relation, not `norm` equality -------
+    long_label = T1_3 + " AND REHABILITATION CENTER"
+    typo = (long_label, long_label[:-1] + "F")   # one char; similar 0.981 >= 0.97
+    for on, tag in ((True, "RELATION"), (False, "MUTATED (key equality)")):
+        rules = ACT_RULES if on else (ACT_RULES - {"4-10-relation"})
+        led = Ledger()
+        a = IngestAct("act-b1", host=HostTable(list(without)), vocab=cms_vocab(),
+                      ledger=led, namespace="cms", type_name="facility",
+                      enforce=rules)
+        got = [a.land(typo[0])[0], a.land(typo[1])[0]]
+        print(f"  B1 {tag}: {got}  ledger={len(led.rows)}")
+        if on:
+            check("5.7 B1 rule 4-10: the act asks the GATE's relation "
+                  "(similar >= match_at), not equality of the gate's PRE-PROCESSOR, so "
+                  "an ordinary typo is one identity in one act",
+                  got == ["proposed", "reused"], str(got))
+        else:
+            check("5.7 B1 MUTATION: keying on `norm` equality splits one identity the "
+                  "gate itself calls `existing` into two proposals",
+                  got == ["proposed", "proposed"], str(got))
+
+    # --- B7: the `existing` branch writes rule 4-10's memory --------------
+    held = HostTable(list(rows))   # T1_3's CCN is IN this one
+    for on, tag in ((True, "MEMOISED"), (False, "MUTATED (existing not memoised)")):
+        rules = ACT_RULES if on else (ACT_RULES - {"4-3-eff"})
+        a = IngestAct("act-b7", host=held, vocab=cms_vocab(), ledger=Ledger(),
+                      namespace="cms", type_name="facility", enforce=rules)
+        verdicts = [a.land(T1_3)[0] for _ in range(4)]
+        print(f"  B7 {tag}: {verdicts}")
+        if on:
+            check("5.7 B7 rule 4-13: `existing` answers with an InstanceRef and still "
+                  "writes the per-act memory -- on the partner's shape (one note naming "
+                  "one thing repeatedly) that is the COMMON case, not the edge",
+                  verdicts == ["existing", "reused", "reused", "reused"], str(verdicts))
+        else:
+            check("5.7 B7 MUTATION: unmemoised, the branch that resolves an identity "
+                  "most cheaply-provably is the one rule 4-10's scope never reaches",
+                  verdicts == ["existing"] * 4, str(verdicts))
 
     print("\n" + "=" * 78)
     failed = [c for c in CHECKS if not c[1]]

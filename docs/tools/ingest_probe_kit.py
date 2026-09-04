@@ -41,12 +41,12 @@ __all__ = [
 #: `ontoloche/registry.py`'s `_identity_closure` caps its own walk. R84's second
 #: clause: the specification cites the shipped implementation rather than restating
 #: the ruling it was derived from.
-CHAIN_CAP = 8
+CHAIN_CAP = 16
 
 #: INGEST.md 4.3. The act rules a construction may switch OFF, so every one of them
 #: has a check that goes red. Standing rule (e)'s doors, named.
-ACT_RULES = frozenset({"4-10", "4-11", "4-10-key", "4-11-written", "4-7-nai",
-                       "4-3-eff"})
+ACT_RULES = frozenset({"4-10", "4-11", "4-10-key", "4-10-relation", "4-11-written",
+                       "4-7-nai", "4-3-eff"})
 
 #: INGEST.md 3.1, rule 3-1. Closed at five.
 OUTCOMES = ("existing", "ambiguous", "proposal", "not_an_instance", "unknowable")
@@ -353,6 +353,11 @@ class EntryDeclaration:
     readable: frozenset[str] = frozenset()
     consumers_known: int = 0
     successor: str | None = None      # the type this name was retired toward. 3-14
+    #: INGEST 3.4a rule 3-21. `merge_types` writes BOTH a successor and an alias for
+    #: one absorption, and a hand-written alias is one the successor scan would miss
+    #: -- `registry.py`'s `_identity_closure` says so in terms, and `I-8` is what
+    #: happens when a document cites that function and takes one of its relations.
+    aliases: frozenset[str] = frozenset()
 
 
 class Vocabulary:
@@ -367,6 +372,21 @@ class Vocabulary:
     def entry(self, namespace: str, type_name: str) -> EntryDeclaration | None:
         return self._entries.get((namespace, type_name))
 
+    def predecessors(self, namespace: str, type_name: str) -> list[str]:
+        """Every name retired TOWARD this one. INGEST 3.4a rule 3-20.
+
+        The backward relation, which `registry.py`'s `_identity_closure` calls *the
+        direction `merge_types` actually produces and the one a caller reaches after
+        doing the right thing* -- i.e. the ORDINARY post-retirement path.
+        """
+        return sorted(t for (n, t), e in self._entries.items()
+                      if n == namespace and e.successor == type_name)
+
+    def alias_holders(self, namespace: str, alias: str) -> list[str]:
+        """Every name declaring this alias. INGEST 3.4a rule 3-21."""
+        return sorted(t for (n, t), e in self._entries.items()
+                      if n == namespace and alias in e.aliases)
+
 
 @dataclass(frozen=True)
 class Closure:
@@ -377,11 +397,20 @@ class Closure:
     complete: bool
     why: str
     hops: tuple[str, ...]
+    #: Every written name that now denotes ONE identity: the forward chain, the
+    #: backward chain, and the aliases of both. `members[0]` is the name the caller
+    #: gave, exactly as `_identity_closure` promises. **This is the extent rule 3-19
+    #: is about** -- `I-8` was reading `hops` alone.
+    members: tuple[str, ...] = ()
+    #: Which of the shipped function's three relations this walk ADOPTED. R87: a
+    #: normative citation must enumerate what it takes and what it leaves.
+    relations: tuple[str, ...] = ()
 
 
 def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
                  *, cap: int = CHAIN_CAP, one_hop: bool = False,
-                 keep_predecessor: bool = False) -> Closure:
+                 keep_predecessor: bool = False, forward_only: bool = False,
+                 no_aliases: bool = False) -> Closure:
     """The CHAIN, not one hop -- and it stops honestly when it cannot finish.
 
     This is the one implementation of `INGEST.md` 3.4a, and every door that reads,
@@ -390,8 +419,18 @@ def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
     that code rather than from **R38**'s words, per **R84**'s second clause: a visited
     set, a hop cap, and ``complete=False`` **with a why** when the walk stops early.
 
-    ``one_hop`` and ``keep_predecessor`` are the MUTATION harness for `I-2` and for
-    its rider defect. They are not designs.
+    **Three relations, per R87.** `_identity_closure` walks the chain **forward**, walks
+    it **backward** (*"the direction `merge_types` actually produces and the one a caller
+    reaches after doing the right thing"*), and consults **aliases**. `I-8` is what
+    happened when this document cited that function as normative and implemented its
+    three *termination* rules with one of its three *relations*: a caller naming the
+    SURVIVOR of a retirement read a strict subset of the identity, and the act wrote a
+    second row for it in ``auto`` mode with no human. **All three are adopted here and
+    named in ``Closure.relations``**; each has its OWN mutation, because one mutation over
+    "the closure" would leave the fix unfalsifiable in the direction it just added.
+
+    ``one_hop``, ``keep_predecessor``, ``forward_only`` and ``no_aliases`` are the MUTATION
+    harness for `I-2`, its rider, and `I-8`'s two relations. They are not designs.
     """
     entry = vocab.entry(namespace, type_name)
     effective = type_name
@@ -403,27 +442,67 @@ def type_closure(vocab: Vocabulary, namespace: str, type_name: str,
             return Closure(effective, entry, False,
                            f"the successor chain from {type_name!r} cycles at "
                            f"{nxt!r}; this identity cannot be resolved to one type",
-                           tuple(hops))
+                           tuple(hops), (type_name,), ("forward",))
         if len(hops) >= cap:                              # rule 3-16: the cap
             return Closure(effective, entry, False,
                            f"the successor chain from {type_name!r} passed the cap "
                            f"of {cap} hops without reaching a live type",
-                           tuple(hops))
+                           tuple(hops), (type_name,), ("forward",))
+        # rule 3-22 (K8): the successor NAME reaches the flat form by the WRITE
+        # door -- `effective_type` becomes `CandidateRef.type_name`, then
+        # `Invocation.type_name`, then `minted_ref` -- WITHOUT ever being a record,
+        # so rule 2-14's guard over records never sees it. The shipped `parse_ref`
+        # then reads the minted string back as a DIFFERENT reference.
+        if any(sep in nxt for sep in (":", "#")):
+            return Closure(effective, entry, False,
+                           f"{type_name!r} was retired toward {nxt!r}, which "
+                           f"contains ':' or '#': `ref_key` would write a string "
+                           f"`parse_ref` reads back as a different reference",
+                           tuple(hops), (type_name,), ("forward",))
         nxt_entry = vocab.entry(namespace, nxt)
         if nxt_entry is None:                             # rule 3-15: dangling
             if keep_predecessor:                          # MUTATION: the rider
-                return Closure(nxt, entry, True, "", tuple(hops + [nxt]))
+                return Closure(nxt, entry, True, "", tuple(hops + [nxt]),
+                               tuple([type_name] + hops + [nxt]), ("forward",))
             return Closure(effective, entry, False,
                            f"{type_name!r} was retired toward {nxt!r} and no entry "
                            f"declares {nxt!r} in {namespace!r}: the extent this "
                            f"identity would be decided over is not readable",
-                           tuple(hops))
+                           tuple(hops), (type_name,), ("forward",))
         hops.append(nxt)
         seen.add(nxt)
         effective, entry = nxt, nxt_entry
         if one_hop:                                       # MUTATION: I-2 itself
             break
-    return Closure(effective, entry, True, "", tuple(hops))
+    # --- rule 3-20: the BACKWARD relation, and rule 3-21: ALIASES ----------
+    # Every written name that now denotes this identity. The forward walk above
+    # answers "what is this name now"; this answers "what else is this identity",
+    # and `I-8` is the second question going unasked.
+    relations = ["forward"]
+    members = [type_name] + [h for h in hops if h != type_name]
+    if not forward_only:
+        relations.append("backward")
+        frontier = list(members)
+        seen_b = set(members)
+        while frontier and len(members) <= cap * 4:
+            name = frontier.pop()
+            for pred in vocab.predecessors(namespace, name):
+                if pred not in seen_b:
+                    seen_b.add(pred)
+                    members.append(pred)
+                    frontier.append(pred)
+    if not no_aliases:
+        relations.append("aliases")
+        for name in list(members):
+            e = vocab.entry(namespace, name)
+            for al in sorted(e.aliases if e else ()):
+                if al not in members:
+                    members.append(al)
+            for holder in vocab.alias_holders(namespace, name):
+                if holder not in members:
+                    members.append(holder)
+    return Closure(effective, entry, True, "", tuple(hops),
+                   tuple(members), tuple(relations))
 
 
 def act_key(vocab: Vocabulary, namespace: str, kind: str, type_name: str,
@@ -590,7 +669,9 @@ def resolve_instance(
     declared = entry
     closure = type_closure(vocab, namespace, type_name,
                            one_hop=(_mutate == "chain_one_hop"),
-                           keep_predecessor=(_mutate == "chain_keeps_predecessor"))
+                           keep_predecessor=(_mutate == "chain_keeps_predecessor"),
+                           forward_only=(_mutate == "closure_forward_only"),
+                           no_aliases=(_mutate == "closure_no_aliases"))
     effective_type = closure.effective
     for hop in closure.hops:
         warnings.append(f"instance_type_succeeded:{hop}")
@@ -606,17 +687,30 @@ def resolve_instance(
     governed_by = f"{namespace}:{effective_type}"
 
     governed_why = ""
-    if (_mutate != "governed_facts_ignored" and effective_type != type_name
-            and declared is not None and entry is not None):
-        changed = [name for name, a, b in (
-            ("MatchPolicy", declared.policy, entry.policy),
-            ("the tenancy predicate", declared.predicate, entry.predicate),
-        ) if a != b]
-        if changed:
-            governed_why = (
-                f"{type_name!r} was retired toward {effective_type!r}, which declares a "
-                f"different {' and a different '.join(changed)}: the extent this "
-                f"resolution would be decided over is not the extent the caller declared")
+    if _mutate != "governed_facts_ignored" and declared is not None:
+        # rule 3-18 (K1): EVERY member of the closure, not the two endpoints. Round
+        # 2 compared the declared entry with the endpoint's, so ONE extra `retire()`
+        # to an endpoint declaring what the caller declared silenced the guard --
+        # while rule 3-19 admits the intermediate's rows into the extent, making the
+        # entry whose rows are being judged the one entry never consulted. Rules 5-10
+        # and 6-18 said "a closure HOP" all along; only 3-18 said "the successor's".
+        for member in closure.members:
+            if member == type_name:
+                continue
+            m_entry = vocab.entry(namespace, member)
+            if m_entry is None:
+                continue
+            changed = [name for name, a, b in (
+                ("MatchPolicy", declared.policy, m_entry.policy),
+                ("the tenancy predicate", declared.predicate, m_entry.predicate),
+            ) if a != b]
+            if changed:
+                governed_why = (
+                    f"{type_name!r} resolves through {member!r}, which declares a "
+                    f"different {' and a different '.join(changed)}: the extent this "
+                    f"resolution would be decided over is not the extent the caller "
+                    f"declared")
+                break
     assert entry is not None
 
     # --- rule 3-8: is this an instance at all? No host read ----------------
@@ -634,7 +728,7 @@ def resolve_instance(
     # duplicate for a facility the same store already holds. Standing rule (e) is
     # exactly this -- the same set at every door -- so the read spans the declared name
     # and every hop of the closure.
-    read_types = [type_name] + [h for h in closure.hops if h != type_name]
+    read_types = list(closure.members) or [type_name]
     if _mutate == "extent_endpoint_only":                # MUTATION: `I-3`
         read_types = [effective_type]
     scanned = 0
@@ -668,7 +762,9 @@ def resolve_instance(
             return Refusal("instance_source_absent",
                            {"why": f"unfaithful reference: {problem}"})
 
-    # --- rule 2-16: the read's `instance_id`s are DISTINCT, or it is unknowable -
+    # --- rule 2-16: two DIFFERENT rows under ONE name and one id -> unknowable --
+    # (`I-6`. Not K2: two names of ONE closure holding ONE row is one identity and
+    #  collapses at rule 2-17 below, which is why this key carries `type_name`.)
     # `I-6`. Two host records under one id collapse to one candidate in a set test
     # that dedupes on the flat key, and the second row vanishes from `candidates`
     # entirely -- so the extent is not countable and this door does not decide.
@@ -705,6 +801,22 @@ def resolve_instance(
         warnings.append("consumers_unregistered")           # rule 7-1
     if host_filter:
         warnings.append("instance_narrowed_proposal:" + ",".join(sorted(host_filter)))
+
+    # rule 2-17 (K2): within ONE closure read the same host row can appear under two
+    # names of one identity -- the migration window rule 3-19's own justification
+    # names. They are ONE thing, so they collapse to ONE candidate under the name the
+    # closure resolves to; rule 2-16's distinctness question is about two DIFFERENT
+    # rows sharing an id under ONE name, which is a different question and stays.
+    if _mutate != "closure_dupes_kept":
+        by_identity: dict[tuple, InstanceRecord] = {}
+        for rec in survivors:
+            k = (rec.namespace, rec.kind, rec.instance_id)
+            prev = by_identity.get(k)
+            if prev is None or rec.type_name == effective_type:
+                by_identity[k] = rec
+        survivors = [by_identity[k] for k in
+                     dict.fromkeys((r.namespace, r.kind, r.instance_id)
+                                   for r in survivors)]
 
     scored = sorted(
         (InstanceCandidate(
@@ -907,11 +1019,42 @@ class IngestAct:
         self.namespace, self.type_name = namespace, type_name
         self.enforce = enforce
         self._minted: dict[tuple, CandidateRef] = {}   # rule 4-10's per-act memory
+        #: the same memory, carrying the LABEL, so rule 4-10 can ask the gate's
+        #: relation rather than compare keys (B1). Rule 4-13 writes both.
+        self._seen: dict[tuple, tuple[str, object]] = {}
         self.host_writes: list[str] = []
 
     def _key(self, type_name: str, label: str) -> tuple:
         return act_key(self.vocab, self.namespace, "entity", type_name, label,
                        raw=("4-10-key" not in self.enforce))
+
+    def _recall(self, type_name: str, label: str):
+        """Rule 4-10's lookup, and B1 is why it is a RELATION and not a key.
+
+        The gate's identity relation is ``similar(norm(a), norm(b)) >= match_at``.
+        Round 2 keyed the act on ``norm`` **equality** -- the gate's *pre-processor*,
+        not the gate -- so an ordinary typo split one identity into two proposals
+        while the gate itself called them ``existing``, and ``norm``'s ASCII collapse
+        merged two genuinely different non-Latin labels into one. A relation that is
+        not an equivalence cannot be a dict key, so the act asks the same question
+        the gate asks, over its own (small) per-act memory.
+        """
+        key = self._key(type_name, label)
+        if key in self._minted:
+            return key, self._minted[key]
+        if "4-10-relation" not in self.enforce:
+            return key, None
+        entry = self.vocab.entry(self.namespace, type_name)
+        if entry is None:
+            return key, None
+        at = entry.policy.match_at
+        want = norm(label)
+        for seen_k, (seen_label, ref) in self._seen.items():
+            if seen_k[:3] != key[:3]:
+                continue
+            if similar(want, norm(seen_label)) >= at:
+                return key, ref
+        return key, None
 
     def land(self, label: str, *, type_name: str | None = None,
              tier: str = "sonnet") -> tuple[str, object]:
@@ -922,11 +1065,11 @@ class IngestAct:
         the type in its key handed the task the project's `CandidateRef`.
         """
         tname = type_name or self.type_name
-        key = self._key(tname, label)
+        key, recalled = self._recall(tname, label)
 
         # --- rule 4-10: within one act, an IDENTITY is resolved once -----------
-        if "4-10" in self.enforce and key in self._minted:
-            return "reused", self._minted[key]
+        if "4-10" in self.enforce and recalled is not None:
+            return "reused", recalled
 
         res = resolve_instance(
             label, InstanceContext(act_id=self.act_id, proposed_by="ai:ingest"),
@@ -936,6 +1079,15 @@ class IngestAct:
             return "refused", res
 
         if res.outcome == "existing":
+            # rule 4-13 (B7): `existing` answers with an `InstanceRef`, not a
+            # `CandidateRef`, and round 2 worded the memory around the CandidateRef --
+            # so the branch that resolves an identity most cheaply-provably was the one
+            # branch rule 4-10's scope never reached. On the partner's shape (a note
+            # naming one project eight times) that is the COMMON case: eight resolutions
+            # and sixteen host reads for one identity.
+            if "4-3-eff" in self.enforce:
+                self._minted[key] = res.ref
+                self._seen[key + (label,)] = (label, res.ref)
             return "existing", res.ref
         if res.outcome == "unknowable":
             return "unknowable", None            # rule 4-7: no proposal, ever
@@ -972,12 +1124,14 @@ class IngestAct:
             # CandidateRef, not only on the one that mints (`I-3`'s rider, finding B5).
             if res.candidate is not None:
                 self._minted[key] = res.candidate
+                self._seen[key + (label,)] = (label, res.candidate)
             return "pending", inv
 
         inv.warnings = tuple(warnings)
         self.ledger.record(inv)
         if res.candidate is not None:
             self._minted[key] = res.candidate
+            self._seen[key + (label,)] = (label, res.candidate)
         return "proposed", inv
 
     def host_writes_for(self, inv: Invocation, instance_id: str) -> InstanceRecord:
