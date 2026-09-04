@@ -2,10 +2,11 @@
 
 **Version:** `v0` — **unstable.** Every name, field and return shape here may change without a
 deprecation path (standing constraint 4).
-**Status:** Draft, 2026-09-03. Satisfies `ROADMAP.md` Phase 3's **first row**, opened by the founder
-2026-09-02. Deliverable **#7a** of the ordering. **This document ships no code.** Its four design tests are
-runnable probes under [`../tools/`](../tools/); their observed output is in
-[`../runs/7A-RUN.md`](../runs/7A-RUN.md).
+**Status:** Draft, 2026-09-03, **amended the same day by the first adversarial round** — three lenses,
+eleven BLOCKING findings, every one constructed and run. What each changed is in
+[`../runs/7A-RUN.md`](../runs/7A-RUN.md) §6. Satisfies `ROADMAP.md` Phase 3's **first row**, opened by the
+founder 2026-09-02. Deliverable **#7a** of the ordering. **This document ships no code.** Its design tests
+are runnable probes under [`../tools/`](../tools/); their observed output is in the run record.
 **Constraints it is written against:** **R58** (the façade pages under one rule for `known`; *a guard never
 reads a page*), **R59** (the protocol stays tenant-blind; tenancy is the host's predicate), **R60** (one
 three-valued `Condition` language, the ingestion loop its first consumer) — all three in
@@ -27,7 +28,7 @@ half — **given a landed row, which existing thing is this, and if none, what i
 protocol over instances **the host already holds**.
 
 It is not a store, not a pipeline, and not a queue. It adds **two read primitives**, **one call**, **one
-declared policy**, **one condition language**, and **no table**.
+reference shape**, **one declared policy**, **one condition language**, and **no table**.
 
 ### 0.1 Non-goals — one line each
 
@@ -38,27 +39,36 @@ declared policy**, **one condition language**, and **no table**.
 - **No HTTP.** No routes, no auth, no pagination-over-the-wire. `INTERFACE.md` §1's non-goal, unchanged.
 - **No tenancy dimension.** R59 stands: tenancy is the host's predicate, made expressible by §6. Reversing
   it is a Phase 4 change, and §6's design test is what would force it.
-- **No instance store.** **Decided by design test 1, not assumed** — see §1. This project stores no
-  instance rows, mints no instance identifiers, and holds no copy of a host's table.
+- **No instance store.** **Decided by design test 1, and three adversarial lenses each tried to overturn it
+  from a different direction and could not** — see §1.
 - **No instance-level proposal loop of its own.** §4 makes an ingest proposal an **invocation of a
-  host-declared action family**, using the ledger `ACTIONS.md` already ships. Nothing new is stored.
+  host-declared action family**, using the ledger `ACTIONS.md` already ships. **No object is stored by this
+  document.** It does ask `ACTIONS.md` for three additive amendments, named in §4.4 — round 1 found the
+  original claim of *"nothing new"* false, and §4 is the section it was false in.
 - **No change to `resolve_type`.** **R77**, non-negotiable. §3's call is a new call in this document.
 
 ---
 
-## 1. The seam — **R78, CONFIRMED by design test 1 before anything else here was written**
+## 1. The seam — **R78, CONFIRMED by design test 1, and held by three adversarial lenses**
 
 **The question R78 put, deliberately falsifiably:** does this project become an instance store, or does it
 define resolution *over instances the host already holds*?
 
-**Answer: the host holds the instances. [Observed], design test 1** — [`ingest_seam_probe.py`](../tools/ingest_seam_probe.py),
-16/16 checks, over the full CMS health-citations file (**165,336,194 bytes, 419,479 rows, 14,627 CCNs, 104
-provider names shared by more than one CCN**, all four reproducing `USE-CASES.md`'s pre-registered figures).
-Every outcome of §3's call was reached with (a) a table the host owns, (b) two **read-only** primitives, and
-(c) **no instance row in the registry**: after a walk-through that scanned 14,627 host rows five times, the
-**shipped** `ontoloche.Registry` on SQLite held exactly `[('entity', 'facility')]`, and no CCN and no
-provider-name string appeared in it. The expectations were pre-registered in
+**Answer: the host holds the instances. [Observed], design test 1** — 16/16 checks over the full CMS
+health-citations file (**165,336,194 bytes, 419,479 rows, 14,627 CCNs, 104 provider names shared by more
+than one CCN**, all four reproducing `USE-CASES.md`'s pre-registered figures and **all four independently
+re-derived from the real file by round 1's public-data lens**). Every outcome of §3's call was reached with
+(a) a table the host owns, (b) two **read-only** primitives, and (c) **no instance row in the registry**:
+after a walk-through that scanned 14,627 host rows five times, the **shipped** `ontoloche.Registry` on
+SQLite held exactly `[('entity', 'facility')]`. The expectations were pre-registered in
 [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §0, in a commit that predates the probe.
+
+**And the confirmation survived the loop, which is the part worth more than the design test.** Round 1's
+three lenses each attacked R78 from a different direction — *does a capture path force a write?*, *does any
+outcome need a registry row?*, *does the seam hold when the scan pages?* — and **[Observed]** none could
+break it. The integrator's sentence is the one to keep: *every duplicate I produced was written by the
+host, exactly as rule 4-2 says it would be.* The loop produced several duplicates; **none of them landed in
+this project's store.**
 
 **Three consequences, and the second is the structural argument.**
 
@@ -67,7 +77,7 @@ provider-name string appeared in it. The expectations were pre-registered in
 2. **Two primitives, not three, and the count is the evidence.** [`EDGES.md`](EDGES.md) §7.1 takes three
    (`put_edge` / `get_edge` / `find_edges`) and [`ACTIONS.md`](ACTIONS.md) §9 takes three, because this
    project **stores** edges and invocations. Instances are the host's, so **there is no `put`** — and a
-   protocol that needed one would be an instance store with a different name. §2 takes two, both reads.
+   protocol that needed one would be an instance store with a different name.
 3. **The type-side half of the seam was already built.** **[Observed]** `resolve_type("BURNS NURSING HOME,
    INC.")` returns `outcome="not_a_type"` with reason **`instance_not_type`** — a branch live in
    [`../../ontoloche/_resolve.py`](../../ontoloche/_resolve.py) since row #1. The type registry does not
@@ -75,10 +85,8 @@ provider-name string appeared in it. The expectations were pre-registered in
    resolution both stand and gain a pointer to this document rather than being deleted (R77).
 
 > **What the confirmation does NOT claim.** It was not shown that an instance store is *unnecessary in
-> general*; it was shown that **every outcome is reachable without one**, on the read path, at 14,627 rows.
-> Write-side ingest at volume is §4's contract and the build row's measurement.
-> [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §1.4 states what would overturn this verdict, so a later reviewer
-> has something to aim at.
+> general*; it was shown that **every outcome is reachable without one** and that three reviewers trying to
+> force one failed. [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §1.4 states what would still overturn it.
 
 **Rules of §1**
 
@@ -86,7 +94,7 @@ provider-name string appeared in it. The expectations were pre-registered in
 |---|---|---|
 | 1-1 | This project stores no instance rows and mints no instance identifiers. An instance is named by an `InstanceRef` (`EDGES.md` §2.1) whose `id` the **host** allocated | `C20-01` |
 | 1-2 | Instance resolution is a **new call** in this document and never an extension of `resolve_type`. R77 | `C20-02` |
-| 1-3 | A registry whose adapter declares `resolves_instances=False` refuses every call in this document with `instance_source_absent` (§8.4) — **never** an empty candidate set, which would read as *"there is nothing like this"* | `C20-03` |
+| 1-3 | A registry whose adapter declares `resolves_instances=False` refuses every call in this document with `instance_source_absent` (§9) — **never** an empty candidate set, which would read as *"there is nothing like this"* | `C20-03` |
 
 ---
 
@@ -111,10 +119,10 @@ class InstanceRecord:
 @dataclass(frozen=True)
 class CandidateQuery:
     namespace:   str
-    kind:        str            # always "entity" in v0
+    kind:        str            # always "entity" in v0. Contortion ING7
     type_name:   str
-    label:       str | None = None    # what the landed row calls it. A HINT, not a filter
-    host_filter: str | None = None    # the HOST's own predicate, opaque to this project
+    label:       str | None = None    # what the landed row calls it. A HINT ONLY -- rule 2-8
+    host_filter: Mapping[str, Any] | None = None   # NAMED filters the host declared. 2.1
     limit:       int | None = None    # the ADAPTER pages. R58
     after:       str | None = None    # opaque cursor. The ENCODING is the build row's
 
@@ -122,14 +130,16 @@ class CandidateQuery:
 class CandidatePage:
     records:        tuple[InstanceRecord, ...]
     known:          int | None  # None = the backend cannot count. NOT 0. Rule U
-    complete:       bool        # about the SET. R58
+    complete:       bool        # about the SET THE QUERY NAMED, host_filter included. 2.1
     why_incomplete: str | None
     next_after:     str | None
 ```
 
 **22. `get_instance(namespace: str, kind: str, type_name: str, instance_id: str) -> InstanceRecord | None`**
 Confirms one reference. `None` means **absent**, which is a fact — the host always knows whether its own key
-exists, exactly as `get_edge` does (`EDGES.md` §7.1 primitive 17).
+exists, exactly as `get_edge` does (`EDGES.md` §7.1 primitive 17). **Its caller is §3's identity read
+re-confirming a resolved `ref` at the moment of use** — the R54/R55 lesson (*identity re-verified at the
+read*) at the instance surface — and §4's propose path confirming the ref the host minted.
 **Uncertainty:** `resolves_instances=False` ⇒ raises `NotSupported`; the registry checks the capability
 first and never calls this, surfacing `Refusal(reason="instance_source_absent")`.
 
@@ -137,7 +147,6 @@ first and never calls this, surfacing `Refusal(reason="instance_source_absent")`
 The one call behind §3. **Scoring is not pushed into the adapter**: the adapter returns records, the
 registry scores them. That is `PACKAGE.md` §3.1's boundary — an adapter that knew about confidence would
 know about `InstanceResolution`, and `C0-04`'s source-inspection test would have a new identifier to police.
-Design test 1 holds the probe's own host table to that rule by source inspection.
 **Uncertainty:** the general rule is `find_types`': a filter the backend cannot apply returns
 `complete=False` with a `why`, **never** a filtered-looking empty page.
 
@@ -145,20 +154,44 @@ Design test 1 holds the probe's own host table to that rule by source inspection
 host's. Both were considered and dropped, for `EDGES.md` §7.1's reason: a primitive that exists only to
 express a policy is a policy inside the adapter.
 
-### 2.1 `label` is a hint and `host_filter` is a filter, and confusing them is the failure
+### 2.1 `label` is a hint that may NOT narrow; `host_filter` is a named, declared filter
 
-`label` says what the landed row calls the thing. A backend **may** use it to narrow; a backend that ignores
-it returns a wider page and the registry scores it, and **that is not incompleteness** — the page it returned
-*is* complete for what it was asked. `host_filter` is different in kind: it is the **host's own predicate
-over its own indexed columns**, opaque to this project, and a host that cannot apply the one it was handed
-must say so (`complete=False` plus a `why`) rather than ignore it.
+*(Both halves of this section were rewritten by round 1. The original said a backend **may** use `label` to
+narrow and left `host_filter` an opaque string, and both were constructed as duplicate factories — findings
+P2 and M8.)*
 
-**Why the distinction is load-bearing, measured.** **[Observed], design test 2**
-([`ingest_paging_probe.py`](../tools/ingest_paging_probe.py), live against `erm2-nwe9` on 2026-09-03): one
-50,000-row page — the host's own ceiling — costs **1.26s warm and 13.86s cold**, and exhausting
-`agency='NYPD'` needs **196 of them**. **[Inferred]** 4.1 minutes at the warm rate, ~45 at the cold one,
-both ignoring deep-cursor decay, both lower bounds — **for one landed row.** The same read drains to
-exhaustion in **four requests** once the host's own predicate narrows **9,764,249** rows to **725**.
+**`label` says what the landed row calls the thing, and a backend may use it to ORDER a page but never to
+omit a record.** **[Observed], P2:** two backends both conformant to the original rule — one ignoring
+`label`, one narrowing on it — answered design test 4's own batch differently: the ignoring host routed 23
+banded rows to a human; the narrowing host answered **`proposal` with `candidates_seen=0` and
+`complete=True`** for all 23, because nothing was truncated and so `unknowable` could not fire. That is
+**§5.1's own argument one layer down**: 23 duplicates whose cause is which backend answered. So narrowing
+is not a backend's discretion; it goes through `host_filter`, where it is named and declarable.
+
+**`host_filter` is a MAPPING of named filters to values, not an opaque expression.** **[Observed], M8:**
+`instance_filters` is a set of names and the original `host_filter` was a free-form string
+(`"agency='NYPD' AND complaint_type='Illegal Fireworks' AND incident_zip='11214'"`), so rule 2-10 had no
+decidable test and rules 2-7, 2-9, 2-10 and `C20-03` — the spec's only defence against contortion ING4 —
+were untestable as written. As a mapping, `{"agency": "NYPD", "complaint_type": "Illegal Fireworks",
+"incident_zip": "11214"}`, each key is checkable against `Capabilities.instance_filters` and a key outside
+it forces `complete=False` with a `why` naming it. **The VALUES stay opaque to this project; the KEYS do
+not.**
+
+**`complete` is about the set the query named, `host_filter` included — and a `proposal` off a narrowed set
+says so.** **[Observed], M2:** over a 725-row narrowed slice of a 9,764,249-row partition, **3,330 of 3,330**
+landed rows resolved `proposal` with `complete=True`, one of them at an address the same host table holds
+**122** rows for. `complete=True` is honest there — the query named that slice — and it is *cheap*, so a
+proposal made over a narrowed set carries `instance_narrowed_proposal:<filter keys>` and the reviewer can
+see what was not looked at.
+
+**Why the narrowing exists at all, measured.** **[Observed], design test 2** (live against `erm2-nwe9`,
+2026-09-03): one 50,000-row page — the host's own ceiling — took **1.3 s to 8.4 s in same-day runs**, and
+exhausting `agency='NYPD'` needs **196 of them**. **[Inferred]** that is **minutes, not seconds, for one
+landed row**, and every figure is a lower bound because deep-cursor decay is ignored. *(The original text
+printed `1.26s` and `4.1 minutes` to two decimals; round 1 re-ran it the same day and got `8.39s` and
+`27.4 minutes` — 6.7x. The argument survives and the precision did not, so the precision is gone.)* The
+same read drains to exhaustion in **four requests** once the host's own predicate narrows 9,764,249 rows to
+**725**.
 
 **So candidate retrieval is affordable exactly when the host says it is**, and the narrowing is a fact about
 the host's table that this project neither invents nor validates. A layer that arranged its own index over a
@@ -172,21 +205,22 @@ alone:
 
 | the page says | it means | observed 2026-09-03 |
 |---|---|---|
-| `complete=True` | this is the **set** | `known=725 complete=True next_after=None` |
+| `complete=True` | this is the **set the query named** | `known=725 complete=True next_after=None` |
 | `complete=False`, `next_after` present | this is a **page**; ask again | `known=200 complete=False next_after='200'` |
 | `complete=False`, `next_after` absent, `why_incomplete` set | **truncated** — the rest cannot be read from this surface | `known=1000 complete=False next_after=None why='scan budget of 2000 rows reached…'` |
 
 **`known` counts what THIS PAGE materialised.** `complete` is about the **set**. A backend that cannot count
 returns `known=None`, which is Rule U and which `0` would falsify.
 
-**And a guard never reads a page.** §3's ambiguity decision is an **identity** read — *do two things answer
-to this?* — so it is an **internal exhaustive read**: the registry loops `next_after` to `None`, or reports
-the read as **truncated** and answers `unknowable` (§3.4). It never treats a page as a set.
+**And a guard never reads a page.** §3's identity read is exactly that — *does more than one thing answer to
+this?* — so it is an **internal exhaustive read**: the registry loops `next_after` to `None`, or reports the
+read as **truncated** and answers `unknowable` (§3.4). It never treats a page as a set.
 `INTERFACE.md` §5.6's caller-facing paging and this internal read must not share a code path that can
-discard a cursor; R58's own fifth-trip evidence is why.
+discard a cursor; R58's own fifth-trip evidence is why — **and round 1 reproduced that fifth trip at this
+surface, which is §3.4.**
 
 **The cursor's encoding is deliberately NOT decided here.** Opaque string, exactly as at the adapter — R58
-leaves the contents to the row that builds it, and this row does not take it.
+leaves the contents to the row that builds it.
 
 ### 2.3 The two capability flags this document mints
 
@@ -202,14 +236,28 @@ resolves_instances:  bool = False
     #: backend that predates this row is `instance_source_absent`.
 
 instance_filters:  frozenset[str] = frozenset()
-    #: The named host filters primitive 23 honours faithfully. U3's shape exactly: a
-    #: filter listed here is applied; a filter NOT listed comes back with
-    #: `complete=False` and a `why` naming it -- never applied-looking and never
-    #: silently dropped.
+    #: The `host_filter` KEYS primitive 23 honours faithfully. U3's shape exactly: a
+    #: key listed here is applied; a key NOT listed comes back with `complete=False`
+    #: and a `why` naming it -- never applied-looking and never silently dropped.
+    #: This is why 2.1 makes `host_filter` a named mapping: a set of names cannot
+    #: govern an opaque expression, and round 1 measured that it did not.
 ```
 
 **Nothing else.** A `counts_instance_candidates` flag was considered and refused: `known: int | None`
 already carries that fact, and a second home for one fact is `EDGES.md` §2.4's rule.
+
+### 2.4 The flat-form guard, at the surface that hands out refs
+
+**[Observed], K8:** `type_name='facility'` with `instance_id='015009#2024-03-11'`, and
+`type_name='facility#015009'` with `instance_id='2024-03-11'`, produce the **identical** `ref_key` —
+`'cms:entity:facility#015009#2024-03-11'` — and it round-trips to the first. That is `C19-82`, row 6c's own
+integrator finding (*a confident reading of the wrong thing*), reachable at a **new** door: the shipped
+guard [`flat_form_problem`](../../ontoloche/actions.py) is enforced at `ACTIONS`' invocation write door
+only, and primitive 23 and `InstanceResolution.ref` hand a caller a ref without passing through it.
+
+**[Observed]** the grammar is sound for the field rule 1-1 actually declares opaque — `'015009#2024'`,
+`'a:b:c'`, `'#'`, `''`, `'x#y:z#w'` all round-trip as `instance_id`. **It is the fields this document does
+NOT declare opaque — `namespace`, `kind`, `type_name` — that break it**, and the guard already catches them.
 
 **Rules of §2**
 
@@ -217,19 +265,23 @@ already carries that fact, and a second home for one fact is `EDGES.md` §2.4's 
 |---|---|---|
 | 2-1 | The protocol adds exactly two primitives, both **reads**. A write primitive for instances is a conformance failure | `C20-04` |
 | 2-2 | `get_instance` returns `None` for absent, never a manufactured record | `C20-05` |
-| 2-3 | `find_instance_candidates` pages under R58's one rule: `known` counts the page, `complete` is about the set, `next_after` says whether there is more | `C20-06` |
+| 2-3 | `find_instance_candidates` pages under R58's one rule: `known` counts the page, `complete` is about the set the query named, `next_after` says whether there is more | `C20-06` |
 | 2-4 | A truncated read is `complete=False`, `next_after=None`, `why_incomplete` set — distinguishable from a page by the report alone | `C20-07` |
 | 2-5 | A backend that cannot count returns `known=None`, never `0` | `C20-08` |
 | 2-6 | The adapter scores nothing. `C0-04`'s source inspection extends to these two primitives | `C20-09` |
-| 2-7 | A `host_filter` the backend cannot apply returns `complete=False` with a `why` naming it; it is never silently ignored | `C20-10` |
-| 2-8 | `label` is a hint: a backend that ignores it returns a wider page with `complete=True`, and the registry narrows above | `C20-11` |
+| 2-7 | A `host_filter` **key** the backend cannot apply returns `complete=False` with a `why` naming that key; it is never silently ignored | `C20-10` |
+| 2-8 | **`label` may order a page and may never omit a record.** A backend narrows only through `host_filter` | `C20-11` |
 | 2-9 | `resolves_instances` defaults `False`, and every call here refuses `instance_source_absent` when it is | `C20-12` |
-| 2-10 | A filter named in `instance_filters` is honoured faithfully; one outside it is reported, per U3's rule | `C20-13` |
+| 2-10 | Every `host_filter` key named in `instance_filters` is honoured faithfully; a key outside it is reported, per U3's rule | `C20-13` |
 | 2-11 | An identity read exhausts the cursor or reports **truncated**; it never reads one page and decides | `C20-14` |
+| 2-12 | `host_filter` is a mapping of **declared keys** to opaque values. A free-form expression is a conformance failure, because `instance_filters` cannot govern one | `C20-63` |
+| 2-13 | `complete=True` over a `host_filter`-narrowed query is honest **and narrow**: any `proposal` decided on it carries `instance_narrowed_proposal:<keys>` | `C20-64` |
+| 2-14 | An `InstanceRecord` whose `namespace`, `kind` or `type_name` would make `ref_key` unfaithful is refused at the primitive, citing `flat_form_problem` | `C20-65` |
+| 2-15 | `get_instance` is evaluated against the entry's declared `Condition` (§6) before its record is returned; a record the predicate fails is `None` with a `why`, and one it cannot decide is a refusal, never a silent pass | `C20-66` |
 
 ---
 
-## 3. `resolve_instance` — **five outcomes, and the fifth was forced by a constructed failure**
+## 3. `resolve_instance` — **five outcomes, and completeness is checked before ANY of them**
 
 ```python
 def resolve_instance(
@@ -239,15 +291,18 @@ def resolve_instance(
     type_name: str,
     namespace: str = "default",
     tier: str,                          # INTERFACE 2.7 -- REQUIRED, not defaulted
-    host_filter: str | None = None,     # the HOST's narrowing. 2.1
-    predicate: Condition | None = None, # the HOST's tenancy predicate. 6, R59
+    host_filter: Mapping[str, Any] | None = None,   # the HOST's narrowing. 2.1
 ) -> InstanceResolution: ...
 ```
 
-**There is deliberately no `min_confidence` parameter.** `resolve_type` has one; this call does not, and §5
-is the reason: the threshold is a **declared, governed fact on the entry**, and a per-call threshold is a
-duplicate factory (design test 4, §5.1). That is the sharpest difference between the two calls and it is not
-an oversight.
+**There is deliberately no `min_confidence` parameter and no `predicate` parameter.** `resolve_type` has the
+first; this call has neither, and §5 and §6 are the reasons: the threshold and the tenancy predicate are
+both **declared, governed facts on the entry**. **[Observed], P3:** the original signature took
+`predicate: Condition | None = None`, and omitting that optional keyword made **5 of 5** cross-tenant
+shared names resolve differently and handed a California caller Colorado `InstanceRef`s — **R59's own
+stated reversal condition, reached by leaving out an argument.** §5.1 refused a per-call *threshold* on
+exactly this reasoning; admitting a per-call *predicate* two sections earlier was the same defect the same
+document argues against.
 
 ### 3.1 The outcomes, and why five rather than four
 
@@ -256,11 +311,11 @@ an oversight.
 
 | outcome | means |
 |---|---|
-| `existing` | exactly one held instance answers to this candidate, above the entry's `match_at` |
-| `ambiguous` | **more than one** does, inside the entry's ambiguity margin, and nothing here separates them |
-| `proposal` | a **finished** scan found none, so this is a new thing |
+| `existing` | **exactly one** held instance answers to this candidate, over a **finished** scan |
+| `ambiguous` | more than one does — **or one does, but not confidently enough to be sure it is the same thing.** A human's call, and §4.3 routes it |
+| `proposal` | a **finished** scan of a non-empty candidate space found none, so this is a new thing |
 | `not_an_instance` | the candidate names a class, a column or an artefact — not one thing of that class |
-| `unknowable` | the candidate scan **did not finish**, so no statement about existence can be made |
+| `unknowable` | the identity read **did not finish**, so no statement about identity can be made |
 
 **The fifth is an outcome and not a flag, and the failure was constructed rather than argued.**
 **[Observed], design test 1 T1.5:** with the fifth value absent, a scan cut off before the matching row
@@ -270,50 +325,107 @@ proposal is well-formed, provenance-bearing, approvable, and wrong: *the polluti
 loop bolted to the front of it.* A `complete=False` flag beside `outcome="proposal"` is a caller's to
 ignore; an outcome is not.
 
-**[Observed], design test 2** reaches the same value from the opposite direction and with no fixture at all:
-resolved against `agency='NYPD'` unnarrowed, the answer is `unknowable`, because 196 host requests is not a
-scan any per-row loop performs. **Two independent routes to one value is the evidence this document rests
-the fifth outcome on.**
+> **A second claim stood here and is WITHDRAWN.** The original §3.1 said design test 2 *"reaches the same
+> value from the opposite direction"* and called that *"two independent routes"*. **[Observed], M1:** that
+> probe calls **no resolver** — it computed `outcome = "unknowable" if not p_trunc.complete else …`, a
+> restatement of the check three lines above it, and a rule-3-5-**violating** resolver inserted over the
+> same truncated page left it printing `10/10 checks pass`. **There was one route, not two.** Design test 2
+> now calls the resolver, so the second route is real; the claim is re-made on the amended probe and the
+> withdrawal is left on the record, because a claim asserted and not run is exactly what
+> [`check_spec_drift.py`](../tools/check_spec_drift.py) exists to catch, pointing inward.
 
-### 3.2 `ambiguous` is decided BEFORE `existing`, and that ordering is a rule
+### 3.2 `ambiguous` is decided BEFORE `existing`, and it is a SET test
 
 **[Observed], design test 1 T1.2:** `"MILLER'S MERRY MANOR"` is the label of **twelve** distinct Indiana
-facilities in the CMS file, every one of them scoring **1.0** on the name. A resolver that took the top
-candidate would answer `existing` at 1.0 — **the confidence `INTERFACE.md` §5.3 calls a guarantee** — and
-file eleven facilities' citations into a twelfth's record.
+facilities in the CMS file, every one scoring **1.0** on the name. A resolver that took the top candidate
+would answer `existing` at 1.0 — **the confidence `INTERFACE.md` §5.3 calls a guarantee** — and file eleven
+facilities' citations into a twelfth's record.
+
+**The tie test is over the SET, not over the top two.** *(Round 1, K2. The original compared
+`top[0] - top[1] <= ambiguity_margin`, and* **[Observed]** *nothing constrained `ambiguity_margin` against
+`1 - match_at`: with this document's own printed numbers — `match_at=0.97`, `ambiguity_margin=0.02` — the
+match band is width 0.03 and the margin is 0.02, an arithmetic gap in the spec's own figures. Seven real CMS
+pairs land in it, including* `MAGNOLIA MANOR OF COLUMBUS NURSING CENTER - WEST` *and* `- EAST`, *two
+genuinely different Georgia facilities, and* `'Mountain View Health Care'` *(115688) against*
+`'MOUNTAIN VIEW HEALTHCARE'` *(265412) at 0.9796 → `existing` at 1.0 with `known=2`, over a complete scan,
+on ordinary data.)*
+
+**The tied set is every candidate at or above `match_at`, together with every candidate within
+`ambiguity_margin` of the top. `existing` requires that set to have exactly one member.** That is stronger
+than any arithmetic between the two numbers and needs no second constraint to hold.
 
 `ROADMAP.md`'s kill criterion is *two things answering to one identity*. **This is that criterion one level
-below where its fourteen trips live**, and the ordering is the guard: a tie inside the margin can never
-collapse to its first member, and `InstanceResolution.ref` is `None` on `ambiguous` — asserted as a negative
-by the probe, because *the outcome was right and the ref was populated anyway* is the shape trips eleven and
-twelve took.
+below where its fourteen trips live**, and `InstanceResolution.ref` is `None` on `ambiguous` — asserted as a
+negative by the probes, because *the outcome was right and the ref was populated anyway* is the shape trips
+eleven and twelve took. **[Observed]** round 1 attacked that rule from three directions and it held every
+time; what failed was its **premise**, which is §3.4.
 
-### 3.3 `not_an_instance` mirrors `not_a_type`, and it is the same argument
+### 3.3 `not_an_instance` mirrors `not_a_type`, and its cost is now measured
 
 `INTERFACE.md` §5.3 gained `not_a_type` because a 99.988%-redundant column resolving to `None` reads as *"go
 propose it"* and hands the pollution machine its first type. The instance analogue is a landed cell that is
-not an instance at all — a column header that arrived as a value, a class word, a blank. **[Observed], T1.4:**
-`"Provider Name"` answers `not_an_instance` and the host table is **never scanned for it** (`scanned=0`),
-which is the point: the cheapest correct answer is the one that asks the host nothing.
+not an instance at all. **[Observed], T1.4:** `"Provider Name"` answers `not_an_instance` and the host table
+is **never scanned for it** (`scanned=0`).
 
-**v0 does not define the classifier**, exactly as `INTERFACE.md` §2.8 does not define semantic detection. It
-defines the **outcome** and requires it to be reachable. `_resolve.py`'s `instance_not_type` is the mirror
-already shipped on the other side of the seam and is the natural place for the pair to be kept honest.
+**v0 does not define the classifier**, exactly as `INTERFACE.md` §2.8 does not define semantic detection —
+**and round 1 measured what that costs, in both directions, so the absence is priced rather than waved at.**
+**[Observed], M9**, against the only classifier this row ships (an eleven-word class list):
 
-### 3.4 Rule U, at this call
+- **false positives: 0 of 14,498** real CMS provider names. Nothing real was refused.
+- **false negatives: 22 of CMS's 23 column headers are NOT caught** — `CMS Certification Number (CCN)`,
+  `Provider Address`, `City/Town`, `State`, `ZIP Code`, `Survey Date` and the rest. **T1.4 picked the one
+  header the hand-written list contains.**
+- **and on UC3: 16,001 distinct `erm2-nwe9` values carrying 861,161 rows (3.9% of the dataset) are street
+  names with no house number** — `'BROADWAY'` 24,154 rows, `'5 AVENUE'` 12,821 — *classes, not instances*,
+  every one of which passes as an instance and becomes a well-formed provenance-bearing proposal.
 
-**A candidate scan that could not finish is `unknowable`, never *not found*.** Stated as an ordering inside
-the call, because the ordering is what makes it true: **the incompleteness is checked before the emptiness
-is interpreted.** A resolution that reached no candidate over a scan that did not finish has not learned that
-there is no such instance; it has learned nothing.
+**So §3.3's *"the cheapest correct answer is the one that asks the host nothing"* is true of 1 of 23 real
+cases**, and the outcome's reachability is specified while its accuracy is a build-row problem with two
+numbers now attached to it. `_resolve.py`'s `instance_not_type` is the mirror already shipped on the other
+side of the seam; **Q86** asks whether this project should ship a matcher at all.
+
+### 3.4 Rule U, at this call — **completeness is checked before the candidate set is INTERPRETED**
+
+*(This section is the one round 1 broke, and both of the lenses that broke it reached the same place from
+opposite directions. The original ordered the check before **the emptiness** was interpreted; rule 3-5's
+table row already said the wider thing — "whatever the candidates found" — and the prose, §13's route table
+and this row's own probe all implemented the narrow one.)*
+
+**An identity read that could not finish yields `unknowable`, whatever it found.** Not *"whatever it failed
+to find"*: **whatever it found.** An unread row may tie the one that was read, and *a guard that could not
+be evaluated has not said the collapse is safe* — which is `INTERFACE.md`'s own sentence at
+`successor_unregistered`, arriving one identity surface down.
+
+**The construction, [Observed], K1 / P1**, with an ordinary `scan_cap` — R58's own third state, the same
+mechanism T1.5 already uses — set one row past the first of the twelve:
+
+```
+CONTROL   (uncapped)   outcome='ambiguous' ref=None conf=1.0 known=12 complete=True  scanned=14627
+TRUNCATED (cap=3541)   outcome='existing'  ref='cms:entity:facility#155049' conf=1.0
+                       known=1 complete=False scanned=3541
+                       reason='one host row answers to "MILLER'S MERRY MANOR"'
+```
+
+**`conf=1.0` is `INTERFACE.md` §5.3's guarantee, handed out for a string twelve facilities answer to**, with
+eleven of them unread — and the tie test that was supposed to stop it was evaluated over a **partial
+extent**, which is **the register's fifth kill-row trip verbatim**, one identity surface down.
 
 `unknowable` also absorbs three cases that are **not** truncation, and naming them stops each becoming its
-own value:
+own value — **and every one of them is now guarded before the interpretation, not after it**:
 
-1. the host's tenancy `predicate` was **undecidable** on candidates the scan returned (§6, design test 3);
-2. the adapter could not apply a `host_filter` it was handed, so the page it returned answers a wider
-   question than the caller asked and cannot be read as the set;
+1. the host's declared tenancy `predicate` was **undecidable** on candidates the scan returned (§6, design
+   test 3). **[Observed], K5:** under the old ordering this leaked `existing` at 1.0 on *another tenant's
+   row*, from a page the host had said could not be read as the set;
+2. the adapter could not apply a `host_filter` **key** it was handed, so the page answers a wider question
+   than the caller asked and cannot be read as the set;
 3. the backend returned `known=None` and `complete=False` together — it neither counted nor finished.
+
+**And a scan that read NO rows is not evidence of absence.** **[Observed], K6:** a `CandidateQuery` naming a
+type that had been retired toward a successor returned `proposal` over `scanned=0` with `complete=True` — *a
+confident "there is nothing like this" from a read of zero rows*, which is Rule U's forbidden empty in the
+one call a caller would believe. Two rules close it: the identity read **resolves `type_name` through the
+successor chain** before it queries (which `EDGES.md` rule 4.3-14 / **R38** already requires of `neighbors`,
+and which this document did not say), and a `proposal` requires the candidate space to have been non-empty.
 
 **Rules of §3**
 
@@ -321,125 +433,197 @@ own value:
 |---|---|---|
 | 3-1 | The outcome vocabulary is closed at five. R3 applies: a sixth is a §-row change with a contract id | `C20-15` |
 | 3-2 | `resolve_instance` is a distinct call and no argument of `resolve_type` reaches it. R77 | `C20-16` |
-| 3-3 | `ambiguous` is decided before `existing`; a tie inside the entry's margin never collapses to its first member | `C20-17` |
+| 3-3 | `ambiguous` is decided before `existing`, over the **set**: every candidate at or above `match_at`, plus every candidate within `ambiguity_margin` of the top | `C20-17` |
 | 3-4 | On `ambiguous`, `ref` is `None` and every tied candidate is returned | `C20-18` |
-| 3-5 | A scan that did not finish is `unknowable`, whatever the candidates found — checked **before** emptiness is interpreted | `C20-19` |
-| 3-6 | `unknowable` is an outcome, not a flag: no `complete=False` result carries `outcome="proposal"` | `C20-20` |
+| 3-5 | An identity read that did not finish is `unknowable`, **whatever the candidates found** — checked before the candidate set is interpreted at all | `C20-19` |
+| 3-6 | **No `complete=False` result carries any outcome but `unknowable` or `not_an_instance`.** `existing`, `ambiguous` and `proposal` each require a finished read | `C20-20` |
 | 3-7 | `proposal` requires `complete=True` on every page the identity read consumed | `C20-21` |
 | 3-8 | `not_an_instance` is reachable without reading the host table at all | `C20-22` |
 | 3-9 | `confidence` is `float \| None`; `None` means *did not score*, never `0.0`. `INTERFACE.md` §5.3's rule | `C20-23` |
-| 3-10 | The call takes no `min_confidence`: the threshold is the entry's. §5 | `C20-24` |
+| 3-10 | The call takes no `min_confidence` and no `predicate`: both are the entry's. §5, §6 | `C20-24` |
 | 3-11 | `tier` is required and is echoed back for provenance. `INTERFACE.md` §2.7 | `C20-25` |
 | 3-12 | An undecidable host predicate makes the resolution `unknowable`, never a narrower candidate set | `C20-26` |
+| 3-13 | `proposal` requires `scanned > 0`. A read of zero rows is `unknowable` with a `why`, never *"there is nothing like this"* | `C20-67` |
+| 3-14 | The identity read resolves `type_name` through the successor chain before querying, as `neighbors` does under **R38**; a retired `type_name` is answered under its successor with `instance_type_succeeded:<successor>` | `C20-68` |
 
 ---
 
-## 4. The propose-at-ingest contract — **an invocation, not a fourth object**
+## 4. The propose-at-ingest contract — **an invocation, one new reference shape, and three amendments this row may NOT land**
 
-**What an instance proposal IS: an invocation of a `kind="action"` family the host declared.** Nothing is
-added. [`ACTIONS.md`](ACTIONS.md) already ships every part of it:
+**What an instance proposal IS: an invocation of a `kind="action"` family the host declared.** Most of it
+already ships in [`ACTIONS.md`](ACTIONS.md):
 
 | what a proposal needs | what already ships it |
 |---|---|
-| a governed declaration that goes through propose→approve | the family is a `TypeEntry`, `ACTIONS.md` §2.1 / §5.1 |
-| a way to name the landed row's identity | `InstanceRef` + `ref_key` / `parse_ref` (R72), `ACTIONS.md` §2.3 |
+| a governed declaration through propose→approve | the family is a `TypeEntry`, `ACTIONS.md` §2.1 / §5.1 |
 | a gate before it runs | `preflight`, `approval_mode`, `min_auto_tier`, `ACTIONS.md` §5.2 |
 | provenance with actor, tier, confidence, approver, source version | `InvocationProvenance`, `ACTIONS.md` §3.2 |
 | a record of what happened | `record_invocation`, the ledger, `ACTIONS.md` §6.2 |
-| a queue that can be drained by a second person, later | `review_invocation` (**R73**), `ACTIONS.md` §6.5 |
+| a queue drained by a second person, later | `review_invocation` (**R73**), `ACTIONS.md` §6.5 |
 | an enumerable backlog | `invocations(unreviewed=True)`, `ACTIONS.md` §6.3 |
 
-**So this section specifies a shape and a rule, and no storage.** That is why §1's *two read primitives*
-survives contact with the write side: the propose-at-ingest act is recorded where every other governed act
-of this project is recorded.
+> **The original section claimed this list was COMPLETE and it is not.** Round 1's integrator lens walked a
+> real capture end to end and **[Observed]** it stops at the first call: *for the one case the design partner
+> is actually missing — a project that does not exist yet — there is no invocation to make.* §4.3 and §4.4
+> are what that finding cost, and the claim of *"adds no object"* is withdrawn in favour of a smaller true
+> one: **this document adds one reference shape and no store.**
 
-### 4.1 What approves it, and who writes the row
+### 4.1 `CandidateRef` — the fourth reference shape, and it is this document's
+
+`EDGES.md` §2.1 defines two; `ACTIONS.md` §2.3 takes a third; **this document takes a fourth**, for the same
+reason ACTIONS gave for `EdgeRef`: the thing being named has no other honest name.
+
+```
+CandidateRef:                   # NEW, this document. A thing that does NOT exist yet
+    type:       TypeRef         # kind MUST be "entity"
+    label:      str             # what the landed row calls it
+    resolution: str             # the outcome that produced it -- "proposal" or "ambiguous"
+    act_id:     str             # the ingest act this candidate belongs to. 4.3
+```
+
+**Why it is forced. [Observed], F1:** `InputSpec(ref="instance")` is validated at both doors (ACTIONS rule
+6-6), and a thing being proposed has no `InstanceRef`. Omitting the input →
+`Refusal(input_kind_mismatch, {"problem":"missing"})`. Naming its type instead →
+`Refusal(input_kind_mismatch, {"declared":"instance","supplied":"type"})`. **Inventing** an id →
+`Preflight allowed`, which rule 1-1 forbids in terms. And declaring the input optional is worse:
+`preflight` called with **nothing** returned `verdict='allowed'` — **the gate answered for a capture whose
+subject it never saw.**
+
+**A `CandidateRef` has no `id` and can never acquire one**: the host mints the identifier, and the moment it
+does, the reference the ledger holds is an `InstanceRef`. That asymmetry is the seam (§1) expressed in a
+type.
+
+### 4.2 What approves it, who writes the row, and what provenance it carries
 
 **The host writes the instance row; this project never does.** The family declares
 `Effect(op="host_state", why=…)` — `ACTIONS.md` §2.5's fourth operation, the admission that *this action
-changes something this protocol does not model* — and the host performs it. The `InstanceRef` the host
-minted comes back on the invocation, so the ledger holds *which* thing was created, by whom, at what tier,
-at what confidence, approved by whom.
+changes something this protocol does not model* — and the host performs it.
 
-**`approval_mode` carries the whole gate.** A family whose ingest proposals may auto-apply declares
-`auto`; one whose proposals a human must see declares `review` or `human`; §5's band is what routes an
-individual row to the second of those.
+**Provenance adds nothing.** `Provenance` (`INTERFACE.md` §2.4) already carries `created_by_actor`,
+`model_tier` (§2.7), `approved_by` (never blank-implying-human) and `source_version` (§2.4a, **R21**);
+`InvocationProvenance` narrows it and adds `confidence`. **[Observed], round 1:** the integrator lens
+checked every provenance field a capture needs and found **none missing** — §4.2 is the part of this section
+that held exactly as written.
 
-### 4.2 What provenance it carries — **nothing new**
+### 4.3 One ingest ACT, and the two rules that make it one
 
-`Provenance` (`INTERFACE.md` §2.4) already carries `created_by_actor`, `model_tier` (§2.7), `approved_by`
-(never blank-implying-human), and `source_version` (§2.4a, **R21**). `InvocationProvenance` narrows it and
-adds `confidence`. **Nothing is added here**, and the brief's instruction — *add nothing until a design test
-forces it* — was not overridden by any of the four.
+**[Observed], F4 — and this is round 1's most important finding.** Two rows in one ingest act whose labels
+resolve to the same thing. `resolve_instance` is called for each **before either is written** — the ordinary
+shape, because the host writes on approval. **Both scans finish**, so rule 3-7 is satisfied and both
+correctly answer `proposal`. Both are approved. The store now holds two rows answering to one identity, and
+the *next* resolution reports it: `ambiguous known=2 confidence=1.0` over `#p-9001` and `#p-9002`.
 
-**One thing that is inherited and is worth stating because it closes a live defect.** **[Observed]**, the
-design partner's capture applies relationships with *no approval step and no model-identity provenance*;
-recorded in the supervisor's own architecture framing of 2026-09-02 as one of five surfaces of one missing
-substrate. Under this contract that act is an invocation carrying an actor, a tier and an approver, and it is
-enumerable afterwards. **The fix is not a feature of this document; it is what using it costs nothing extra.**
+**Every rule in §3 fired correctly and the outcome is still two things answering to one identity.** This is
+not a guard that failed to look — **it is a guard that was never asked.** The state is created *between* two
+correct answers, and nothing made the second call aware of the first. **[Observed]** the string `idempot`
+occurred **zero** times in the original document and `within the batch` **zero** times.
 
-### 4.3 Reconciling a proposal made while a candidate was `ambiguous`
+**And the same shape reaches across acts. [Observed], K4:** between a proposal and the host's write the
+state the resolution read is unchanged, so the permission can be cashed again — three passes produced three
+unreviewed invocations for one label with `warnings=[[], [], []]`, and **the concurrent variant needs no
+repeat call at all**: two workers read the same state, both answer `proposal`, both hosts write. That is
+**standing rule (c) one surface down**: *a pending ingest proposal is an unconsumed permission to mint an
+instance identity, and no door asked who already holds one for this word.*
 
-This is the case the brief names and it needs a mechanical handle, not prose.
+**So an ingest ACT is a first-class scope, and two rules bind it:**
 
-**The rule: a propose-at-ingest invocation made while `resolve_instance` answered `ambiguous` is recorded
-with the warning `instance_ambiguous_at_proposal:<n>`, where `<n>` is the number of tied candidates, and it
-is recorded in `approval_mode="review"` whatever the family's default.** Two consequences, both mechanical:
+1. **Within one act, a label is resolved once.** The first `proposal` for a label mints a `CandidateRef`
+   carrying that `act_id`, and every later reference to the same label **in the same act** reuses it rather
+   than resolving again.
+2. **Across acts, the propose door asks who already holds a pending proposal for this word.** Before
+   recording a propose-at-ingest invocation the loop queries `invocations(unreviewed=True)` for an undrained
+   proposal answering to this label under this `(namespace, kind, type_name)`. If one exists, the second
+   proposal carries `instance_proposal_pending:<invocation_id>` and does not mint a second identity.
 
-1. `invocations(unreviewed=True)` enumerates exactly the proposals that were made over an unresolved
-   identity. The backlog is a query, not a memory.
-2. `review_invocation` (**R73**) is its only drain, and R73's own argument applies unchanged: **a review is
-   a second act by a second person at a later time.** The actor who ingested the row cannot clear their own
-   ambiguity.
+**Reconciling a proposal made while a candidate was `ambiguous`.** The invocation is recorded with
+`instance_ambiguous_at_proposal:<input_name>:<n>` — **[Observed], F7:** the original grammar carried only
+`<n>`, so a capture with a 3-way and a 2-way tie recorded `['…:3','…:2']`, two integers with no input name
+and no refs — and it is recorded in `approval_mode="review"` whatever the family's default. Then
+`invocations(unreviewed=True)` enumerates exactly the proposals made over an unresolved identity, and
+`review_invocation` (**R73**) is its only drain.
 
-**A proposal made while the resolution was `unknowable` is a different case and this document refuses to
-soften it:** it is not recorded as a proposal at all, because *we could not look* is not *we looked and found
-nothing*. §10 records what this cannot enforce.
+> **`<n>` is counted over a FINISHED read or it is not counted.** **[Observed], K9:** under the old §3.4 a
+> capped scan reported `ambiguous known=3` where the true multiplicity was **12**, so a reviewer draining the
+> queue saw `:3` for a twelve-way collision. Rule 3-6 closes it — an unfinished read is `unknowable` and
+> mints no proposal — and it is named here so the fix cannot be scoped narrowly and lose it.
+
+> **What §4.3 says about self-review, corrected.** The original said *"the actor who ingested the row cannot
+> clear their own ambiguity."* **[Observed], F11:** `review_invocation(reviewed_by='ai:capture')` — the same
+> actor — succeeds. `ACTIONS.md` §6.5 / R73 argued only that a `reviewed_by=` *parameter on the write call*
+> would permit self-review; it never claimed actor distinctness is enforced anywhere. **The true sentence is
+> that the review is a separate act, separately recorded, by whoever performs it** — and whether the registry
+> should refuse a self-review is **Q89**, not this document's to take.
+
+### 4.4 The three amendments this document ASKS OF `ACTIONS.md`, and may not make
+
+R3's rule is that a value is added in the change that introduces it; the same discipline applies to a shape.
+**[Observed], round 1**, three of `ACTIONS.md`'s shipped surfaces cannot express what §4 requires, and this
+row ships no code, so all three are **named here and landed by the build row**:
+
+| # | what is missing | the evidence | why this row may not land it |
+|---|---|---|---|
+| **A1** | `InputSpec.ref` has no value for a thing that does not exist yet | F1's four refusals above | `InputSpec` is a printed, drift-checked shape backed by `ontoloche/actions.py`; amending the prose without the code fails [`check_spec_drift.py`](../tools/check_spec_drift.py), and amending the code is product code |
+| **A2** | **`Invocation` has no field that carries a RESULT**, so rule 4-3's *"the `InstanceRef` the host minted is recorded on the invocation"* has no carrier. **[Observed], F2:** route A (the ref in the `host_state` effect's `why`, which is its identity per ACTIONS 2.5-9) makes a **correct** capture warn `effect_undeclared:host_state:created …` — *"a detector that fires on a correct run is not a detector"*, ACTIONS' own sentence, reproduced one document along. Route B (an optional `InputSpec` used as an output slot) works and is one container meaning two things | same | same |
+| **A3** | `record_invocation` takes neither `approval_mode` nor `warnings`, so rule 4-5 cannot put **one** invocation into `review`. **[Observed], F3:** `declared_policy` is copied from the family and the only shipped route to `review` is a governance act that moves **every subsequent row** there | same | same |
+
+**Until all three land, §4 is a specification of a contract that cannot yet be executed**, and saying so is
+the point: `ACTIONS.md` §14's *"a build row finds what a reading round cannot, by trying to write the test"*
+arriving one row earlier, because a reading round **did** find it — by trying to write the walk-through.
 
 **Rules of §4**
 
 | # | rule | id |
 |---|---|---|
-| 4-1 | A propose-at-ingest act is an invocation of a `kind="action"` family; this document adds no object and no primitive for it | `C20-27` |
+| 4-1 | A propose-at-ingest act is an invocation of a `kind="action"` family; this document adds no object with a store and no primitive for it | `C20-27` |
 | 4-2 | The host writes the instance row. The family declares `Effect(op="host_state")` with its mandatory `why`, and this project performs no write | `C20-28` |
-| 4-3 | The `InstanceRef` the host minted is recorded on the invocation, so the ledger names what was created | `C20-29` |
+| 4-3 | The `InstanceRef` the host minted is recorded on the invocation, in the `results` slot amendment **A2** adds — never in an effect's `why` and never in `inputs` | `C20-29` |
 | 4-4 | Provenance is `InvocationProvenance` unchanged: actor, tier, confidence, approver, `source_version`. No field is added | `C20-30` |
-| 4-5 | A proposal made over an `ambiguous` resolution carries `instance_ambiguous_at_proposal:<n>` and is recorded in `review` mode whatever the family declared | `C20-31` |
+| 4-5 | A proposal made over an `ambiguous` resolution carries `instance_ambiguous_at_proposal:<input_name>:<n>` and is recorded in `review` mode whatever the family declared | `C20-31` |
 | 4-6 | Those proposals are enumerable by `invocations(unreviewed=True)` and drained only by `review_invocation` | `C20-32` |
 | 4-7 | A resolution of `unknowable` yields **no** proposal | `C20-33` |
-| 4-8 | An ingest family may not declare `Effect(op="propose_type", kind="predicate")` — `ACTIONS.md` §2.5's allowlist, inherited and restated because an ingestion loop is the highest-volume caller that could reach it | `C20-34` |
+| 4-8 | An ingest family may not declare `Effect(op="propose_type", kind="predicate")` — `ACTIONS.md` §2.5's allowlist, restated because ingestion is the highest-volume caller that could reach it | `C20-34` |
+| 4-9 | A thing being proposed is named by a `CandidateRef`, which has no `id` and never acquires one | `C20-69` |
+| 4-10 | **Within one ingest act a label is resolved once**; later references to it in that act reuse the first `CandidateRef` | `C20-70` |
+| 4-11 | **Before recording a propose invocation the loop asks `invocations(unreviewed=True)` who already holds a pending proposal for this label** under this `(namespace, kind, type_name)`; a second carries `instance_proposal_pending:<invocation_id>` and mints no second identity | `C20-71` |
+| 4-12 | `<n>` in `instance_ambiguous_at_proposal` is counted over a finished read; rule 3-6 makes an unfinished one unable to reach this door at all | `C20-72` |
 
 ---
 
-## 5. The match-vs-propose confidence gate — **a governed fact on the entry, never a call parameter**
+## 5. The match-vs-propose confidence gate — **a governed fact on the entry, and it answers in §3's vocabulary**
 
 ```
-MatchPolicy:                    # declared on the kind="entity" entry
-    match_at:        float      # at or above: `existing`
-    propose_below:   float      # strictly below: `proposal`
-    ambiguity_margin: float     # candidates within this of the top are TIED. 3.2
-    why:             str        # REQUIRED, non-empty
+MatchPolicy:                     # declared on the kind="entity" entry
+    match_at:         float      # at or above: a candidate is match-grade
+    propose_below:    float      # strictly below: not a candidate at all
+    ambiguity_margin: float      # candidates within this of the top are TIED. 3.2
+    why:              str        # REQUIRED, non-empty
 ```
 
-**Three outcomes, three-valued per R60**, and the band between the two thresholds is the third: a human's,
-not a default's. **[Observed], design test 4** ([`ingest_gate_probe.py`](../tools/ingest_gate_probe.py),
-100 live NYC 311 rows, 38 already held exactly, 24 held but landing in an abbreviated spelling, 38 genuinely
-new):
+**The gate answers in §3's five outcomes and mints no vocabulary of its own.** *(Round 1, K3. The original
+gave it three verdicts of its own —* `match` / `propose` / `review` *— and* **[Observed]** `review` *was not
+one of the five that rule 3-1 closes, had no `InstanceResolution` to ride, and no drain. The two artefacts
+this document cited then answered one landed row two ways:* `MatchPolicy.verdict → 'review'` *and*
+`resolve_instance → 'proposal'` *on* `'WILLOWBROOKE CT SKILLED CARE CENTER AT MEASE LI'` *@ 0.9691 — and
+with nothing forbidding a re-ingest, pass 1 proposed, the host minted a row, and pass 2 answered `existing`
+at 1.0 against the duplicate it had just created.)*
 
-```
-match_at=0.97  propose_below=0.80
-   known: {'match': 38}          novel: {'propose': 38}
-  banded: {'review': 23, 'match': 1}
-```
+| the score says | the outcome |
+|---|---|
+| exactly one candidate at or above `match_at`, nothing else tied | **`existing`** |
+| more than one candidate in the tied set (§3.2) | **`ambiguous`** |
+| a top candidate at or above `propose_below` but below `match_at` | **`ambiguous`** — *not confident enough to be the same thing, and a human decides* |
+| nothing at or above `propose_below` | **`proposal`** |
+| nothing scored, or the read did not finish | **`unknowable`** |
 
-**38 of 38** — `ROADMAP.md`'s *"I already know 38 of these"*, made literal on public data. All three outcomes
-fire on one batch. The one abbreviated row that matched at 1.0 is `BATH BEACH PARK`, which contains no
-abbreviable word: the correct answer, not a miss.
+**One outcome, two reasons, and the `reason` string says which** — `endpoint_kind_mismatch`'s recorded
+economy (`EDGES.md` §7 / `INTERFACE.md` §5.12): *a closed vocabulary that grows a value per variant of one
+failure is not closed for long.* Both reasons mean the same thing to a caller — **a human must decide, and
+nothing may be minted meanwhile** — and rule 4-5 routes both to the same queue.
 
 ### 5.1 Why the threshold is declared and not passed — **the failure, constructed**
 
-**[Observed], design test 4 §4.3:** the identical batch, under two callers who each chose their own
-threshold, resolves **differently on 18 of 100 rows** — every one of them an address in the band:
+**[Observed], design test 4:** the identical batch, under two callers who each chose their own threshold,
+resolves **differently on 18 of 100 rows** — every one an address in the band:
 
 ```
 '2260 BENSON AVE' @ 0.9091: caller A -> match, caller B -> review
@@ -449,14 +633,34 @@ threshold, resolves **differently on 18 of 100 rows** — every one of them an a
 
 Each caller is internally consistent. The store ends up holding duplicates **whose cause is which caller
 landed the row** — a fact the curation loop cannot see, cannot enumerate and cannot fix, because nothing
-recorded it. So the threshold rides the proposal→approval loop like every other governed fact, is
-enumerable, and changes by a governance act rather than by an argument.
+recorded it. So the threshold rides the proposal→approval loop like every other governed fact.
 
 **`why` is required and non-empty**, on `ACTIONS.md` §2.4-3's reasoning exactly: an undescribed threshold is
 one nobody will ever be able to raise.
 
-**And the gate never softens `unknowable`.** **[Observed]** `policy.verdict(None) == "unknowable"`: a
-candidate the scan could not score is not a candidate the gate may call `propose`.
+### 5.2 *"I already know 38 of these"* — the number, and what the fixture does to it
+
+`ROADMAP.md` homes instance resolution in Phase 3 with the walkthrough's *"I already know 38 of these"*.
+**[Observed], design test 4**, 100 live NYC 311 rows — 38 already held exactly, 24 held but landing in an
+abbreviated spelling, 38 genuinely new:
+
+```
+match_at=0.97  propose_below=0.80
+   known: {'existing': 38}     banded: {'ambiguous': 23, 'existing': 1}     novel: {'proposal': 38}
+```
+
+**And the fixture's own hand is on that number, which round 1 measured and this section now prints.**
+**[Observed], M3:** the probe builds its host with one instance per **address**, while the instance in
+`erm2-nwe9` is a service request keyed by `unique_key`; **46%** of the fetched rows share an address and the
+probe discards **32%** of them. **Un-deduped — the host's actual rows — the same batch gives
+`{'ambiguous': 13, 'existing': 25}`.**
+
+**Both numbers are true of different hosts, and the second is the more honest headline.** *A host that holds
+one instance per label answers 38 of 38; a host that holds its real rows answers 25 and correctly refuses to
+guess on 13.* The second is `resolve_instance` working — 13 genuine multiplicities caught rather than
+collapsed — and it is the number a reader should carry, because **[Observed]** 59.7% of `uvpi-gqnh`'s
+683,788 instances share an address with another (see ING5). *A headline number that is an artefact of a
+fixture line is exactly what §5.1's own argument is about, and it was one.*
 
 **Rules of §5**
 
@@ -465,10 +669,12 @@ candidate the scan could not score is not a candidate the gate may call `propose
 | 5-1 | `MatchPolicy` is declared on the entry and rides propose→approve; `resolve_instance` takes no threshold argument | `C20-35` |
 | 5-2 | `propose_below <= match_at`, refused at declaration otherwise | `C20-36` |
 | 5-3 | `MatchPolicy.why` is required and non-empty | `C20-37` |
-| 5-4 | At or above `match_at` is `existing`; strictly below `propose_below` is `proposal`; the band between is the human's, and it is a third outcome rather than a rounded one | `C20-38` |
-| 5-5 | An unscored candidate is `unknowable` at the gate as at the call | `C20-39` |
+| 5-4 | The gate answers in §3's five outcomes and mints no verdict vocabulary of its own | `C20-38` |
+| 5-5 | An unscored candidate, and a candidate off an unfinished read, are `unknowable` at the gate as at the call | `C20-39` |
 | 5-6 | Two entries in one namespace may declare different policies; two **callers** may not | `C20-40` |
 | 5-7 | The policy in force is recorded on the invocation, as `ACTIONS.md` rule 3-8 records the policy the gate judged | `C20-41` |
+| 5-8 | **`existing` requires exactly one member in the tied set of §3.2** — every candidate at or above `match_at` plus every candidate within `ambiguity_margin` of the top | `C20-73` |
+| 5-9 | A top candidate between `propose_below` and `match_at` is `ambiguous`, never `existing` and never `proposal` | `C20-74` |
 
 ---
 
@@ -514,13 +720,15 @@ result, because a condition that calls `consumers` is a gate that hides a walk (
 
 **There is no `not`, and no `matches`.** Negation exists only as `ne` / `not_in` over a named attribute, so a
 caller cannot build an unbounded negation and `not(unknowable)` never has to be argued about; a regex
-operator is a query language, which is the door §2.4 of `ACTIONS.md` exists to keep shut.
+operator is a query language, which is the door `ACTIONS.md` §2.4 exists to keep shut. **[Observed], round
+1:** a reviewer tried to construct a real CMS or NYC host predicate needing either and could not — *"every
+case I built reduced to `ne`/`not_in` or to the attribute-to-attribute gap, which is a different missing
+thing."* That gap is contortion **ING10**.
 
 ### 6.1 Three-valued, and both two-valued readings are constructed failures
 
-**[Observed], design test 3** ([`ingest_condition_probe.py`](../tools/ingest_condition_probe.py)), over
-**1,373** CMS facilities from two states in **one store** — California and Colorado, the pair sharing the
-most provider names (**five**, of 84 names that span more than one state):
+**[Observed], design test 3**, over **1,373** CMS facilities from two states in **one store** — California
+and Colorado, the pair sharing the most provider names (**five**, of 84 names that span more than one state):
 
 - a predicate over `ownership_type`, **an attribute no column of this export carries**, evaluates
   `unknowable` on all 1,373 candidates and the resolution is `unknowable`;
@@ -548,22 +756,24 @@ R60: **declared on the entry, evaluated by the registry**, so two hosts cannot d
 meant. R59: **the tenancy predicate is the host's.** Both hold, and they are not in tension:
 
 - the predicate is **declared** as a `Condition` on the entry, which is what makes it enumerable and
-  governed;
-- the **registry** evaluates it over the candidates primitive 23 returned — that evaluation is the
-  guarantee;
-- the **host** may also apply it inside its adapter as `host_filter`, which is an optimisation and never the
-  guarantee. **[Observed], design test 3:** the primitive's signature carries **no tenant parameter**, each
-  host `considered=1373` of 1,373 rows, and the predicate did every exclusion. *The separation is not that
-  the host hid rows; it is that the exclusion happened where it can be counted.*
+  governed — and **[Observed], P3:** it may not also be a call parameter, because a caller who omits the
+  keyword gets a different answer and a cross-tenant candidate. §3's signature no longer has one;
+- the **registry** evaluates it over the candidates primitive 23 returned — **and over the record primitive
+  22 returns** (rule 2-15), because **[Observed], M7:** `get_instance` originally had no tenancy surface at
+  all and a California caller could confirm a Colorado row by key;
+- the **host** may also narrow inside its adapter through `host_filter`, which is an optimisation and never
+  the guarantee. **[Observed], design test 3:** the primitive's signature carries **no tenant parameter**,
+  each host `considered=1373` of 1,373 rows, and the predicate did every exclusion. *The separation is not
+  that the host hid rows; it is that the exclusion happened where it can be counted.*
 
 ### 6.4 The one change R60 requires, and it lands with this document
 
 R60 says the four surfaces are amended **in one change**. This document is that change: `INGEST.md` §6 is the
 language, and the three sibling sections gain a pointer to it in the same commit —
 [`INTERFACE.md`](INTERFACE.md) §10b.4 (contortion 11), [`EDGES.md`](EDGES.md) §4.3 (**R22**), and
-[`ACTIONS.md`](ACTIONS.md) §2.4 (**ACT4**, rule 2.4-9). **The pointers do not change any printed shape or
-signature in those documents**, because nothing here is built yet: each says where its missing mechanism now
-lives and what still has to happen before it can be used.
+[`ACTIONS.md`](ACTIONS.md) §2.4 (**ACT4**, rule 2.4-9). **The pointers change no printed shape or signature
+in those documents**, because nothing here is built yet: each says where its missing mechanism now lives and
+what still has to happen before it can be used.
 
 **Rules of §6**
 
@@ -582,8 +792,8 @@ lives and what still has to happen before it can be used.
 | 6-11 | `Condition.why` is required and non-empty | `C20-52` |
 | 6-12 | `all_of` is `False` if any term is; otherwise `unknowable` if any is; otherwise `True`. `any_of` is its dual | `C20-53` |
 | 6-13 | There is no `not` and no `matches` | `C20-54` |
-| 6-14 | The condition is declared on the entry and rides propose→approve | `C20-55` |
-| 6-15 | The registry evaluates it; a host-side `host_filter` is an optimisation and never the guarantee | `C20-56` |
+| 6-14 | The condition is declared on the entry and rides propose→approve. **It is never a call parameter** | `C20-55` |
+| 6-15 | The registry evaluates it, over every record either primitive returns; a host-side `host_filter` is an optimisation and never the guarantee | `C20-56` |
 | 6-16 | A candidate the predicate could not decide makes the resolution `unknowable` (§3.4) and is never silently dropped | `C20-57` |
 | 6-17 | The candidate primitive takes no tenant parameter. R24 / R59 | `C20-58` |
 
@@ -604,62 +814,63 @@ registry cannot even say how blind.
 
 **Nothing in this project can fix it. Registering consumers is a host act.** This document states the
 obligation; meeting it belongs to the host, and until it is met every ingest proposal's blast radius is
-`known=0, complete=false` — which is honest and is not the same as safe.
+`known=0, complete=false` — which is honest and is not the same as safe. **The resolution says so**: it
+carries `consumers_unregistered` in its `warnings` (§8), because **[Observed], F8:** the original rules 7-1
+and 7-4 named the resolution as their carrier and `InstanceResolution` had no field for either.
 
 ### 7.2 The entity vocabulary is the host's to register
 
 `propose_type` / `approve` are shipped. A host that wants `task`, `project`, `person`, `org`, `meeting`,
 `briefing`, `decision` as `kind="entity"` rows registers them itself. **This is not a build row for anybody**
-— it is separated out here so nobody waits on this project for it. (`../decisions/2026-09-02-phase3-repoint-R77-R78.md`
-§5, row 0d: **NOT STARTED — and it needs NO work from this project.**)
+— it is separated out here so nobody waits on this project for it.
 
 ### 7.3 The tenancy predicate is the host's
 
 R59, unchanged. The host declares it as a `Condition` (§6) on the entry, and it becomes enumerable and
 governed by declaring it. A host that does not declare one is running the loop with no tenancy filter — which
 is correct for a single-tenant deployment and is a defect in any other, and **this document cannot tell which
-a deployment is.**
+a deployment is**, so the resolution carries `no_tenancy_predicate` rather than implying a filter.
 
 **Rules of §7**
 
 | # | rule | id |
 |---|---|---|
-| 7-1 | Ingest curation reports its blast radius from `consumers()`, and reports it as incomplete, never as safe | `C20-59` |
+| 7-1 | Ingest curation reports its blast radius from `consumers()`, and reports it as incomplete, never as safe — carried in `InstanceResolution.warnings` as `consumers_unregistered` | `C20-59` |
 | 7-2 | This document specifies no consumer-registration mechanism; it states the obligation | `C20-60` |
 | 7-3 | The entity vocabulary is registered by the host through the shipped calls; this document adds no path for it | `C20-61` |
-| 7-4 | A namespace with no declared tenancy predicate runs unfiltered, and the resolution says so rather than implying a filter | `C20-62` |
+| 7-4 | A namespace with no declared tenancy predicate runs unfiltered and the resolution carries `no_tenancy_predicate` | `C20-62` |
 
 ---
 
-## 8. Printed shapes — and why `check_spec_drift.py` is **not** pointed here yet
+## 8. Printed shapes — and what has and has NOT been executed
 
 [`../tools/check_spec_drift.py`](../tools/check_spec_drift.py) compares a spec's printed shapes and
 signatures against the dataclasses and methods that exist. **Nothing in this document exists**, so pointing
-the checker here would fail on every line of it. This is `ACTIONS.md` §14's position exactly, and the
-sequence is the same: **the build row adds `INGEST.md` to the checker in the same change that lands the
-shapes**, and until then the shapes below are a specification and are checked by reading.
-
-The shapes are printed in full in §2 (`InstanceRecord`, `CandidateQuery`, `CandidatePage`), §3 (the call),
-§5 (`MatchPolicy`) and §6 (`Condition`, `ConditionResult`). The one shape not yet printed:
+the checker here would fail on every line. This is `ACTIONS.md` §14's position exactly: **the build row adds
+`INGEST.md` to the checker in the same change that lands the shapes.**
 
 ```
 InstanceContext:                    # the ResolveContext analogue, and it is NOT that object
     label_source:   str | None      # "erm2-nwe9#incident_address" -- WHICH SURFACE the
                                     #   string was read from. INTERFACE 10b.6's finding B
     row_attributes: dict            # the landed row's other columns, opaque
-    sibling_labels: list[str]       # other candidate labels in the same batch
+    siblings:       tuple[tuple[str, str], ...]   # (type_name, label) of the other candidates
+                                    #   in the same ingest act. TYPED -- see below
+    act_id:         str             # the ingest act. 4.3's scope
     proposed_by:    str | None
 
 InstanceResolution:
     outcome:        str             # the five of 3.1
     ref:            InstanceRef | None      # when "existing"
+    candidate:      CandidateRef | None     # when "proposal" or "ambiguous". 4.1
     confidence:     float | None    # None means "did not score", NOT zero
     reason:         str
-    candidates:     tuple[InstanceCandidate, ...]   # ties on "ambiguous"; near misses otherwise
+    candidates:     tuple[InstanceCandidate, ...]   # the tied set on "ambiguous"
     known:          int             # len(candidates). Rule K
     complete:       bool            # Rule K -- about the candidate SET
     why_incomplete: str             # "" when complete
     scanned:        int             # how many host records the identity read consumed
+    warnings:       tuple[str, ...] # 7-1, 7-4, 2-13, 3-14
     tier:           str             # echoed back; goes into provenance
 
 InstanceCandidate:
@@ -673,7 +884,12 @@ InstanceCandidate:
 **column-shaped** — `sample_values` is *"up to N observed instances"* and `sibling_columns` *"carries most of
 the signal"* — which is the right shape for resolving the word `facility` and the wrong one for resolving
 `"BURNS NURSING HOME, INC."`. `ACTIONS.md` §5.1 recorded contortion **ACT2** for using `ResolveContext` with
-less signal than it was built for; this document declines to make that a second time and says why.
+less signal than it was built for; this document declines to make that a second time.
+
+**`siblings` is TYPED, and round 1 is why.** **[Observed], F6:** the original field was
+`sibling_labels: list[str]`, and a capture resolving a task was handed a project name and a person name with
+nothing to tell them apart. `ResolveContext.sibling_columns` carries signal because they are columns of *one
+row*; these are not. The pair carries what the flat list could not.
 
 **`label_source` exists because of a finding this project already recorded and could not act on.**
 `INTERFACE.md` §10b.6 finding **B**, **[Observed]**: NYC's catalogue and its SODA API disagree on field names
@@ -682,29 +898,56 @@ proposer brings depends on which surface it read*, and §10b.6 says in terms tha
 must record which surface a column name came from.** This is that field. It is a fact about *us* and so does
 not belong in `Provenance.source_version`, which R21 reserves for a fact about the **source**.
 
+### 8.1 What is specified and NOT yet exercised — **stated, because round 1 counted it**
+
+**[Observed], F9 and §6.2c:** at the end of round 1, nine printed things had never been run by any design
+test — `InstanceContext` and all its fields (the call's second **positional** argument), both capability
+flags, `InstanceRecord.source_version`, `NotSupported`, and `get_instance` itself — and the probes contained
+**eleven countable absences**, five of them a previous kill-row trip's count verbatim. The amended probes
+close the ones that produced findings; **this subsection is where the remainder is named rather than
+implied**, so the build row knows exactly what has a specification and no evidence behind it:
+
+| still unexercised | why it is left | what would exercise it |
+|---|---|---|
+| `InstanceRecord.source_version` | no fixture carries two versions of one host row | a CMS re-export beside the current one |
+| `NotSupported` at primitive 22 | needs an adapter that declares `resolves_instances=False`, which is a build-row object | the contract suite's `sqlite_minimal` leg |
+| `instance_filters` with a key the host declines | needs a real adapter to decline one | `C20-10` in the build row |
+
+**Nothing else in §2, §3, §4, §5 or §6 is unexercised after the amendments** — and §5 of this document's run
+record carries the count.
+
 ---
 
 ## 9. Rule → planned id mapping *(standing constraint 8)*
 
-**Sixty-two rules, sixty-two planned ids, `C20-01` … `C20-62`**, listed in each section's own table above.
+**Seventy-six rules, seventy-six planned ids, `C20-01` … `C20-74`**, listed in each section's own table.
 The prefix is `C20` because `C19` is `ACTIONS.md`'s and is full. **The ids are *planned*:** this row ships no
 implementation, so no id is claimed, and the build row claims them in the change that makes each rule
-testable — which is standing constraint 8's own rule about spec and ids landing together, applied to a spec
-that precedes its build by design (R60: *nothing is built before the spec row*).
+testable — standing constraint 8's rule applied to a spec that precedes its build by design (R60).
 
-**Three vocabulary values are RESERVED here and deliberately NOT minted**, on ruling **R11**'s precedent
-— *a value is added in the change that introduces it, and nothing introduces it yet*:
+**Five vocabulary values are RESERVED here and deliberately NOT minted**, on ruling **R11**'s precedent — *a
+value is added in the change that introduces it, and nothing introduces it yet*:
 
-| value | carrier | why it is reserved rather than added |
+| value | carrier | note |
 |---|---|---|
-| `instance_source_absent` | `Refusal.reason`, the **thirty-second** | No v0 code path can return it: this row ships none. The build row mints it in `INTERFACE.md` §5.12 **and** `types.REFUSAL_REASONS` in the change that makes it reachable. It is the **sixth capability refusal**, after `proposals_not_stored`, `cannot_record_override`, `consumer_source_read_only`, `edge_store_absent` and `action_store_absent`, and it exists for the reason the first of those does: an empty candidate page would read as *"there is nothing like this"*, which is Rule U's forbidden empty in the one call a caller would believe |
-| `instance_ambiguous_at_proposal:<n>` | `warnings`, the **thirty-eighth** | §4.3's mechanical handle. Reserved for the same reason |
-| — no third refusal — | | A malformed `Condition` is refused with **`attributes_schema_violation`**, which `ACTIONS.md` rule 2.4-6 already uses for a malformed `Precondition` declaration. **Minting a value for the identical failure one object along is Cause B in the direction nobody guards** — a closed vocabulary grows by one value per *fact*, not per *object* |
+| `instance_source_absent` | `Refusal.reason`, the **thirty-second** | The **sixth capability refusal**, after `proposals_not_stored`, `cannot_record_override`, `consumer_source_read_only`, `edge_store_absent` and `action_store_absent`, and it exists for the reason the first of those does: an empty candidate page would read as *"there is nothing like this"* |
+| `instance_ambiguous_at_proposal:<input_name>:<n>` | `warnings` | §4.3's mechanical handle. The `<input_name>` segment was added by round 1's F7 |
+| `instance_proposal_pending:<invocation_id>` | `warnings` | §4.3 rule 4-11's handle — the pending-proposal question K4 forced |
+| `instance_narrowed_proposal:<keys>` | `warnings` | §2.1 rule 2-13's handle — M2's cheap `complete=True` made visible |
+| `instance_type_succeeded:<successor>` | `warnings` | §3.4 rule 3-14's handle — K6's retired-type case |
 
-**Why the reservation and not the amendment.** `check_spec_drift.py` holds `INTERFACE.md` §5.12's list and
-count against `types.REFUSAL_REASONS`, and §5.4's table against `types.WARNING_VALUES`. Amending the prose
-without the tuple fails the checker; amending the tuple is product code, which this row does not ship. The
-reservation is written so the count stays reconcilable — exactly the reason R11's reservation was written.
+**A malformed `Condition` mints nothing**: it is refused with **`attributes_schema_violation`**, which
+`ACTIONS.md` rule 2.4-6 already uses for a malformed `Precondition` declaration. **Minting a value for the
+identical failure one object along is Cause B in the direction nobody guards** — a closed vocabulary grows by
+one value per *fact*, not per *object*.
+
+**Why reservation and not amendment.** `check_spec_drift.py` holds `INTERFACE.md` §5.12's list and count
+against `types.REFUSAL_REASONS`, and §5.4's table against `types.WARNING_VALUES`. Amending the prose without
+the tuple fails the checker; amending the tuple is product code, which this row does not ship. **Q85** asks
+the supervisor to rule it, because EDGES v0 and ACTIONS v0 both chose the other way.
+
+**Three shape amendments to `ACTIONS.md` are likewise named and not made** — §4.4's A1, A2 and A3 — for the
+same reason and with the same routing.
 
 ---
 
@@ -712,12 +955,16 @@ reservation is written so the count stays reconcilable — exactly the reason R1
 
 | # | contortion |
 |---|---|
-| **ING1** | **The ledger cannot tell an instance write from any other host-state change, except by prose.** §4 maps the write to `Effect(op="host_state")`, whose identity **is** its `why` (`ACTIONS.md` §2.5), so two ingest families with differently-worded admissions are two effects. Adding a `propose_instance` op was considered and refused: this project performs no such write, and an op naming an operation it never performs is a permission that misdescribes itself. **The cost is stated, not paid down.** |
-| **ING2** | **Nothing enforces that a caller does not propose over an `unknowable` resolution.** Rule 4-7 is a rule of this document; the registry does not execute (`ACTIONS.md` §4) and `record_invocation` records what already occurred, because *refusing to record what already happened is the worst available answer* (`ACTIONS.md` rule 2.5-6). So the loop's most important rule is **advisory at the only door that could enforce it.** Inherited, not introduced — and worse here than in ACTIONS, because ingestion is the highest-volume caller in the system. |
-| **ING3** | **`resolve_instance` cannot use `resolve_type`'s resolver, and the two can drift about what one word is.** `_resolve.py`'s `identity_key` / `same_word` are the registry's notion of *the same word* and exist as one function because the kill row's seventh trip is what happens when there are two. This document scores **instance labels**, which are not vocabulary words — `"MILLER'S MERRY MANOR"` is not a candidate for `NAME_RE` — so it cannot reuse that function and must not, and there is now a **second** notion of similarity in the project. **[Observed]** it is a real risk rather than a theoretical one: the seventh trip is exactly this shape one layer up. §11 carries it as a question rather than a design. |
-| **ING4** | **A `host_filter` is opaque, so this project cannot tell a narrowing from a tenancy filter.** §2.1 requires the host's filter to be opaque; §6.3 requires the tenancy predicate to be a declared `Condition`. A host that puts its tenancy inside `host_filter` gets the right answer and an **unenumerable** gate — the thing R60 exists to prevent, arriving through the field R58's measurement forced. Rule 6-15 says the registry's evaluation is the guarantee, which makes the outcome safe; it does not make the host's filter visible. |
-| **ING5** | **`InstanceRecord.label` assumes a host has one.** CMS has `Provider Name`, 311 has `incident_address`, and a host whose instances are identified by a composite of four columns has none. v0 requires the **host** to choose the label its adapter returns and records that this is a choice the adapter makes silently, with nothing in the protocol able to see it. |
-| **ING6** | **The 104 shared names are handled and the 14,498 unshared ones are not proved.** Design test 1 exercises `existing` at multiplicity 1 and `ambiguous` at multiplicity 12. **[Observed]** the file's remaining structure — near-misses that are *genuinely different facilities with similar names* — is exercised only by design test 4's abbreviation band, on a different dataset. The false-positive rate of any real resolver is a **build-row** measurement and this document does not claim one. |
+| **ING1** | **The ledger cannot tell an instance write from any other host-state change, except by prose.** §4 maps the write to `Effect(op="host_state")`, whose identity **is** its `why` (`ACTIONS.md` §2.5), so two ingest families with differently-worded admissions are two effects. Adding a `propose_instance` op was considered and refused: this project performs no such write. **Round 1 sharpened the cost: [Observed]** putting the minted ref into that `why` makes a **correct** capture warn `effect_undeclared`, which is why §4.4's amendment **A2** asks for a `results` slot instead |
+| **ING2** | **Nothing enforces that a caller does not propose over an `unknowable` resolution.** Rule 4-7 is a rule of this document; the registry does not execute (`ACTIONS.md` §4) and `record_invocation` records what already occurred. So the loop's most important rule is **advisory at the only door that could enforce it.** Inherited, not introduced — and worse here, because ingestion is the highest-volume caller in the system |
+| **ING3** | **`resolve_instance` cannot use `resolve_type`'s resolver, so the project now has two notions of *the same string*.** `_resolve.py`'s `identity_key` / `same_word` are one function *because the kill row's seventh trip is what happens when there are two*. **[Observed], K10:** the risk is already realised in this row's own probe — `'状态'` and `'!!!'` answer `not_an_instance` with `scanned=0`, because the probe's normaliser is `identity_key`'s ASCII-only collapse re-implemented, so a real Chinese-language facility name is refused as a class word. **That is `C4-14`'s defect in its other direction.** A probe defect and not a spec defect — §3.3 declines to define the classifier — and it is measured evidence for **Q86** rather than a theoretical risk |
+| **ING4** | **A `host_filter` narrows in the host, so this project cannot tell a narrowing from a tenancy filter.** Rule 2-12 makes the **keys** declarable, which is what `instance_filters` needs to govern them, and the **values** stay opaque. A host that puts tenancy in a filter value still gets the right answer and an unenumerable gate; rule 6-15's registry-side evaluation is what makes the outcome safe, and it does not make the host's intent visible |
+| **ING5** | **`InstanceRecord.label` assumes a host has one, and round 1 measured what that costs.** **[Observed]** on `uvpi-gqnh` (683,788 DPR instances): `address` → 408,701 distinct values and **59.7% of instances share an address with another**, so 59.7% of landed rows resolve `ambiguous` and rule 4-5 forces every one of those proposals into `review`; `spc_common` → 132 values, which are class words → `not_an_instance`; `tree_id` → the opaque host id, which is not *"the human-facing string a landed row would carry"*. **The label choice does not merely hide a decision; on the second-largest NYC fixture it defeats the gate**, and `label_parts` is the obvious answer this row does not take on a design test's authority |
+| **ING6** | **The 104 shared names are handled and the 14,498 unshared ones are not proved.** Design test 1 exercises `existing` at multiplicity 1 and `ambiguous` at multiplicity 12; **[Observed], K2** the near-miss population is real (`- WEST` / `- EAST`) and §3.2's set test is what covers it. The false-positive rate of any real resolver is a **build-row** measurement and this document claims none |
+| **ING7** | **`kind` is pinned to `"entity"`, and that silently drops half of UC2.** `INTERFACE.md` §10's CMS design test registers six types, **two of them `value_set`** — `deficiency_corrected_status` (**[Observed]** exactly six values, `'Deficient, Provider has date of correction'` 408,475 … `'No revisit needed'` 277) and `scope_severity_code`. *"Which of the six statuses is this cell?"* is an instance question over a landed row and is what UC2 was chosen to test, and this protocol cannot ask it. The constraint is **inherited** from `EDGES.md` §2.1 (*an `InstanceRef`'s type MUST be `kind="entity"`*) — **but an inherited constraint that removes a fixture's stated pathology is a contortion, not a non-issue.** Round 1, M6 |
+| **ING8** | **For a prose source, two of `InstanceContext`'s four fields are empty and the empty pair is the discriminating pair.** **[Observed], F6:** of the 104 shared-name ties, `row_attributes` separates **104/104** and `siblings` **0/104** — and a capture from meeting prose can fill `siblings` and cannot fill `row_attributes` or `label_source`. **[Observed], F10:** `not_an_instance` is likewise unreachable from prose — `'the team'`, `'next quarter'`, `'action items'`, `'TBD'`, `'the migration'` all resolve `proposal` — so **every extraction error from a prose source lands as a well-formed proposal.** ACT2's shape at a second surface, recorded rather than designed away, and it is the strongest argument for **Q86**'s option (c) |
+| **ING9** | **Self-review is not enforced and this document previously said it was.** **[Observed], F11:** `review_invocation(reviewed_by='ai:capture')` succeeds for the actor that ingested the row. `ACTIONS.md` §6.5 / R73 argued only that a `reviewed_by=` parameter on the write call would permit it; nothing anywhere enforces actor distinctness. **Q89** carries it |
+| **ING10** | **`Condition` cannot compare two attributes of one record, and the nearest expressible form is accepted at declaration and `False` for every record.** UC2's own pre-registered pathology — **[Observed] 5,338 of 416,948 rows (1.2803%)** carry a correction date before the survey date — has the gate `Correction Date >= Survey Date`. **[Observed], M5:** `Condition(op='gte', attribute='Correction Date', value='Survey Date')` is **ACCEPTED** at declaration and answers `holds=False` for valid and inverted rows alike, because every ISO date sorts below `'S'`. **That is design test 3's own mechanism-C failure, reached by a predicate that passes rules 6-1…6-13 with a non-empty `why`.** A thirteenth term (`cmp_attr`) is a §-row change and is **not** taken on a design test's authority; **Q90** routes it |
 
 ---
 
@@ -725,78 +972,109 @@ reservation is written so the count stays reconcilable — exactly the reason R1
 
 *(R1–R82 exist and Q1–Q84 are spent; neither number is reused.)*
 
-**Q85 — Does `instance_source_absent` land in this row after all?** §9 reserves it on R11's precedent, which
-keeps `check_spec_drift.py` green and the scope fence intact. The counter-argument is R3's plain words: *a
-value is added in the change that introduces it*, and this change introduces the **specification** of it.
-EDGES v0 and ACTIONS v0 both chose the other way — they amended `types.REFUSAL_REASONS` from a spec row. **A
-ruling either way is cheap now and expensive after the build row.**
+**Q85 — Does `instance_source_absent` land in this row after all?** §9 reserves five values on R11's
+precedent, which keeps `check_spec_drift.py` green and the scope fence intact. The counter-argument is R3's
+plain words: *a value is added in the change that introduces it*, and this change introduces the
+**specification** of it. EDGES v0 and ACTIONS v0 both chose the other way. **A ruling either way is cheap now
+and expensive after the build row.** The same question governs §4.4's three ACTIONS shape amendments.
 
-**Q86 — Is a second notion of *the same string* acceptable, or does the project need one?** Contortion ING3.
-`identity_key` / `same_word` are one function *because the kill row's seventh trip is what happens when there
-are two*, and this document has now created a second scorer for a different class of string. The honest
-options are (a) accept two, named and separated, with the boundary written down; (b) generalise the existing
-one; (c) require every instance resolver to be supplied by the deployment, as `Resolver` already is, and
-specify only the outcomes. **[Inferred]** (c) is closest to what `PACKAGE.md` §2.6 already does, and it is
-the founder's call because it decides whether this project ships a matcher at all.
+**Q86 — Is a second notion of *the same string* acceptable, or does the project need one?** Contortion ING3,
+and round 1 turned it from a risk into a measurement: **[Observed]** this row's own normaliser refuses
+`'状态'` as a class word, which is `C4-14`'s defect in its other direction. The options are (a) accept two,
+named and separated, with the boundary written down; (b) generalise the existing one; (c) **require every
+instance resolver to be supplied by the deployment, as `Resolver` already is, and specify only the
+outcomes.** **[Inferred]** (c) is closest to what `PACKAGE.md` §2.6 already does, and ING8's measurement —
+that the discriminating fields are empty for a prose source, and 3.9% of a real NYC column is class words —
+is the strongest evidence for it. **It decides whether this project ships a matcher at all.**
 
 **Q87 — Should `resolve_instance` be permitted at all when `consumers()` returns `known=0`?** §7.1 states the
-obligation and stops. The stronger reading is that ingest **curation** — the propose path — should refuse on
-a namespace with no registered consumers, because proposing blind is the failure `consumers()` exists to
-prevent. That would make an unmet host obligation a hard stop rather than a warning, which is a policy
-decision about somebody else's deployment and is not a spec row's to take.
+obligation and now carries `consumers_unregistered` on the resolution. The stronger reading is that the
+**propose** path should refuse on a namespace with no registered consumers, because proposing blind is the
+failure `consumers()` exists to prevent. That makes an unmet host obligation a hard stop, which is a policy
+decision about somebody else's deployment.
 
 **Q88 — Does the Rule of the ordering's extension to Phase 3 stand?**
 [`../decisions/2026-09-02-phase3-repoint-R77-R78.md`](../decisions/2026-09-02-phase3-repoint-R77-R78.md) §6
-recommends it and marks it *pending the founder's word*. **This document was written under it** — every shape
-was exercised against CMS and NYC first, and §12 records what the partner's shape would have changed. If the
-extension is declined, §12 becomes a list of things to reconsider rather than a list of conflicts recorded.
+recommends it and marks it *pending the founder's word*. **This document was written under it**, and §12
+records what the partner's shape would have changed.
+
+**Q89 — Should the registry refuse a self-review?** Contortion ING9. `review_invocation`'s whole argument
+(R73) is that *a review is a second act by a second person at a later time*, and **[Observed]** nothing
+enforces the second person. It is `ACTIONS.md`'s call to make, not this document's, and the ingestion loop is
+the caller that makes it matter — a batch of a thousand rows with a thousand self-reviews is a drained queue
+that reviewed nothing.
+
+**Q90 — Does `Condition` gain a thirteenth term for attribute-to-attribute comparison?** Contortion ING10.
+The fixture is UC2's own pre-registered 1.2803% date inversion, the workaround (enumerating 47,318 literal
+pairs) is absurd and the alternative (a host-computed boolean column) is ING4 arriving through §6. **The
+danger is precise: the nearest expressible form is accepted at declaration and silently false for 100% of
+records**, which is the shape §6 exists to prevent. R60 says a thirteenth is a §-row change with a contract
+id; it is not taken on a design test's authority.
 
 ---
 
 ## 12. The partner's shape, exercised against the public data — **conflicts recorded, not resolved**
 
-Written under the extended Rule of the ordering (Q88). **[Observed]** from the supervisor's architecture
-framing of 2026-09-02, five open defects in the design partner's capture path are five surfaces of one
-missing substrate. Each is checked here against what the public data forced.
+Written under the extended Rule of the ordering (Q88). **[Inferred]**, from the supervisor's architecture
+framing of 2026-09-02 — *a document that is not in this repository, and this section carries that document's
+own claim tag rather than upgrading it* — five open defects in the design partner's capture path are five
+surfaces of one missing substrate. *(Round 1, F12: the original section tagged these `[Observed]` from an
+out-of-repo source, upgrading a claim `2026-09-02-phase3-repoint-R77-R78.md` §5 tags `[Inferred]`. The
+`consumers() → known:0` fact IS sourced in-repo, at `INTERFACE.md` §9 contortion 6, and keeps its tag.)*
 
 | the partner's defect | what this spec does | did the partner's shape change anything? |
 |---|---|---|
-| capture emits `create_task` and has **no `create_project` verb** — the propose step missing on the entity that matters | §4: an ingest proposal is an invocation of a host-declared family; the missing verb is a family the host declares and approves | **No.** §4 was derived from `ACTIONS.md`'s shipped ledger, and CMS's *"a facility we have never seen"* is the same shape |
-| **project scatter** — tasks filed into wrong existing projects, for want of a match-vs-propose gate | §5's `MatchPolicy`, three-valued | **No, and the public data made it sharper.** The 18-of-100 disagreement (design test 4 §4.3) is what forced the threshold onto the entry; the partner's defect argues for a gate but not for *where the gate is declared* |
-| relationships auto-applied with **no approval step and no model-identity provenance** | §4.2: `InvocationProvenance` unchanged — actor, tier, approver | **No.** Inherited, not designed |
-| **`consumers()` returns `known:0`** | §7.1: stated as a host obligation, and Q87 asks whether it should be a hard stop | **No** — and this is the one where the public data is silent, because CMS and NYC have no consumers either. Recorded as a **gap in the fixtures**, not in the spec |
+| capture emits `create_task` and has **no `create_project` verb** | §4: an ingest proposal is an invocation of a host-declared family, and §4.1's `CandidateRef` is what makes the *proposed* case expressible | **No — and round 1 proved the point the hard way.** The shape was derived from `ACTIONS.md`'s shipped ledger and CMS's *"a facility we have never seen"*, and the integrator lens then showed the derivation was **incomplete for both**, not partner-shaped |
+| **project scatter** — tasks filed into wrong existing projects, for want of a match-vs-propose gate | §5's `MatchPolicy`, answering in §3's outcomes | **No, and the public data made it sharper.** The 18-of-100 disagreement forced the threshold onto the entry; the partner's defect argues for a gate but not for *where it is declared* |
+| relationships auto-applied with **no approval step and no model-identity provenance** | §4.2: `InvocationProvenance` unchanged | **No.** Inherited, not designed — and the one part of §4 round 1 could not break |
+| **`consumers()` returns `known:0`** **[Observed, in-repo]** | §7.1, plus `consumers_unregistered` on the resolution; **Q87** asks whether it should be a hard stop | **No** — and this is where the public data is **silent**, because CMS and NYC have no consumers either. Recorded as a **gap in the fixtures**, not in the spec |
 | the rot sensor cannot fire for want of `last_used_at` | out of scope: `record_use` / `usage` are `INTERFACE.md` §5.7's | — |
 
-**One conflict is recorded and routed.** The partner's capture path resolves *"which project does this task
-belong to?"* — an instance question over a small, single-tenant, in-memory candidate set. The public data
-forced §2.1's `host_filter` and §3's `unknowable` because **9,764,249** rows cannot be scanned per landed row.
-**A protocol shaped only around the partner's case would have neither**, and would be correct for that case
-and wrong for the venture claim R78 §4 rests on. **The public-data need wins and the conflict is recorded
-here**, per the rule.
+**Two conflicts are recorded and routed.**
+
+1. **Scale.** The partner's capture resolves *"which project does this task belong to?"* over a small,
+   single-tenant, in-memory candidate set. The public data forced §2.1's `host_filter` and §3's `unknowable`
+   because **9,764,249** rows **[Observed 2026-09-03]** cannot be scanned per landed row. **A protocol shaped
+   only around the partner's case would have neither.**
+2. **Source shape, and it cuts the other way.** **[Observed], ING8:** the fields that discriminate on CMS
+   (`row_attributes`, 104/104 of the ties) are exactly the fields a prose capture cannot fill, and
+   `not_an_instance` is unreachable from prose entirely. **The public-data shape does not serve the partner's
+   source here, and this document does not resolve it toward either** — it records both, prices the prose
+   case at ING8, and routes the underlying decision to **Q86**. *The rule says the public-data need wins and
+   the conflict is recorded; it does not say the partner's need is refused silently, which would be the same
+   failure pointing the other way.*
 
 ---
 
-## 13. Kill-criterion check — required, and not skipped
+## 13. Kill-criterion check — required, and it was NOT sufficient the first time
 
 `ROADMAP.md`'s kill criterion is *two things answering to one identity*. **Fourteen trips are on the record**
 ([`../decisions/2026-08-29-3c-rulings-R6-R12.md`](../decisions/2026-08-29-3c-rulings-R6-R12.md)), all at the
 type-identity surface, none in a real merge.
 
-**This document opens a second identity surface and the check is therefore obligatory.** The question: *does
-any resolution outcome let two instances answer to one identity through the confidence gate?*
+**This document opens a second identity surface. Its first check listed five routes and round 1 constructed
+four more through it** — see [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §6.2. The table below is the amended
+one, and the four rows added by the loop are marked.
 
 | the route | what stops it |
 |---|---|
-| two candidates tie and the top one is returned | **Rule 3-3**: `ambiguous` is decided before `existing`, and rule 3-4 makes `ref` `None`. **[Observed]** on twelve real facilities scoring 1.0 |
-| a truncated scan finds nothing and a duplicate is proposed | **Rules 3-5 / 3-6 / 3-7**: `unknowable` is an outcome and `proposal` requires a finished scan. **[Observed]** constructed at `cms:entity:facility#745057` |
-| an undecidable tenancy predicate silently excludes the real match | **Rules 6-4 / 6-16**: `unknowable` is neither false nor true. **[Observed]** both readings constructed on 1,373 rows |
-| two callers with different thresholds each create a row | **Rule 5-1**: the threshold is the entry's. **[Observed]** 18 of 100 rows disagree when it is not |
-| an ingest family proposes a `kind="predicate"` type at volume | **Rule 4-8**: `ACTIONS.md` §2.5's allowlist, restated here because ingestion is the highest-volume caller that could reach it |
+| two candidates tie and the top one is returned | **Rules 3-3 / 3-4**: the tie test is a **set** test and `ref` is `None`. **[Observed]** on twelve real facilities scoring 1.0 |
+| a truncated scan finds nothing and a duplicate is proposed | **Rules 3-5 / 3-6 / 3-7**: `unknowable` is an outcome and `proposal` requires a finished read. **[Observed]** at `cms:entity:facility#745057` |
+| an undecidable tenancy predicate silently excludes the real match | **Rules 6-4 / 6-16**. **[Observed]** both readings constructed on 1,373 rows |
+| two callers with different thresholds each create a row | **Rule 5-1**. **[Observed]** 18 of 100 rows disagree when it is not the entry's |
+| an ingest family proposes a `kind="predicate"` type at volume | **Rule 4-8**: `ACTIONS.md` §2.5's allowlist |
+| **a truncated scan FINDS a match and returns `existing` at 1.0** *(round 1, K1/P1 — the tie test evaluated over a partial extent, which is the register's fifth trip one surface down)* | **Rules 3-5 / 3-6**, as amended: completeness is checked before the candidate set is interpreted at all |
+| **the match band is wider than the ambiguity margin, so two candidates are both match-grade and one is named** *(round 1, K2 — seven real CMS pairs, no truncation)* | **Rules 3-3 / 5-8**: the tied set is every candidate at or above `match_at`, and `existing` requires exactly one |
+| **two rows in ONE ingest act resolve the same label before either is written** *(round 1, F4 — every §3 rule fires correctly and the state is created between two correct answers)* | **Rule 4-10**: within one act a label is resolved once |
+| **a pending proposal is cashed twice, or by two concurrent workers** *(round 1, K4 — standing rule (c) one surface down)* | **Rule 4-11**: the propose door asks who already holds a pending proposal for this word |
+| **a banded score has no outcome, so the gate and the call answer one row two ways** *(round 1, K3)* | **Rules 5-4 / 5-9**: the gate answers in §3's five and mints no vocabulary of its own |
+| **an instance's type is retired underneath it and a zero-row read answers `proposal`** *(round 1, K6)* | **Rules 3-13 / 3-14**: `proposal` requires `scanned > 0`, and the identity read follows the successor chain as **R38** requires of `neighbors` |
+| **two different instances collide in `ref_key`** *(round 1, K8 — `C19-82` at a new door)* | **Rule 2-14**: the primitive refuses a record `flat_form_problem` rejects |
 
-**The check does not trip, and the reason is worth stating plainly: every one of the five routes was closed
-by a rule whose evidence is a constructed failure rather than an argument.** What this document cannot claim
-is that the *list* is complete — that is what the adversarial loop is for, and §14 of
-[`../runs/7A-RUN.md`](../runs/7A-RUN.md) carries what it found.
+**Twelve routes, five of which this document listed and seven of which a loop constructed.** The honest
+reading is the one §6.4 of the run record gives: **every one of the seven was a rule that guarded the case
+that prompted it and not the case beside it** — standing rule (d), three times in one round, in a row whose
+brief cited the register that minted it.
 
 ---
 
@@ -807,9 +1085,10 @@ is that the *list* is complete — that is what the adversarial loop is for, and
 | the seam decided by design test 1 **before** anything else was written | §1, and [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §0 is the pre-registration, committed before the probe existed |
 | candidate-retrieval primitives, each with a capability flag, each paged per R58 | §2 — two primitives, two flags, three states measured live |
 | `resolve_instance` with the four-outcome shape **or a different closed set argued** | §3 — **five**, and T1.5 is the argument |
-| the propose-at-ingest contract | §4 — an invocation, no new object |
+| the propose-at-ingest contract | §4 — an invocation, one reference shape, three amendments named and routed |
 | the match-vs-propose confidence gate as a governed fact | §5 — and §5.1 constructs the alternative's failure |
 | `Condition` as the loop consumes it, with the three sibling sections amended in one change | §6, §6.4 |
 | host obligations stated | §7 |
 | printed shapes, rule→id mapping, contortions, questions | §8, §9, §10, §11 |
-| every shape exercised against the public data, conflicts recorded | §12, and the four design tests in [`../runs/7A-RUN.md`](../runs/7A-RUN.md) |
+| every shape exercised against the public data, conflicts recorded | §12, the four design tests, and §6 of the run record |
+| an adversarial loop with every finding constructed and run | [`../runs/7A-RUN.md`](../runs/7A-RUN.md) §6 |
