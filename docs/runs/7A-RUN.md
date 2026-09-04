@@ -717,3 +717,153 @@ scatter, which is the useful case: **two independent lenses reached the same tri
 3. **The document contradicted itself twice in ways a reader would act on** — §3.4's prose against rule 3-5,
    and §5.1's argument against §3's own printed signature. Both are the same failure: *a claim made in prose
    and not carried into the shape beside it.*
+
+---
+
+### 6.5 Round 2, lens 1 — **the fix auditor. NOT YET: 5 BLOCKING, 7 MAJOR, 4 MINOR, and it found the kill-row family inside round 1's own fix.**
+
+**Why this lens went first, and it is a rule rather than a choice.** The twelfth countersignature made it
+standing: *every round after a fix round begins with a lens pointed at that fix.* Round 1 shipped a large fix
+set — INGEST 62 → 74 rules, a fourth reference shape, a rewritten kill-criterion table, one kit replacing two
+resolvers — so round 2's first lens was pointed at exactly `07af54f`..`39d3718` and at nothing else. The
+register's own count said this is where the next defect lives (3e 4-of-10; row #4 round 3 2-of-4; 4d round 2
+five inside round 1's fixes; 6b round 2 the tenth trip inside the ninth's fix). **It was right again.**
+
+**The lens reproduced the baseline before attacking it: [Observed]** DT1 36/36, DT2 13/13, DT3 17/17,
+DT4 11/11, DT5 10/10 = **87/87**. It mutated **copies** of the probes in a scratch directory with `PYTHONPATH`
+pointed at the repo, so the shipped `ontoloche` package was the real one and **no repo file was ever
+modified** — `git status --short` returned nothing throughout.
+
+#### 6.5a `I-2` (proposed) — **the successor chain is followed for ONE hop, and two ordinary curation passes give two confident answers at 1.0 for one identity**
+
+**This is inside round 1's own diff.** Rule **3-14** (`C20-68`) and route 11 of §13 were both minted at
+`07af54f` to close **K6**. The rule says the identity read resolves `type_name` *"through the successor
+**chain** ... as `neighbors` does under **R38**"*. **[Observed]**, verified by the worker at
+[`../tools/ingest_probe_kit.py`](../tools/ingest_probe_kit.py) lines 491–499, the implementation is a `while`
+whose body ends in an unconditional `break`:
+
+```python
+    # --- rule 3-14: follow the successor chain BEFORE querying -------------
+    effective_type = type_name
+    seen = {type_name}
+    while entry is not None and entry.successor and entry.successor not in seen:
+        warnings.append(f"instance_type_succeeded:{entry.successor}")
+        effective_type = entry.successor
+        seen.add(effective_type)
+        entry = vocab.entry(namespace, effective_type) or entry
+        break
+```
+
+**The construction, [Observed], two ordinary `retire(successor=)` passes and no guard bypassed:**
+
+```
+TWO-hop chain  (facility -> nursing_facility -> ltc_facility)
+   outcome='existing' ref='cms:entity:nursing_facility#999999' conf=1.0 complete=True why_incomplete=''
+   warnings=('instance_type_succeeded:nursing_facility', 'no_tenancy_predicate', 'consumers_unregistered')
+ONE-hop chain  (facility -> ltc_facility), the chain-following CONTROL
+   outcome='existing' ref='cms:entity:ltc_facility#015009' conf=1.0 complete=True
+
+ONE WORD, ONE TYPE IDENTITY, TWO CONFIDENT ANSWERS AT 1.0:
+   cms:entity:nursing_facility#999999  vs  cms:entity:ltc_facility#015009
+```
+
+**Three things make this the fix auditor's finding rather than a fresh one.**
+
+1. **Round 1's headline fix cannot see it.** Rules 3-5 / 3-6 guard the completeness the read *reports*, and
+   this read reports `complete=True` with `why_incomplete=''`. **It did not fail to finish; it finished over
+   the wrong extent.** `I-1` was a scan that stopped early and said so; this is a scan that ran to the end of
+   the wrong set and said nothing.
+2. **This repository already closed this exact defect one document along, and rule 3-14 cites the ruling it
+   fails to implement.** **[Observed]** [`../../ontoloche/registry.py`](../../ontoloche/registry.py) line 1403
+   carries the comment *"**The chain, not one hop** (row 4d, round 2). This read ONE successor and required it
+   to be live, so a vocabulary curated **twice** — the ordinary outcome after two passes — lost §5.10's
+   promise"*, and `_identity_closure` follows the chain with a visited set, a hop cap, and `complete=False`
+   with a `why` when it stops early. Rule 3-14 names **R38** as its authority and implements none of R38's
+   three termination rules.
+3. **Standing rule (d), inside the commit that invoked standing rule (d) as its reason for existing.** The
+   rule was minted at `resolve_instance` and the enumeration stopped there; the caller it also binds is the
+   shipped `_identity_closure`, whose behaviour it contradicts.
+
+**A second defect rides in the same four lines**, [Observed] by the worker: `entry = vocab.entry(namespace,
+effective_type) or entry` keeps the **old** entry when the successor's entry is absent, so the read then
+queries `effective_type` while holding the predecessor's entry.
+
+**Classification is NOT the worker's.** It is constructed against a **specification** and a **throwaway kit**,
+not against shipped code at a shipped door — which is the exact distinction [**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)
+used to classify `I-1`. On that reading it is a second instance-surface record, **`I-2`**, and not a fifteenth
+trip; it is recorded here to the standard R83 set and **routed to the supervisor**, who rules. The kill-row
+trip count is **not** incremented anywhere by this record.
+
+#### 6.5b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **A1** | **BLOCKING** | **The successor chain is one hop — §6.5a above.** Rule 3-14 says *chain*, cites R38, and the kit `break`s after one. Two curation passes give two `existing`/1.0 answers for one identity, both `complete=True` | **ACCEPTED.** Rule 3-14 is restated over the closure, with R38's three termination rules (visited set, hop cap, `complete=False` **with a `why`** when the cap or a dangling successor stops it), and the kit implements the closure rather than a hop. A probe constructs the two-hop state and shows the rule refusing it |
+| **A2** | **BLOCKING** | **Neither fix commit touched the run record, so §1–§4 still hold the evidence round 1 refuted.** **[Observed]**, verified by the worker: `git log --oneline 07af54f^..39d3718 -- docs/runs/7A-RUN.md` returns **nothing**. §4 still prints `{'match': 38}` / `{'review': 23}` — **the three-verdict vocabulary K3 killed and rule 5-4 (`C20-38`) now forbids in terms** — still prints *"two callers who chose their own thresholds"* and *"18 of 100"*, and still asserts *"the number is 38 of 38"* with no trace of M3. §2's header says `10/10` and §3's `12/12`; the probes now print 13/13 and 17/17. **There is no §5 at all**, while `INGEST.md` §8.1 and this document's own §6.1a both cite *"§5 of this document"*. **Design test 5 has no section in the run record** | **ACCEPTED, and it is the round's most consequential finding for the reader.** Every round-1 disposition was kept in `INGEST.md` and in the probes and in **neither** of the two documents that carry the row's evidence. §1–§4 are re-run and re-pasted from the amended kit, §5 is written, and design test 5 gets its own section |
+| **A3** | **BLOCKING** | **§9 — the standing-constraint-8 accounting section — is wrong three ways after the fix, and round 1 verified it right before the fix.** **(i)** **[Observed]**, re-verified by the worker: the distinct `C20-` ids number **74**, and §9 line 924 reads ***"Seventy-six rules, seventy-six planned ids, `C20-01` … `C20-74`"*** — off by two and self-contradictory in one sentence. `git show 07af54f^:docs/specs/INGEST.md` said *"Sixty-two rules, sixty-two planned ids"*, which was correct. **(ii)** The pre-fix table gave ordinals for every reserved value; the amended one gives an ordinal for the refusal and **none for the four warnings**, and *"the reservation is written so the count stays reconcilable"* was deleted. **(iii)** **Two vocabulary values the fix itself minted are reserved nowhere.** **[Observed]**, re-verified: `len(types.WARNING_VALUES)` = 37, `'consumers_unregistered' in WARNING_VALUES` = **False**, `'no_tenancy_predicate' in WARNING_VALUES` = **False** — and the kit emits both on **every** call. §9 says *"**Five** vocabulary values are RESERVED here"*; there are **seven** | **ACCEPTED.** R11's reservation is what keeps `check_spec_drift.py` reconcilable with the closed tuples, and it is what **Q85** is about. This is standing rule (d) failing **inside the section whose only job is to enumerate**: F8's fix minted two values and the commit that minted them did not name §9. Also accepted: §9 names `warnings` as the carrier for two handles that §4.4 amendment A3 records **[Observed]** `record_invocation` cannot carry — §9 and §4.4 must agree |
+| **A4** | **BLOCKING** | **Rule 2-15 (`C20-66`), minted to close M7, is not implementable as written, and its implementation is a wrapper the primitive's own caller walks past.** The rule: *"a record the predicate fails is `None` **with a `why`**"* — but primitive 22 returns `InstanceRecord \| None`, so **[Observed]** `type is NoneType -- no room for a why`. The guard lives in `get_instance_checked`, not in primitive 22, and **[Observed]** the primitive itself returns the other tenant's row unchanged: `-> 'co-host' / '065001'`. **[Observed]** `ingest_seam_probe.py:439` calls `host.get_instance(...)` **directly**, and the check that passes on it is labelled *"T1.13 primitive 22 re-confirms a resolved ref at the moment of use"*. **[Observed]** `resolve_instance` never calls primitive 22 at all | **ACCEPTED.** F13's disposition was *"it has a real caller once named"* and M7's was that primitive 22 gain a tenancy surface; §2 names the caller in **prose** and no rule requires it and no code path performs it. The rule is restated where the return type can carry its `why`, and the row's own design test stops calling the unguarded door |
+| **A5** | **BLOCKING** | **§8.1's claim *"Nothing else in §2, §3, §4, §5 or §6 is unexercised after the amendments"* is FALSE, proved by mutation.** 21 single-rule deletions, each followed by all five design tests; **two survive with all 87 green**: rule **2-5** (*a backend that cannot count returns `known=None`, never 0*) and rule **3-9** (*confidence `None` means did not score, never 0.0*). **[Observed]** `can_count=False -> known=None complete=True` and `grep -c can_count` across the five design tests is **0**; **[Observed]** a proposal whose predicate excluded every scanned row gives `confidence=None scanned=1`, and mutating it to `0.0` — the value `INTERFACE.md` §5.3 forbids — moves nothing | **ACCEPTED.** `C20-08` and `C20-23` have no check at all, and §3.4's third named absorber rides `C20-08`. Round 1 counted eleven countable absences; the amended §8.1 asserts three and it is at least five. The two rules get checks that go red, and §8.1's closing sentence is withdrawn |
+| **A6** | MAJOR | **§12 still prints the withdrawn `18-of-100`.** **[Observed]**, re-verified by the worker: `INGEST.md:627` and `:1065` carry **31 of 100**; `INGEST.md:1029` carries ***"The 18-of-100 disagreement forced the threshold onto the entry"***. `39d3718`'s own message says *"the disagreement is 31 of 100, not 18, and the spec carries the new number"* — and the diff touched two sites of three | **ACCEPTED.** The number is the whole argument for putting the threshold on the entry and the document now gives two values for it. **The fix closed the two occurrences that prompted it and not the one beside them — the defect §6.4 says the round was about, reproduced by the round's own fix** |
+| **A7** | MAJOR | **§13's intro contradicts §13's own closing line, in the section the fix rewrote.** **[Observed]**, re-verified: lines 1056–1058 read *"round 1 constructed **four** more through it ... and the **four** rows added by the loop are marked"*, and line 1075 reads *"Twelve routes, five of which this document listed and **seven** of which a loop constructed."* | **ACCEPTED.** The paragraph is pre-fix text the rewrite left behind, in the section whose own heading says it *"was NOT sufficient the first time"* |
+| **A8** | MAJOR | **p-m2's disposition does not survive one day, and the printed range excludes the measurement the landing commit says it prints.** §2.1 prints *"**1.3 s to 8.4 s** in same-day runs"*; `39d3718`'s message says a third same-day measurement was **20.74s** and *"the spec now prints all three"*. **[Observed]** `grep -n "20.74"` over the whole repo returns **nothing**. **[Observed]** the lens's unmodified re-run today: `one 50000-row page took 0.65s` — **below the printed floor** | **ACCEPTED.** The range is false in both directions on the first re-run after it landed, and the commit message asserts a spec change the spec does not contain. p-m2's real lesson — *a live per-page timing is not a fact a spec can pin* — is not what the fix implemented; §2.1 states the affordability argument without pinning a number, and the numbers move to the run record with their dates |
+| **A9** | MAJOR | **Rule 2-14's enforcement path inside `resolve_instance` is reached by no check, and the check that claims to reach it is green for an unrelated reason.** **[Observed]** T1.13's last call returns `Refusal('instance_source_absent')` — the **vocabulary** refusal — with `host reads performed: 0`, and the probe asserts only `isinstance(r13, Refusal)`. With the entry declared so the read happens, the guard does fire. **[Observed]** deleting the entire guard leaves that check green: `35/36`, and the one red is a different assertion | **ACCEPTED.** K8's disposition is kept in the rule and lost in the evidence: the only thing exercising it is a unit call on the helper. **This is M1's shape — a check that restates something else — surviving into the fix round** |
+| **A10** | MAJOR | **`flat_form_ok` is a divergent second copy of the shipped guard rule 2-14 cites, and it reproduces the exact falsehood `C19-90` / `C19-94` closed.** **[Observed]** kit, `namespace='org:cms'` → *"`parse_ref` would read back a **different reference**"*; shipped `flat_form_problem`, same input → *"`ref_key` would write a string `parse_ref` **RAISES** on, so the ledger row it writes cannot be read back at all"*. The shipped function's own comments record why it **asks** `parse_ref` instead of classifying: *"a case analysis over `(field, separator)` is a second home for `parse_ref`'s grammar ... and it is the thing that went stale here within one commit"* (`C19-94`, row 6c round 3 **fix-auditor lens**). Nothing imports the shipped guard | **ACCEPTED.** This is contortion **ING3** — *two notions of the same string* — arriving at the guard itself, and standing rule (d) once more: the rule was minted at primitive 23 and the commit did not name the shipped implementation it binds, in the same commit that cited `C19-82` as its evidence |
+| **A11** | MAJOR | **The kit's tied set carries a `>= propose_below` floor the spec does not state, and it papers over a contradiction between §3.2 and §5's own table.** Kit: `near_top = (top.score - c.score) <= margin and (c.score >= policy.propose_below)`. Rules 3-3 (`C20-17`) / 5-8 (`C20-73`) state the tied set with **no floor**. **[Observed]** two candidates tied inside the margin and both below `propose_below` (`ACME REHAB OF SPRINGFIELD` / `SPRINGVILLE`, both 0.5714) → `outcome='proposal'`, while §5's table row 2 says `ambiguous` and row 4 says `proposal` **for the same input** | **ACCEPTED.** K2's disposition claimed the set test *"needs no second constraint"*; there **is** a second constraint, it lives in the code and not in the document, and a build-row implementer reading rules 3-3 and 5-8 writes the other behaviour. §5's table and §3.2 are made to agree, and the floor is either stated as a rule or removed |
+| **A12** | MAJOR | **Rule 2-13's only two checks assert its warning on the outcomes rule 2-13 is not about, so M2's actual population is posed by nothing.** Rule 2-13 (`C20-64`) is about a **`proposal`** decided over a narrowed set — M2's *"3,330 of 3,330 landed rows resolved `proposal` with `complete=True`"*. **[Observed]** DT1's check asserts it on an `existing` and DT2's on an `ambiguous`; the kit appends the warning to **every** outcome, unconditionally on `host_filter` | **ACCEPTED.** Not one narrowed `proposal` is asserted anywhere, and the implementation is wider than the rule, so the handle that was supposed to say *"this proposal was decided over a slice"* does not distinguish proposals |
+| **A13** | MINOR | **§14 still says *"the four design tests"*.** **[Observed]**, re-verified: `INGEST.md:1094`. Five ship | **ACCEPTED**, and it is A2's shadow: the exit criteria are accurate about the record and wrong about the artefacts |
+| **A14** | MINOR | **Kill-criterion route 5 is prose nothing tests.** *"an ingest family proposes a `kind=\"predicate\"` type at volume → rule 4-8"*. **[Observed]** no probe constructs a family with `Effect(op="propose_type", kind="predicate")` | **ACCEPTED.** It is an **original** route, not one of the seven the loop added — the lens confirmed each of those seven goes red under deletion |
+| **A15** | MINOR | **`assert_adapter_boundary` inspects only the fixture adapter.** **[Observed]** `inspect.getsource(HostTable)` is the whole check; `SocrataServiceRequests` — the implementation running against 9.7M live rows — is never inspected, so rule 2-6 (`C20-09`) is enforced against the fixture and not against the real one | **ACCEPTED** |
+| **A16** | MINOR | **§5.2's two percentages no longer come from one run.** §5.2 says *"46% of the fetched rows share an address and the probe discards 32% of them"*; **[Observed]** the amended probe prints `129 sharing one (32%)` — it labels **32%** as the *sharing* rate | **ACCEPTED.** M3's disposition was that §5 print the real number **and say what the fixture does**; a reader cannot reconcile 46% with anything the probe emits |
+
+#### 6.5c What the lens attacked and could NOT break — carried forward so round 3 is not re-tread
+
+1. **`I-1`'s own fix, attacked by mutation from three directions.** `_mutate="rule_u_last"` goes red in DT1
+   **and** DT2 **and** DT4; deleting the `if not complete` branch, the `undecided` branch and the
+   `scanned == 0` branch each go red. **The ordering is real, load-bearing, and now tested in three places.**
+   The only confident answer over a wrong extent the lens obtained was A1, which does not pass through this
+   guard at all.
+2. **"One kit replaces two resolvers" — the disagreement was DECIDED, not deduplicated.** **[Observed]**
+   exactly one `resolve_instance`, one `evaluate`, one `norm`, one `similar` across all six files, all in the
+   kit, and `_rule_u()` runs before the branches. **K7's correct ordering (design test 3's) won.**
+3. **Rules 3-3 / 3-4's `ref=None` on `ambiguous`.** Not populatable; putting the top ref on an `ambiguous`
+   result goes red immediately. **The shape trips 11 and 12 took still does not reproduce.**
+4. **The set test against K2's actual population.** Reverting to a top-two margin comparison goes red in two
+   probes. The `MAGNOLIA ... - WEST` / `- EAST` and `Mountain View` pairs are genuinely caught — A11 is about
+   a **floor**, not about K2's band.
+5. **Rules 6-4 / 6-5 / 6-12 / 6-16, the three-valued language.** Every deletion goes red. Round 1's
+   could-not-break #6 still holds and is now the ordering the whole kit uses.
+6. **Rules 2-7 / 2-10 / 2-8 — the P2 and M8 fixes.** Ignoring an undeclared `host_filter` key goes red;
+   making `label` narrow goes red in **four probes at once**. `host_filter` really is a named mapping and
+   `label` really is non-narrowing, in the kit and in **both** host adapters.
+7. **Rule 2-11's cursor exhaustion is tested — but by DT2 alone.** Stopping the identity read at the first
+   page leaves DT1, DT3, DT4 and DT5 **all green**; only DT2 goes red, on `ambiguous complete=True` over 1,000
+   of 9,768,174 rows. Not a finding, because the suite as a whole catches it — **recorded because four of the
+   five design tests cannot see the fifth trip's own shape.**
+8. **`C20-01` and the R78 seam, from a fourth direction.** `resolve_instance` returns
+   `InstanceResolution | Refusal`, `CandidateRef` has no `id` field at all, `HostTable` has no writer.
+   **Four lenses have now failed to force an instance row into the registry.**
+9. **Rules 5-2 / 5-3 / 5-9 at declaration and at the gate.** Both refused in `__post_init__`; turning the band
+   into a `proposal` goes red twice. **K3 is genuinely closed** — DT4 prints
+   `['ambiguous','existing','proposal']` and the `match`/`propose`/`review` vocabulary is gone from every
+   probe. *(It survives only in the run record — which is A2.)*
+10. **Rules 4-10 / 4-11 and design test 5.** F4 and K4 are each constructed and each proved by mutation,
+    10/10. A fourth way to cash a pending proposal was caught by `invocations(unreviewed=True)`.
+    **§6.2c's countable absence #9 is genuinely closed.**
+11. **The `C20-xx` grammar itself.** **[Observed]** 74 distinct ids, no gaps, 74 rule rows, one id each. Only
+    the **prose count** is wrong (A3), never the mapping.
+12. **`check_links.py` and `check_spec_drift.py`.** Both green, as the commits claim. Neither covers
+    `INGEST.md`, which is why A3 and A6 are invisible to them — stated in §8, and not a defect.
+
+#### 6.5d What this lens says about the register's own prediction
+
+**The register predicted the defect would be inside the fix, and it was — five BLOCKING inside a diff of two
+commits.** More precisely, and this is the part worth carrying: **three of the five are the SAME failure the
+round they fix was about.** A6 is *"closed the occurrence that prompted it and not the one beside it"*,
+verbatim, in the commit whose own message announced the number change. A3 is standing rule (d) failing inside
+**the section whose only job is to enumerate**. A10 is standing rule (d) failing in a commit that cited row
+6c's fix-auditor finding as its evidence. **A round's fixes are written by the person who has just read the
+findings, and that is exactly when the enumeration feels finished.**
+
+**And A2 is the one a reader meets first.** Every disposition of round 1 was kept in two artefacts and in
+neither of the two documents that carry the row's evidence. The run record still prints the vocabulary the
+spec now forbids.
