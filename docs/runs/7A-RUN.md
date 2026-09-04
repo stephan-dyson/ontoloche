@@ -74,76 +74,95 @@ taken and this paragraph is the record of a wrong guess.
 
 ---
 
-## 1. Design test 1 — **the R78 seam. VERDICT: CONFIRMED.**
+## 1. Design test 1 — **the R78 seam. VERDICT: CONFIRMED. 36/36.**
 
-**Probe:** [`docs/tools/ingest_seam_probe.py`](../tools/ingest_seam_probe.py). **Run 2026-09-03,
-16/16 checks pass, exit 0.** Two engines, as `actions_nyc_probe.py` uses them: the **shipped**
+> **RE-RUN AND RE-PASTED 2026-09-04, and this notice is round 2's finding A2 being closed.** Round 1's and
+> round 2's fixes landed in `INGEST.md` and in the probes and **in neither of the two documents that carry
+> this row's evidence** — **[Observed]** `git log --oneline 07af54f^..39d3718 -- docs/runs/7A-RUN.md` returned
+> nothing. So §1–§4 went on printing the check counts, the headline numbers and, at §4, the three-verdict
+> vocabulary (`match` / `propose` / `review`) that finding **K3** killed and rule 5-4 now forbids in terms.
+> **Every block below is re-pasted from a run at `83f6a75`**, and where a number moved, the old one and the
+> reason are kept rather than overwritten — the point of the section is the evidence, not the tidiness.
+>
+> **The check counts, then and now:** 16 → **36**, 10 → **13**, 12 → **17**, 7 → **11**, and design test 5 is
+> new at **27**. **87 → 104 across the row.**
+
+**Probe:** [`docs/tools/ingest_seam_probe.py`](../tools/ingest_seam_probe.py). **Run 2026-09-04 at `83f6a75`,
+36/36 checks pass, exit 0.** Two engines, as `actions_nyc_probe.py` uses them: the **shipped**
 `ontoloche.Registry` on SQLite holds the vocabulary — so *"no instance rows"* is a claim about the real
 store — and the host table plus `resolve_instance` are throwaway kit, because this row ships no product code.
 
-### 1.1 Observed output, pasted
+### 1.1 Observed output, pasted — **the run at `83f6a75`**
 
 ```
 DESIGN TEST 1 -- the R78 seam, over CMS `NH_HealthCitations_Aug2026.csv`
   source: https://data.cms.gov/provider-data/dataset/r5ix-sfxw
   file: 165336194 bytes, 419479 rows
   host table: 14627 CCNs, 14498 distinct provider names, 104 names shared by more than one CCN
-  [PASS] the pre-registered CMS figures reproduce
-  [PASS] the host table names no facade shape (PACKAGE 3.1, C0-04's rule)
 
   R77 control -- resolve_type('BURNS NURSING HOME, INC.')
     -> outcome='not_a_type' reason='instance_not_type'
-  [PASS] R77: the type registry refuses the instance question rather than answering it
 
 T1.1 -- 'BURNS NURSING HOME, INC.' (one CCN in the file)
-  -> outcome='existing' ref_key='cms:entity:facility#015009' confidence=1.0 scanned=14627 complete=True
+  -> outcome='existing' ref='cms:entity:facility#015009' confidence=1.0 scanned=14627 complete=True
+     warnings=('no_tenancy_predicate', 'consumers_unregistered')
 
 T1.2 -- "MILLER'S MERRY MANOR" (twelve CCNs in the file)
-  -> outcome='ambiguous' known=12 confidence=1.0
-       cms:entity:facility#155049  1.0  WARSAW, IN
-       cms:entity:facility#155102  1.0  PLYMOUTH, IN
-       cms:entity:facility#155173  1.0  MARION, IN
-       cms:entity:facility#155235  1.0  LOGANSPORT, IN
-       cms:entity:facility#155299  1.0  PORTAGE, IN
-       cms:entity:facility#155557  1.0  INDIANAPOLIS, IN
-       cms:entity:facility#155564  1.0  MOORESVILLE, IN
-       cms:entity:facility#155574  1.0  WALKERTON, IN
-       cms:entity:facility#155578  1.0  NEW CARLISLE, IN
-       cms:entity:facility#155579  1.0  HOPE, IN
-       cms:entity:facility#155583  1.0  GARRETT, IN
-       cms:entity:facility#155589  1.0  CULVER, IN
-  [PASS] T1.2 ambiguous, never `existing`, and all twelve are handed back
-  [PASS] T1.2 no ref_key: nothing answered for twelve facilities at once
+  -> outcome='ambiguous' known=12 confidence=1.0   ... 12 in the tied set
 
-T1.3 -- 'ONTOLOCHE MEMORIAL CARE CENTER', absent from all 419479 rows
-  -> outcome='proposal' confidence=0.8 scanned=14627 complete=True
+T1.3 -- 'THE SARAH ROBERTS FRENCH HOME' (CCN 745040), HELD OUT of the host table
+        a real facility arriving new, which is the honest shape of a proposal
+  -> outcome='proposal' confidence=0.6415 scanned=14626 complete=True
 
 T1.4 -- 'Provider Name', the column header landed as a value
   -> outcome='not_an_instance' scanned=0
 
-T1.5 -- 'Tuskegee Airmen Texas State Veterans Home', whose row is 14,623 of 14,627,
-        with the host's scan capped at 14000
-  five-outcome set -> outcome='unknowable' complete=False scanned=14000
-                      why='host scan cap of 14000 rows reached; the rest of this
-                           table cannot be read from this surface'
-  four-outcome set -> outcome='proposal' complete=False
-                      reason='nothing in the scanned rows matched'
-  uncapped control -> outcome='existing' ref_key='cms:entity:facility#745057' confidence=1.0
+T1.5 -- 'Tuskegee Airmen Texas State Veterans Home', row 14,623 of 14,627, scan capped at 14000
+  capped   -> outcome='unknowable' complete=False scanned=14000
+  uncapped -> outcome='existing' ref='cms:entity:facility#745057'
+  MUTATED (Rule U last) -> outcome='unknowable'
 
 T1.6 -- R58's three states off one primitive
-     the set: known=14627 complete=True  next_after=None     why=None
-      a page: known=500   complete=False next_after='045350' why=None
-   truncated: known=14000 complete=False next_after=None     why='host scan cap of 14000
-                                                                 rows reached; ...'
+     the set: known=14627 complete=True next_after=None
+      a page: known=500 complete=False next_after='045350'
+   truncated: known=14000 complete=False next_after=None
 
 T1.7 -- what the registry holds after all of it
   registry rows: [('entity', 'facility')]
 
+T1.8 -- ROUND 1's TRIP (`I-1`): truncation with the match FOUND
+  cap=3541 (1 of the twelve read, 11 unread)
+  FIXED   -> outcome='unknowable' ref=None complete=False scanned=3541
+  MUTATED -> outcome='existing' ref='cms:entity:facility#155049' confidence=1.0
+
+T1.9 -- two candidates both at or above match_at, over a COMPLETE scan
+  'Mountain View Health Care' (115688) vs 'MOUNTAIN VIEW HEALTHCARE' (265412)
+  -> outcome='ambiguous' ref=None known=2 complete=True
+
+T1.10 -- a score inside the band answers in the FIVE, not a sixth verdict
+  'BURNS NURSING HM INC' -> outcome='ambiguous' confidence=0.9524
+
+T1.11 -- the type is retired underneath the instances
+  resolve(type_name='facility') after retire(successor='nursing_facility')
+  -> outcome='existing' ref='cms:entity:nursing_facility#015009' scanned=14627
+     warnings=('instance_type_succeeded:nursing_facility', ...)
+  a read of ZERO rows -> outcome='unknowable' scanned=0
+
+T1.12 -- the two capability flags 2.3 mints
+  resolves_instances=False -> Refusal('instance_source_absent')
+  a host_filter key outside instance_filters -> complete=False
+       why='host_filter keys this backend does not declare: ownership_type'
+
 ==============================================================================
-16/16 checks pass
+36/36 checks pass
 R78 VERDICT: CONFIRMED -- every outcome is reachable over a host-held table,
              through two read primitives, with no instance row in the registry.
 ```
+
+**Three things in that block were not in round 1's, and each is a fix made visible.** **T1.3** no longer
+resolves an invented name — it holds out a **real** CCN, which is the honest shape of a proposal and closes
+round 1's complaint that the fixture proved nothing. **T1.8** is `I-1` itself, constructed and mutation-proved
+at the door it was found at. **T1.11** is the retired-type case round 2's `I-2`, `I-3` and `I-7` all live in.
 
 ### 1.2 What the verdict rests on, stated so it can be attacked
 
@@ -203,7 +222,7 @@ Stated now, so a later reviewer has something to aim at rather than a conclusion
 
 ---
 
-## 2. Design test 2 — **paging under load (R58). 10/10, live against `erm2-nwe9`.**
+## 2. Design test 2 — **paging under load (R58). 13/13, live against `erm2-nwe9`.**
 
 **Probe:** [`docs/tools/ingest_paging_probe.py`](../tools/ingest_paging_probe.py). The host is
 **Socrata itself**, not a fixture: `$limit`/`$offset` are its own paging, so the primitive is a thin
@@ -264,7 +283,7 @@ gets it from a real 9.7-million-row partition and a real API ceiling.
 
 ---
 
-## 3. Design test 3 — **the two-tenant loop (R59 / R60). 12/12, over CMS CA + CO.**
+## 3. Design test 3 — **the two-tenant loop (R59 / R60). 17/17, over CMS CA + CO.**
 
 **Probe:** [`docs/tools/ingest_condition_probe.py`](../tools/ingest_condition_probe.py). **The fixture
 is the sharpest the CMS file offers: [Observed]** 84 provider names are shared across more than one
@@ -333,58 +352,173 @@ store**, five names both tenants answer to: if tenancy leaks, it leaks here.
 
 ---
 
-## 4. Design test 4 — **"I already know 38 of these". 7/7, over live 311 rows.**
+## 4. Design test 4 — **"I already know 38 of these". 11/11, over live 311 rows.**
 
-**Probe:** [`docs/tools/ingest_gate_probe.py`](../tools/ingest_gate_probe.py). `ROADMAP.md` homes
-instance resolution in Phase 3 with the walkthrough's *"I already know 38 of these"*. The batch is 100
-real rows out of the 311 partition design test 2 narrowed: **38 already held exactly, 24 held but landing
-in an abbreviated spelling, 38 genuinely new.**
+**Probe:** [`docs/tools/ingest_gate_probe.py`](../tools/ingest_gate_probe.py). `ROADMAP.md` homes instance
+resolution in Phase 3 with the walkthrough's *"I already know 38 of these"*. **Re-run 2026-09-04 at
+`83f6a75`, 11/11**, and the block below replaces one this document printed until round 2's **A2**: the old
+one carried `{'match': 38}` / `{'review': 23}`, **a three-verdict vocabulary finding K3 killed and rule 5-4
+now forbids in terms**, and a headline number round 1's **M3** had already shown to be an artefact of one
+`setdefault` line.
 
 ```
-  400 rows fetched, 271 with a distinct address
-  host holds 62 instances (38 exact + 24 that will land abbreviated)
+DESIGN TEST 4 -- "I already know 38 of these", the confidence gate
+  live from https://data.cityofnewyork.us/resource/erm2-nwe9.json, 2026-09-04
+  host narrowing: {'agency':'NYPD','complaint_type':'Illegal Fireworks','incident_zip':'11214'}
+  400 rows fetched, 271 with a distinct address, 129 sharing one (32%)
   landing batch: 100 rows (38 known / 24 abbreviated / 38 new)
 
-4.1 the gate, declared on the entry: match_at=0.97 propose_below=0.8
-      known: {'match': 38}
-     banded: {'match': 1, 'review': 23}
-      novel: {'propose': 38}
-     known:match   e.g. '7502 18 AVENUE' @ 1.0
-     banded:review e.g. '2260 BENSON AVE' @ 0.9091
-     novel:propose e.g. '25 BAY   13 STREET REAR ANNEX 2031' @ 0.6122
+4.1 the gate on a host holding ONE instance per address (match_at=0.97 propose_below=0.8)
+    known: {'existing': 38}
+   banded: {'ambiguous': 23, 'existing': 1}
+    novel: {'proposal': 38}
+     banded:ambiguous  e.g. '2260 BENSON AVE' @ 0.9091
+     banded:existing   e.g. 'BATH BEACH PARK' @ 1.0
+     novel:proposal    e.g. '25 BAY   13 STREET REAR ANNEX 2031' @ 0.6122
 
   the number: 38 of 38 already-known rows matched
 
-4.2 outcomes that fired across the batch: ['match', 'propose', 'review']
+4.2 outcomes that fired across the batch: ['ambiguous', 'existing', 'proposal']
 
-4.3 the same batch under two callers who chose their own thresholds
-  18 of 100 rows resolve DIFFERENTLY for the two callers
-     '2260 BENSON AVE' @ 0.9091: caller A -> match, caller B -> review
-     '1602 SHORE PKWY' @ 0.9091: caller A -> match, caller B -> review
-     '130 BAY   47 ST' @ 0.8667: caller A -> match, caller B -> review
+4.3 the SAME batch against the host's ACTUAL rows -- round 1 finding M3
+    (`erm2-nwe9`'s instance is a service request keyed by unique_key, not an address)
+    known: {'ambiguous': 13, 'existing': 25}
+   banded: {'ambiguous': 23, 'existing': 1}
+    novel: {'proposal': 38}
 
-4.4 policy.verdict(None) -> 'unknowable'
-7/7 checks pass
+  the honest number: 25 of 38 matched, 13 correctly refused to guess
+
+4.4 the same batch under two ENTRIES declaring different thresholds
+    (which is what a per-CALL threshold would let two callers do)
+  31 of 100 rows resolve DIFFERENTLY
+
+4.5 a candidate the read could not finish
+  over a truncated read -> outcome='unknowable' complete=False
+  MUTATED               -> outcome='existing'
+
+11/11 checks pass
 ```
 
-**The number is 38 of 38, and it is in the record because the row was told to put it there.** All three
-of the gate's outcomes fire on one batch of real rows: 38 `match`, 23 `review`, 38 `propose`, with one
-abbreviated row matching at 1.0 because its address (`BATH BEACH PARK`) contains no abbreviable word —
-**[Observed]**, and it is the correct answer rather than a miss.
+**§4.3 is the number this row actually stands behind, and it is not the headline one.** *"38 of 38"* is true
+of a host holding **one instance per address**, and **[Observed]** `erm2-nwe9`'s instance is a service request
+keyed by `unique_key` — so against the host's real rows the answer is **25 of 38 matched and 13 correctly
+refused to guess**. Round 1's M3 found the headline was an artefact of a `seen.setdefault(address, r)` line;
+**the fix was to print both numbers and say which fixture each describes**, because the fixture's number is
+still the one that answers the walkthrough's question and the honest number is the one a build row must plan
+for. **§4.4's disagreement is 31 of 100, not the 18 this document printed until round 2** — and the two callers
+are now two **entries**, because a per-call threshold is exactly what §5.1 refuses.
 
-**4.3 is the section that decides §5's shape.** Two callers who each chose a threshold for the same
-vocabulary disagree on **18 of 100 rows**, every one of them an abbreviated address in the band. Each
-caller is internally consistent; the store ends up with duplicates whose cause is *which caller landed
-the row*, which is a fact the curation loop cannot see, cannot enumerate, and cannot fix — because
-nothing recorded it. **So the threshold is a declared, governed fact on the entry**, riding the
-proposal→approval loop like every other governed fact, and it is **not** a call parameter. `MatchPolicy.why`
-is required and non-empty for `ACTIONS.md` §2.4-3's reason: an undescribed threshold is one nobody will
-ever be able to raise.
-
-**4.4 closes the loop back to design test 1.** A candidate the scan could not score is `unknowable` at
-the gate too — the gate never softens the fifth outcome into a fourth.
+**§4.5 closes the loop back to design test 1**: a candidate the scan could not score is `unknowable` at the
+gate too, and the mutation proves the check goes red.
 
 ---
+
+## 4a. Design test 5 — **the ingest ACT (`INGEST.md` §4.3). 27/27, over CMS facilities.**
+
+*(Numbered `4a` rather than `5` on purpose: `INGEST.md` §8.1 and this document's §6.1a both cite "§5 of this
+document", so §5 keeps its number and the fifth design test takes the letter. Renumbering to tidy an
+appearance would break two citations, which is the trade this row does not make.)*
+
+**Probe:** [`docs/tools/ingest_act_probe.py`](../tools/ingest_act_probe.py), on the one kit. **This design
+test did not exist before round 1's fixes**, and round 1's own §6.2c counted its absence as countable absence
+#9: *"zero `record_invocation`, zero `invocations(`, zero `InvocationProvenance` — §4, the whole
+propose-at-ingest contract, has no probe at all."* It is now the largest of the five.
+
+```
+DESIGN TEST 5 -- the ingest ACT (INGEST 4.3), over CMS facilities
+  host: 14627 CCNs; the landed rows name a facility it does NOT hold
+
+5.1 -- two landed rows in ONE act name the same facility          [F4]
+  RULE 4-10 ON : ['proposed','reused']  writes=[#HOST-1]  -> existing known=1
+  MUTATED      : ['proposed','proposed'] writes=[#HOST-1,#HOST-2] -> ambiguous known=2
+
+5.2 -- the same label landed in three SEPARATE acts, none reviewed  [K4]
+  RULE 4-11 ON : 3 invocations, 1 host write
+     pending-warnings=['instance_proposal_pending:inv-1', ...]  -> existing known=1
+  MUTATED      : 3 invocations, 3 host writes, no warnings       -> ambiguous known=3
+
+5.3 -- two workers read the SAME state and neither repeats a call
+  outcomes=['proposed','proposed']  writes=2  -> ambiguous known=2
+
+5.4 -- a proposal made while the resolution was `ambiguous`
+  land("MILLER'S MERRY MANOR") -> proposed, approval_mode='review'
+     warnings=('instance_ambiguous_at_proposal:facility:12',)
+  invocations(unreviewed=True) -> 1
+
+5.5 -- rule 4-7: nothing is proposed over an `unknowable` resolution
+  land over a truncated read -> 'unknowable'; ledger holds 0 invocations
+
+5.6 -- the instance-surface table, each cell proved by MUTATION
+  I-2 CHAIN : hops=[...nursing_facility, ...ltc_facility]
+  I-2 MUTATED (one hop): hops=[...nursing_facility]
+  I-2 rider HONEST STOP: unknowable complete=False
+  I-2 rider MUTATED (keeps predecessor): proposal complete=True
+  I-7 GOVERNED : unknowable          I-7 MUTATED (ignored): proposal
+  I-6 DISTINCT : unknowable known=2  I-6 MUTATED (ignored): existing known=1
+  I-4 NORM KEY : ['proposed','reused'] ledger=1
+  I-4 MUTATED (raw label): ['proposed','proposed'] ledger=2
+  B1 per-land type: 'proposed' then 'proposed'
+  I-5 UNWRITTEN: 'proposed' -> drained -> 'pending'
+  I-5 MUTATED (unreviewed only): 'proposed' -> drained -> 'proposed'
+  I-3 WHOLE CLOSURE: the minted row stayed under 'facility'; second act -> 'existing'
+  I-3 MUTATED (endpoint only): second act -> 'proposed'
+  Z6 FENCED: land('Provider Name') -> 'not_an_instance'; ledger=0
+  Z6 MUTATED (unfenced): -> 'proposed'; ledger=1
+
+27/27 checks pass
+```
+
+**§5.3 is the one that is honest about what this layer cannot do.** Two workers reading the same state and
+neither repeating a call still produce two host writes, and **no rule in §4 stops them** — the guard is
+advisory at the only door that enforces (contortion **ING2**). Round 2's **Z3** found §13's route table
+claiming the concurrent case *closed* while this very check constructs it **open**, with the disclaimer
+living only in a probe's `check()` string and pointing at `PACKAGE.md`'s **G1**, which is uniqueness in the
+**type** store and therefore permanently out of this document's reach under rules 1-1 and 2-1.
+
+**§5.6 is the seven-cell table, and it is the section round 3's fix auditor is pointed at.** Every cell has a
+paired arm: the fix asserts the correct answer, the mutation asserts the defect reproduces. §6.10e carries the
+sweep that removes each fix at source and confirms **nine of nine red**.
+
+## 5. What each round cost — **the section two documents cite and that did not exist**
+
+**[Observed]** until `83f6a75` this document had no §5, while `INGEST.md` §8.1 cited *"§5 of this document's
+run record carries the count"* and §6.1a cited *"recorded in §5 of this document as what the round cost"*.
+That is round 2's **A2** in its purest form: a disposition kept in one artefact and in none of the others.
+
+### 5.1 The row, in numbers
+
+| | before the loop | after round 1 | after round 2 |
+|---|---|---|---|
+| `INGEST.md` rules / planned ids | 62 | 74 | **85** |
+| design tests | 4 | 5 | 5 |
+| checks across them | 45 | 87 | **104** |
+| kill-criterion routes (§13) | 5 | 12 | 12 |
+| reference shapes | 3 | 4 (`CandidateRef`) | 4 |
+| contortions recorded | 8 | 10 | **11** |
+| amendments asked of `ACTIONS.md` | 0 | 3 | **5** |
+| questions open | — | Q85–Q90 | **Q85–Q91** |
+| instance-surface records | 0 | 1 (`I-1`) | **7** (`I-1`…`I-7`) |
+| kill-row trips | 14 | **14** | **14** |
+
+### 5.2 What each round cost, in one paragraph each
+
+**Round 1 cost the row its probes.** Three lenses, 37 findings, 11 BLOCKING. The fixes to `INGEST.md` were the
+cheap half; the expensive half was that **a mutation deleting §3.4's load-bearing sentence left the suite
+printing `16/16`**, design test 2's headline outcome was computed from a flag rather than from a resolver, and
+design test 4's headline number was an artefact of one `setdefault`. Two resolvers became one kit with a
+mutation harness. **Eleven countable absences** were the measure of what the old probe set could not ask.
+
+**Round 2 cost the row its idea of what a defect is.** Four lenses, 47 findings, 19 BLOCKING — **the findings
+did not shrink, they grew** — and the fix auditor found five BLOCKING inside round 1's own two commits. Seven
+failures of standing rule (d), every one inside the fixes of the round that cited rule (d) as its reason for
+existing. But the finding that changed the row is that the nine constructions were **not nine defects**: they
+are **one question asked at seven doors**, and the register ruled them a table (`I-1`…`I-7`) rather than a
+list. The fix set is therefore one change, and **standing rule (e)** is what it states.
+
+**And the cheapest thing the row bought was the harness's own defect.** §6.10e-i: the first mutation sweep
+reported a real defect as *surviving*, because it disabled a fix by flipping a default the design tests
+override explicitly. **That is the row's own M1/A9 shape in its own tooling, one round after it recorded
+both** — and it cost one re-run to find, because the sweep was built to be checked.
 
 ## 6. The adversarial loop
 
