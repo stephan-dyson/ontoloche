@@ -25,7 +25,7 @@ It is not a schema store and it is not a graph. It holds names, definitions, pro
 - **No package layout.** No module names, no `pip` name, no conformance test suite. → **#2**.
 - **No relationships or edges.** No `neighbors()`, no traversal, no edge storage — a *relationship type* can be registered here as a type, but the edges themselves are → deliverable **#4, [`docs/specs/EDGES.md`](EDGES.md)** — **landed 2026-08-29**.
 - **No actions.** Action families are registered here as `kind="action"` entries; their shape, their invocations and their gate are → deliverable **#6, [`docs/specs/ACTIONS.md`](ACTIONS.md)** — **landed 2026-08-29**. Tenshen's actions stay in code (beacon spec §10.7) and ACTIONS is written so that they can.
-- **No instance resolution.** *"I already know 38 of these facilities"* (`WALKTHROUGH.md` step 2) is **entity** resolution, not **type** resolution. `resolve_type` resolves the word *facility*; it does not resolve `"BURNS NURSING HOME, INC."` against 14,627 CCNs. See §10.3 — this is a named gap, not an oversight.
+- **No instance resolution.** *"I already know 38 of these facilities"* (`WALKTHROUGH.md` step 2) is **entity** resolution, not **type** resolution. `resolve_type` resolves the word *facility*; it does not resolve `"BURNS NURSING HOME, INC."` against 14,627 CCNs. See §10.3 — this is a named gap, not an oversight. → **it is deliverable #7a, [`INGEST.md`](INGEST.md)** — **landed 2026-09-03**. **This non-goal is unchanged and gains a pointer rather than being deleted**, which is ruling **R77**'s own instruction: instance resolution is Phase 3's, it is a **new call** in that document, and `resolve_type` is never extended to cover it, because adding it here would make one call mean two things — 0.1's Cause B, committed by the spec itself.
 
 ---
 
@@ -1137,6 +1137,8 @@ So v0 adds **`not_a_type`**, with `reason ∈ {redundant_projection, derived_val
 
 **Resolution: state it as a gap rather than stretch the call.** Adding instance resolution to a type registry would make `resolve_type` mean two different things — which is 0.1's Cause B, semantic collision, committed by the spec itself. Recorded in §1 non-goals and in §11.
 
+> **The gap now has an owner, and the refusal to stretch the call was vindicated by measurement rather than left as an argument** *(row 7a, 2026-09-03)*. [`INGEST.md`](INGEST.md) specifies `resolve_instance` as a separate call with **five** outcomes. **[Observed]** on the full file this section measured: `"MILLER'S MERRY MANOR"` is the label of **twelve** distinct Indiana facilities, every one scoring 1.0 on the name, so an instance resolver must decide **ambiguity before existence** — an ordering `resolve_type` has no reason to have and would have had to acquire. **[Observed]** the shipped `resolve_type` already answers this section's own example `outcome="not_a_type"` with reason `instance_not_type`, so the boundary is enforced by code and not only declared. §11's *"Instance resolution has no home in any current deliverable"* is closed by pointer, per **R77**.
+
 ### The severity case, end to end — the interface catching 0.5's worst result
 
 ```python
@@ -1270,6 +1272,8 @@ consumers("status", namespace="oti_311")
 The registry reports that the consumer **would silently drop the very type it was registered to gate on**. That is internally correct — `status` names a predicate whose extent is empty, so the type is excluded and `on_unknown="drop"` puts it in `would_drop` — and it is exactly backwards to the reader. `C11-02` blesses gating on a predicate that does not exist *because that is mechanism C made visible*; here the same behaviour produces a confident wrong-looking answer.
 
 **Recorded, not fixed.** The honest options are a value-level gate on `Consumer` (a change to §2.9, and it starts to make the registry know what a value is) or a documented rule that `gate` must name a registered `kind="predicate"` entry — which would break `C11-02`. **Neither is taken on a design test's authority. Ruling wanted; the recommendation is in [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.**
+
+> **The missing mechanism now has a home — ruling R60's one change, landed 2026-09-03 by row 7a.** This contortion, `EDGES.md`'s **Q17**/**R22** and `ACTIONS.md`'s **ACT4** are three surfaces reaching for one thing, and R60 ruled they get **one** language rather than three. It is specified in [`INGEST.md`](INGEST.md) §6: a `Condition` of twelve closed terms — ten operators over **one record's attribute values**, never over another call's result, plus `all_of` / `any_of` composed by Kleene logic — **three-valued** (holds / fails / **unknowable**, with `why` required on the third), declared on the entry so it rides propose→approve, and evaluated by the registry so two hosts cannot disagree about what a gate meant. A value-level `Consumer.gate` is expressible as one. **Nothing in this document changes yet**, and that is R60's sequencing rather than an omission: the language lands before anything uses it, `INGEST.md` §9 reserves its ids as *planned*, and the build row is where §2.9 gains a field, a rule and an id. The pointer is written here because R60 requires the surfaces to be amended in one change.
 
 ### 10b.5 CONTORTION 12 — the source's own version has no home in `Provenance`
 
