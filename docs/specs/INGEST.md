@@ -1089,6 +1089,23 @@ implied**, so the build row knows exactly what has a specification and no eviden
 | `NotSupported` at primitive 22 | needs an adapter that declares `resolves_instances=False`, which is a build-row object | the contract suite's `sqlite_minimal` leg |
 | `instance_filters` with a key the host declines | needs a real adapter to decline one | `C20-10` in the build row |
 
+### 8.1a What this v0 KNOWS is wrong with it — **eight open findings, named in the spec rather than only in a run record**
+
+*(Landed under [R88](../decisions/2026-09-04-7a-supervisor-ruling-R88.md) part four. A reader of this document
+learns its limits without reading `7A-RUN.md`. The first two are the build row's declared first and second
+actions.)*
+
+| # | open finding | where |
+|---|---|---|
+| **1** | **`C20-05` and `C20-08` still have no check that can go red.** Six of the eight rules the row obliged itself to prove are now closed at design test 1's `T1.13`; these two are not, and §3.4's third `unknowable` absorber rides `C20-08` | run record §6.16b |
+| **2** | **Primitive 22 resolves no closure and applies the PREDECESSOR's predicate.** The same identity is found under the declared name and absent under the effective one; `resolve_instance` answers `unknowable` where `get_instance_checked` hands the caller the row | rules 2-15, 3-14…3-21 |
+| **3** | **Rules 4-10/4-11 assume *same label ⇒ same thing*** — **Q92**, and the largest thing this document knows is wrong with itself | §4.3, Q92 |
+| **4** | **Rule 3-19's read cost is (hops+1)× and §2.1 is written for one read** — **Q93** | §2.1, Q93 |
+| **5** | **Thirteen mutation survivors remain** after `T1.13` closed six, including §3.2's `ambiguity_margin` clause, whose deletion changes **0 of 1,494** real CMS labels — *specified, argued from, and effectively unexercised* | §3.2, §8.1 |
+| **6** | **ING11's dual-write curve.** The review queue does **not** drain when a migration finishes — at 100% dual-written the `ambiguous` rate is **100%** — it drains when the host *deletes* the predecessor rows, a separate act this contortion does not name. A *move* migration costs zero | ING11 |
+| **7** | **§13's route table was not re-derived for the eight cells**, and route 9's *"or by two concurrent workers"* clause is still there while design test 5 constructs that case OPEN | §13 |
+| **8** | **§9's reserved ordinals do not reconcile with `types.WARNING_VALUES`.** The count of rules is now checked; the ordinals of the reserved values are not | §9 |
+
 **Nothing else in §2, §3, §4, §5 or §6 is unexercised after the amendments** — and §5 of this document's run
 record carries the count.
 
@@ -1231,6 +1248,30 @@ not entitled to choose between the second and third:
 
 **(a) and (c) differ only in whether the registry declines or warns, which is the question Q56 asks on the
 read side — so they should be answered together and by the same person.** The default in force is **(a)**.
+
+**Q92 — do rules 4-10 and 4-11 keep assuming *same label ⇒ same thing*?** Round 1's F4 and round 2's `I-4`
+both fixed the *spelling* of the label. Round 3's **P4** measured that the assumption underneath is what
+fails, and that normalising made it **worse**: **[Observed]** live `erm2-nwe9`, addresses shared by another
+request in the same slice **82.2% raw → 83.7% after rule 4-10's normaliser**, and one ingest act over a real
+3,342-row slice gives `{'proposed': 1044, 'reused': 2298}` — **68.8% of a real batch never resolved, never
+scored, never recorded, nothing for `review_invocation` to drain.** §5.2 states in terms that this dataset's
+instance is *a service request keyed by `unique_key`*, and the label is an address.
+
+**The honest fix is not another key.** It is for `InstanceContext.row_attributes` to be **read** — and
+**[Observed], round 3's B8**, no rule in 1-1…7-5 binds `InstanceContext` and `resolve_instance` consults only
+`context.act_id`; a 12-way tie with `row_attributes` *uniquely naming one of the twelve* still answers
+`ambiguous known=12`. **ING8** prices the field's *emptiness* for a prose source; nothing prices its
+**inertness** for a landed row, where it is the field that separates **104 of 104** CMS ties. That is a design
+change above this row's scope, and it is the largest single thing this document knows is wrong with itself.
+
+**Q93 — what does rule 3-19's extent cost, and does §2.1's affordability argument survive it?** The identity
+read spans the whole closure, which is what closes `I-3` and `I-8`, so the cost is **not optional**.
+**[Observed]** live, same narrowed slice: 1 → 4 `read_types` takes 725 → 2,900 rows and 0.3 s → 1.5 s;
+**[Inferred]** at the hop cap the unnarrowed case is ~1,764 requests, **≈32 minutes for one landed row**.
+§2.1 states its affordability argument for **one** read and rule 3-19 multiplies it by the closure's length.
+Related and unresolved: **[Observed]** §2.1's printed timing range has been falsified **three times in two
+days** — twice below the floor, once above the ceiling — which is its own answer about pinning a live
+measurement in a specification.
 
 ---
 

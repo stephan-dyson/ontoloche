@@ -208,6 +208,43 @@ Postgres-backed, built against messy CSV-shaped data. **Not** built against Tens
 >
 > **One consequence to see before it is designed in.** The **Rule of the ordering** above is scoped to rows **#1–#4**, so it does not reach this phase: nothing structural stops the mapping layer from taking its shape *because the design partner has it*. Recommended and pending the founder's word: **extend the rule here** — every shape in this phase is exercised against the public data (CMS Montana, NYC `uvpi-gqnh` / `erm2-nwe9` / `693u-uax6`) as well as against the design partner's capture, and a conflict is **recorded** rather than resolved silently toward the partner. That is the discipline that produced `value_set` and `not_a_type`, two shapes the partner did not need and the public data did.
 
+### Row 7a — the Layer B spec row. **DONE 2026-09-04.**
+
+[`docs/specs/INGEST.md`](docs/specs/INGEST.md) v0 · [`docs/runs/7A-RUN.md`](docs/runs/7A-RUN.md) · ships **no
+product code**, exactly as its brief fenced it.
+
+**What the spec DECIDED:**
+
+1. **R78 is CONFIRMED, and narrowly.** The host holds the instances; this project defines resolution over them
+   through **two READ primitives**. What was tested is that *every outcome is reachable* over a host-held
+   table with no instance row in the registry — **[Observed]**, after a walk-through scanning 14,627 rows the
+   shipped store held exactly `[('entity','facility')]`. **The absence of a third primitive is the evidence:**
+   a protocol needing a `put` would be an instance store with a different name.
+2. **`resolve_instance` is a NEW call and `resolve_type` is never extended** (**R77**), with **five** outcomes
+   rather than four. The fifth, `unknowable`, was **pre-registered as a prediction before the probe existed**
+   and then forced by construction — under a four-outcome set a truncated scan answers `proposal` for a
+   facility that exists in the same table, which is the pollution machine with a governance loop bolted to the
+   front of it.
+3. **The tenancy protocol stays tenant-blind** (**R59**): the candidate primitive takes no tenant parameter,
+   each host sees the whole store, and *the predicate does the excluding, above the primitive, where it is
+   enumerable*. **R60's one `Condition` language** is twelve terms — ten operators and two Kleene combinators,
+   no `not` — and landed across `INTERFACE.md`, `EDGES.md` and `ACTIONS.md` in the same change.
+4. **Standing rule (e), minted by this row:** *the extent an identity is decided over, **and the facts that
+   govern the decision**, are the same at every door that reads it, writes it, keys it, gates it or counts it
+   — and a door that cannot prove both answers `unknowable` rather than deciding.*
+5. **Five amendments are asked of `ACTIONS.md` and none is made here**, so §4 is a contract that cannot yet be
+   executed — and the document says so.
+
+**What it cost, stated because the roadmap should carry it:** three adversarial rounds, eleven lens verdicts,
+**no clean round**, findings **37 → 47 → 51**. The kill criterion's shape was reached **eight times before any
+code exists** and recorded as the `I-1`…`I-8` instance-surface records; **the trip count stayed at FOURTEEN**.
+`stop` was put for the eleventh time and the **first without a trip**, with the supervisor recommending
+*continue, and open the dedicated identity-surface row* — because a loop that can predict where its next
+defect will be is wasted in a row that writes the rule first and predicts second.
+
+**Q85–Q93 want a ruling** (Q91 the founder's), and **eight open findings are named in `INGEST.md` §8.1** as
+the build row's declared inputs — E22 first, E2 second.
+
 **Exit criterion:** the staff doing manual uploads lose the hour a day, and what lands is queryable rather than a pile.
 
 ---
