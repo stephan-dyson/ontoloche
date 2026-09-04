@@ -1021,3 +1021,203 @@ line, because its measurement is of the **shipped** `invocations` signature and 
 8. **Deliberately not attacked by this lens:** §2.2's paging states, §6's twelve terms and their Kleene
    composition, §6.2's null handling, design tests 2 and 3's live measurements, and the whole of §6.5's
    A1–A16. No finding here duplicates one of those.
+
+---
+
+### 6.7 Round 2, lens 3 — **the kill row. NOT YET: 4 BLOCKING, 3 MAJOR, 1 MINOR, and four more constructions in the family.**
+
+*(Lenses 2, 3 and 4 were dispatched together in isolated worktrees; sections are numbered in the order the
+lenses returned, because the rule is that each is written to disk as it returns.)*
+
+**Provenance first, standing rule (a).** **[Observed]** `git diff --name-only a1b0364^..HEAD -- ontoloche/`
+returns nothing and `grep -rc "resolve_instance\|MatchPolicy\|find_instance_candidates\|InstanceResolution"
+ontoloche/` returns zero on every file. **Row 7a still ships no door**, so there is no earlier commit to
+bisect: Z1, Z2, Z3, Z4, Z5, Z6 and Z7 are constructed against the **specification**, the **one kit**, and
+**design test 5's own ledger**. The constructions that reach the **shipped** `ref_key` / `parse_ref` /
+`flat_form_problem` / `InstanceRef` are in §6.7c, and **they held**.
+
+**[Observed]** baseline reproduced before anything: 36/36, 13/13 (live `erm2-nwe9`), 17/17, 11/11, 10/10 =
+**87/87**, and every finding below was reached with those 87 still green. Mutations were on copies with
+`PYTHONPATH` pointed at the worktree; **no repo file was modified.**
+
+#### 6.7a The four kill-row-family records — written to the standard the fourteen trip records set
+
+**The classification is the supervisor's.** All four are constructed against a specification and a throwaway
+kit with **no shipped door** — the exact distinction [**R83**](../decisions/2026-09-04-7a-supervisor-ruling-R83.md)
+used to classify `I-1`. On that reading they are instance-surface records; **the kill-row count is not
+incremented anywhere by this round.**
+
+**Record A (Z1) — the successor chain binds the READ door and no door that WRITES.** **[Observed]**, full
+165,336,194-byte CMS file, the repo's unmodified probes and kit:
+
+```
+ACT 1 (no successor yet): land('THE SARAH ROBERTS FRENCH HOME') -> 'proposed'
+  reviewed by user:curator;  invocations(unreviewed=True) = 0
+  host minted cms:entity:facility#HOST-1
+  CONTROL, before any governance act:
+    outcome='existing' ref='cms:entity:facility#HOST-1' conf=1.0 complete=True
+
+GOVERNANCE ACT: retire('facility', successor='nursing_facility')
+  the host migrates 14626 rows and leaves HOST-1 under 'facility'
+
+ACT 2: land('THE SARAH ROBERTS FRENCH HOME') -> 'proposed'
+  outcome='proposal' ref=None conf=0.6415 scanned=14626 complete=True why_incomplete=''
+  warnings=('instance_type_succeeded:nursing_facility', 'no_tenancy_predicate',
+            'consumers_unregistered')
+  host minted cms:entity:facility#HOST-2
+
+TWO HOST ROWS, ONE FACILITY -> once the migration finishes: ambiguous known=2 conf=1.0
+```
+
+**Rule 3-14 fired correctly, reported itself in a warning, and the duplicate was minted anyway.** §4.2 and
+rule 4-3 never say **which** type the host writes under, and rule 4-11's key `(namespace, kind, type_name)`
+never says which `type_name`. **Both readings break**: write under the declared name and the chain-following
+read can never see it again; write under the effective name and the ledger key misses across the retire.
+**[Observed]** `grep -c "successor" ingest_act_probe.py` = **0** — six in the seam probe, zero in the other
+four; the successor lives in one probe and the ledger in another and **no construction puts them in one
+room**, which is *trip 14's own count shape verbatim*. **MUTATION PROOF:** applying the fix to a copy leaves
+design test 5 at **10/10** — the gate is blind to the rule's presence *and* its absence.
+**Cross-reference: trip 14**, and it is `I-2`'s sibling rather than its duplicate — `I-2` is the chain
+stopping after one hop; this is the chain **followed correctly** with only the read door bound by it.
+
+**Record B (Z2) — the act's scope key is the raw string and the gate's is `norm`. This is lens 2's B3,
+reached independently from the other direction, and it is the round's convergence.**
+
+```
+A='THE SARAH ROBERTS FRENCH HOME'   B='The Sarah Roberts French Home,'
+norm(A) == norm(B) -> True          similar(A,B) -> 1.0
+THE GATE, asked directly: resolve(B) against a host holding A
+  -> outcome='existing' ref='cms:entity:facility#HOST-A' conf=1.0
+ONE ACT, rules 4-10 and 4-11 both ON:
+  outcomes=['proposed','proposed']  writes=[#HOST-1, #HOST-2]  warnings=[(),()]
+  the NEXT resolution -> ambiguous known=2 conf=1.0
+```
+
+**The population is real, public, and the worker re-derived every figure from the file rather than taking the
+lens's paragraph. [Observed] 2026-09-04**, over the same 165,336,194-byte file, using the kit's own `norm`:
+
+```
+rows: 419479   CCNs: 14627
+distinct RAW names:  14498   shared by >1 CCN: 104
+distinct NORMALISED: 14427   shared by >1 CCN: 155
+normalised keys carrying MORE THAN ONE raw spelling: 71
+examples: ['PARK PLACE','Park Place'] ['HERITAGE HEALTH CARE CENTER','Heritage Health Care Center']
+          ['CHRISTIAN CARE NURSING CENTER','Christian Care Nursing Center']
+```
+
+**MUTATION PROOF:** rekeying rule 4-10 on `norm(label)` leaves design test 5 at **10/10** — the gate cannot
+tell which key the rule uses. **[Observed]** all five `land()` sites pass one of exactly **two** string
+constants and all five `IngestAct` constructions pass `namespace="cms", type_name="facility"`.
+**Cross-reference: K3's shape at a new pair of artefacts**, and contortion **ING3** arriving inside §4.3.
+
+**Record C (Z4) — a DRAINED proposal is an unconsumed permission.**
+
+```
+act-1 land(label) -> 'proposed'                 invocations(unreviewed=True) = 1
+review_invocation(reviewed_by='user:curator')   invocations(unreviewed=True) = 0
+the host has NOT written yet  (rule 4-2: the write is the host's)
+act-2 land(label) -> 'proposed'   warnings=()
+both approvals then land -> [#HOST-1, #HOST-2] -> ambiguous known=2
+```
+
+Rule 4-6 makes `review_invocation` the **only** drain and rule 4-11 makes `unreviewed=True` the **only**
+question, so **draining removes the pending proposal from the guard's view while the identity it authorises
+still does not exist.** The window is not exotic; it is the specified sequence, because §4.2 puts the write on
+the host and `ACTIONS.md` §4's gate is advisory (**ING2**). **[Observed]** `ingest_act_probe.py` contains
+exactly **one** `reviewed_by =` assignment and **no** `land()` after it.
+**Cross-reference: standing rule (c) verbatim, one surface down and one drain along** — K4 was the permission
+cashed while pending; this is the permission **re-issued because it was cashed**, and it is this round's
+closest thing to trip 12's *a guard evaluated once for a call that can run twice*.
+
+**Record D (Z7) — the tied set dedupes on `ref_key`, so two different host records sharing one `instance_id`
+collapse to one.**
+
+```
+two host rows, one instance_id -> outcome='existing' ref='cms:entity:facility#015009'
+                                  known=1 scanned=2 conf=1.0
+candidates=[('cms:entity:facility#015009','BURNS NURSING HOME, INC.',1.0)]
+   -- the second row ('BURNS NURSING HOME INC', state='TX') is GONE
+```
+
+Rule 1-1 makes `instance_id` the host's and opaque; **no rule requires a `CandidatePage`'s ids to be
+distinct**, and §3.2's set test silently treats a repeated id as one candidate. `flat_form_problem` correctly
+returns `None` — the id is the field the grammar may carry anything in. **ING5 already measured that a host
+keyed on a non-unique natural column is the ordinary case** (59.7% of `uvpi-gqnh`'s 683,788 instances share an
+address). **Cross-reference: trip 8's empty-key collision at the instance layer**, which round 1's §6.2d
+recorded as *not constructible* — **it is constructible; it just needs the host's id rather than the label to
+be the colliding field, and round 1 checked the label side and stopped.**
+
+#### 6.7b Every finding, with its disposition
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| **Z1** | **BLOCKING** | **Rule 3-14 binds the identity read and nothing binds the write — §6.7a Record A.** One ordinary `retire(successor=)` between two acts mints a second identity with every §3 rule firing correctly | **ACCEPTED, and it is the fix to make first.** §4.2 / §4.3 must say **which** `type_name` the host writes under and **which** the rule 4-11 ledger key uses; everything else in Record A follows from that one absent sentence. Rule 3-14's enumeration is extended to the write door per standing rule (d), and design test 5 gains a `retire(successor=)` |
+| **Z2** | **BLOCKING** | **Rules 4-10/4-11 scope on the RAW label; the gate decides identity on `norm` — §6.7a Record B.** **[Observed]**, re-derived by the worker: **71** normalised keys carry more than one raw spelling, and the shared-name count is **104 raw / 155 normalised** | **ACCEPTED, and this is lens 2's B3 independently reached** — the round's convergence, exactly as K1/P1 were round 1's. One fix closes both: the per-act rules key on whatever §3 calls the same thing, or the document states they are exact-string and prices it in ING3 |
+| **Z3** | **BLOCKING** | **§13 asserts a route CLOSED that the row's own design test constructs as OPEN, and routes it to a guarantee that cannot cover it.** Route 9 says *"a pending proposal is cashed twice, **or by two concurrent workers** … Rule 4-11"*. **[Observed]** design test 5's own check 5.3 constructs two workers reading one state, `writes=2`, `ambiguous known=2`, and passes with the message *"this document says so"* — and **[Observed]**, re-verified by the worker, the document does **not** say so: `concurrent` occurs in `INGEST.md` only in §4.3's quotation of K4's evidence and in §13's route row. **[Observed]** `PACKAGE.md` §3.5's **G1 is uniqueness in the TYPE store** | **ACCEPTED.** The route table is the artefact whose job is to say what stops the kill row, and one of its twelve rows is false; the disclaimer lives only in a probe's `check()` string and points at a guarantee that rule 1-1 and rule 2-1 put permanently out of this document's reach. Either route 9 drops the concurrent clause and §10 gains the contortion, or §4.3 gains a rule — **it cannot be both** |
+| **Z4** | **BLOCKING** | **A drained-but-unwritten proposal is invisible to rule 4-11 — §6.7a Record C.** The guard asks who holds an *unreviewed* proposal rather than who holds a proposal at all | **ACCEPTED.** The guard is at the wrong end: it blocks the second proposal while the first is undrained, and stands down at exactly the moment the first is approved and still unwritten |
+| **Z5** | MAJOR | **The gate's BAND branch caps `known` and `candidates` at 5 over a FINISHED read, and rule 4-5's `<n>` inherits the cap.** **[Observed]** `resolve('BURNS NURSING HM INC')` → `ambiguous conf=0.9524 complete=True scanned=14627 known=5 len(candidates)=5`, of which exactly **one** is banded and four score 0.76–0.79; the reviewer's warning is `instance_ambiguous_at_proposal:facility:5`. The tied branch by contrast gives `known=12`. **[Observed]** the only `known` assertions in all five design tests are `== 12` and `== 2` — **zero** on the band branch | **ACCEPTED.** Rule 3-4 (`C20-18`) says *"every tied candidate is returned"* and §8 prints `known: int` with no cap; rule 4-12's *"counted over a finished read"* is satisfied and the number is still meaningless. §4.3's own note said K9's fix *"cannot be scoped narrowly and lose it"* — **it was scoped to the unfinished-read case** |
+| **Z6** | MAJOR | **Rule 4-7 fences `unknowable` and nothing fences `not_an_instance`.** **[Observed]**, re-verified: rule 4-7 (`C20-33`) reads *"A resolution of `unknowable` yields **no** proposal"* and names no second outcome. So: `resolve('Provider Name') -> not_an_instance scanned=0`, then `land('Provider Name') -> 'proposed'`, ledger `[('inv-1','Provider Name','not_an_instance','auto')]`, host writes `#HOST-CLASSWORD (label='Provider Name')`, and re-landing it in the same act returns `'reused', object=None` where a `CandidateRef` is contracted. **MUTATION PROOF:** extending rule 4-7 to `not_an_instance` leaves design test 5 at **10/10**; `grep -c "not_an_instance" ingest_act_probe.py` = **0** | **ACCEPTED, and it is not ING8.** ING8 is a classifier that misses; this is the classifier **succeeding** — §3.3's *"the cheapest correct answer is the one that asks the host nothing"* — and §4 proposing over it anyway, in `auto` mode, unrouted to review. Rule 4-7 names one of the **two** outcomes that must mint nothing |
+| **Z7** | MAJOR | **The tied set dedupes on `ref_key` — §6.7a Record D.** Two different host records under one `instance_id` collapse to one and answer `existing` at 1.0 with `known=1` | **ACCEPTED.** Either §2 gains a rule that a page's `instance_id`s are distinct-or-`unknowable`, or §3.2 says what a repeated id means |
+| **Z8** | MINOR | **§1's pre-registered *"104 provider names shared by more than one CCN"* is the RAW count; the gate collides on the normalised key, where the figure is 155.** **[Observed]**, re-derived by the worker: `RAW 14498 / shared 104` vs `NORMALISED 14427 / shared 155` | **ACCEPTED.** Nothing pre-registered is *wrong* — §1 says the four figures were independently re-derived and they were, twice — but they describe a surface `resolve_instance` **does not use**. The number that describes the gate's own collision surface is **155**, and the 51-name gap is exactly Z2's population. Both numbers are printed, with what each one measures |
+
+#### 6.7c What the lens attacked and could NOT break
+
+1. **The shipped flat-form grammar, from four instance-surface directions A9/A10 did not walk.**
+   **[Observed]** empty `namespace` → `':entity:facility#015009'` round-trips; empty type name →
+   `'cms:entity:#015009'` round-trips; empty id → `'cms:entity:facility#'` round-trips and is **distinct** from
+   the `TypeRef` key `'cms:entity:facility'`; a non-`str` id is refused at `InstanceRef.__post_init__` with
+   EDGES 2.1's own message. **No two distinct instance references collide in `ref_key` once
+   `namespace`/`kind`/`name` are separator-free.** The one misreading route — an `InstanceRef` over a
+   `kind="edge"` type — is **already recorded in `parse_ref`'s own docstring**, forbidden by EDGES 2.1, and
+   INGEST pins `kind="entity"`. A9 and A10 remain the live findings there; **no third was found.**
+2. **Rule 3-4's `ref=None` on `ambiguous`.** Held under every construction, including the band branch, the
+   retired-type branch and the duplicate-id branch. **The shape trips 11 and 12 took still does not
+   reproduce.**
+3. **Rule 4-11 across a retire while the first proposal is still PENDING.** **[Observed]** act 2 answers
+   `'pending'` with `instance_proposal_pending:inv-1` and **no** second mint. *The ledger key staying on the
+   declared name is what saves it* — which is why Z1's two horns cannot be fixed independently.
+4. **Rule U's ordering, from a fifth direction.** No construction produced a confident answer over an
+   unfinished read; every path through the band, the retired type and the duplicate id reported `complete=True`
+   honestly. §6.5c item 1 stands.
+5. **The R78 seam, from a fifth lens.** Nothing needed an instance row in the registry; every duplicate above
+   was written by the host. **Five lenses have now failed to force one.**
+6. **`namespace` at the instance surface.** `find_instance_candidates` filters on it, `vocab.entry` is keyed
+   on it, and a dangling successor yields `scanned=0` → `unknowable`. **`namespace` is untouched at the
+   instance surface as it has been across all fourteen trips.**
+7. **`MatchPolicy` at declaration.** Rules 5-2 / 5-3 refuse in `__post_init__`; no policy reaches the gate
+   malformed. **A11's floor is about the tied set, not about the declaration.**
+8. **Kleene composition and the three-valued language.** No predicate made §6 decide something it could not
+   read. Design test 3's ordering remains the one the whole kit uses.
+
+#### 6.7d The countable-absence count, re-run over the AMENDED kit — **nine, and three are a previous trip's count shape**
+
+Round 1's §6.2c counted eleven over the old probes. Over the amended artefacts:
+
+1. **Zero** `IngestAct` / `Ledger` references outside `ingest_act_probe.py` — §4's entire contract is posed by
+   **one** of the five design tests.
+2. **Zero** `successor` in `ingest_act_probe.py` — Z1's quadrant. ***Trip 14's count shape verbatim.***
+3. **Zero** `not_an_instance` in `ingest_act_probe.py` — Z6's quadrant.
+4. **Zero** `norm(` in `ingest_act_probe.py` — Z2's quadrant; the act's key is never compared with the gate's.
+5. **Exactly two** distinct label constants across all five `land()` sites, and **one** `(namespace,
+   type_name)` pair across all five `IngestAct` constructions.
+6. **One** `reviewed_by =` in the whole file, with **no** `land()` after it — Z4's quadrant.
+7. **Zero** assertions of `known` on the **band** branch — Z5's quadrant.
+8. **Zero** fixtures in which two host records share an `instance_id` — Z7's quadrant.
+9. **Zero** `can_count` across all five — carried from A5, because §3.4's third named absorber rides `C20-08`.
+
+**The sentence this register has now written ten times, at this row** — and at round 2 it has a sharper form:
+*§4's only probe holds **one** label, **one** type and **one** namespace, so every quadrant of §4.3 except the
+one that prompted it is unposed.*
+
+#### 6.7e Standing rule (d) — a fifth through eighth failure, all inside round 1's own fix set
+
+Lens 1 found three (A3, A6, A10). These are four more:
+
+1. **Rule 3-14** minted at the identity read; binds the propose door and the host write (Z1).
+2. **Rules 4-10 / 4-11** minted with the word *label*; bind `norm`, the gate's own identity function (Z2, B3).
+3. **Rule 4-7** minted for `unknowable`; binds `not_an_instance`, the other outcome that must mint nothing (Z6).
+4. **Rules 3-4 / 4-12** minted at the tied branch; bind the band branch, where `known` is capped at 5 (Z5).
+
+**Seven failures of standing rule (d) in one round, every one inside the fixes of the round that invoked
+standing rule (d) as its own lesson.** That is the sharpest thing round 2 has to say, and §6.9 says it again
+with the totals.
