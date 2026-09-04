@@ -48,7 +48,9 @@ from ingest_probe_kit import (  # noqa: E402
     Capabilities, CandidateQuery, CandidateRef, Condition, EntryDeclaration, HostTable,
     InstanceContext, InstanceRecord, MatchPolicy, NotSupported, OUTCOMES, Refusal,
     Vocabulary, assert_adapter_boundary, flat_form_ok, resolve_instance,
+    CHAIN_CAP, type_closure,
 )
+from dataclasses import replace  # noqa: E402
 
 csv.field_size_limit(10_000_000)
 
@@ -473,6 +475,129 @@ def main() -> int:
           and all(len(s) == 2 for s in context.siblings))
     check("T1.14 a CandidateRef carries the act it belongs to (rule 4-10's scope)",
           resolve(T1_3, h=without).candidate.act_id == "act-1", "")
+
+    # =====================================================================
+    # T1.13 -- ROUND 3's DEBT. The eight rules 6.9c obliged this row to prove
+    #         with a red check, plus the three of E3's survivors that are rules
+    #         rather than probe wiring. Round 3's E22/P1 found NONE of them had
+    #         one, a full round after the row wrote the obligation.
+    #
+    #         "A check that cannot go red is a decoration" -- this row's own
+    #         standard, applied to the rules it leaned on hardest.
+    # =====================================================================
+    print("\nT1.13 -- the eight rules 6.9c named, and E3's survivors")
+
+    # rule 1-1 / C20-01 -- the rule the whole R78 verdict rests on
+    novel = HostTable([rec for rec in host._rows if rec.instance_id != T1_3_CCN])
+    r = resolve_instance(T1_3, InstanceContext(act_id="t13"), host=novel,
+                         vocab=cms_vocab(), namespace="cms", type_name="facility",
+                         tier="sonnet", _mutate="registry_mints")
+    print(f"  C20-01 MUTATED -> outcome={r.outcome!r} ref={r.ref!r}")
+    check("T1.13 rule 1-1 / `C20-01`: this project MINTS NO instance identifiers -- "
+          "the mutation hands back a registry-invented ref and this check is what "
+          "makes that visible. Round 3's P1 reached it on a live path over 209 real "
+          "Colorado facilities with all 104 checks green",
+          r.ref == "cms:entity:facility#minted-by-registry",
+          f"the mutation must be reachable: {r.ref}")
+    control = resolve_instance(T1_3, InstanceContext(act_id="t13"), host=novel,
+                               vocab=cms_vocab(), namespace="cms",
+                               type_name="facility", tier="sonnet")
+    check("T1.13 rule 1-1 / `C20-01`, the FIXED arm: no ref the registry invented",
+          control.ref is None and control.outcome == "proposal",
+          f"{control.outcome} / {control.ref}")
+
+    # rule 2-1 / C20-04 -- two primitives, both READS
+    writers = [n for n in dir(HostTable)
+               if n.startswith(("put", "write", "set_", "add_", "delete", "upsert"))]
+    print(f"  C20-04: write-shaped methods on the host adapter -> {writers}")
+    check("T1.13 rule 2-1 / `C20-04`: the adapter surface is TWO READS and no write. "
+          "A `put_instance` would make this go red, and round 3 found nothing that "
+          "would have noticed", writers == [], str(writers))
+
+    # rule 6-17 / C20-58 -- the candidate primitive takes no tenant
+    fields = set(CandidateQuery.__dataclass_fields__)
+    print(f"  C20-58: CandidateQuery fields -> {sorted(fields)}")
+    check("T1.13 rule 6-17 / `C20-58`: the candidate primitive takes NO tenant "
+          "parameter -- R24/R59's tenant-blind protocol, checked on the shape rather "
+          "than asserted in prose",
+          not (fields & {"tenant", "tenant_id", "host", "owner"}), str(sorted(fields)))
+
+    # rule 3-11 / C20-25 -- tier echoed back for provenance
+    r = resolve_instance(T1_3, InstanceContext(act_id="t13"), host=novel,
+                         vocab=cms_vocab(), namespace="cms", type_name="facility",
+                         tier="sonnet", _mutate="tier_dropped")
+    print(f"  C20-25 MUTATED -> tier={r.tier!r}  (control {control.tier!r})")
+    check("T1.13 rule 3-11 / `C20-25`: `tier` is echoed back, because "
+          "`InvocationProvenance.model_tier` depends on it and a dropped tier is a "
+          "provenance hole nothing else reports",
+          control.tier == "sonnet" and r.tier == "", f"{control.tier!r}/{r.tier!r}")
+
+    # rule 3-4 / C20-18 -- EVERY tied candidate is returned
+    r = resolve_instance(T1_2, InstanceContext(act_id="t13"), host=host,
+                         vocab=cms_vocab(), namespace="cms", type_name="facility",
+                         tier="sonnet", _mutate="one_of_tied")
+    full = resolve_instance(T1_2, InstanceContext(act_id="t13"), host=host,
+                            vocab=cms_vocab(), namespace="cms", type_name="facility",
+                            tier="sonnet")
+    print(f"  C20-18 MUTATED -> known={r.known} len(candidates)={len(r.candidates)}"
+          f"   (control {full.known}/{len(full.candidates)})")
+    check("T1.13 rule 3-4 / `C20-18`: on `ambiguous` EVERY tied candidate is returned "
+          "-- `known` agreeing with `len(candidates)` is the invariant, and the "
+          "mutation reporting 2 while returning 1 is the shape trips 11 and 12 took",
+          full.known == len(full.candidates) == 12
+          and r.known != len(r.candidates),
+          f"control {full.known}/{len(full.candidates)}, mutated {r.known}/{len(r.candidates)}")
+
+    # rule 2-14 / C20-65 -- E3's survivor, and 13's route 12 rests on it
+    bad_rec = InstanceRecord("cms", "entity", "facility#015009", "2024-03-11",
+                             "AMBIGUOUS FLAT FORM", {})
+    for mut, tag in ((None, "GUARD ON"), ("flat_form_off", "MUTATED")):
+        v_bad = cms_vocab()
+        v_bad.declare("cms", "facility#015009", v_bad.entry("cms", "facility"))
+        out = resolve_instance("AMBIGUOUS FLAT FORM", InstanceContext(act_id="t13"),
+                               host=HostTable([bad_rec]), vocab=v_bad,
+                               namespace="cms", type_name="facility#015009",
+                               tier="sonnet", _mutate=mut)
+        got = out.reason if isinstance(out, Refusal) else out.outcome
+        print(f"  C20-65 {tag} -> {type(out).__name__} {got}")
+        if mut is None:
+            check("T1.13 rule 2-14 / `C20-65`: a record whose `type_name` would make "
+                  "`ref_key` unfaithful is REFUSED at the surface that hands out refs. "
+                  "13's route 12 rests on this rule and round 3's E3 found it had no "
+                  "check that could go red",
+                  isinstance(out, Refusal), str(got))
+        else:
+            check("T1.13 rule 2-14 MUTATION: with the guard off the caller is handed a "
+                  "ref `parse_ref` reads back as a different reference",
+                  not isinstance(out, Refusal), str(got))
+
+    # rules 3-16 / 3-17 -- E3's other two survivors
+    chain = cms_vocab()
+    for i in range(20):
+        chain.declare("cms", f"t{i}", replace(chain.entry("cms", "facility"),
+                                              successor=f"t{i+1}"))
+    chain.declare("cms", "t20", replace(chain.entry("cms", "facility")))
+    c_on = type_closure(chain, "cms", "t0")
+    c_off = type_closure(chain, "cms", "t0", no_cap=True)
+    print(f"  C20-77: cap ON -> complete={c_on.complete} hops={len(c_on.hops)}; "
+          f"OFF -> complete={c_off.complete} hops={len(c_off.hops)}")
+    check("T1.13 rule 3-16 / `C20-77`: the walk carries a hop cap and reaching it is "
+          "`complete=False` with a `why`, never a silent answer. The cap is 16, the "
+          "SHIPPED `_IDENTITY_CHAIN_CAP` value (round 3, E6)",
+          (not c_on.complete) and len(c_on.hops) == CHAIN_CAP and c_off.complete,
+          f"{c_on.complete}/{len(c_on.hops)} vs {c_off.complete}")
+
+    cyc = cms_vocab()
+    cyc.declare("cms", "a", replace(cyc.entry("cms", "facility"), successor="b"))
+    cyc.declare("cms", "b", replace(cyc.entry("cms", "facility"), successor="a"))
+    y_on = type_closure(cyc, "cms", "a")
+    y_off = type_closure(cyc, "cms", "a", no_cycle_guard=True, no_cap=True)
+    print(f"  C20-78: cycle guard ON -> complete={y_on.complete}; "
+          f"OFF -> hops={len(y_off.hops)}")
+    check("T1.13 rule 3-17 / `C20-78`: a CYCLE stops the walk with a `why` -- 5.9 does "
+          "not forbid constructing one, so the walk must survive it",
+          (not y_on.complete) and "cycles at" in y_on.why and len(y_off.hops) > 16,
+          f"{y_on.complete} / {y_on.why[:40]} / {len(y_off.hops)}")
 
     print("\n" + "=" * 78)
     failed = [c for c in CHECKS if not c[1]]
