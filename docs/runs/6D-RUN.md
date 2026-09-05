@@ -227,5 +227,36 @@ totalled in the convergence note.
 
 ## 6. The adversarial loop
 
-*Written as each lens returns, before any fix, per constraint 7. Nothing here yet: this file's first
-commit contains §0 and nothing else, which is the ordering R89 opened this row for.*
+*Written as each lens returns, before any fix, per constraint 7. Four lenses were dispatched at
+`d4b86a8`, the pre-registration commit: the **kill row** (twenty-two records as one lens, with
+R80/Q82 first by ruling), the **fix auditor** (pointed at `0c0c7f6` and everything since), the
+**cross-namespace lens** (prediction S3) and the **actions-twin lens** (prediction S4).*
+
+### 6.0 The gate's counts, taken at `d4b86a8` — **after the predictions were committed and BEFORE any lens returned**
+
+**This is the ordering R89 opened the row for, in its smallest form.** Nine consecutive trips ended
+with a paragraph titled *why the checker exited 0*, countable since trip eleven — *zero occurrences
+of `register_consumer`*, *zero repeated calls on one row*, *zero occurrences of `include_retired`* —
+and **every one of those counts was taken after the trip had already walked through the gap.**
+§0.5 predicted four gaps; this section takes their counts. `git log` carries the ordering: §0 landed
+at **`d4b86a8`**, these counts were taken against that same tree, and the first lens had not
+reported.
+
+**[Observed]**, `docs/tools/check_merge_guard.py` at `d4b86a8` — the ten-axis gate that is this
+surface's only mechanical guard:
+
+| # | what §0.5 predicted | the count | verdict |
+|---|---|---|---|
+| **G1** | the gate cannot pose a cross-namespace question | `cross_namespace`: **0**. Every fixture namespace literal in the file is `"default"` — 19 occurrences, `namespace="default"` 11 times. The only other namespace-shaped literals are the actor `"user:sd"` and the consumer `"svc:meta"` | **CONFIRMED as a count.** No fixture, on any leg, at any door, in any of the ten axes, has ever driven two namespaces — and *"`namespace` is untouched across all fourteen trips and `cross_namespace_merge` still refuses on live NYC data"* appears in **fourteen** consecutive countersignatures |
+| **G2** | the gate has never driven an action family | `kind="action"`: **0**. The kinds driven are `predicate` 60, `edge` 4, `entity` 3, `data` 1 | **CONFIRMED as a count.** An action family **is** a `TypeEntry` and enters the same six doors; the eleventh trip's sibling already walked a capability-predicate merge to `applied` through that layer |
+| **G3** | nine of ten axes cannot see a tombstone's words | `include_retired`: **2**, both added by axis 10 for the fourteenth trip | **CONFIRMED as a count**, with the qualification the count itself carries: axis 10 closed the **mint** doors; whether the **transfer** doors and `reinstate` are still driven over active rows only is T3 and T13, and that is a lens's answer rather than a grep's |
+| **G4** | no `proposed`-status fixture anywhere in the gate | `proposed`: **0**. `status="proposed"`: **0**. And `propose_type`: **24** | **CONFIRMED as a count, and it is the sharpest of the four.** The gate drives the propose **door** two dozen times and has **never held a row in the `proposed` state** — the one state ruling **R40** forces every `kind="predicate"` through. §0.4's **N5** predicts that between `propose_type` and `approve` nothing holds the word; this count says the gate could not have told anyone either way |
+
+**What this section is worth, stated so it can be argued with.** A count is not a defect. None of the
+four is a finding, and this row will not report one as such. What they establish is the thing nine
+post-mortems could not: **the gate's blind spots were on the record before the round, not after it.**
+If a trip arrives in this row and its *why the checker exited 0* paragraph names one of G1–G4, the
+register can say for the first time that the gap was written down before anything walked through it.
+If a trip arrives whose blindness is **none** of these four, §0.5 said in advance that that is a
+falsification of §0.5, and it will be recorded as one rather than explained away.
+
