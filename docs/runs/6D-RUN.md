@@ -2542,6 +2542,82 @@ so governance was never compared.
 
 ---
 
+### 6.24 Round 3's fix set, change 3 of 4 — **the TWENTY-THIRD trip closes, and the naive form of its own fix was measured and rejected**
+
+*Ruling [R94](../decisions/2026-09-05-6d-supervisor-ruling-R94.md)'s change 3.*
+
+#### The trip, and whose the contradiction is
+
+`9a4e140` — this row's own change 1 — minted `word_held_by_tombstone` and wired it to
+`retire(successor=)`, `merge_types` and `import_types`: **three doors where the surface has four.**
+`reinstate` moves a word onto a live row by making the row live, and it was never asked.
+
+| | before | after |
+|---|---|---|
+| `reinstate('alpha')` | `TypeEntry`, `warnings=()` | **`Refusal word_held_by_tombstone`, non-overridable** |
+| `resolve_type('zeta')` | `existing / 1.0` | `proposal / 0.2353` |
+| `reinstate('beta')` | `Refusal alias_collision` — **permanently un-reinstatable** | `TypeEntry` |
+
+#### The narrowing was MEASURED before it was chosen, and the naive form DEADLOCKS
+
+Asking `_retired_holder` at both rows **before the guard was written**:
+
+```
+reinstate('alpha') -> tombstone holder = ('entity','beta')  on 'zeta'
+reinstate('beta')  -> tombstone holder = ('entity','alpha') on 'zeta'
+=> a plain non-overridable rule leaves BOTH FROZEN
+```
+
+`reinstate` has no `acknowledge` and no `force`, so there would be **no way back at all**. That is
+closing a legal operation — the exact defect `304967a` shipped and change 1 of this set removed.
+**§5.9's successor mechanism discriminates**: `alpha.successor == 'beta'` means alpha *handed its
+words to beta* by its own governance act, so alpha's claim is stale and beta — the receiver — must
+still be able to reclaim them. `C9-37` pins the trip; `C9-38` pins the narrowing.
+
+**A walk that hits `_IDENTITY_CHAIN_CAP` REFUSES rather than excuses.** Rule U says *we could not
+finish looking* is not *there is nothing there*, and at a non-overridable identity guard the safe end
+of that is the refusal.
+
+#### TWICE in this change a check caught me, and neither time was it reading
+
+**1. The scan was too wide, and the shipped ids caught it.** The first cut scanned `rec.name`
+alongside the dormant aliases — and a survivor **always** carries the absorbed row's name as an
+alias, so the rule closed ruling R11's act for **every merged row**. `C9-12` (*"reinstating the
+merged-away word is legal: its successor is retired"*) and `C9-17` went red on both mirrors, 5
+failures. Narrowed to **aliases only** — the same shape change 1 had to adopt in round 1 to preserve
+`C12-09`. **The name half is DECLINED and rides with Q95**, which is the founder's, rather than being
+settled by a guard.
+
+**2. Part A's AST scan flagged my new helper.** `_hands_words_to` names `successor`, so
+`check_merge_guard.py` refused to pass until a person wrote down what it means in `KNOWN_CALLERS`.
+Recorded: it **reads**, writes no row, and can only make the guard too wide or too narrow — never a
+collapse. *That is row 4d's checker working exactly as it was built to.*
+
+**And a third, in my own shell:** I reported *"gate exit=0"* from a command whose `$?` was **grep's**
+status, not the gate's. The manifest test caught it. A measurement that reports the wrong process's
+exit code is this row's own most-repeated class, this time not in a fixture.
+
+#### Axis 18 — the four doors ENUMERATED, not sampled
+
+Five cells on one store: `import_types`, `merge_types`, `retire_successor`, `reinstate`, and
+`reinstate PREDECESSOR`. **Driving three doors and asserting they agree is precisely the check that
+was green while the trip was live**, so the axis enumerates. `sqlite_minimal` records NOT REACHABLE
+with the capability named (no event table, so the fixture's `force` cannot be recorded).
+
+| mutation | gate | ids | fails on |
+|---|---|---|---|
+| **MC3** the guard disabled | **RED** | **RED** | `four doors / reinstate` |
+| **MC4** the narrowing removed | **RED** | **RED** | `four doors / reinstate PREDECESSOR` |
+| **MC5** the chain excuses every tombstone | **RED** | **RED** | `four doors / reinstate` |
+
+#### The degraded leg refuses ahead of the subject, and this is the THIRD door
+
+`stores_events=False` gives `cannot_record_override` before the guard is consulted at `reinstate`,
+as it does at `merge_types` in change 1. Both ids record **NOT REACHABLE, never a pass**, gated on
+the capability. **Stated once as a pattern rather than met three times as an accident.**
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.

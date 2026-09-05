@@ -4066,6 +4066,88 @@ class Registry:
                 },
                 warnings=tuple(alias_warnings),
             )
+
+        # **THE KILL ROW'S TWENTY-THIRD TRIP** (row 6d, round 3; countersigned by
+        # ruling **R94**). `reinstate` is the FOURTH door that makes a word answer at
+        # confidence **1.0**, and it is the one door the rule was never wired to.
+        # `9a4e140` -- this row's own change 1 -- minted `word_held_by_tombstone` and
+        # applied it at `retire(successor=)`, `merge_types` and `import_types`:
+        # **three doors where the surface has four.** Standing rule (d) by number, at a
+        # rule this row minted itself, and R93's adopted reading -- *a widened matcher is
+        # a minted rule and its consumers are its doors* -- with the consumer nobody
+        # walked to.
+        #
+        # **[Observed]**, four ordinary calls, no `force` and no adapter write: `alpha`
+        # and `beta` both retired holding `zeta`; `import_types` refuses
+        # `word_held_by_tombstone` in that same store; `reinstate("alpha")` returned a
+        # `TypeEntry` with `warnings=()`, `resolve_type("zeta")` answered `alpha` at
+        # **1.0**, and `reinstate("beta")` was then refused `alias_collision`
+        # **non-overridably**. That last step is the harm §5.12 names in its own words:
+        # the tombstone becomes **permanently un-reinstatable**, which is the governance
+        # act ruling **R11** created `reinstate` to provide.
+        #
+        # **THE NARROWING, AND IT WAS MEASURED BEFORE IT WAS CHOSEN.** The naive
+        # consistent form -- refuse whenever any other tombstone answers to one of these
+        # words -- **DEADLOCKS**. In the construction above `alpha` and `beta` each hold
+        # `zeta`, so each blocks the other and **NEITHER can ever be reinstated**;
+        # `reinstate` has no `acknowledge` and no `force`, so there would be no way back
+        # at all. That is closing a legal operation, which is the exact defect
+        # `304967a` shipped and change 1 of this fix set removed. **[Observed]** by
+        # asking `_retired_holder` at both rows before this guard was written.
+        #
+        # **The successor chain discriminates, and it is §5.9's own mechanism rather
+        # than a convenience.** `alpha.successor == "beta"`: alpha **handed its words to
+        # beta** by its own governance act, so alpha's claim on `zeta` is the stale one
+        # and reinstating alpha would take the word back from the row it was given to.
+        # Reinstating **beta** is the receiver reclaiming what it was given, and that
+        # must still work. So a tombstone whose successor chain leads **to this row** is
+        # excused, and nothing else is. `C9-37`; the narrowing is `C9-38`.
+        # **THE ALIASES ONLY, NEVER `rec.name` -- and the shipped ids caught the wider
+        # form.** `C9-12` blesses reinstating a MERGED-AWAY word whose successor has since
+        # been retired, and a survivor ALWAYS carries the absorbed row's name as an alias.
+        # A rule that scanned `rec.name` therefore closed ruling R11's governance act for
+        # **every merged row** -- the same over-wide shape change 1 hit in round 1, where
+        # `_retired_holder` had to be restricted to a tombstone's aliases to preserve
+        # `C12-09`. The name half rides with **Q95**, which is the founder's, and is
+        # DECLINED here rather than settled by a guard.
+        tomb_words = list(dormant)
+        tomb, tomb_why = self._retired_holder(
+            namespace, tomb_words, exclude=((rec.kind, rec.name),)
+        )
+        tomb_row, tomb_word = tomb
+        if tomb_row is not None and self._hands_words_to(
+            namespace, tomb_row, rec.name, rec.kind
+        ):
+            # A PREDECESSOR of this row: it already gave these words away, here.
+            tomb_row, tomb_word = None, None
+        if tomb_why is not None:
+            # The detail names the SCAN, because this door now runs two of them -- the
+            # eighteenth trip's own sentence at a third door.
+            alias_warnings.append("alias_check_incomplete:tombstone scan: " + tomb_why)
+        if tomb_row is not None:
+            return Refusal(
+                "word_held_by_tombstone",
+                {
+                    "type": type,
+                    "word": tomb_word,
+                    "holder": tomb_row.name,
+                    "holder_kind": tomb_row.kind,
+                    "overridable": False,
+                    "why": (
+                        f"reinstating {rec.name!r} would make {tomb_word!r} answer to a "
+                        f"LIVE row, and the RETIRED {tomb_row.kind} {tomb_row.name!r} "
+                        f"still answers to that word (INTERFACE.md 5.8 keeps a "
+                        f"tombstone's words by design). It would leave "
+                        f"{tomb_row.name!r} permanently un-reinstatable, which is ruling "
+                        f"R11's own governance act -- the same fact `merge_types`, "
+                        f"`retire(successor=)` and `import_types` refuse in this store"
+                    ),
+                    "path_back": (
+                        f"reinstate {tomb_row.name!r} first, or leave that word retired"
+                    ),
+                },
+                warnings=tuple(alias_warnings),
+            )
         if dormant:
             breach = self._alias_identity_breach(
                 namespace,
@@ -8049,6 +8131,35 @@ class Registry:
             else:  # pragma: no cover -- a shape ACTIONS.md 2.5 does not define
                 out.append(("<unreadable>", repr(e)))
         return frozenset(out)
+
+    def _hands_words_to(self, namespace: str, holder, name: str, kind: str) -> bool:
+        """Has `holder` already handed its words to `name` by naming it a successor?
+
+        **The twenty-third trip's narrowing** (row 6d, round 3). A tombstone that named a
+        successor gave its words away *at that call*, so it cannot also block the row that
+        received them -- otherwise two tombstones on one word block each other and
+        **neither** ever comes back, which the guard above records as measured rather than
+        assumed.
+
+        The walk follows `successor` the way :meth:`resolve_type` does, with the same
+        `_IDENTITY_CHAIN_CAP` and the same `walked` set against a cycle. **A walk that
+        hits the cap returns False**, which REFUSES: Rule U says *we could not finish
+        looking* is not *there is nothing there*, and at a non-overridable identity guard
+        the safe end of that is the refusal, not the excuse.
+        """
+        seen = {holder.name}
+        current = getattr(holder, "successor", None)
+        hops = 0
+        while current and current not in seen and hops < _IDENTITY_CHAIN_CAP:
+            if same_word(current, name):
+                return True
+            seen.add(current)
+            hops += 1
+            nxt = self.adapter.get_type(namespace, current, kind=kind)
+            if nxt is None:
+                return False
+            current = getattr(nxt, "successor", None)
+        return False
 
     def _retired_holder(
         self,

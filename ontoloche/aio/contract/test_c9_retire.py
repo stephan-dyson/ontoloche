@@ -1741,3 +1741,118 @@ async def test_c9_36_the_r75_transfer_refuses_a_word_a_tombstone_answers_to(
     )
     still_live = await adapter.get_type("default", "gamma", kind="predicate")
     assert still_live is not None and still_live.status == "active", still_live.status
+
+async def test_c9_37_reinstate_refuses_a_word_a_tombstone_still_answers_to(
+    adapter, make_registry
+):
+    """**The kill row's TWENTY-THIRD trip.** Row 6d, round 3; countersigned by **R94**.
+
+    `reinstate` is the **fourth** door that makes a word answer at confidence **1.0**, and
+    it is the one door the rule was never wired to. `9a4e140` — this row's own change 1 —
+    minted `word_held_by_tombstone` and applied it at `retire(successor=)`, `merge_types`
+    and `import_types`: **three doors where the surface has four.** Standing rule (d) by
+    number, at a rule this row minted itself.
+
+    **[Observed]** before the fix, four ordinary calls, no `force` and no adapter write:
+    `reinstate("alpha")` returned a `TypeEntry` with `warnings=()`, `resolve_type("zeta")`
+    answered `alpha` at **1.0**, and `reinstate("beta")` was then refused
+    `alias_collision` **non-overridably** — the tombstone made **permanently
+    un-reinstatable**, which is the governance act ruling **R11** created `reinstate` to
+    provide, and which §5.12 names in those words.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await registry.import_types(
+        [{"name": "alpha", "kind": "entity", "definition": "the alpha definition",
+          "aliases": ["zeta"], "status": "active"}],
+        namespace="default", kind="entity",
+    )
+    await seed(registry, "beta", kind="entity", definition="a quite different beta definition")
+    gone = await registry.retire("alpha", "superseded", retired_by="user:sd", successor="beta")
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire toward a successor ({gone.reason})")
+    gone2 = await registry.retire("beta", "the area was dropped", retired_by="user:sd")
+    if isinstance(gone2, Refusal):
+        pytest.skip(f"this backend cannot retire the successor ({gone2.reason})")
+
+    held = await adapter.get_type("default", "beta", kind="entity")
+    if held is None or "zeta" not in (held.aliases or ()):
+        pytest.skip("this backend did not carry the transferred word onto the successor")
+
+    # CONTROL: a door the rule WAS wired to refuses the identical act in this store.
+    control = await registry.import_types(
+        [{"name": "gamma", "kind": "entity", "definition": "a third thing",
+          "aliases": ["zeta"], "status": "active"}],
+        namespace="default", kind="entity",
+    )
+    assert any(
+        w == "import_refused:word_held_by_tombstone" for w in (control[0].warnings or ())
+    ), ("the wired doors refuse this act", control[0].warnings)
+
+    back = await registry.reinstate("alpha", "we need it back", reinstated_by="user:sd")
+    assert isinstance(back, Refusal), (
+        "reinstating `alpha` makes `zeta` answer at 1.0 while the tombstone `beta` still "
+        "holds it -- the fourth door must refuse what the other three refuse", back,
+    )
+    if back.reason == "cannot_record_override":
+        # NOT REACHABLE, never a pass: this door refuses before the tombstone guard is
+        # consulted, because the reinstatement itself cannot be written down. Gated on
+        # the CAPABILITY, so a store that CAN record events and refused this way is a
+        # finding. **The third door in this fix set where `stores_events=False` refuses
+        # ahead of the subject** -- stated once here rather than met three times as an
+        # accident.
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", back.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses before the tombstone guard runs"
+        )
+    assert back.reason == "word_held_by_tombstone", back.reason
+    assert back.detail["overridable"] is False
+    assert back.detail["holder"] == "beta", back.detail
+
+async def test_c9_38_a_predecessor_does_not_block_the_row_it_gave_its_words_to(
+    adapter, make_registry
+):
+    """**The narrowing `C9-37` must not be written without, and it was MEASURED first.**
+
+    The naive consistent form — refuse whenever any other tombstone answers to one of
+    these words — **deadlocks**. `alpha` and `beta` each hold `zeta`, so each blocks the
+    other and **neither** can ever be reinstated; `reinstate` has no `acknowledge` and no
+    `force`, so there is no way back at all. **That is closing a legal operation**, the
+    exact defect `304967a` shipped and change 1 of this fix set removed.
+
+    §5.9's successor mechanism discriminates: `alpha.successor == "beta"` means alpha
+    **handed its words to beta** by its own governance act, so alpha's claim is the stale
+    one. Reinstating **beta** is the receiver reclaiming what it was given, and it must
+    still work.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await registry.import_types(
+        [{"name": "alpha", "kind": "entity", "definition": "the alpha definition",
+          "aliases": ["zeta"], "status": "active"}],
+        namespace="default", kind="entity",
+    )
+    await seed(registry, "beta", kind="entity", definition="a quite different beta definition")
+    gone = await registry.retire("alpha", "superseded", retired_by="user:sd", successor="beta")
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire toward a successor ({gone.reason})")
+    gone2 = await registry.retire("beta", "the area was dropped", retired_by="user:sd")
+    if isinstance(gone2, Refusal):
+        pytest.skip(f"this backend cannot retire the successor ({gone2.reason})")
+
+    back = await registry.reinstate("beta", "we need beta back", reinstated_by="user:sd")
+    if isinstance(back, Refusal) and back.reason == "cannot_record_override":
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", back.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses before the narrowing is reached"
+        )
+    assert not isinstance(back, Refusal), (
+        "`alpha` is a PREDECESSOR: it gave `zeta` to `beta` at the retirement that named "
+        "beta its successor, so it cannot also block beta. A rule that refused here "
+        "would leave BOTH rows permanently unreinstatable, which is the deadlock this "
+        "narrowing was measured against before it was written",
+        getattr(back, "reason", None), getattr(back, "detail", None),
+    )
+    assert back.status == "active", back.status

@@ -276,6 +276,17 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "scan the minute it was added, which is Part A working: a new function naming an "
         "identity field fails this check until a person writes down what it means.",
     ),
+    "_hands_words_to": CallerVerdict(
+        False,
+        "**READS** `holder.successor` and walks the chain to answer ONE question for "
+        "`reinstate`'s twenty-third-trip guard: *has this tombstone already handed its "
+        "words to the row being reinstated?* It writes no row and returns a bool. Its "
+        "only effect is to EXCUSE a tombstone from a refusal -- so a defect here makes "
+        "the guard too WIDE or too NARROW, never a collapse -- and both directions are "
+        "driven by axis 18's `reinstate` and `reinstate PREDECESSOR` cells and pinned by "
+        "`C9-37` and `C9-38`. Flagged by Part A's over-broad scan the minute it was "
+        "added, which is this checker working exactly as row 4d built it to",
+    ),
     "_search_namespaces": CallerVerdict(
         False,
         "**READS** `rec.successor` to build the sentence R6's cross-namespace lookup "
@@ -3626,6 +3637,147 @@ _NAME_CELLS = (
 )
 
 
+def check_four_doors_at_one_word() -> tuple[list[str], list[str], list[str]]:
+    """Axis 18 -- **ALL FOUR doors that make a word answer at 1.0, on ONE store.**
+
+    **The kill row's TWENTY-THIRD trip** (row 6d, round 3; ruling **R94**). `9a4e140`
+    minted `word_held_by_tombstone` and wired it to `retire(successor=)`, `merge_types`
+    and `import_types` -- **three doors where the surface has four**. `reinstate` is the
+    fourth, and this file could not have said so: `word_held_by_tombstone` occurred here
+    exactly ONCE, inside a comment.
+
+    **The axis enumerates rather than samples**, because the defect was a door table with
+    one row missing: driving three doors and asserting they agree is precisely the check
+    that was green while the trip was live. All four are asked on the same store, and the
+    fourth cell is the narrowing -- a PREDECESSOR must still come back, or two tombstones
+    on one word block each other and neither is ever reinstatable.
+    """
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    def two_tombstones(registry):
+        """`alpha` and `beta`, both retired, both answering to `zeta`."""
+        rows = registry.import_types(
+            [{"name": "alpha", "kind": "entity", "definition": "the alpha definition",
+              "aliases": ["zeta"], "status": "active"}],
+            namespace="default", kind="entity",
+        )
+        if not rows or rows[0].status != "active":
+            return _NOT_REACHABLE + "the alpha row was not written"
+        _seed(registry, "beta", kind="entity", definition="a different thing")
+        # `retire` has no `acknowledge`; `force=True` is the shipped way past an
+        # OVERRIDABLE refusal such as `no_consumer_evidence`, which is what a store with
+        # no registered consumers gives. It is used for the FIXTURE only -- the defect
+        # this axis drives needs no force at any of the four doors, and on `sqlite` the
+        # fixture builds without it. Two of three legs recorded NOT REACHABLE for exactly
+        # this reason until it was added, which is a fixture failing on its own subject.
+        gone = registry.retire(
+            "alpha", "superseded", retired_by="user:sd", successor="beta", force=True
+        )
+        if isinstance(gone, Refusal):
+            return _NOT_REACHABLE + f"cannot retire toward a successor ({gone.reason})"
+        gone = registry.retire(
+            "beta", "the area was dropped", retired_by="user:sd", force=True
+        )
+        if isinstance(gone, Refusal):
+            return _NOT_REACHABLE + f"cannot retire the successor ({gone.reason})"
+        held = registry.adapter.get_type("default", "beta", kind="entity")
+        if held is None or "zeta" not in (held.aliases or ()):
+            return _NOT_REACHABLE + "the word was not carried onto the successor"
+        return None
+
+    for leg, build, _knowable in _legs():
+        for door in ("import_types", "merge_types", "retire_successor", "reinstate",
+                     "reinstate PREDECESSOR"):
+            registry = build()
+            try:
+                built = two_tombstones(registry)
+                if built is not None:
+                    unreachable.append(f"{leg} / four doors / {door}: " + built[len(_NOT_REACHABLE):])
+                    lines.append(f"  {leg:15s} {'four doors':17s} {door:24s} NOT REACHABLE")
+                    continue
+
+                if door == "reinstate PREDECESSOR":
+                    # THE NARROWING: `alpha` gave `zeta` to `beta` at the retirement that
+                    # named beta its successor, so it cannot also block beta.
+                    out = registry.reinstate(
+                        "beta", "we need it back", reinstated_by="user:sd"
+                    )
+                    if isinstance(out, Refusal):
+                        problems.append(
+                            f"{leg} / four doors / {door}: the receiver was refused "
+                            f"{out.reason!r}. `alpha` is a PREDECESSOR -- it handed "
+                            f"`zeta` to `beta` by its own governance act -- so a rule "
+                            f"that refuses here leaves BOTH rows permanently "
+                            f"unreinstatable, which CLOSES A LEGAL OPERATION"
+                        )
+                        lines.append(f"  {leg:15s} {'four doors':17s} {door:24s} FAILED")
+                    else:
+                        lines.append(f"  {leg:15s} {'four doors':17s} {door:24s} held")
+                    continue
+
+                if door == "import_types":
+                    got = [
+                        w for row in (registry.import_types(
+                            [{"name": "gamma", "kind": "entity", "definition": "a third",
+                              "aliases": ["zeta"], "status": "active"}],
+                            namespace="default", kind="entity") or ())
+                        for w in (row.warnings or ())
+                    ]
+                    refused = "import_refused:word_held_by_tombstone" in got
+                    reason = got
+                elif door == "merge_types":
+                    _seed(registry, "gamma", kind="entity", definition="a third")
+                    _seed(registry, "delta", kind="entity", definition="a fourth")
+                    live = registry.adapter.get_type("default", "gamma", kind="entity")
+                    registry.adapter.put_type(
+                        type(live)(**{**live.__dict__, "aliases": ("zeta",)})
+                    )
+                    out = registry.merge_types(
+                        "gamma", "delta", "one and the same", merged_by="user:sd",
+                        acknowledge=("definitions_diverge", "no_consumer_evidence"),
+                    )
+                    refused = isinstance(out, Refusal) and out.reason == "word_held_by_tombstone"
+                    reason = getattr(out, "reason", "MERGED")
+                elif door == "retire_successor":
+                    _seed(registry, "gamma", kind="entity", definition="a third")
+                    _seed(registry, "delta", kind="entity", definition="a fourth")
+                    live = registry.adapter.get_type("default", "gamma", kind="entity")
+                    registry.adapter.put_type(
+                        type(live)(**{**live.__dict__, "aliases": ("zeta",)})
+                    )
+                    out = registry.retire(
+                        "gamma", "superseded", retired_by="user:sd", successor="delta"
+                    )
+                    refused = isinstance(out, Refusal) and out.reason == "word_held_by_tombstone"
+                    reason = getattr(out, "reason", "RETIRED")
+                else:  # reinstate -- the TWENTY-THIRD trip
+                    out = registry.reinstate(
+                        "alpha", "we need it back", reinstated_by="user:sd"
+                    )
+                    refused = isinstance(out, Refusal) and out.reason == "word_held_by_tombstone"
+                    reason = getattr(out, "reason", "REINSTATED")
+
+                if refused:
+                    lines.append(f"  {leg:15s} {'four doors':17s} {door:24s} held")
+                else:
+                    problems.append(
+                        f"{leg} / four doors / {door}: got {reason!r} where the other "
+                        f"doors refuse `word_held_by_tombstone`. A word a tombstone "
+                        f"still answers to must not be made to answer at 1.0 -- the "
+                        f"tombstone becomes PERMANENTLY UN-REINSTATABLE, which is "
+                        f"ruling R11's own governance act and INTERFACE.md 5.12's own "
+                        f"sentence. THE TWENTY-THIRD TRIP was this door table with one "
+                        f"row missing"
+                    )
+                    lines.append(f"  {leg:15s} {'four doors':17s} {door:24s} FAILED")
+            finally:
+                _release(registry)
+
+    return problems, lines, unreachable
+
+
 def check_cross_namespace_order() -> tuple[list[str], list[str], list[str]]:
     """Axis 16 -- **which refusal a CROSS-NAMESPACE pair gets, and in what order.**
 
@@ -4100,6 +4252,11 @@ def main() -> int:
             "PACKAGE.md 4.1 pair, one word under two kinds, which no fixture above "
             "could pose:",
             check_merge_escape,
+        ),
+        (
+            "  and ALL FOUR DOORS THAT MAKE A WORD ANSWER AT 1.0 -- the TWENTY-THIRD "
+            "trip: the rule was minted here and wired to three of the four:",
+            check_four_doors_at_one_word,
         ),
         (
             "  and WHICH REFUSAL A CROSS-NAMESPACE PAIR GETS -- finding G1/X10, declared "
