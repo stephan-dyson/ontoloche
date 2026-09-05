@@ -962,7 +962,7 @@ them.** The count is **FOURTEEN** until the supervisor rules.*
 | **S4** | the ACTIONS-layer twin | **CONFIRMED.** The kill row reported it falsified; **the worker REJECTED that** on evidence (§6.4), because A3 is a declaration collapse at the word doors whose predicate control refuses non-overridably |
 | **T1** | capability-degraded skip = pass | **CONFIRMED, falsifier FALSE** — K4 neither refuses nor warns |
 | **T2** | empty-key word set makes a guard vacuous | **CONFIRMED**, with its bound stated: `resolve_type` answers `none`, so no 1.0 collapse follows |
-| **T3** | `reinstate` is the unenumerated door | **PARTIAL.** The enumeration gap is **confirmed by count** (`_word_rows` 0 occurrences in its body); **the predicted HARM at D6 is FALSIFIED** — in every construction `reinstate` is the victim, never the door |
+| **T3** | `reinstate` is the unenumerated door | **CONFIRMED — grade WITHDRAWN and re-scored in §9.3.** The enumeration gap is **confirmed by count** (`_word_rows` 0 occurrences in its body); **the predicted HARM at D6 is FALSIFIED** — in every construction `reinstate` is the victim, never the door |  **[Round 3, ruling R94]** The falsification of the harm is **withdrawn**: it was graded before `word_held_by_tombstone` existed as a value, and the predicted harm at D6 is the **TWENTY-THIRD trip**. `C9-37`.
 | **T4** | an identity-field writer outside `registry.py` | **PARTIAL.** **FALSIFIED** at `actions.py` (no stored-record identity write); **CONFIRMED** at `aio/registry.py` — 53 writes, invisible to Part A, covered only by a `nonbinding` test |
 | **T5** | `clash_why` / `_variant_why` dropped at two of six sites | **CONFIRMED, both halves** — §0 named lines 4429 and 4769 before either lens existed |
 | **T6** | `_identity_stale` blind to tombstone-held words | **NOT PROBED** |
@@ -2833,3 +2833,111 @@ still be *created* by an ordinary call, and once created it cannot be *undone* b
 **R79's flat-form half is ruled and unbuilt**, and it is not this question — it rides alongside it.
 
 ---
+
+---
+
+## 9. The convergence note — **the row closes NOT clean, at TWENTY-THREE, and its own fixes are now the largest source of findings**
+
+*Standing constraint 7 allows two consecutive clean rounds or three rounds plus an honest note. **Three
+rounds ran and none was clean**, so this is the note. `R3-P10` predicted exactly that **in writing
+before round 3 opened** (`ca74950`), so the note is not an outcome the row steered toward after the
+fact.*
+
+### 9.1 What the loop did, round by round
+
+| round | distinct | BLOCKING | trips routed | countersigned |
+|---|---|---|---|---|
+| 1 | 19 | 8 | 5 | 15th–19th (**R91**, **R92**) |
+| 2 | 21 | 9 | 3 | 20th–22nd (**R93**) |
+| 3 | **30** | **9** | 2 routed, 1 upheld | **23rd** (**R94**); `K2` ruled not a trip (**R95**) |
+
+**The findings did not shrink in any round.** Round 3 found half again as many as round 2, on a
+surface nine of this row's commits had just crossed.
+
+### 9.2 The result that decides the stop question — **the provenance INVERTED**
+
+§6.13 said of round 2: *"the loop is still finding the surface's own defects rather than the row's
+regressions."* **Round 3 reversed that.** Round 2 routed three constructions and **all three
+pre-dated** the commits standing next to them. In round 3, **roughly 20 of 30 findings — including 5
+of the 9 BLOCKING — are defects this row introduced**:
+
+| finding | what it was | whose |
+|---|---|---|
+| `A1` / `A2` | the `effects`-order false refusal, which **closed a legal operation** | `304967a`, **mine** |
+| `A3` | `5401` dropped its `why`; a legal truncating backend skipped the guard and **wrote the alias** | `304967a`, **mine** |
+| `X1` | the accumulator given to one branch of a ternary and not its twin | `4f8db52`, **mine** |
+| `X2` | 17 of change D's 26 sites pinned by nothing | `4f8db52`, **mine** |
+| `K1` | the 23rd trip's **contradiction** (three doors wired of four) | `9a4e140`, **mine** |
+
+**That is what a loop looks like when it has finished with the surface and started on the row.** It
+is not a comfortable result and it is the honest one.
+
+### 9.3 The withdrawn grade — **and it happens to flatter the row, so it gets more scrutiny, not less**
+
+Round 1 scored **T3 PARTIAL**: the enumeration gap confirmed by count, *"the predicted HARM at D6
+FALSIFIED — in every construction `reinstate` is the victim, never the door."* **That grade is
+withdrawn** (R94 part two, accepted). It was taken **before the rule was minted**: round 1 asked
+whether `reinstate` creates a second *LIVE* holder — it does not, and `C9-23` pins that correctly —
+and the *tombstone*-holder question did not exist as a value until `9a4e140` shipped **after** the
+grade. The predicted harm is real, and it is the **TWENTY-THIRD trip**.
+
+**T3 therefore moves PARTIAL → CONFIRMED**, and §0's round-1 tally moves with it:
+
+> **21 CONFIRMED · 3 PARTIAL · 1 FALSIFIED · 5 NOT REACHED** → **22 CONFIRMED · 2 PARTIAL ·
+> 1 FALSIFIED · 5 NOT REACHED.**
+
+**A correction that improves the row's own score is the one to distrust**, so it is stated with its
+mechanism rather than as a tidy-up — and R93 loses one of the three falsifications part four leaned
+on, which the supervisor recorded against itself.
+
+### 9.4 Every round's predictions, scored
+
+| round | pre-registered | outcome |
+|---|---|---|
+| **§0** (30) | before any lens existed | **22 CONFIRMED · 2 PARTIAL · 1 FALSIFIED · 5 NOT REACHED** *(after the T3 withdrawal)* |
+| **§6.8** (10) | before round 2's lenses | **6 CONFIRMED · 2 PARTIAL · 2 FALSE** |
+| **§6.16** (10) | before round 3's lenses | **8 CONFIRMED · 1 PARTIAL · 1 FALSE** |
+
+**In all three rounds the clean falsifications were claims this row published about its own work** —
+round 2's `R2-P6` and `R2-P7`, round 3's `G4` (six cells published, eight in the tuple) and `X4`
+(five fills published, six actual), and `R3-P4`, the row's own prediction against its own last
+commit, which scored **FALSE**.
+
+### 9.5 What the row is honestly converging on, and what it is not
+
+**Converging:** the *class* of defect. Rounds 1 and 2 found guards that compared the wrong thing.
+Round 3 found **door tables with a row missing** — three of them, all published by this row — and
+**checks that cannot fail on their own subject**, which this register has now met **eleven** times.
+
+**Not converging:** the *count*. 19 → 21 → 30. A loop whose findings grow while its defect class
+narrows is a loop that has learned where to look, not one that has run out.
+
+**The single sentence this row would hand the next one:** *a rule is not applied until the commit
+names every door it binds, and a number is not derived until it is derived LAST.* Both were minted
+here, both were then broken here, and both were caught by the checks rather than by the reading.
+
+### 9.6 What is left open, in full
+
+**Mine, and unclosed:** `X1` (the ternary's twin), `X2` (17 sites pinned by nothing, and the gate's
+missing `page_cap` fixtures), `X5` (the carrier widened for 14 §5.4 values), `X7`–`X11`,
+`INTERFACE.md` §5.10's printed refusal **order** (X10's other half, declared in three commits), and
+`_alias_identity_breach`'s keyed-probe residual, which is **stated at the site and raised as a
+question rather than closed**.
+
+**Not mine:** `A5`/`A12`, `A6`, `A4`/`A9`. **The founder's:** `Q94`, `Q95`, `Q96`, and `R95`'s
+across-kinds question, which this fix set met **as a question** and did not settle by accident. Next
+question number: **Q97**.
+
+### 9.7 What the row cost and what it built, re-derived LAST
+
+| | at open (`d4b86a8`) | now | defining command |
+|---|---|---|---|
+| commits | — | **38** | `git log --oneline d4b86a8..HEAD \| wc -l` |
+| contract ids | **366** | **399** | `grep -o "TOTAL = [0-9]*" test_manifest.py` |
+| gate axes | **10** | **18** | Part A + `main()`'s registered table + Part B's two |
+| `Refusal.reason` | 31 | **33** | `len(REFUSAL_REASONS)` |
+| `warnings` vocabulary | 37 | **39** | `len(WARNING_VALUES)` |
+| kill-row trips | 14 | **23** | the register |
+
+**The register stands at TWENTY-THREE**, none of them in a real merge.
+
