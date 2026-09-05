@@ -142,6 +142,7 @@ from ontoloche.registry import (
     _EDGE_PAGE_SIZE,
     _IDENTITY_CHAIN_CAP,
     _NEAR_MISS_CAP,
+    _answers_to,
     _asserts_domain_semantic,
     _aware,
     _created_by,
@@ -1528,7 +1529,7 @@ class AsyncRegistry:
                 continue
             if rec.status == "active":
                 by_namespace.setdefault(rec.namespace, []).append(rec)
-            elif rec.status == "retired" and rec.name == candidate:
+            elif rec.status == "retired" and _answers_to(rec, candidate):
                 retired_elsewhere.setdefault(rec.namespace, []).append(rec)
 
         alternatives: list[Alternative] = []
@@ -1560,8 +1561,16 @@ class AsyncRegistry:
             # sentence under a ``complete=True`` seal. Uniqueness is per
             # ``(namespace, kind)`` (2.1), so a name taken under another kind is not the
             # same entry; it is still the same WORD, and R6 owes the caller that word.
+            # **Keyed, and byte equality was finding X2** (row 6d, round 1; ruling R90).
+            # `_word_rows`, `_alias_holder` and `_alias_clash` have compared by
+            # `identity_key` since the SEVENTH trip -- *one word is not one string* --
+            # and this function, the only guard in the package that reads more than one
+            # namespace, compared BYTES. So `dpr:bike__lane` was a near miss to a `dot`
+            # caller asking for `bike_lane` instead of the loud *already taken* the
+            # byte-exact case gets, and a RETIRED `median__strip` was invisible entirely
+            # under a `complete=True` seal.
             candidates = [
-                rec for rec in by_namespace.get(other, ()) if rec.name == candidate
+                rec for rec in by_namespace.get(other, ()) if _answers_to(rec, candidate)
             ]
             if candidates:
                 exact_elsewhere.append(other)
@@ -1570,6 +1579,31 @@ class AsyncRegistry:
             for tombstone in retired_elsewhere.get(other, ()):
                 burned_elsewhere.append((other, tombstone))
 
+            # **Finding X3: the kind-blind fix was applied to the exact probe only.**
+            # `exact_elsewhere` above is deliberately kind-BLIND -- row 3e's round-1 fix,
+            # because uniqueness is per `(namespace, kind)` but the WORD is taken either
+            # way -- while this pool was kind-FILTERED. With `kind=` supplied, a word held
+            # elsewhere as an alias or under a variant spelling therefore produced total
+            # silence: no exact hit, and the near-miss scorer never saw the row.
+            #
+            # The pool keeps its filter, because scoring a `value_set` against a caller
+            # asking for an `entity` is a near miss the caller cannot act on -- but a row
+            # this function has ALREADY decided answers to the word is added back, so the
+            # two halves agree about what they saw. *A fix applied at one call site of N*
+            # is the ninth, tenth and eleventh trips' single sentence.
+            # **Finding X3, and the fix is X2's rather than a second one here.** X3's
+            # complaint was that with `kind=` supplied, a word held elsewhere as an ALIAS
+            # or under a VARIANT SPELLING produced total silence: no exact hit, and this
+            # kind-filtered pool never scored the row. The keyed `candidates` probe above
+            # closes it -- such a row is now an EXACT hit and gets the loud *ALREADY
+            # TAKEN*, which is what R6 owes the caller.
+            #
+            # **The first cut added the cross-kind row to this POOL instead, and `C3-12`
+            # went red within one run.** §5.3.1 rule 5 is that a name taken under another
+            # kind is listed with score **`None`, never a number**, because nothing
+            # scored it -- Rule U at the alternatives list. Feeding it to the scorer
+            # invents a similarity no resolver computed, which is the confident answer
+            # this whole function exists to avoid. The pool keeps its filter.
             pool = by_namespace.get(other, ())
             if kind is not None:
                 pool = [rec for rec in pool if rec.kind == kind]
@@ -1709,12 +1743,26 @@ class AsyncRegistry:
                 "prior rejections could not be searched: "
                 + (self.caps.reason("stores_proposals") or "")
             )
-        page = await self.adapter.find_proposals(
-            ProposalQuery(name=candidate, status="rejected")
-        )
+        # **Finding X2's third byte site.** `ProposalQuery(name=)` is an exact match, so
+        # a namespace whose only trace of this word is a rejection under another legal
+        # SPELLING was invisible -- the cheapest possible record of *we already decided
+        # against this word*, missed for the reason the SEVENTH trip minted `identity_key`
+        # to end. Asked for every spelling this registry considers one word, exactly as
+        # `_alias_identity_breach` asks `name_in`, and the returned rows are then keyed so
+        # a backend that widened the query cannot widen the ANSWER.
         found: dict[str, list[str]] = {}
-        for record in page.records:
-            found.setdefault(record.namespace, []).append(record.name)
+        page = None
+        for spelling in self._word_spellings(candidate):
+            page = await self.adapter.find_proposals(
+                ProposalQuery(name=spelling, status="rejected")
+            )
+            for record in page.records:
+                if not same_word(record.name, candidate):
+                    continue
+                if record.name not in found.setdefault(record.namespace, []):
+                    found[record.namespace].append(record.name)
+            if not page.complete:
+                break
         if not page.complete:
             return found, False, (
                 "the rejected-proposal page was partial: "
@@ -4132,6 +4180,25 @@ class AsyncRegistry:
         # EIGHTEENTH; change 3 moves its declaration up rather than adding a second one,
         # because two channels on one door is how a caller ends up told half a story.
         merge_warnings: list[str] = []
+        # **Guard #4 moved AHEAD of #1/#2/#3 -- finding X5** (row 6d, round 1; R90).
+        # It used to fire fourth, so the three identity guards first compared operands
+        # from two different namespaces: member-name sets from disjoint scopes, read as
+        # one set. **[Observed]** three of four cross-namespace merges answered
+        # `predicate_merge` -- including a KIND MISMATCH -- and only identical non-empty
+        # extents ever reached `cross_namespace_merge`.
+        #
+        # The outcome was always safe; the STORY was wrong, and the story is what a caller
+        # acts on. That is `C9-19`'s class, named in this method's own comment, and the
+        # register's rule from row 3c: a guard that answers with the wrong reason has told
+        # a caller something false about their store. Namespaces exist to keep two words
+        # apart (§2.6), so *these two rows are not comparable at all* is the FIRST fact
+        # about this pair, not the fourth.
+        if left.namespace != right.namespace:
+            return Refusal(
+                "cross_namespace_merge",
+                {"from": left.namespace, "into": right.namespace, "overridable": False},
+            )
+
         breach = await self._identity_breach(
             left,
             right,
@@ -4182,12 +4249,9 @@ class AsyncRegistry:
                 },
             )
 
-        # 4 -- cross-namespace collision is what namespaces exist to preserve.
-        if left.namespace != right.namespace:
-            return Refusal(
-                "cross_namespace_merge",
-                {"from": left.namespace, "into": right.namespace, "overridable": False},
-            )
+        # 4 -- cross-namespace collision is what namespaces exist to preserve. **Asked
+        # ABOVE, before #1/#2/#3, since row 6d closed finding X5**; kept numbered here so
+        # §5.10's order still reads in this file.
 
         # **The TRANSFERRED aliases are checked, and not checking them was the kill row's
         # SIXTH trip** (row 4c, round 3). Guard #2 above compares `left`'s extent to
@@ -4767,6 +4831,20 @@ class AsyncRegistry:
             # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
             incoming = tuple(row.get("aliases") or ())
             extra_import_warnings: list[str] = []
+            # **Finding X6: a field the caller supplied and this call ignores.** This
+            # method takes ONE `namespace` for the whole batch (§2.5's Foundry mapping is
+            # a per-call scope, not a per-row one), and a row carrying its own
+            # `namespace` had that key silently dropped -- so a dump with a namespace
+            # column wrote its identities into the CALLER's scope with `warnings=()`.
+            # **[Observed]** a row asking for `dot` written into `dpr` with nothing said.
+            #
+            # Accepted-and-ignored is the `mark_reviewed` shape row 6c fixed one call
+            # along: a caller who supplies a field and sees no effect is owed the
+            # sentence. Not a refusal -- the write is legal and the mapping is the
+            # documented one; what was missing is that it SAYS SO.
+            asked_ns = row.get("namespace")
+            if asked_ns is not None and asked_ns != namespace:
+                extra_import_warnings.append(f"import_field_ignored:namespace:{asked_ns}")
             # **An import REPLACES a standing row's aliases, and dropping one was
             # silent** (row 6c, round 1 kill-row `m1` and round 2 kill-row `m4`, closed
             # in round 3). `aliases=tuple(row.get("aliases") or ())` below is a wholesale

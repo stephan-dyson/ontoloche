@@ -251,6 +251,19 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
     # is a guard somebody thinks is being checked and is not* -- failed until the entry
     # came out again. Both halves earned their keep inside one row, so the churn is
     # recorded rather than tidied away.
+    "_answers_to": CallerVerdict(
+        False,
+        "**READS** a row's `name` and `aliases` and answers *does this row answer to "
+        "this word?*, keyed by `identity_key` rather than by bytes. It is a predicate: "
+        "it takes a record and a word and returns a bool, and it writes nothing at all. "
+        "Added by row 6d for findings **X1** and **X2** -- `_search_namespaces`, the only "
+        "guard in this package that reads more than one namespace, was built out of NONE "
+        "of the identity machinery, so a word a live tombstone in another namespace still "
+        "answered to as an ALIAS was invisible under a `complete=True` seal. Flagged by "
+        "the over-broad `aliases` scan, which is Part A working exactly as the FOURTH "
+        "trip's ruling designed it: it found a function this file had never heard of and "
+        "demanded a verdict rather than assuming one. Recorded, not silenced.",
+    ),
     "_alias_map": CallerVerdict(
         False,
         "**READS** every ACTIVE row's `aliases` in one `(namespace, kind)` and hands "
