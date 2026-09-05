@@ -1283,6 +1283,159 @@ round's job is to find what is **not** on this list.*
    finding fewer than round 1's nineteen is not convergence and will not be reported as such.
 
 
+### 6.9 Round 2, lens 1 to return — **the FIX AUDITOR. NOT YET: 3 BLOCKING, 4 MAJOR, 2 MINOR — three mutation survivors, and one construction routed.**
+
+*Written to disk as the lens returned, before any fix. **G1 and G2 were re-run by the worker against
+the repo itself** (not the lens's shadow tree) and the source claim verified line by line, because
+G1 contradicts a claim one of this row's own commits made.*
+
+> **The sentence this section exists to record: THREE of my five fix commits assert something that
+> is not true.** A door table that claims a door is closed (`9a4e140`), a code comment that asserts
+> a detail cannot depend on page order (`f8992f3`), and a mutation proof that holds only under a
+> cleaner mutation than the one recorded (`a446b89`). *The next defect lives in the last fix* has
+> been this register's counted policy for seven rows; this round it is counted against the row that
+> wrote the policy into its own predictions.
+
+#### G1 — BLOCKING — **`approve` mints over a tombstone whose own NAME is the word, at every kind, with `warnings=()`** — ROUTED
+
+**Inside `9a4e140`, and it is a claim that commit made.** The commit's door table reads *"approve /
+`_write_approved` **yes** — mint scan, kind filter dropped."* **The scan's filter was dropped; the
+filter that DISCARDS the scan's result was not.**
+
+**[Observed, worker-verified at `registry.py:2744–2748`]** `_write_approved`'s only retired branch is
+
+```python
+if r.status == "retired"
+and not same_word(r.name, rec.name)          # <- excludes a tombstone whose NAME is the word
+and any(same_word(a, rec.name) for a in (r.aliases or ()))
+```
+
+so it answers the **alias** half only — and **[Observed]** `name_previously_retired` appears at
+`registry.py:2320` (`propose_type`) and `5138` (`import_types`) and **nowhere in `_write_approved`.**
+**A fix applied to a scan and not to the consumer of the scan.**
+
+**Worker's independent re-run against the repo, ordinary calls, no `force` at any mint:**
+
+```
+holder name    kind       door          the door said                          live preds                    reinstate
+commentable_   predicate  propose_type  TypeEntry warnings=('name_previously_retired',)   []                 TypeEntry OK
+commentable_   predicate  approve       TypeEntry warnings=()                  [('commentable','predicate')] Refusal alias_collision
+commentable_   predicate  import_types  commentable_/predicate/retired  warnings=('name_previously_retired',) []  TypeEntry OK
+commentable_   entity     approve       TypeEntry warnings=()                  [('commentable','predicate')] Refusal alias_collision
+```
+
+**One store, one word, three mint doors, two answers** — the FIFTEENTH trip's own sentence — and the
+post-state is the fifteenth and sixteenth trips' own harm: `reinstate` refused `alias_collision`
+**non-overridably**, ruling **R11**'s governance act spent. It is at the door ruling **R40** forces
+every `kind="predicate"` down. No `force`, no acknowledgement, no `AmbiguousKind`.
+
+**Why the gate exits 0, countably.** `grep -c "name_previously_retired" docs/tools/check_merge_guard.py`
+→ **0**. Axes 10 and 11 both build their tombstone through `_alias_only_store`, which writes the word
+into `aliases` — and **the commit's own new ids agree**: `C5-14` and `C12-22` both seed
+`aliases: ["zzz_moved"]`. **The fix, its ids and its axis all tested the alias half of a rule stated
+over both halves.**
+
+**Routed to the supervisor for countersignature. The count is NINETEEN; classification is not the
+worker's.** **§6.8 prediction: NONE** — unpredicted by R2-P1…R2-P10 and absent from the KNOWN OPEN
+list.
+
+#### G2 — BLOCKING — `import_types`' name door discards the byte-identical cross-kind tombstone, on a filter the same commit read and left
+
+**Inside `9a4e140`.** **[Observed, worker-verified at `registry.py:5115`]**
+`named = [r for r in retired_here if r.name != name and same_word(r.name, name)]`. Before the change
+the scan was kind-scoped, so a byte-identical retired name could never appear and `r.name != name`
+was **inert**; the commit widened the scan — and **touched this very line** (`standing = variants[0]
+if False else named[0]` → `named[0]`) — so the clause now discards exactly the newly-visible
+cross-kind tombstone.
+
+**[Observed]** `commentable` entity tombstone: `propose_type` → `name_previously_retired`;
+`import_types` → **mints `commentable/predicate/active`**; `reinstate` and `resolve_type` then raise
+`AmbiguousKind`. The raise is K7/A5's declined class; **the mint asymmetry is new.**
+
+**§6.8 prediction: NONE.**
+
+#### G3 — BLOCKING — **two mutation survivors: axis 11's transfer cells are green on `sqlite_degraded` with the guard removed outright**
+
+**Inside `9a4e140`'s axis 11.** Removing `retire(successor=)`'s `_retired_holder` (MU8) and
+`merge_types`' (MU9) reddens `sqlite` and leaves `sqlite_degraded` **`held`** — because that leg
+refuses `predicate_merge` (refusal #2 firing honestly, for a reason with nothing to do with the
+tombstone) and **the axis never reads the reason**.
+
+**[Observed]** `sed -n '2916,3057p' docs/tools/check_merge_guard.py | grep -c "out.reason"` → **0**,
+against **7** in `check_skipped_guards`.
+
+> **This is the exact lesson `a446b89`'s own change note records itself learning** — *"a refusal for
+> any other reason is recorded as NOT REACHABLE rather than as a pass"* — **learned by axis 13 and
+> not carried to axis 11's transfer branch, in the same fix set.**
+
+**Confirms R2-P5**, which predicted a fifth fixture defect after four in five changes.
+
+#### The rest
+
+| # | severity | the defect | §6.8 |
+|---|---|---|---|
+| **G4** | MAJOR | **Every accumulator is dropped on every refusal path.** `_refused_import` returns `warnings=(f"import_refused:{reason}",)` alone; **`Refusal` has no `warnings` field at all**; `retire_skips` and `reinstate`'s `alias_warnings` surface only in success returns. So the NINETEENTH trip's note reaches a caller **only when the call succeeds** — A/B verified on one store: the note present when nothing else refuses, gone when `alias_collision` fires after it was collected. Gate reason: both `identity_guard_skipped` occurrences sit behind a branch recording *any* refusal as NOT REACHABLE, so the gate is **structurally unable** to fail on a refusal path | **R2-P3 CONFIRMED** |
+| **G5** | MAJOR | **`effects` compared by list equality closes a legal merge.** Two families identical in every governance key, `effects` differing only in **order** → `Refusal action_declarations_diverge`, **non-overridable**, at both collapse doors. `C10-09`, `C12-09`, `C12-15` and `C16-07` all exist because a fix that closes a legal operation is worse than the defect. Gate reason: `action_declarations_diverge` occurs **0** times in the gate — **G2's declared absence is what hides it** | **R2-P4 CONFIRMED** |
+| **G6** | MAJOR | **`merge_types`' `alias_collision` DETAIL is a function of page order — at the door change 2's whole subject was, with a comment asserting the opposite.** The line reads *"Every holder, so the detail cannot depend on page order either."* **[Observed]** over all 120 orders of one store: 60 report `holder='delta'`, 60 report `holder='epsilon'`. Gate reason: `check_page_order` compares verdicts and holder counts and **never a detail** — `grep -c "detail"` over the axis → **0** | **R2-P8 confirmed as a claim, its SITE falsified** — see below |
+| **G7** | MAJOR | **Axis 11 never drives cell 8.** Its two transfer rows are labelled `"alias x same x transfer"` and `"alias x cross x transfer"` and **both carry `mint_kind="predicate"`**; the transfer branch reads neither `arrives` nor `mint_kind`. **The cell the commit's table records "CLOSED HERE" is driven by nothing** — MU10 (`_retired_holder` made kind-scoped again) reddens only the import row | **R2-P5 CONFIRMED again** |
+| **G8** | MINOR | **The `why` `merge_types`' own new tombstone scan emits is asserted by nothing.** Deleting the append leaves the gate at **exit 0, zero rows changed**; `grep -c "tombstone scan"` over the gate → **0**. The commit says shipping a fix that drops its own scan's signal *"would be the FIFTH trip inside the fix for the FIFTEENTH"* — **the signal ships and nothing holds it** | — |
+| **G9** | MINOR | **`a446b89`'s "89 rows of honest NOT REACHABLE" is 21.** Four legs, exit 0. Every one of the 21 names a real capability the fixture needs | **R2-P7 FALSE** |
+
+#### The three §6.8 predictions this lens found FALSE, and one is a measurement I should have taken
+
+- **R2-P6 is FALSE as stated.** `merge_types` adds **one** scan per call, not three — measured at HEAD
+  against `60cdb70` in a second worktree: 15 → **16** adapter calls, 818 → **1,622** records, 0.036 →
+  **0.053 s** on an 800-row namespace; `import_types` over twenty rows 140 → **160** calls, 81,030 →
+  **97,260** records. Bounded and linear, and **4× cheaper than the 64,840-record precedent the
+  prediction leaned on.** *What is true is the second half:* **no commit in the fix set carries a
+  measurement.** The cost is real and unstated, not unbounded.
+- **R2-P7 is FALSE** — 21 rows, not 89, and none of them wrong (G9).
+- **R2-P8's SITE is FALSE.** The prediction said this row *"fixed the verdict at three doors and the
+  detail at one"* and pointed at `import_types`. **The unfixed detail is at `merge_types`** — change
+  2's own door, with a code comment asserting the opposite (G6). The prediction was right about the
+  class and wrong about where, which the record keeps as a partial rather than a confirmation.
+
+**CONFIRMED:** R2-P1 (not clean), R2-P3 (G4), R2-P4 (G5), R2-P5 (G3 and G7), R2-P10 (the two
+BLOCKING are unpredicted). **§6.8's second falsifier does not bite** — three of the four MAJOR/MINOR
+findings are in the **harness**, so the harness audit was real.
+
+#### (b) Rule-(d) failures by number — both in this row's own commits
+
+1. **`9a4e140`'s mint-door enumeration.** The rule is *a tombstone's words are held against every
+   kind*; the table lists `approve` and `import_types` as bound. **Neither is bound for the holder's
+   NAME half** — `_write_approved` has no such branch at all (G1) and `import_types`' `named` filter
+   discards it (G2).
+2. **`a446b89`'s five-door enumeration.** Every door is listed with *"notes surfaced in X"*, and
+   **every one of those five surfaces is a success return.** The refusal returns of the same five
+   doors are unenumerated and drop the note (G4).
+
+#### (c) R88 failures — three, and the second is worse than a decline
+
+1. **F2 still bound no commit** — `_variant_why` at `registry.py:5108`. Already §6.8's KNOWN OPEN 1,
+   counted here because R88's rule is that *a later round finds it and counts it*, and this is the
+   later round.
+2. **`9a4e140` did not decline the holder's-NAME half at approve and import — it CLAIMED those doors
+   closed.** G1 and G2 are a claim that does not hold, **which is worse than a decline that was not
+   carried**: a decline leaves a reader looking, a false claim tells them not to.
+3. **`a446b89`'s `_gates_on` decline is argued wrongly** `[Inferred]`. It says the computed path
+   needs no skip note because gate sets are computed rather than read — but at
+   `_alias_identity_breach` the second operand is `_gates_on(..., rec=other)`, read off a stored row,
+   and the whole check is skipped there anyway by `if self.caps.indexes_membership:`. **The argument
+   fails, not the outcome** — and the lens said so rather than inflating it.
+
+**Holding as written:** `f8992f3`'s `_alias_holder` decline (all three callers refuse on any holder —
+the argument was tested and stands), `9a4e140`'s `reinstate` and cells-3/4 declines, `304967a`'s four
+shape keys and G2, `9d2f203`'s G1 and Q96.
+
+#### One honesty item the lens volunteered about a proof this row published
+
+`a446b89`'s commit claims *"M10 `_identity_breach` note off — gate RED"*. The lens's first cut of
+that mutation reddened the gate **for an unrelated reason** and left axis 13 green; only the clean
+form reddens the intended row. **The claim holds, but only under a cleaner mutation than the one the
+commit recorded** — which is the third of this section's three claims-that-need-qualifying, and it is
+recorded rather than left for round 3.
+
+
 ---
 
 ## 7. The fix set
