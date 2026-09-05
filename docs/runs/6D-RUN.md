@@ -1217,3 +1217,83 @@ change, measured by R90's own grep going from 0 to a number). **K7 and F5 travel
 touches their door, each named.** Every fix commit **enumerates the doors its rule binds** (R85) **and
 lists what it DECLINED** (R88).
 
+---
+
+## 7. The fix set
+
+*Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
+Each lands as its own commit, enumerating the doors its rule binds (R85) and listing what it
+declined (R88), with all three legs green before it is pushed.*
+
+| # | change | closes | commit |
+|---|---|---|---|
+| **1** | **the 2×2×2** | the FIFTEENTH and SIXTEENTH trips, and K6's cross-kind cell | **`9a4e140`** — 373 ids, `Refusal.reason` 31 → 32, axis 10 → 11, six mutations and no survivors; three legs **1741 passed / 566 skipped / 0 failed**, exit 0 |
+| **2** | page order + truncation | the SEVENTEENTH and EIGHTEENTH trips | *in flight* |
+| **3** | the capability-degraded skip | the NINETEENTH trip | *pending* |
+
+**Separate, and named as such:** **A3** (governance identity — a different table, R91),
+**`_search_namespaces`** (R90, one change measured by R90's own grep going from 0 to a number).
+**K7 and F5** travel with whichever change touches their door.
+
+---
+
+## 8. Questions this row raises — **Q95 onward**
+
+*R1–R92 exist; Q94 was minted by R91. The next question number is **Q96**.*
+
+### Q95 — does the tombstone-word rule bind a tombstone's own NAME at the TRANSFER doors, and if it does, what happens to `C12-09`?
+
+**Raised by change 1 (`9a4e140`), which declined two of the eight cells rather than take them.**
+
+**The question.** Ruling **R91** named the 2×2×2 and change 1 closed six of its eight cells. The two
+it did not close are the pair where the word arrives as a **NAME** at a **transfer** door:
+
+| cell | the state |
+|---|---|
+| **3** | a tombstone whose own **name** is a word `merge_types` or `retire(successor=)` is about to move onto a live row, **same kind** |
+| **4** | the same, **across kinds** |
+
+**Why they were declined rather than closed, and it is not a scope fence but a collision with a
+pinned ruling.** Change 1's guard asks about a tombstone's **aliases** and deliberately not about
+its **name**, because *a retired row's own name written as an alias onto another row is the ordinary
+post-retirement succession that **`C12-09` blesses** when the two extents agree.* **[Observed]** `PACKAGE.md` §6.2's row for
+`C12-09` reads, verbatim: *"**and an imported alias between two identical non-empty extents is
+still written** — the half a careless fix deletes. §5.10 refusal #2 permits that collapse
+(`C10-09` narrowed the guard rather than closing the operation), so a fix that refused every
+predicate alias would pass a suite asserting only refusals while removing a legal write."*
+**That last clause is this question in advance.** Closing cells 3 and 4 with the same rule that closes 5–8 would
+**reverse that narrowing**, and the register's own history says a fix that closes a legal operation
+is worse than the defect it closes.
+
+**The evidence that made it a question rather than a judgement.** The gate found it, not a reading:
+change 1's first cut *did* bind the name half, and `check_merge_guard.py` went red on
+`import_types known-equal` within one run — the one extent state `C12-09` is about. **A guard whose
+first cut reddens the id that pins a deliberate narrowing is telling you the narrowing is the
+subject, not the collateral.**
+
+**The three answers, with the cost of each:**
+
+1. **Leave it as change 1 shipped it — the rule binds ALIASES only.** `C12-09` stands untouched. The
+   residual is real and is stated: a tombstone whose own **name** is moved onto a live row by
+   `merge_types` or `retire(successor=)` is left un-reinstatable, and no door says so. That is the
+   fifteenth and sixteenth trips' own harm reached through the one field the rule does not cover.
+2. **Bind the name half too, and narrow `C12-09`** to *"…may still be aliased **when no tombstone
+   answers to the word**"*. Closes the residual; changes what a pinned id asserts, which is a ruling
+   and not a fix.
+3. **Bind the name half and let the succession path move**, so the blessed act becomes `reinstate`
+   → `merge_types` → `retire` rather than a direct alias write. Closes the residual without
+   narrowing `C12-09`'s claim, at the cost of a three-call path where callers have one — which is
+   the shape the twelfth trip's own correction had to make for `successor_active`.
+
+**The worker's default, which is what shipped: (1).** A row that closes a cell by reversing a
+narrowing another row pinned on purpose is doing the thing standing rule (d) exists to prevent, one
+ruling along — and **this row does not get to overturn `C12-09` by fixing something else.**
+
+**[Observed]** the residual is not hypothetical: `_retired_holder`'s docstring states the cut, and
+`check_merge_guard.py`'s axis 11 drives the six closed cells and **not** cells 3 and 4, so the gate
+records the gap rather than hiding it.
+
+**For the supervisor.** Q95 is the supervisor's rather than the founder's on its face — it is a
+narrowing of a contract id, not a change to a shipped guarantee — **unless** answer 2 is taken, in
+which case what `C12-09` asserts changes and the founder's Q56 territory is one step nearer.
+
