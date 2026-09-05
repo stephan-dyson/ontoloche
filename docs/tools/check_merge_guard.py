@@ -3156,6 +3156,7 @@ def check_page_order() -> tuple[list[str], list[str], list[str]]:
             # sentence is here rather than learned again.
             continue
         verdicts: dict[str, int] = {}
+        details: set[str] = set()
         holders_after: set[int] = set()
         blocked: str | None = None
         for order in itertools.permutations(rows):
@@ -3174,6 +3175,17 @@ def check_page_order() -> tuple[list[str], list[str], list[str]]:
             )
             verdict = out.reason if isinstance(out, Refusal) else "MERGED"
             verdicts[verdict] = verdicts.get(verdict, 0) + 1
+            # **Finding G6/A15, and this line is the axis's own correction.** Until row
+            # 6d's round-2 fix set this axis compared the VERDICT and never the DETAIL,
+            # so the eighteenth trip's sibling -- a guard that answers the same and SAYS
+            # something different -- was invisible to the axis built for page order.
+            details.add(
+                "-"
+                if not isinstance(out, Refusal)
+                else repr([(k, out.detail.get(k)) for k in
+                           ("holder", "holders", "held_by", "held_by_all", "excused")
+                           if k in out.detail])
+            )
             holders_after.add(len(_holders_of(registry, "zeta")))
             _release(registry)
         if blocked is not None:
@@ -3181,6 +3193,15 @@ def check_page_order() -> tuple[list[str], list[str], list[str]]:
             lines.append(
                 f"  {leg:15s} {'merge_types':17s} {'page order':24s} NOT REACHABLE"
             )
+        elif len(details) > 1:
+            problems.append(
+                f"{leg} / page order: the verdict is stable and the DETAIL is not -- "
+                f"{sorted(details)} over {sum(verdicts.values())} permutations of ONE "
+                f"store. A guard that answers the same and SAYS something different is "
+                f"the EIGHTEENTH trip one field along, and PACKAGE.md 3.3 guarantees no "
+                f"ordering at all"
+            )
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'page order detail':24s} FAILED")
         elif len(verdicts) > 1 or (holders_after - {1}):
             problems.append(
                 f"{leg} / page order: this guard's answer is a FUNCTION OF SORT ORDER "
@@ -3192,7 +3213,7 @@ def check_page_order() -> tuple[list[str], list[str], list[str]]:
             )
             lines.append(f"  {leg:15s} {'merge_types':17s} {'page order':24s} FAILED")
         else:
-            label = "page order (%d perms)" % sum(verdicts.values())
+            label = "page order+detail (%d)" % sum(verdicts.values())
             lines.append(f"  {leg:15s} {'merge_types':17s} {label:24s} held")
 
         # **The TRUNCATION half, in the same axis because it is the same sentence.** The
@@ -3469,6 +3490,74 @@ _NAME_CELLS = (
 )
 
 
+def check_merge_escape() -> tuple[list[str], list[str], list[str]]:
+    """Axis 15 -- the kill row's TWENTY-SECOND trip: **who may the escape excuse?**
+
+    Mutation `MC1` -- restoring `merge_types`' word-keyed escape -- was RED on the
+    contract ids and **GREEN here**, because no fixture in this file poses a
+    `PACKAGE.md` 4.1-blessed pair: one word, two kinds, two rows. Every alias fixture
+    above is single-kind, so `same_word(holder, left.name)` and
+    `(holder.name, holder.kind) == (left.name, left.kind)` agree in all of them and the
+    escape's operand was never under test. **A cell the id file drives and the gate
+    cannot is the same absence this row has now met seven times**, and it is closed here
+    rather than declared open a fifth time.
+
+    Rule U's shape applies to the axis itself: where `indexes_membership` is False the
+    extents are UNKNOWABLE, `predicate_merge` fires ahead of the alias door by
+    `IDENTITY_GUARD_ORDER`, and the cell records NOT REACHABLE -- never a pass.
+    """
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    for leg, build, knowable in _legs():
+        registry = build()
+        try:
+            _seed(registry, "alpha", kind="predicate", definition="a capability")
+            # 4.1 blesses one word under two kinds: the ENTITY is a different row.
+            _seed(registry, "alpha_", kind="entity", definition="a thing")
+            _seed(registry, "beta", kind="predicate", definition="a capability")
+            _seed(registry, "aaa_note", predicates=["alpha", "beta"])
+            if registry.adapter.get_type("default", "alpha_", kind="entity") is None:
+                unreachable.append(f"{leg} / merge escape: alpha_ was not written")
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'escape operand':24s} NOT REACHABLE"
+                )
+                continue
+            out = registry.merge_types(
+                "alpha", "beta", "one and the same", merged_by="user:sd",
+                acknowledge=("definitions_diverge", "no_consumer_evidence"),
+            )
+            reason = out.reason if isinstance(out, Refusal) else "MERGED"
+            if reason == "alias_collision":
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'escape operand':24s} held"
+                )
+            elif not knowable and reason == "predicate_merge":
+                unreachable.append(
+                    f"{leg} / merge escape: indexes_membership=False makes both extents "
+                    f"unknowable, so predicate_merge refuses before the alias door"
+                )
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'escape operand':24s} NOT REACHABLE"
+                )
+            else:
+                problems.append(
+                    f"{leg} / merge escape: the escape excused a STRANGER -- `alpha_` is "
+                    f"an ENTITY and PACKAGE.md 4.1 blesses it holding the word `alpha` "
+                    f"beside the predicate, so it is a DIFFERENT ROW and not `left` under "
+                    f"another skin. Got {reason!r}; the alias door refuses the identical "
+                    f"write kind_mismatch NON-OVERRIDABLY in this same store"
+                )
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'escape operand':24s} FAILED"
+                )
+        finally:
+            _release(registry)
+
+    return problems, lines, unreachable
+
+
 def check_tombstone_names() -> tuple[list[str], list[str], list[str]]:
     """Axis 14 -- a tombstone's own NAME at every mint door, both kind relations."""
     problems: list[str] = []
@@ -3641,6 +3730,12 @@ def main() -> int:
             "  and A TOMBSTONE'S OWN NAME AT EVERY MINT DOOR -- the TWENTIETH and "
             "TWENTY-FIRST trips: the half no fixture in this file could pose:",
             check_tombstone_names,
+        ),
+        (
+            "  and WHO THE ESCAPE MAY EXCUSE -- the TWENTY-SECOND trip: a "
+            "PACKAGE.md 4.1 pair, one word under two kinds, which no fixture above "
+            "could pose:",
+            check_merge_escape,
         ),
     ):
         print()

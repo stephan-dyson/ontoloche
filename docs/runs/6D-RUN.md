@@ -1794,6 +1794,62 @@ widened, followed to every consumer.**
 
 ---
 
+### 6.14 Round 2's fix set, changes A–C — **every matcher this row widened, followed to every consumer**
+
+*Ruling [R93](../decisions/2026-09-04-6d-supervisor-ruling-R93.md)'s subject, stated as the
+register's reading: **a widened matcher IS a minted rule and its consumers ARE its doors.***
+
+| change | matcher | consumers followed | commit |
+|---|---|---|---|
+| **A** | `_word_rows`' kind filter | 5 doors, 2 fixed | **`8d717c9`** — the TWENTIETH and TWENTY-FIRST trips; ids 383 → 385, axis 14 |
+| **B** | `_answers_to`'s keying | 5 consumers, 1 fixed | **`f8fc284`** — X7, a label naming NO ROW under a `complete=True` seal; ids 386 |
+| **C** | `_alias_clash`'s SET | 3 callers, all 3 touched | *this section* — the TWENTY-SECOND trip **and** the page-order DETAIL; ids 388, axis 15 |
+
+#### Change C's two cells
+
+**The TWENTY-SECOND trip — `C10-25`.** Change 2 fixed *which* holders the escape is evaluated over
+and **never asked what excuses one**. The clause read `not same_word(holder, left.name)` — keyed by
+**word** — on the stated ground that a holder spelled differently is `left` itself under another
+skin. **`PACKAGE.md` §4.1 blesses one word under two kinds**, so it need not be. The escape now
+excuses exactly `left` — same name, same kind — and **exact rather than keyed on purpose**: a row
+whose name is a variant spelling of `left.name` is a DIFFERENT ROW, and the only row a merge may
+excuse is the one it is consuming.
+
+**The page-order DETAIL — `C10-26`, findings G6 and A15.** Change 2 made the VERDICT
+order-independent and left the DETAIL in scan order, at the door whose own comment asserts *"Every
+holder, so the detail cannot depend on page order either."* `_alias_clash` now returns its holders
+**sorted**, measured at the source: **1 distinct return over 6 page orders**, where the scan-ordered
+version gave 2.
+
+#### The finding change C made about ITSELF, and it is the seventh of its class
+
+**Mutation `MC1` — restoring the word-keyed escape — was RED on the contract ids and GREEN on the
+gate.** No fixture in `check_merge_guard.py` posed a §4.1-blessed pair (one word, two kinds, two
+rows); every alias fixture in the file is single-kind, so `same_word(holder, left.name)` and
+`(holder.name, holder.kind) == (left.name, left.kind)` **agree in all of them** and the escape's
+operand had never been under test. **Axis 15 closes it rather than declaring it open a fifth time** —
+which is what §6.9's own note about G1 said a decline was turning into.
+
+**And axis 12 was corrected in the same change:** it compared the VERDICT across 24 permutations and
+never the DETAIL, so the defect it exists to catch was invisible to it one field along. It now
+compares both, and `MC2` (dropping the sort) is RED on the gate as well as on the ids.
+
+| mutation | gate | ids |
+|---|---|---|
+| **MC1** the word-keyed escape restored | **RED** (axis 15, new) | **RED** |
+| **MC2** `_alias_clash`'s sort dropped | **RED** (axis 12, extended) | **RED** |
+
+#### Rule U at the axis, not only at the door
+
+On a backend declining `indexes_membership` the extents are **unknowable**, so `predicate_merge`
+refuses ahead of the alias door by `IDENTITY_GUARD_ORDER` and this cell is never asked. Both the id
+and axis 15 record **NOT REACHABLE, never a pass** — axis 13's lesson one door along — and the id
+still binds the refusal itself on every leg, so a merge that *succeeded* there would be RED. The kill
+row predicted exactly this asymmetry in §6.12 (*"reproduces on sqlite, postgres and the async mirror;
+NOT on `sqlite_minimal`"*).
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
