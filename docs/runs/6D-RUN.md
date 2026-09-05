@@ -907,3 +907,113 @@ falsification REJECTED** with the argument above.
 **Routed to the supervisor for countersignature (R83): K1, K2, K3, K4 and K5.** The count stays
 **FOURTEEN**; classification is not the worker's.
 
+### 6.5 Round 1, totalled — **four lenses, four verdicts of NOT YET, no lens returned nothing**
+
+#### The findings, deduplicated — because four lenses reached six of them independently
+
+| lens | raw findings | BLOCKING |
+|---|---|---|
+| cross-namespace (§6.1) | 6 | 1 |
+| actions-twin (§6.2) | 6 | 2 |
+| fix auditor (§6.3) | 5 | 3 |
+| kill row (§6.4) | 9 | 5 |
+| **raw total** | **26** | **11** |
+| **DISTINCT** | **19** | **8** |
+
+**Six findings were reached by more than one lens from different briefs, and that is worth more than
+any single report.** Row 6c recorded the same thing when two lenses collided on `projection`'s pool:
+*a finding that arrives with its own replication.* Here:
+
+| the finding | reached by |
+|---|---|
+| the trip-14 fix is **kind-scoped** | **three lenses** — A1 (actions), F1 (fix auditor), K6 (kill row) |
+| the tombstone's word at the **alias-write** doors | F4, K2 |
+| `clash_why` bound and never used | F3, K3 — and K3 escalates it MAJOR → BLOCKING by chaining to two live holders at 1.0 |
+| `approve` raises out of a governance call | F5, K5 — by two different routes |
+| `AmbiguousKind` at the §4.1-blessed store | A5, K7 — **the round's one unpredicted finding, found twice** |
+| `namespace` has no word-identity rule | X4, K8 |
+
+#### The seven distinct constructions ROUTED FOR COUNTERSIGNATURE (R83)
+
+*Each reaches a shipped door and either lets two identities answer to one word, or lets a door answer
+at §5.3's guarantee on a pair the registry refuses non-overridably. **The worker does not classify
+them.** The count is **FOURTEEN** until the supervisor rules.*
+
+| # | construction | the sentence | ordinary calls? |
+|---|---|---|---|
+| **1** | **K1 — R80/Q82, page order** | a non-overridable identity guard's answer is a function of **sort order**: 60 of 120 orders swallow it, two live rows answer to one word, `resolve_type` at 1.0 | acknowledgements used (the door requires them); **the escape itself needs none** |
+| **2** | **F4 / K2 — the alias-write doors** | the trip-14 rule was applied to the incoming **name** only; `_word_rows(namespace, alias)` at 7023 defaults `match_aliases=False`. `reinstate` then refuses with **`path_back=None`** | **five ordinary calls, no `force`, no acknowledgement** |
+| **3** | **F3 / K3 — the dropped `clash_why`** | a truncated scan reads as *the words are free*, **silently**, and the merge proceeds to two live holders and 1.0 | ordinary calls on a paging backend |
+| **4** | **K4 — the capability-degraded skip** | refused non-overridably on one backend, written with `warnings=()` on another — on **UC1 Tenshen's own declared shape** | **five ordinary calls** |
+| **5** | **F5 / K5 — `approve` raises** | nothing holds a pending proposal's word, and the second approval does not merely write — it **raises `AlreadyExists`**, which appears **0 times in `INTERFACE.md`** | **three ordinary calls** |
+| **6** | **A1 / F1 / K6 — the cross-kind cell** | the trip-14 fix is kind-scoped, so the tombstone's word is free one kind along and the tombstone is left permanently un-reinstatable | **five ordinary calls**, both directions, async mirror |
+| **7** | **A3 — no operand for a DECLARATION** | two verbs with contradictory governance collapse; `preflight` answers the dead word with the **tombstone's** policy and a Haiku actor records `applied` against an irreversible human-approval verb | **two of three doors with ordinary calls** (worker's narrowing) |
+
+#### §0.7's scoring table, FILLED — 30 predictions, pre-registered at `d4b86a8` before any lens ran
+
+| # | prediction | outcome |
+|---|---|---|
+| **S1** | round 3's new ids and the tenth axis | **CONFIRMED** — F2 is inside `2da0433` itself; K2/F4 is its unenumerated field |
+| **S2** | the `C10-20` page-order escape (Q82 / R80) | **CONFIRMED, falsifier FALSE** — refuses in 60 of 120 orders, not in every one. **R80's first discharge achieved; its second half does not apply** |
+| **S3** | cross-namespace variants of trip 14 | **CONFIRMED at the READ.** Its falsifier's first conjunct was **met** — nothing constructed at any write door — and that is stated rather than smoothed |
+| **S4** | the ACTIONS-layer twin | **CONFIRMED.** The kill row reported it falsified; **the worker REJECTED that** on evidence (§6.4), because A3 is a declaration collapse at the word doors whose predicate control refuses non-overridably |
+| **T1** | capability-degraded skip = pass | **CONFIRMED, falsifier FALSE** — K4 neither refuses nor warns |
+| **T2** | empty-key word set makes a guard vacuous | **CONFIRMED**, with its bound stated: `resolve_type` answers `none`, so no 1.0 collapse follows |
+| **T3** | `reinstate` is the unenumerated door | **PARTIAL.** The enumeration gap is **confirmed by count** (`_word_rows` 0 occurrences in its body); **the predicted HARM at D6 is FALSIFIED** — in every construction `reinstate` is the victim, never the door |
+| **T4** | an identity-field writer outside `registry.py` | **PARTIAL.** **FALSIFIED** at `actions.py` (no stored-record identity write); **CONFIRMED** at `aio/registry.py` — 53 writes, invisible to Part A, covered only by a `nonbinding` test |
+| **T5** | `clash_why` / `_variant_why` dropped at two of six sites | **CONFIRMED, both halves** — §0 named lines 4429 and 4769 before either lens existed |
+| **T6** | `_identity_stale` blind to tombstone-held words | **NOT PROBED** |
+| **T7** | `_word_spellings`' residual is reachable | **FALSIFIED** — `_word_rows` at 7023 closes it, which is T7's own stated falsifier. It leaves a smaller finding: **the docstring states a residual its own call site closes** |
+| **T8** | `namespace` has no word-identity rule | **CONFIRMED, countably** — 27 keyed comparisons, zero on a namespace |
+| **T9** | required-keyword rule at one guard of two | **CONFIRMED as a count** — 1 of `_identity_breach`'s 5 call sites passes the gate sets — **and unconstructed as a defect on its own**, which is how it is graded |
+| **T10** | propose-time check not re-made at approve time | **CONFIRMED** — and the re-check is the one that crashes |
+| **T11** | `match_aliases` defaulted to the trip-14 answer | **CONFIRMED, and it named `registry.py:7023` by line before any lens ran.** This is the prediction that most nearly became prevention |
+| **T12** | no no-op for a repeated import or approval | **PARTIAL.** **CONFIRMED** for `import_types`; **FALSIFIED** for `approve`, which returns `already_decided` |
+| **T13** | retired-holder question missing at the transfer doors | **CONFIRMED** — D4's R75 transfer and D5's word move both reach it |
+| **T14** | the 2×2 is a 2×2×2 with `kind` as the third axis | **CONFIRMED, falsifier FALSE, by three independent lenses** |
+| **N1** | truncation signal dropped (type half) | **CONFIRMED** — F2, F3 and K3 |
+| **N2** | a caller taking one result of the closure | **NOT PROBED** |
+| **N3** | a read-bound rule with no write door gated | **CONFIRMED on the ACTIONS surface** — A4 |
+| **N4** | byte query and keyed comparison in one family | **NOT PROBED** |
+| **N5** | nothing holds the word of a pending proposal | **CONFIRMED AND EXCEEDED** — it does not merely write, it raises |
+| **N6** | one answer reported for a set never counted | **CONFIRMED on the type half** — K1's `_alias_clash` first-holder return |
+| **N7** | a governed fact left behind by a moved word | **NOT PROBED** as predicted — **but A3 is its shape**, reached from the other side: the governed fact is the *declaration*, and it stays with the tombstone |
+| **N8** | a forward-only walk of a both-directions closure | **NOT PROBED** |
+| **G1** | the gate cannot pose a cross-namespace question | **CONFIRMED**, and further than claimed — the R6 contract test body is byte-exact too |
+| **G2** | the gate has never driven an action family | **CONFIRMED**, escape closed — it reached all six doors |
+| **G3** | nine of ten axes cannot see a tombstone's words | **CONFIRMED** |
+| **G4** | no `proposed`-status fixture anywhere in the gate | **CONFIRMED**, and it is K5's gate reason verbatim |
+
+**Scored: 21 CONFIRMED · 3 PARTIAL · 1 FALSIFIED outright · 5 NOT PROBED.**
+
+#### The four things this round is owed, stated against the row rather than for it
+
+**1. §0.5 got FOUR of SIX, and that is not a clean confirmation.** The kill row graded it against
+itself and the grading is adopted: G4, G2, G1 and rule (c)'s field gap were each a *why the checker
+exited 0* reason **written down before the round** — but K1's (zero page-order controls) and K3's
+(one `alias_check_incomplete` assertion) were **new counts**. Nine trips have ended with that
+paragraph written afterwards; this row wrote two thirds of it in advance. Two thirds is the result,
+not three thirds.
+
+**2. The yield is concentrated where §0 pointed, and that is evidence about AIM, not a victory.**
+The fix auditor volunteered it and it is kept: F1 duplicates A1; F2, F3 and F5 all live inside
+predictions §0 wrote before those lenses existed. A round that finds what its own predictions named
+has demonstrated that the predictions were good **and** that the lenses were pointed by them.
+
+**3. One falsification nearly went the other way, and that changes what a falsification is worth
+here.** The fix auditor's first fixture for T5 made `import_types` *appear* to satisfy T5's
+falsifier; only a sharpened fixture isolated the trip-14 scan. **A less careful lens would have
+scored T5 FALSIFIED.** Every falsification in the table above should be read with that in mind — and
+it is why the S4 falsification was adjudicated rather than accepted.
+
+**4. THIS ROUND PREDICTED. IT DID NOT YET PREVENT — and that distinction is the whole reason the row
+exists.** R89 opened row 6d because *"a loop that can predict where its next defect will be is wasted
+in a row that writes the rule first and predicts second."* §0 named `registry.py:7023` by line, and
+the gate's four blind spots by count, **before any lens ran** — and the lenses then found defects at
+exactly those addresses. **But those defects already existed at HEAD.** Prediction ahead of a
+*finding* is what row 7a already demonstrated. **Prevention is a rule that binds every door named in
+advance, landing before the next defect** — and that is what round 1's fixes have to do to make this
+row different from row 7a. Until they do, this row has reproduced row 7a's result one surface along,
+and §6.16a's sentence still stands unanswered: *predicting your own next defect and then shipping it
+is not a success.*
+
