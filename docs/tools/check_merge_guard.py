@@ -2791,6 +2791,224 @@ def check_tombstone_words() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ======================================================================== axis 11
+# **THE 2x2x2, and axis ten drove exactly ONE of its eight cells.** The kill row's
+# FIFTEENTH and SIXTEENTH trips (row 6d, round 1; ruling **R91**).
+#
+# Trip 14 closed *(the word arrives as a NAME) x (the holder is the SAME kind) x (a MINT
+# door)* and axis ten was written for exactly that cell. Ruling R91 named the table:
+#
+#     how the word arrives   {name, alias}
+#     the holder's kind      {same, different}
+#     the door               {mint, write/transfer}
+#
+# **Why axis ten could not pose the other seven, countably.** `kind="action"` appears
+# **0** times in this file and every axis-10 fixture is `kind="predicate"` on BOTH sides,
+# so the kind dimension had never been driven; and axis 10's door list is literally
+# `("propose_type", "import_types", "approve")` -- three mint doors, **zero** alias-write
+# doors and **zero** transfer doors.
+#
+# **Two cells are DECLINED rather than closed, and the reason is a narrowing this
+# register pinned on purpose.** *(name x transfer)* -- a tombstone's own NAME written as
+# an alias onto another row -- is the ordinary post-retirement succession `C12-09`
+# **blesses** when the extents agree. Closing it here would reverse that narrowing, so
+# the guard asks about a tombstone's **ALIASES** and deliberately not about its NAME, and
+# the two cells are recorded as declined in the fix commit rather than driven here.
+#
+# The probe is `reinstate`, for axis ten's own reason: what the trip costs is ruling
+# **R11**'s governance act, so that is what the axis asks.
+
+#: ``(label, how the word arrives, the mint kind, the door)`` -- the five cells axis ten
+#: could not pose. `same`/`cross` is the holder's kind against the incoming row's.
+_CELLS = (
+    ("name x cross x mint", "name", "entity", "propose_type"),
+    ("name x cross x approve", "name", "entity", "approve"),
+    ("name x cross x import", "name", "entity", "import_types"),
+    ("alias x same x import", "alias", "predicate", "import_types"),
+    ("alias x cross x import", "alias", "entity", "import_types"),
+    ("alias x same x transfer", "alias", "predicate", "retire_successor"),
+    ("alias x cross x transfer", "alias", "predicate", "merge_types"),
+)
+
+
+
+
+def _release(registry: Registry) -> None:
+    """Close this cell's backend connection.
+
+    **A postgres leg opens one connection per `build()`, and axis eleven adds seven cells
+    x three legs to a file that already opened one per row.** Under the full three-leg
+    suite that reached `max_connections` and the run died with *"sorry, too many clients
+    already"* -- an ENVIRONMENTAL ceiling this axis pushed the run over rather than a
+    defect it introduced, and the same ceiling produced eight postgres errors on the run
+    BEFORE this axis existed. Releasing per cell is the cheap half; the leaked `oo_*`
+    schemas row 6c counted at 193 (272 today) are the other half and are not this row's.
+    """
+    close = getattr(getattr(registry, "adapter", None), "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:  # pragma: no cover -- a double close is not a finding
+            pass
+
+
+def _seed_transfer_fixture(registry: Registry) -> str | None:
+    """`gamma` (live, carrying the tombstone's word) and `delta`, with equal extents.
+
+    The alias is written straight through the adapter because the shipped door refuses
+    it -- that refusal is the fix, and asserting it belongs at `C12-23` rather than here.
+    """
+    for name in ("gamma", "delta"):
+        _seed(registry, name, kind="predicate", definition="a capability")
+    _seed(registry, "bbb_memo", predicates=["gamma", "delta"])
+    live = registry.adapter.get_type("default", "gamma", kind="predicate")
+    if live is None:
+        return "gamma was not written"
+    registry.adapter.put_type(
+        type(live)(**{**live.__dict__, "aliases": ("commentable",)})
+    )
+    return None
+
+
+def check_tombstone_cells() -> tuple[list[str], list[str], list[str]]:
+    """Axis 11 -- the five cells of the 2x2x2 that axis ten could not pose."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    for leg, build, _knowable in _legs():
+        for label, arrives, mint_kind, door in _CELLS:
+            registry = build()
+            pending = None
+            if door == "approve":
+                # The word is FREE when the proposal is made and spoken for by the time
+                # it is approved -- the approve window, and `_write_approved`'s scan is
+                # the one that decides days later.
+                pending = registry.propose_type(
+                    "commentable", "another kind entirely", EVIDENCE, "user:sd",
+                    kind=mint_kind,
+                )
+                if isinstance(pending, (Refusal, TypeEntry)):
+                    unreachable.append(
+                        f"{leg} / {label}: this backend cannot hold a pending proposal, "
+                        f"so there is no approve window to go stale in"
+                    )
+                    lines.append(f"  {leg:15s} {label:26s} NOT REACHABLE")
+                    continue
+            built = _tombstone_word_store(registry)
+            if built is not None:
+                unreachable.append(f"{leg} / {label}: " + built[len(_NOT_REACHABLE):])
+                lines.append(f"  {leg:15s} {label:26s} NOT REACHABLE")
+                _release(registry)
+                continue
+            if door == "approve":
+                registry.approve(pending.id, "user:sd")
+
+            if door == "propose_type":
+                # **This door asserts what the CALLER is owed, not what `reinstate`
+                # says, and that is axis four's and axis ten's own recorded lesson
+                # arriving a THIRD time.** Ruling R40 makes a proposal PENDING, so on a
+                # backend that can hold one nothing is minted here, `reinstate` still
+                # succeeds, and the row reads `held` for the wrong reason -- which is
+                # precisely how a mutation of this cell survived the gate on the first
+                # run of this axis.
+                answer = registry.propose_type(
+                    "commentable", "another kind entirely", EVIDENCE, "user:sd",
+                    kind=mint_kind,
+                )
+                if not isinstance(answer, TypeEntry) or not any(
+                    w.startswith("word_previously_retired")
+                    for w in (answer.warnings or ())
+                ):
+                    problems.append(
+                        f"{leg} / {label}: this door answered a "
+                        f"{type(answer).__name__} for a word the RETIRED 'searchable' "
+                        f"still holds as an alias, instead of handing back the holder "
+                        f"with `word_previously_retired`. The fourteenth trip's fix was "
+                        f"kind-SCOPED, and this cell is the FIFTEENTH trip"
+                    )
+                    lines.append(f"  {leg:15s} {label:26s} FAILED")
+                    continue
+            elif door == "import_types":
+                row = (
+                    {"name": "commentable", "kind": mint_kind,
+                     "definition": "a row", "status": "active"}
+                    if arrives == "name"
+                    else {"name": "beta", "kind": mint_kind, "definition": "a row",
+                          "aliases": ["commentable"], "status": "active"}
+                )
+                registry.import_types([row], namespace="default", kind=mint_kind)
+            elif door in ("retire_successor", "merge_types"):
+                # **The transfer cells are seeded BELOW the doors, and the reason is the
+                # fix working.** The ordinary route -- `import_types` writing the alias
+                # onto a second row -- is now REFUSED `word_held_by_tombstone` by the
+                # very guard this axis exists to hold, so a fixture that used it would
+                # build nothing and the row would report `held` having driven no
+                # transfer at all. *A check green for a reason other than the one it
+                # claims* is this register's own repeated finding, and it arrived inside
+                # this fix (see `C9-36`'s note). The state is real in any store written
+                # before the fix shipped, which is what these two guards are for.
+                if _seed_transfer_fixture(registry) is not None:
+                    unreachable.append(
+                        f"{leg} / {label}: this backend cannot seed the transfer fixture"
+                    )
+                    lines.append(f"  {leg:15s} {label:26s} NOT REACHABLE")
+                    continue
+                if door == "retire_successor":
+                    out = registry.retire(
+                        "gamma", "superseded", retired_by="user:sd", successor="delta",
+                        force=True,
+                    )
+                else:
+                    out = registry.merge_types(
+                        "gamma", "delta", "one and the same", merged_by="user:sd",
+                        acknowledge=(
+                            "definitions_diverge", "no_consumer_evidence",
+                            "retired_operand",
+                        ),
+                    )
+                # **A DIFFERENT probe for the transfer cells, and the reason is the
+                # fixture.** Seeding `gamma`'s alias below the doors leaves the tombstone
+                # un-reinstatable BEFORE the transfer runs, so `reinstate` cannot tell
+                # these two cells anything -- it is already refused either way. What the
+                # guard owes here is that the transfer does not SPEND the word: the
+                # refusal by name, and nothing written onto the successor.
+                took = registry.adapter.get_type("default", "delta", kind="predicate")
+                _release(registry)
+                if not isinstance(out, Refusal) or "commentable" in (
+                    (took.aliases if took is not None else ()) or ()
+                ):
+                    problems.append(
+                        f"{leg} / {label}: this door moved a word the RETIRED "
+                        f"'searchable' still answers to onto 'delta' -- the tombstone "
+                        f"can never be brought back, which is ruling R11's own "
+                        f"governance act. A tombstone's aliases are an unconsumed "
+                        f"permission (standing rule (c)); this door spent one"
+                    )
+                    lines.append(f"  {leg:15s} {label:26s} FAILED")
+                else:
+                    lines.append(f"  {leg:15s} {label:26s} held")
+                continue
+
+            back = registry.reinstate(
+                "searchable", "we were wrong", reinstated_by="user:sd"
+            )
+            _release(registry)
+            if isinstance(back, Refusal):
+                problems.append(
+                    f"{leg} / {label}: this cell spent a word the RETIRED 'searchable' "
+                    f"still answers to, and `reinstate` is now refused {back.reason!r} "
+                    f"-- the tombstone can never be brought back, which is the "
+                    f"governance act ruling R11 created `reinstate` to provide. Trip 14 "
+                    f"closed ONE cell of this 2x2x2; this is another"
+                )
+                lines.append(f"  {leg:15s} {label:26s} FAILED")
+            else:
+                lines.append(f"  {leg:15s} {label:26s} held")
+
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -2839,6 +3057,7 @@ def main() -> int:
         print(line)
     unreachable.extend(stale_unreachable)
     state_problems.extend(stale_problems)
+    _drop_postgres_schemas()
 
     for title, run in (
         (
@@ -2873,6 +3092,11 @@ def main() -> int:
             "trip: every axis above asks about a word an ACTIVE row holds:",
             check_tombstone_words,
         ),
+        (
+            "  and THE 2x2x2 -- the kill row's FIFTEENTH and SIXTEENTH trips: axis ten "
+            "drove ONE of its eight cells:",
+            check_tombstone_cells,
+        ),
     ):
         print()
         print(title)
@@ -2881,6 +3105,16 @@ def main() -> int:
             print(line)
         unreachable.extend(axis_unreachable)
         state_problems.extend(axis_problems)
+        # **Dropped BETWEEN axes, not only at the end, and the eleventh axis is why.**
+        # Every fixture on the Postgres leg is a fresh SCHEMA and a fresh CONNECTION, and
+        # this cleanup used to run once in `main`'s `finally` -- so the peak connection
+        # count was the whole FILE. Eleven axes reached `max_connections` (100) and the
+        # run died `FATAL: sorry, too many clients already`, which reads as a red on a
+        # guard rather than as a resource ceiling. The schema-drop note in `_legs` records
+        # the same lesson one resource along: 19,220 leaked schemas segfaulted the
+        # backend three times. **A checker that has to be run to be believed must be cheap
+        # enough to run**, and that sentence is about connections as much as catalogs.
+        _drop_postgres_schemas()
     if unreachable:
         # Ruling R12, applied to this checker: **a verdict without its coverage line is
         # not a verdict.** A row whose fixture could not be built on a leg is printed and

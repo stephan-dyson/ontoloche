@@ -1070,3 +1070,78 @@ async def test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types(
     assert isinstance(back, TypeEntry), (
         "R11's governance act must still be available", back
     )
+
+async def _tombstone_holding(registry, word="zzz_moved"):
+    """A RETIRED predicate that still answers to ``word``, and nothing named ``word``."""
+    await seed(registry, "alpha", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["alpha"])
+    written = await registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": [word],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or word not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = await registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    return gone
+
+async def test_c12_22_the_import_name_door_holds_the_word_across_kinds(adapter, make_registry):
+    """**The FIFTEENTH trip at the third mint door.** Row 6d; ruling **R91**.
+
+    `import_types` is a NAME door in its own right, and shipping the kind-blind scan at
+    `propose_type` alone would be *a fix applied at one call site of three* — the single
+    sentence of the ninth, tenth and eleventh trips.
+    """
+    registry = await make_registry(adapter)
+    tombstone = await _tombstone_holding(registry)
+
+    out = await registry.import_types(
+        [{"name": "zzz_moved", "status": "active", "definition": "another kind"}],
+        kind="entity",
+    )
+    assert out and out[0].name == tombstone.name, out
+    assert f"word_previously_retired:{tombstone.name}" in (out[0].warnings or ()), (
+        out[0].warnings
+    )
+    assert isinstance(
+        await registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd"), TypeEntry
+    )
+
+async def test_c12_23_the_import_alias_door_refuses_a_word_a_tombstone_answers_to(
+    adapter, make_registry
+):
+    """**The kill row's SIXTEENTH trip** — the trip-14 rule bound the incoming NAME only.
+
+    A word a tombstone still answers to, arriving in the incoming row's **`aliases`**,
+    was written with **no refusal and no warning**; `resolve_type` then answered the new
+    row at 1.0 and `reinstate` refused `alias_collision` non-overridably **with
+    `path_back=None`** — worse than the door it descends from. `_alias_identity_breach`'s
+    keyed scan defaults `match_aliases=False`, and `_alias_clash` reads ACTIVE rows only.
+
+    **[Observed, row 6d round 1]** five ordinary calls, no `force`, no acknowledgement;
+    countersigned as the sixteenth trip by ruling **R91**. `word_held_by_tombstone`, the
+    thirty-second `Refusal.reason`.
+    """
+    registry = await make_registry(adapter)
+    tombstone = await _tombstone_holding(registry)
+
+    out = await registry.import_types(
+        [{"name": "beta", "status": "active", "aliases": ["zzz_moved"],
+          "definition": "a brand new row"}],
+        kind="predicate",
+    )
+    assert out, out
+    assert "import_refused:word_held_by_tombstone" in (out[0].warnings or ()), (
+        out[0].warnings
+    )
+    written = await adapter.get_type("default", "beta", kind="predicate")
+    assert written is None or "zzz_moved" not in (written.aliases or ()), (
+        "nothing is written -- a refusal is not a warning on a completed act"
+    )
+    # ...and the whole point: the tombstone can still be brought back.
+    assert isinstance(
+        await registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd"), TypeEntry
+    ), "R11's governance act must survive the write that used to burn it"
+    assert tombstone.name == "alpha"

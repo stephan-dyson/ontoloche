@@ -1869,8 +1869,13 @@ class AsyncRegistry:
             # EIGHTH trip). `get_type` is a byte match, so a RETIRED `commentable_`
             # left `commentable` free -- and `_alias_holder`, keyed in round 2, scans
             # active rows only. See `_word_rows`.
+            # **The kind filter was the FIFTEENTH trip** (row 6d, round 1; R91).
+            # `_alias_clash` applies NO kind filter, so it sees a cross-kind tombstone at
+            # `reinstate` and refuses `alias_collision` non-overridably -- while this
+            # scan, kind-scoped, let the word be minted here with no warning at all. One
+            # store, one word, two guards, opposite answers. See `_retired_holder`.
             variants, variant_why = await self._word_rows(
-                namespace, name, kind=kind, match_aliases=True
+                namespace, name, match_aliases=True
             )
             # **Only a RETIRED variant stands in for the name here.** A LIVE one is
             # `_alias_holder`'s `alias_collision` -- non-overridable, and the answer
@@ -2351,8 +2356,9 @@ class AsyncRegistry:
         # the caller the row it needs -- `name_previously_retired`'s own treatment -- and
         # the two branches disagreeing about one fact is what the eighth trip's
         # countersignature calls one door disagreeing with itself. `C5-13`.
+        # Kind-blind, for the FIFTEENTH trip's reason (R91) -- see `_retired_holder`.
         word_rows, word_why = await self._word_rows(
-            rec.namespace, rec.name, kind=rec.kind, match_aliases=True
+            rec.namespace, rec.name, match_aliases=True
         )
         answering = [
             r
@@ -2705,6 +2711,11 @@ class AsyncRegistry:
         #: transfer*, which is a stated absence rather than an empty write.
         repoint_onto: TypeRecord | None = None
         repoint_words: tuple[str, ...] = ()
+        #: `_retired_holder`'s `why` when the tombstone scan could not finish. Rule U on
+        #: the LOOK: it is reported and never refused on, because refusing on a short
+        #: page bans `retire(successor=)` on every paging backend -- the lesson `C10-09`,
+        #: `C3-13`, `C4-12` and `C12-13` each taught once.
+        retire_word_why: str | None = None
         #: the successor that took the words, once the write has actually happened --
         #: ``None`` whenever nothing moved, which is what keeps the warning below a
         #: statement about a write rather than about an intention.
@@ -3092,6 +3103,46 @@ class AsyncRegistry:
                     repoint_dropped = tuple(
                         a for a in transferred if a not in repoint_words
                     )
+                    # **The RETIRED holder of a word this transfer MOVES** -- the
+                    # transfer half of the FIFTEENTH and SIXTEENTH trips (row 6d, round
+                    # 1; ruling R91). `_alias_identity_breach` above compares the target
+                    # against ACTIVE rows; nothing asked whether a TOMBSTONE still
+                    # answers to one of the words R75 is about to re-point, and if one
+                    # does this write leaves it permanently un-reinstatable.
+                    # Both operands are excluded -- `rec` is a tombstone by the time this
+                    # write lands. See `_retired_holder`.
+                    tomb, tomb_why = await self._retired_holder(
+                        namespace,
+                        repoint_words,
+                        exclude=((rec.kind, rec.name), (succ.kind, succ.name)),
+                    )
+                    tomb_row, tomb_word = tomb
+                    if tomb_row is not None:
+                        return Refusal(
+                            "word_held_by_tombstone",
+                            {
+                                "type": type,
+                                "successor": successor,
+                                "word": tomb_word,
+                                "holder": tomb_row.name,
+                                "holder_kind": tomb_row.kind,
+                                "overridable": False,
+                                "why": (
+                                    f"retiring {type!r} toward {successor!r} would move "
+                                    f"{tomb_word!r} onto {successor!r}, and the RETIRED "
+                                    f"{tomb_row.kind} {tomb_row.name!r} still answers to "
+                                    f"that word (INTERFACE.md 5.8 keeps a tombstone's "
+                                    f"words by design). The transfer would leave "
+                                    f"{tomb_row.name!r} permanently un-reinstatable"
+                                ),
+                                "path_back": (
+                                    f"reinstate {tomb_row.name!r} first, or leave that "
+                                    f"word retired"
+                                ),
+                            },
+                        )
+                    if tomb_why is not None:
+                        retire_word_why = tomb_why
 
         report = await self._consumer_report(rec)
 
@@ -3305,9 +3356,16 @@ class AsyncRegistry:
             await self._entry(
                 stored,
                 extra_warnings=(
-                    (f"aliases_transferred:{transferred_to}",)
-                    if transferred_to is not None
-                    else ()
+                    (
+                        (f"aliases_transferred:{transferred_to}",)
+                        if transferred_to is not None
+                        else ()
+                    )
+                    + (
+                        (f"alias_check_incomplete:{retire_word_why}",)
+                        if retire_word_why is not None
+                        else ()
+                    )
                 ),
             )
         )
@@ -4121,6 +4179,13 @@ class AsyncRegistry:
         # could not finish has not said the words are free, and refusing on a short page
         # would ban `merge_types` on every paging backend -- the lesson row 4d learned
         # three times. It warns and proceeds.
+        # **This door had no warning channel at all until now**, which is why the
+        # EIGHTEENTH trip could drop `clash_why` in silence. `_retired_holder`'s own
+        # `why` is wired here rather than left for the next change: shipping a fix
+        # that drops the signal its own scan emits would be the FIFTH trip inside the
+        # fix for the FIFTEENTH, and *the next defect lives in the last fix* is this
+        # register's most-counted sentence.
+        merge_warnings: list[str] = []
         moving = tuple(a for a in (left.name,) + tuple(left.aliases) if a)
         holder, clash_why = await self._alias_clash(target_ns, right.name, right.kind, moving)
         if holder is not None and not same_word(holder, left.name):
@@ -4142,6 +4207,45 @@ class AsyncRegistry:
                     ),
                 },
             )
+
+        # **The RETIRED holder of a word this merge MOVES** -- the transfer half of the
+        # FIFTEENTH and SIXTEENTH trips (row 6d, round 1; ruling R91). `_alias_clash`
+        # above reads ACTIVE rows only, by design, because `alias_collision` is about two
+        # LIVE entries. Nothing asked whether a TOMBSTONE still answers to one of these
+        # words -- and if one does, this write leaves it permanently un-reinstatable,
+        # which is the governance act ruling R11 created `reinstate` to provide.
+        #
+        # Both operands are excluded: `left` becomes a tombstone in this very write, and
+        # on the `retired_operand` path it already is one -- see `_retired_holder`.
+        tomb, tomb_why = await self._retired_holder(
+            target_ns, moving, exclude=((left.kind, left.name), (right.kind, right.name))
+        )
+        tomb_row, tomb_word = tomb
+        if tomb_row is not None:
+            return Refusal(
+                "word_held_by_tombstone",
+                {
+                    "from": from_,
+                    "into": into,
+                    "word": tomb_word,
+                    "holder": tomb_row.name,
+                    "holder_kind": tomb_row.kind,
+                    "overridable": False,
+                    "why": (
+                        f"merging {from_!r} into {into!r} would write {tomb_word!r} onto "
+                        f"{into!r}, and the RETIRED {tomb_row.kind} {tomb_row.name!r} "
+                        f"still answers to that word (INTERFACE.md 5.8 keeps a "
+                        f"tombstone's words by design). The merge would leave "
+                        f"{tomb_row.name!r} permanently un-reinstatable, which is ruling "
+                        f"R11's own governance act"
+                    ),
+                    "path_back": (
+                        f"reinstate {tomb_row.name!r} first, or leave that word retired"
+                    ),
+                },
+            )
+        if tomb_why is not None:
+            merge_warnings.append("alias_check_incomplete:" + tomb_why)
 
         # An acknowledgement that cannot be recorded is refused -- but only AFTER the
         # **FIVE** non-overridable guards above. *(Four until the kill row's THIRTEENTH
@@ -4303,6 +4407,7 @@ class AsyncRegistry:
                     if threshold is None
                     else f"definitions_threshold:{threshold}"
                 ),
+                *merge_warnings,
             ),
         )
 
@@ -4462,15 +4567,16 @@ class AsyncRegistry:
                 # three*, which is the single sentence of the ninth, tenth and eleventh
                 # trips -- and `import_types` is a NAME door in its own right, observed
                 # minting the identical row in the trip's own reproduction.
+                # Kind-blind, for the FIFTEENTH trip's reason (R91).
                 variants, _variant_why = await self._word_rows(
-                    namespace, name, kind=row.get("kind", kind), match_aliases=True
+                    namespace, name, match_aliases=True
                 )
                 retired_here = [r for r in variants if r.status == "retired"]
                 named = [
                     r for r in retired_here if r.name != name and same_word(r.name, name)
                 ]
                 if named:
-                    standing = variants[0] if False else named[0]
+                    standing = named[0]
                 else:
                     answering = [
                         r
@@ -4646,6 +4752,55 @@ class AsyncRegistry:
                         )
                     )
                     continue
+
+                # **Ordering: this runs AFTER refusals #1/#2/#3 and after
+                # `_alias_clash`, and putting it first was this fix's own first
+                # defect -- caught by the gate within one run.** Both facts can be
+                # true of one import: *these two extents may not be unified* and
+                # *this word is spoken for by a tombstone*. The established
+                # refusals are the older, more specific claim about an identity
+                # collapse, and answering them with this reason would be the
+                # THIRTEENTH trip's own sentence -- *a guard that changes what a
+                # door SAYS about a state it already refused correctly*. This one
+                # catches what they do not: the extents agree, no collapse is
+                # asserted, and the tombstone is burned anyway.
+                # **The RETIRED holder of a word this import WRITES AS AN ALIAS** -- the
+                # SIXTEENTH trip (row 6d, round 1; ruling R91). The trip-14 fix closed
+                # the word arriving as this row's NAME, at the block above; arriving in
+                # `aliases` it was asked by nothing, because `_alias_identity_breach`'s
+                # keyed scan defaults `match_aliases=False` and `_alias_clash` reads
+                # ACTIVE rows only. **[Observed, five ordinary calls, no `force`, no
+                # acknowledgement]** the alias was written with no refusal and no
+                # warning, `resolve_type` answered the new row at 1.0, and `reinstate`
+                # refused `alias_collision` non-overridably with `path_back=None` --
+                # worse than the door it descends from, which at least says how it could
+                # have been avoided. This row is excluded: it may legally carry a word it
+                # already holds. See `_retired_holder`.
+                tomb, tomb_why = await self._retired_holder(
+                    namespace,
+                    incoming,
+                    exclude=((row.get("kind", kind), name),),
+                )
+                tomb_row, tomb_word = tomb
+                if tomb_row is not None:
+                    out.append(
+                        self._refused_import(
+                            namespace,
+                            name,
+                            (
+                                f"{tomb_word!r} is still answered by the RETIRED "
+                                f"{tomb_row.kind} {tomb_row.name!r}; importing it as an "
+                                f"alias of {name!r} would leave {tomb_row.name!r} "
+                                f"permanently un-reinstatable. Reinstate "
+                                f"{tomb_row.name!r} first, or leave that word retired"
+                            ),
+                            reason="word_held_by_tombstone",
+                            kind=row.get("kind", kind),
+                        )
+                    )
+                    continue
+                if tomb_why is not None:
+                    extra_import_warnings.append("alias_check_incomplete:" + tomb_why)
 
             imported_from = {"system": system}
             for key in ("apiName", "rid"):
@@ -7044,6 +7199,126 @@ class AsyncRegistry:
                 break
             cursors.add(after)
         return records, why
+
+    async def _retired_holder(
+        self,
+        namespace: str,
+        words: Sequence[str],
+        *,
+        kind: str | None = None,
+        exclude: Sequence[tuple[str, str]] = (),
+    ):
+        """Which **RETIRED** row answers to any of these words -- by NAME or by ALIAS, of **ANY KIND**?
+
+        ``((holder, the word it answers to) or (None, None), why the scan did not finish)``.
+
+        **The FIFTEENTH and SIXTEENTH trips are the two axes this function adds to the
+        question, and the fourteenth trip's fix had neither** (row 6d, round 1; ruling
+        [R91], countersigned).
+
+        Trip 14 closed exactly one cell of what ruling R91 then named as a **2x2x2**:
+        *(the word arrives as a NAME) x (the holder is the SAME kind) x (a MINT door)*.
+        The other seven were open, and two of them were walked to the harm:
+
+        ==========================  =========  =========  ==========================
+        the word arrives as         holder     door       what happened
+        ==========================  =========  =========  ==========================
+        a name                      same       mint       closed -- trips 8 and 14
+        a name                      DIFFERENT  mint       **the FIFTEENTH trip**
+        an ALIAS                    same       transfer   **the SIXTEENTH trip**
+        ==========================  =========  =========  ==========================
+
+        **The fifteenth trip.** ``_word_rows`` was called ``kind=``-scoped at all three
+        mint doors, so a word a retired ``kind="action"`` family still held as an alias
+        was minted as a ``kind="predicate"`` row's **name** with **no refusal and no
+        warning** -- and ``reinstate`` then refused ``alias_collision``
+        **non-overridably**, because :meth:`_alias_clash` applies no kind filter and does
+        see it. **One store, one word, two guards, opposite answers.** The tombstone is
+        left permanently un-reinstatable, which is the governance act ruling **R11**
+        created ``reinstate`` to provide. [Observed] five ordinary calls, no ``force``,
+        no acknowledgement, on both legs, in **both** directions, and it is **not**
+        action-specific: a ``predicate`` tombstone against an ``entity`` mint reaches the
+        identical state at all three doors.
+
+        **Which way the guards were made to agree, because it is a choice and not an
+        obvious one.** ``PACKAGE.md`` 4.1 **blesses** one word under two kinds, and
+        :meth:`_alias_holder` gates its **name** side on ``other.kind == kind`` for
+        exactly that reason. So this function changes **only the RETIRED half**: two LIVE
+        rows may still share a word across kinds. A **tombstone's** words are held against
+        every kind, because the alternative -- making the mint doors kind-aware -- leaves
+        ``reinstate`` refused by a kind-blind ``_alias_clash``, which is the trip itself.
+        **The guard that decides whether R11's governance act can succeed is the one the
+        others are made to agree with.**
+
+        **The cost is stated rather than discovered later**, and it is ruling **R82**'s
+        own price paid at one more axis: a word a tombstone answers to is unusable in
+        **every** kind until the tombstone is reinstated or the word is left retired.
+
+        **ONE scan, and the reason is written in this file already.**
+        :meth:`_word_spellings` records that its predecessor *"cost a full namespace read
+        PER ALIAS -- measured at 64,840 records and 1.56 s for twenty import rows over an
+        800-type namespace."* Every word is therefore tested against every row of a
+        **single** paged walk, not one walk per word.
+
+        **Rule U on the LOOK, never on its result.** A scan that could not finish returns
+        its ``why`` and **no holder**; the callers report it as ``alias_check_incomplete``
+        and proceed. Refusing on a short page bans these doors on every paging backend --
+        the lesson ``C10-09``, ``C3-13``, ``C4-12`` and ``C12-13`` each taught once, and
+        which ``_word_spellings`` had to learn a third time.
+        """
+        wanted = tuple(w for w in words if w)
+        if not wanted:
+            return (None, None), None
+        skip = {(k, n) for k, n in exclude}
+        why: str | None = None
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = await self.adapter.find_types(
+                TypeQuery(namespace=namespace, kind=kind, include_retired=True, after=after)
+            )
+            for rec in page.records:
+                if rec.status != "retired":
+                    continue
+                # **The operands of the write are skipped, and leaving them in was this
+                # fix's own near-miss** -- caught by reasoning about the post-state, not
+                # by a test. `merge_types` moves `(left.name, *left.aliases)` and `left`
+                # becomes a tombstone in THAT VERY WRITE; on the `retired_operand` path
+                # it is already one. A scan that did not skip it would find `left`
+                # answering to `left.name` and the door would refuse ITSELF -- the TENTH
+                # trip's sentence (*a guard evaluating a state the call destroys*)
+                # pointed at this fix before it shipped.
+                if (rec.kind, rec.name) in skip:
+                    continue
+                for word in wanted:
+                    # **ALIASES only, and the NAME deliberately NOT** -- the cut is the
+                    # whole correctness of this guard and the gate found it within one
+                    # run. A tombstone's own NAME being written as an alias onto another
+                    # row is the ordinary post-retirement succession `C12-09` **blesses**
+                    # when the extents agree, and refusing it here would reverse a
+                    # narrowing this register pinned on purpose. What trips 14, 15 and 16
+                    # are each about is the tombstone's **aliases** -- words it answers
+                    # to that no door ever asked about, standing rule (c)'s *unconsumed
+                    # permission*. The name half is already answered, at the mint doors
+                    # by `name_previously_retired` (trip 8, `C10-19`).
+                    if any(same_word(a, word) for a in (rec.aliases or ())):
+                        return (rec, word), None
+            if not page.complete and page.next_after is None:
+                why = page.why_incomplete or (
+                    "the backend could not answer this query in full"
+                )
+                break
+            after = page.next_after
+            if after is None:
+                break
+            if after in cursors:
+                why = (
+                    "this backend returned a pagination cursor it had already returned "
+                    "(PACKAGE.md 3.4 primitive 6)"
+                )
+                break
+            cursors.add(after)
+        return (None, None), why
 
     def _word_spellings(self, word: str) -> tuple[str, ...]:
         """The spellings of ``word`` a `name_in` query must ask for. **Bounded.**

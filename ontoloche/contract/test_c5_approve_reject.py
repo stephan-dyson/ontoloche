@@ -285,3 +285,44 @@ def test_c5_13_a_word_a_tombstone_answers_to_is_not_free_at_approve(
     assert isinstance(back, TypeEntry), (
         "R11's governance act must still be available", back
     )
+
+
+def test_c5_14_approve_holds_a_tombstones_word_across_kinds(adapter, make_registry):
+    """**The FIFTEENTH trip at the door R40 forces every predicate down.** Row 6d; R91.
+
+    `approve` writes the row days after `propose_type` judged it, so the tombstone scan
+    at `_write_approved` is the one that decides. It was `kind=`-scoped like its two
+    siblings, and this is the cross-kind cell.
+    """
+    registry = make_registry(adapter, approval_policy="review")
+    seed(registry, "alpha", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["alpha"])
+
+    # **The word is FREE when the proposal is made and spoken for by the time it is
+    # approved** -- the approve window, and the order is the whole fixture. Proposing
+    # after the alias exists is refused `alias_collision` at the propose door, which is
+    # a different id; this one is about what `_write_approved` decides days later.
+    pending = registry.propose_type(
+        "zzz_moved", "another kind entirely", [DATA_EVIDENCE], "user:sd", kind="entity"
+    )
+    if not isinstance(pending, Proposal):
+        pytest.skip("this backend does not store proposals, so approve has none to judge")
+
+    written = registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zzz_moved"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or "zzz_moved" not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+
+    out = registry.approve(pending.id, "user:sd")
+    assert isinstance(out, TypeEntry), out
+    assert "word_previously_retired:alpha" in (out.warnings or ()), out.warnings
+    assert isinstance(
+        registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd"), TypeEntry
+    ), "R11's governance act must survive an approval that used to burn it"

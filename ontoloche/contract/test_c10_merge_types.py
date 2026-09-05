@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from ..adapter import TypeRecord
 from ..types import Consumer, Evidence, MergeResult, Refusal, ResolveContext, TypeEntry
 from ._support import seed
 from .doubles import DegradedAdapter
@@ -1069,3 +1070,72 @@ def test_c10_20_a_merge_may_not_write_a_word_another_live_row_already_answers_to
     )
     assert isinstance(ok, MergeResult), ok
     assert ok.aliases_added == ("p_one",)
+
+
+@pytest.mark.requires_capability("indexes_membership")
+# **Declared, and the declaration is the finding.** On a backend that cannot
+# report membership, both extents come back EMPTY and §5.10's refusal #2 fires
+# FIRST -- honestly, and for the reason trip 2 minted it: *empty is not equal*.
+# The door still refuses; it refuses with the older, more specific reason, so
+# this id cannot assert its own value there. `check_capability_matrix.py` caught
+# the omission within one run of the fix, which is what R2's matrix is for.
+def test_c10_21_the_word_move_refuses_a_word_a_tombstone_answers_to(
+    adapter, make_registry
+):
+    """**The SIXTEENTH trip at the FIFTH write door.** Row 6d; ruling **R91**.
+
+    `merge_types` writes ``(left.name, *left.aliases)`` onto ``right``. `_alias_clash`
+    asks whether an **ACTIVE** row already answers to one of them — by design, since
+    `alias_collision` is §5.9b's *two LIVE entries* — and **nothing asked whether a
+    TOMBSTONE does**. If one does, the merge leaves it permanently un-reinstatable.
+
+    Both operands are excluded from the scan, and leaving them in was the fix's own
+    near-miss: `left` becomes a tombstone in this very write, so a scan that did not skip
+    it would make the door refuse **itself** — the TENTH trip's sentence, *a guard
+    evaluating a state the call destroys*, pointed at the fix before it shipped.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "alpha", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["alpha"])
+    written = registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": ["zzz_moved"],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or "zzz_moved" not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+
+    seed(registry, "gamma", kind="predicate", definition="a capability")
+    seed(registry, "delta", kind="predicate", definition="a capability")
+    seed(registry, "bbb_memo", predicates=["gamma", "delta"])
+    # **Seeded BELOW the doors, and the first cut of this test did not do that.** The
+    # fix's own alias-door guard (`C12-23`) refuses the `import_types` write this
+    # fixture used to build, so the test SKIPPED on every leg and asserted nothing while
+    # reporting green -- *a check green for a reason other than the one it claims*,
+    # arriving inside the fix for the fifteenth and sixteenth trips. The state is real
+    # in any store written before this fix shipped, which is what the guard is for; that
+    # the ordinary doors now refuse to build it is asserted at `C12-23`.
+    live = adapter.get_type("default", "gamma", kind="predicate")
+    assert live is not None
+    adapter.put_type(TypeRecord(**{**live.__dict__, "aliases": ("zzz_moved",)}))
+
+    out = registry.merge_types(
+        "gamma", "delta", "one and the same", merged_by="user:sd",
+        acknowledge=("definitions_diverge", "no_consumer_evidence"),
+    )
+    assert isinstance(out, Refusal), (
+        "the word move would burn the tombstone that still answers to this word", out
+    )
+    assert out.reason == "word_held_by_tombstone", out.reason
+    assert out.detail["overridable"] is False
+    assert out.detail["holder"] == "alpha", out.detail
+
+    # Nothing was written: `delta` did not take the word and `gamma` is still live.
+    moved_to = adapter.get_type("default", "delta", kind="predicate")
+    assert moved_to is not None and "zzz_moved" not in (moved_to.aliases or ()), (
+        "the word move must not spend a word a tombstone still answers to"
+    )
+    assert (adapter.get_type("default", "gamma", kind="predicate")).status == "active"
