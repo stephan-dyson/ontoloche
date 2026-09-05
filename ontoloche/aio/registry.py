@@ -3704,7 +3704,7 @@ class AsyncRegistry:
         # This door refuses on ANY holder, so the set and the first match give the same
         # verdict here -- it is named rather than indexed so a reader can see that, and
         # `held_by` reports every one rather than whichever the backend paged first.
-        collision = collisions[0] if collisions else None
+        collision = collisions[0][0] if collisions else None
         if collision is not None:
             return Refusal(
                 "alias_collision",
@@ -3712,7 +3712,7 @@ class AsyncRegistry:
                     "type": type,
                     "aliases": list(dormant),
                     "held_by": collision,
-                    "held_by_all": list(collisions),
+                    "held_by_all": [n for n, _k in collisions],
                     "why": (
                         f"{collision!r} is an active entry that already answers to "
                         f"{rec.name!r} or to one of the aliases this row would "
@@ -4426,24 +4426,51 @@ class AsyncRegistry:
         # NON-OVERRIDABLY. A non-overridable identity guard whose answer is a function of
         # sort order is R58's own class (*a guard never reads a page*) arriving in the
         # file built to enumerate these guards.
-        blocking = tuple(h for h in holders if not same_word(h, left.name))
+        # **THE TWENTY-SECOND TRIP: the escape excused a STRANGER** (row 6d, round 2;
+        # ruling R93). It read `not same_word(h, left.name)` -- keyed by WORD -- on the
+        # stated ground that *"a holder that is merely another spelling of `left.name` is
+        # `left` itself under a different skin."* **`PACKAGE.md` 4.1 BLESSES one word
+        # under two kinds**, so it need not be: `alpha_`(entity) beside `alpha`(predicate)
+        # is TWO ROWS, and excusing the entity let `beta` take the word while the entity
+        # kept it. **[Observed]** both answered `alpha` at confidence 1.0, and the alias
+        # door refused the identical write `kind_mismatch` NON-OVERRIDABLY in the same
+        # store. Reproduces on sqlite, postgres and the async mirror; not on
+        # `sqlite_minimal`, where empty extents refuse it first.
+        #
+        # **Change 2 fixed WHICH holders are examined and never asked WHAT excuses one.**
+        # The escape now excuses exactly `left` -- same name, same kind, the row this
+        # merge is retiring -- and nothing else. Exact rather than keyed **on purpose**:
+        # a row whose name is a variant spelling of `left.name` is a DIFFERENT ROW, and
+        # the only row a merge may excuse is the one it is consuming.
+        blocking = tuple(
+            (n, k) for n, k in holders if not (n == left.name and k == left.kind)
+        )
         if blocking:
             return Refusal(
                 "alias_collision",
                 {
                     "from": from_,
                     "into": into,
-                    "holder": blocking[0],
-                    # Every holder, so the detail cannot depend on page order either --
-                    # a caller reading `holder` alone gets a stable answer because the
-                    # SET decided the verdict before the first element was chosen.
-                    "holders": list(blocking),
-                    "excused": [h for h in holders if same_word(h, left.name)],
+                    "holder": blocking[0][0],
+                    # **Findings G6 and A15, and this comment WAS the finding.** It
+                    # used to argue that the detail could not depend on page order
+                    # *because the SET decided the verdict before the first element was
+                    # chosen* -- which is true of the VERDICT and says nothing about
+                    # `holder`, `holders` or `held_by`. **[Observed]**: those three took
+                    # different values across page orders of ONE store. A guard that
+                    # answers the same and SAYS something different is the EIGHTEENTH
+                    # trip one field along. What makes them stable is that
+                    # `_alias_clash` now returns its holders SORTED -- at the source, so
+                    # every caller gets it -- and `C10-26` pins it.
+                    "holders": [n for n, _k in blocking],
+                    "excused": [
+                        n for n, k in holders if n == left.name and k == left.kind
+                    ],
                     "words": list(moving),
                     "overridable": False,
                     "why": (
                         f"merging {from_!r} into {into!r} would write "
-                        f"{list(moving)} onto {into!r}, and {list(blocking)} "
+                        f"{list(moving)} onto {into!r}, and {[n for n, _k in blocking]} "
                         f"already answer to one of those words as ACTIVE entries -- two "
                         f"live entries with one word between them is INTERFACE.md 5.9b's "
                         f"`alias_collision` and `C16-06`'s whole-store invariant, at the "
@@ -5087,7 +5114,7 @@ class AsyncRegistry:
                 # order can excuse one. `_alias_clash`'s set changes nothing here and
                 # that is the point -- the SEVENTEENTH trip needed a caller with an
                 # ESCAPE, and this caller has none.
-                clash = clashes[0] if clashes else None
+                clash = clashes[0][0] if clashes else None
                 if clash is None and clash_why is not None:
                     extra_import_warnings.append("alias_check_incomplete:" + clash_why)
                 if clash is not None:
@@ -7817,7 +7844,8 @@ class AsyncRegistry:
     ) -> tuple[tuple[str, ...], str | None]:
         """EVERY ACTIVE entry that answers to one of these words, or to ``name``.
 
-        ``(holders, why the look did not finish)``. Keyed by `identity_key` and carrying
+        ``(holders, why the look did not finish)``, where each holder is ``(name, kind)``
+        and the tuple is **sorted** -- see the note at the return. Keyed by `identity_key` and carrying
         the page's `why`, for the two reasons row 4d records at :meth:`_alias_holder`:
         the seventh trip, and Rule U's third operand.
 
@@ -7851,7 +7879,7 @@ class AsyncRegistry:
         """
         records, why = await self._active_page(namespace)
         words = tuple(aliases) + (name,)
-        holders: list[str] = []
+        holders: list[tuple[str, str]] = []
         for other in records:
             # Exact self-skip, for `_alias_holder`'s reason.
             if other.name == name and other.kind == kind:
@@ -7865,9 +7893,15 @@ class AsyncRegistry:
             # that answers twice -- once by its name and once by an alias -- is one
             # holder, and reporting it twice would make a caller's count disagree with
             # the store's. `C16-06`'s invariant is about rows, not about matches.
-            if hit and other.name not in holders:
-                holders.append(other.name)
-        return tuple(holders), why
+            if hit and (other.name, other.kind) not in holders:
+                holders.append((other.name, other.kind))
+        # **SORTED, and returning them in scan order was findings G6 and A15.** Change 2
+        # made the VERDICT independent of page order and left the DETAIL in the order the
+        # backend happened to page -- so `holder`, `holders` and `held_by` took different
+        # values across 120 orders of one store, at the door whose own comment asserts
+        # *"the detail cannot depend on page order either."* A guard that answers the same
+        # and SAYS something different is the seventeenth trip one field along.
+        return tuple(sorted(holders)), why
 
     def _refused_import(
         self,

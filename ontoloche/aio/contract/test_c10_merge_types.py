@@ -1302,3 +1302,95 @@ async def test_c10_24_merge_states_a_skipped_identity_guard_too(adapter, make_re
         "door does -- standing rule (d), the doors a rule binds",
         merged.warnings,
     )
+
+async def test_c10_25_the_escape_excuses_only_left_itself(adapter, make_registry):
+    """**The kill row's TWENTY-SECOND trip.** Row 6d, round 2; countersigned by **R93**.
+
+    `merge_types`' escape read `not same_word(h, left.name)` — keyed by **word** — on the
+    stated ground that *"a holder that is merely another spelling of `left.name` is `left`
+    itself under a different skin."* **`PACKAGE.md` §4.1 blesses one word under two
+    kinds**, so it need not be: `alpha_`(entity) beside `alpha`(predicate) is **two rows**,
+    and excusing the entity let `beta` take the word while the entity kept it — both
+    answering at **1.0**, while the alias door refused the identical write `kind_mismatch`
+    **non-overridably** in the same store.
+
+    Change 2 fixed *which* holders are examined and never asked *what excuses one*. The
+    escape now excuses exactly `left` — same name, same kind — and **exact rather than
+    keyed on purpose**: a row whose name is a variant spelling of `left.name` is a
+    DIFFERENT ROW, and the only row a merge may excuse is the one it is consuming.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "alpha", kind="predicate", definition="a capability")
+    # §4.1 blesses this: `_alias_holder` gates its name side on `other.kind == kind`.
+    await seed(registry, "alpha_", kind="entity", definition="a thing")
+    await seed(registry, "beta", kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["alpha", "beta"])
+
+    # CONTROL: the alias door refuses this exact write, non-overridably.
+    control = await registry.import_types(
+        [{"name": "beta", "kind": "predicate", "definition": "a capability",
+          "aliases": ["alpha"], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+    assert any(
+        w.startswith("import_refused:") for w in (control[0].warnings or ())
+    ), control[0].warnings
+
+    out = await registry.merge_types(
+        "alpha", "beta", "one and the same", merged_by="user:sd",
+        acknowledge=("definitions_diverge", "no_consumer_evidence"),
+    )
+    assert isinstance(out, Refusal), (
+        "the entity `alpha_` is a STRANGER, not `left` under a different skin", out
+    )
+    if out.reason != "alias_collision":
+        # NOT REACHABLE, never a pass -- axis 13's lesson, one field along. The alias
+        # door is the THIRD identity guard; where `indexes_membership` is False the
+        # extents are UNKNOWABLE, `predicate_merge` fires first by
+        # `IDENTITY_GUARD_ORDER`, and this cell never gets asked. That is Rule U doing
+        # its job, not this trip passing: the kill row recorded the same asymmetry
+        # ("reproduces on sqlite, postgres and the async mirror; NOT on
+        # `sqlite_minimal`"). The refusal above still binds on every leg.
+        assert registry.caps.indexes_membership is False, (
+            "an earlier guard fired on a backend that CAN read extents -- that is a "
+            "finding, not a capability", out.reason,
+        )
+        assert out.reason == "predicate_merge", out.reason
+        pytest.skip(
+            "NOT REACHABLE: indexes_membership=False makes both extents unknowable, so "
+            f"`{out.reason}` refuses before the alias door is consulted"
+        )
+    assert out.detail["overridable"] is False
+
+async def test_c10_26_the_refusal_detail_does_not_depend_on_page_order(
+    adapter, make_registry
+):
+    """**Findings G6 and A15.** Change 2 made the VERDICT order-independent and left the
+    DETAIL in scan order.
+
+    `PACKAGE.md` §3.3 guarantees **no ordering**, so `holder`, `holders` and `held_by` took
+    different values across page orders of one store — at the door whose own comment
+    asserts *"Every holder, so the detail cannot depend on page order either."* **A guard
+    that answers the same and SAYS something different is the seventeenth trip one field
+    along**, and the axis built for page order compares verdicts and never a detail.
+    """
+    seen = set()
+    for i, order in enumerate((("delta", "epsilon"), ("epsilon", "delta"))):
+        ns = f"order{i}"
+        ordered = await make_registry(
+            OrderedAdapter(adapter, by_name_order(order)), approval_policy="auto"
+        )
+        for name in ("beta", "delta", "epsilon"):
+            await seed(ordered, name, kind="predicate", definition="a capability", namespace=ns)
+        for name in ("delta", "epsilon"):
+            live = await adapter.get_type(ns, name, kind="predicate")
+            if live is None:
+                pytest.skip("this backend did not write the fixture rows")
+            await adapter.put_type(TypeRecord(**{**live.__dict__, "aliases": ("zeta",)}))
+        holders, _why = await ordered._alias_clash(ns, "beta", "predicate", ("zeta",))
+        seen.add(tuple(holders))
+
+    assert len(seen) == 1, (
+        "the holder set a caller is shown must not depend on which row the backend "
+        "paged first -- PACKAGE.md 3.3 guarantees no ordering at all", seen,
+    )
