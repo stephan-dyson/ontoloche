@@ -3559,11 +3559,15 @@ class AsyncRegistry:
         # `_alias_clash`'s `wanted` set, so the dormant-free case is exactly what it
         # covers. **[Observed]** in four ordinary calls: `propose`, `retire`, `import`
         # with a variant-spelled alias, `reinstate` -> two live rows, one word.
-        collision, collision_why = await self._alias_clash(
+        collisions, collision_why = await self._alias_clash(
             namespace, rec.name, rec.kind, dormant
         )
         if collision_why is not None:
             alias_warnings.append("alias_check_incomplete:" + collision_why)
+        # This door refuses on ANY holder, so the set and the first match give the same
+        # verdict here -- it is named rather than indexed so a reader can see that, and
+        # `held_by` reports every one rather than whichever the backend paged first.
+        collision = collisions[0] if collisions else None
         if collision is not None:
             return Refusal(
                 "alias_collision",
@@ -3571,6 +3575,7 @@ class AsyncRegistry:
                     "type": type,
                     "aliases": list(dormant),
                     "held_by": collision,
+                    "held_by_all": list(collisions),
                     "why": (
                         f"{collision!r} is an active entry that already answers to "
                         f"{rec.name!r} or to one of the aliases this row would "
@@ -4187,26 +4192,59 @@ class AsyncRegistry:
         # register's most-counted sentence.
         merge_warnings: list[str] = []
         moving = tuple(a for a in (left.name,) + tuple(left.aliases) if a)
-        holder, clash_why = await self._alias_clash(target_ns, right.name, right.kind, moving)
-        if holder is not None and not same_word(holder, left.name):
+        holders, clash_why = await self._alias_clash(target_ns, right.name, right.kind, moving)
+        # **The escape is evaluated over the WHOLE SET, and evaluating it over the first
+        # match was the kill row's SEVENTEENTH trip** (row 6d, round 1; ruling R92, and
+        # the question ruling R80 put first in this row's lens as Q82).
+        #
+        # `left` is about to become a tombstone whose words move onto `right`, so a
+        # holder that is merely another spelling of `left.name` is `left` itself under a
+        # different skin and excusing it is correct. What was NOT correct is asking that
+        # of **one** holder: `_alias_clash` returned whichever row the backend paged
+        # first, `PACKAGE.md` §3.3 guarantees no ordering, and a page that happened to
+        # put such a row first hid a genuine third holder behind it.
+        #
+        # **[Observed]** all 120 page orders of one five-row store: **60 refused, 60
+        # swallowed**, and the swallowed half left two ACTIVE rows answering to one word
+        # with `resolve_type` at 1.0 -- on a pair this same call refuses `predicate_merge`
+        # NON-OVERRIDABLY. A non-overridable identity guard whose answer is a function of
+        # sort order is R58's own class (*a guard never reads a page*) arriving in the
+        # file built to enumerate these guards.
+        blocking = tuple(h for h in holders if not same_word(h, left.name))
+        if blocking:
             return Refusal(
                 "alias_collision",
                 {
                     "from": from_,
                     "into": into,
-                    "holder": holder,
+                    "holder": blocking[0],
+                    # Every holder, so the detail cannot depend on page order either --
+                    # a caller reading `holder` alone gets a stable answer because the
+                    # SET decided the verdict before the first element was chosen.
+                    "holders": list(blocking),
+                    "excused": [h for h in holders if same_word(h, left.name)],
                     "words": list(moving),
                     "overridable": False,
                     "why": (
                         f"merging {from_!r} into {into!r} would write "
-                        f"{list(moving)} onto {into!r}, and {holder!r} is an ACTIVE "
-                        f"entry that already answers to one of those words -- two live "
-                        f"entries with one word between them is INTERFACE.md 5.9b's "
+                        f"{list(moving)} onto {into!r}, and {list(blocking)} "
+                        f"already answer to one of those words as ACTIVE entries -- two "
+                        f"live entries with one word between them is INTERFACE.md 5.9b's "
                         f"`alias_collision` and `C16-06`'s whole-store invariant, at the "
                         f"fifth write door and the kill row's THIRTEENTH trip"
                     ),
                 },
             )
+        if clash_why is not None:
+            # **The EIGHTEENTH trip: this binding existed and was never read.** The
+            # comment above says *"it warns and proceeds"* and, until row 6d, it did
+            # neither -- `alias_check_incomplete` appeared ZERO times in this method, so
+            # a merge over a scan that finished and a merge over one that was cut short
+            # were byte-identical to the caller, and the short one proceeded to two live
+            # holders and a confidence-1.0 answer. Rule U on the LOOK: reported, never
+            # refused on, because refusing on a short page bans `merge_types` on every
+            # paging backend -- `C10-09`'s lesson, `C3-13`'s and `C12-13`'s.
+            merge_warnings.append("alias_check_incomplete:collision scan: " + clash_why)
 
         # **The RETIRED holder of a word this merge MOVES** -- the transfer half of the
         # FIFTEENTH and SIXTEENTH trips (row 6d, round 1; ruling R91). `_alias_clash`
@@ -4245,7 +4283,14 @@ class AsyncRegistry:
                 },
             )
         if tomb_why is not None:
-            merge_warnings.append("alias_check_incomplete:" + tomb_why)
+            # **The detail NAMES THE SCAN, because this door now runs two of them** and
+            # a caller told only *"a look did not finish"* cannot tell which fact is
+            # unknown -- whether a live row might hold one of these words, or whether a
+            # tombstone might. One value for two facts is INTERFACE.md 2.3's Cause B, and
+            # this register has minted a separate value for exactly that three times; the
+            # cheaper answer here is one value with a detail that says which, which is how
+            # `word_previously_retired:<holder>` already works.
+            merge_warnings.append("alias_check_incomplete:tombstone scan: " + tomb_why)
 
         # An acknowledgement that cannot be recorded is refused -- but only AFTER the
         # **FIVE** non-overridable guards above. *(Four until the kill row's THIRTEENTH
@@ -4738,9 +4783,14 @@ class AsyncRegistry:
                         )
                     )
                     continue
-                clash, clash_why = await self._alias_clash(
+                clashes, clash_why = await self._alias_clash(
                     namespace, name, row.get("kind", kind), incoming
                 )
+                # As at `reinstate`: this door refuses on any holder at all, so no page
+                # order can excuse one. `_alias_clash`'s set changes nothing here and
+                # that is the point -- the SEVENTEENTH trip needed a caller with an
+                # ESCAPE, and this caller has none.
+                clash = clashes[0] if clashes else None
                 if clash is None and clash_why is not None:
                     extra_import_warnings.append("alias_check_incomplete:" + clash_why)
                 if clash is not None:
@@ -7402,28 +7452,60 @@ class AsyncRegistry:
 
     async def _alias_clash(
         self, namespace: str, name: str, kind: str, aliases: Sequence[str]
-    ) -> tuple[str | None, str | None]:
-        """An ACTIVE entry that already answers to one of these words, or to ``name``.
+    ) -> tuple[tuple[str, ...], str | None]:
+        """EVERY ACTIVE entry that answers to one of these words, or to ``name``.
 
-        ``(holder, why the look did not finish)``. Keyed by `identity_key` and carrying
+        ``(holders, why the look did not finish)``. Keyed by `identity_key` and carrying
         the page's `why`, for the two reasons row 4d records at :meth:`_alias_holder`:
         the seventh trip, and Rule U's third operand.
+
+        **`why is not None` means the answer is `unknowable`, NOT "no holders".** A
+        caller that reads an empty tuple without reading the `why` beside it is reading a
+        scan that did not finish as *the word is free* -- which is the FIFTH trip's
+        operand, and it is how this function shipped until row 6d.
+
+        **The SET, not the first match, and the kill row's SEVENTEENTH trip is why**
+        (row 6d, round 1; ruling **R92**). This returned `other.name` from inside the
+        loop, so it answered with **whichever holder the backend happened to page
+        first** -- and `PACKAGE.md` §3.3 guarantees no ordering at all. On its own that
+        is merely arbitrary. It became a trip because :meth:`merge_types` has an ESCAPE:
+        it excuses a holder that is another spelling of ``left.name``, so a page whose
+        first match was such a row hid a genuine third holder behind it and the
+        non-overridable guard was swallowed. **[Observed]** over all 120 page orders of
+        one five-row store: **60 refused, 60 swallowed**, two ACTIVE rows left answering
+        to one word and `resolve_type` at confidence 1.0 on a pair the same registry
+        refuses `predicate_merge` non-overridably.
+
+        > **The defect was never *"it returns the first"*; it was *"it returns the first
+        > AND a caller has an escape clause."*** :meth:`_alias_holder` also returns one
+        > holder and is NOT a trip, because every one of its callers refuses on any
+        > holder at all -- there is nothing for an unlucky page order to excuse. That
+        > distinction is why this change touches this function and not that one.
+
+        Ruling **R80** put this question first in row 6d's kill-row lens and offered two
+        discharges -- construct the state, or prove the doors refuse it. The first was
+        achieved, so Q82 stopped being the register's carried-forward suspicion and
+        became a state.
         """
         records, why = await self._active_page(namespace)
         words = tuple(aliases) + (name,)
+        holders: list[str] = []
         for other in records:
             # Exact self-skip, for `_alias_holder`'s reason.
             if other.name == name and other.kind == kind:
                 continue
-            if any(same_word(other.name, word) for word in words):
-                return other.name, None
-            if any(
+            hit = any(same_word(other.name, word) for word in words) or any(
                 same_word(alias, word)
                 for alias in (other.aliases or ())
                 for word in words
-            ):
-                return other.name, None
-        return None, why
+            )
+            # **Every holder, and de-duplicated by NAME rather than by identity.** A row
+            # that answers twice -- once by its name and once by an alias -- is one
+            # holder, and reporting it twice would make a caller's count disagree with
+            # the store's. `C16-06`'s invariant is about rows, not about matches.
+            if hit and other.name not in holders:
+                holders.append(other.name)
+        return tuple(holders), why
 
     def _refused_import(
         self,

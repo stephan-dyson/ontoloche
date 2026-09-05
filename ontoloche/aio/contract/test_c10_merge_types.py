@@ -21,7 +21,8 @@ import pytest
 from ontoloche.aio.adapter import TypeRecord
 from ontoloche.types import Consumer, Evidence, MergeResult, Refusal, ResolveContext, TypeEntry
 from ontoloche.aio.contract._support import seed
-from ontoloche.aio.contract.doubles import AsyncDegradedAdapter
+from ontoloche._resolve import same_word
+from ontoloche.aio.contract.doubles import AsyncDegradedAdapter, OrderedAdapter, by_name_order
 
 
 NO_EVENTS = {"stores_events": "work_link_types has no event table"}
@@ -1126,3 +1127,138 @@ async def test_c10_21_the_word_move_refuses_a_word_a_tombstone_answers_to(
         "the word move must not spend a word a tombstone still answers to"
     )
     assert ((await adapter.get_type("default", "gamma", kind="predicate"))).status == "active"
+
+@pytest.mark.requires_capability("indexes_membership")
+async def test_c10_22_a_truncated_collision_scan_is_reported_not_silent(adapter, make_registry):
+    """**The kill row's EIGHTEENTH trip.** Row 6d, round 1; countersigned by **R92**.
+
+    `merge_types` bound `_alias_clash`'s `why` and never read it. The comment above the
+    call said *"it warns and proceeds"* and it did **neither**: `alias_check_incomplete`
+    appeared **zero** times in the method, so a merge over a scan that finished and a
+    merge over one the backend cut short were **byte-identical to the caller** — and the
+    short one proceeded to two live holders and a confidence-1.0 answer.
+
+    It is the FIFTH trip's operand — *partial is not equal* — un-applied to a guard the
+    THIRTEENTH trip's fix added. `_alias_clash` did not exist when trip 5 closed that
+    operand at `_extent`'s three callers, so it inherited the rule's exemption rather
+    than the rule: **rule (d) by number, in R84's clause in its purest form.**
+
+    Rule U on the LOOK and never on its result: the merge is **not** refused on a short
+    page — that would ban `merge_types` on every paging backend, which is `C10-09`'s
+    lesson, `C3-13`'s and `C12-13`'s — it is reported.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    for name in ("gamma", "beta"):
+        await seed(registry, name, kind="predicate", definition="a capability")
+    await seed(registry, "aaa_note", predicates=["gamma", "beta"])
+
+    # A backend that caps an unlimited query: PACKAGE.md 3.3 permits it and UC3's scale
+    # produces it. The collision scan cannot finish, and that is the whole subject.
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=2), approval_policy="auto")
+    words, why = await capped._alias_clash("default", "beta", "predicate", ("gamma",))
+    if why is None:
+        pytest.skip("this backend answered the scan in full, so there is no `why` to drop")
+
+    out = await capped.merge_types(
+        "gamma", "beta", "one and the same", merged_by="user:sd",
+        acknowledge=("definitions_diverge", "no_consumer_evidence"),
+    )
+    if isinstance(out, Refusal):
+        pytest.skip(f"this backend refuses the merge for another reason ({out.reason})")
+    # **The COLLISION scan specifically**, and asserting only the value was this id's own
+    # first defect: this door runs TWO scans that can each fail to finish, and change 1's
+    # tombstone scan already emitted `alias_check_incomplete` -- so a test asserting the
+    # bare value passed with `clash_why` still dropped, and the mutation SURVIVED. The
+    # detail now names the scan, and this asserts the one this id is about.
+    assert any(
+        w.startswith("alias_check_incomplete:collision scan:")
+        for w in (out.warnings or ())
+    ), (
+        "a merge over a COLLISION scan that could not finish must say so -- Rule U on "
+        "the LOOK, and it must say WHICH look",
+        out.warnings,
+    )
+    assert words == () or words, words
+
+async def test_c10_23_the_escape_is_evaluated_over_the_whole_holder_set(adapter, make_registry):
+    """**The kill row's SEVENTEENTH trip — ruling R80's Q82, constructed.** Row 6d; R92.
+
+    `merge_types` excuses a holder that is another spelling of `left.name`, because
+    `left` is about to become a tombstone whose words move onto `right`. That is correct.
+    What was not correct is asking it of **one** holder: `_alias_clash` returned whichever
+    row the backend paged first, `PACKAGE.md` §3.3 guarantees **no ordering at all**, and
+    a page whose first match was an excused row hid a genuine holder behind it.
+
+    **[Observed]** over all 120 page orders of one five-row store: **60 refused, 60
+    swallowed**, the swallowed half leaving two ACTIVE rows answering to one word with
+    `resolve_type` at 1.0 — on a pair this same call refuses `predicate_merge`
+    **non-overridably**. A non-overridable identity guard whose answer is a function of
+    sort order is R58's own class, *a guard never reads a page*.
+
+    `OrderedAdapter` is a **legal** backend: §3.3 guarantees no ordering, so a backend
+    free to page its rows in any order is conformant.
+    """
+    verdicts = set()
+    # **A distinct namespace per order**, because the two runs share one adapter and a
+    # store left dirty by the first would decide the second. The first cut did not do
+    # this and the second order ran against a spent fixture.
+    for i, order in enumerate(
+        (
+            ("aaa_note", "beta", "delta", "gamma_"),
+            ("aaa_note", "beta", "gamma_", "delta"),
+        )
+    ):
+        ns = f"order{i}"
+        ordered = await make_registry(
+            OrderedAdapter(adapter, by_name_order(order)), approval_policy="auto"
+        )
+        for name in ("gamma", "beta", "delta"):
+            await seed(ordered, name, kind="predicate", definition="a capability", namespace=ns)
+        await seed(
+            ordered, "aaa_note", predicates=["gamma", "beta", "delta"], namespace=ns
+        )
+        written = await ordered.import_types(
+            [{"name": "gamma", "kind": "predicate", "definition": "a capability",
+              "aliases": ["zeta"], "status": "active"}],
+            namespace=ns, kind="predicate",
+        )
+        if not written or "zeta" not in (written[0].aliases or ()):
+            pytest.skip("this backend did not keep the alias the fixture is built on")
+        # **The escape-firer is minted AFTER the alias write and BEFORE the retirement,
+        # and both halves of that sentence are fixture defects this test already made
+        # once.** Before the write, `gamma_` is a live row answering to `gamma`, so the
+        # import is refused `alias_collision` and the fixture never exists. After the
+        # retirement, `gamma_` is the tombstone's word by `identity_key` and the mint
+        # door hands back the holder (`C4-16`) -- so it is never created and
+        # `_alias_clash` returns ONE holder in every order, which reports a reverted
+        # guard as sound. **A fixture that cannot build its own subject reports the guard
+        # as sound**, and this id is the second place row 6d has had to write that down.
+        await seed(ordered, "gamma_", kind="entity", definition="the escape firer", namespace=ns)
+        gone = await ordered.retire(
+            "gamma", "no longer used", retired_by="user:sd", namespace=ns, force=True
+        )
+        if isinstance(gone, Refusal):
+            pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+        live = await adapter.get_type(ns, "delta", kind="predicate")
+        assert live is not None
+        await adapter.put_type(TypeRecord(**{**live.__dict__, "aliases": ("zeta",)}))
+
+        out = await ordered.merge_types(
+            "gamma", "beta", "one and the same", merged_by="user:sd", namespace=ns,
+            acknowledge=("definitions_diverge", "no_consumer_evidence", "retired_operand"),
+        )
+        verdicts.add(out.reason if isinstance(out, Refusal) else "MERGED")
+        holders = [
+            t.name
+            for t in (await ordered.list_types("predicate", namespace=ns)).types
+            if same_word(t.name, "zeta")
+            or any(same_word(a, "zeta") for a in (t.aliases or ()))
+        ]
+        assert len(holders) <= 1, (
+            "two ACTIVE rows answering to one word -- C16-06 and mechanism 4", holders
+        )
+
+    assert len(verdicts) == 1, (
+        "a non-overridable identity guard answered differently depending on which row "
+        "the backend paged first", verdicts,
+    )

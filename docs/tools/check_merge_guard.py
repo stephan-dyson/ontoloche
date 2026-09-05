@@ -97,6 +97,7 @@ nobody notices is missing.
 from __future__ import annotations
 
 import ast
+import itertools
 import os
 import sys
 import tempfile
@@ -111,8 +112,12 @@ sys.path.insert(0, str(ROOT))
 from ontoloche import Registry  # noqa: E402
 from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
 from ontoloche.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
-from ontoloche.contract.doubles import DegradedAdapter  # noqa: E402
-from ontoloche._resolve import _norm, identity_key  # noqa: E402
+from ontoloche.contract.doubles import (  # noqa: E402
+    DegradedAdapter,
+    OrderedAdapter,
+    by_name_order,
+)
+from ontoloche._resolve import _norm, identity_key, same_word  # noqa: E402
 from ontoloche.registry import NAME_RE  # noqa: E402
 from ontoloche.policy import NamespacePolicy  # noqa: E402
 from ontoloche.types import (  # noqa: E402
@@ -3009,6 +3014,189 @@ def check_tombstone_cells() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ======================================================================== axis 12
+# **PAGE ORDER. The kill row's SEVENTEENTH trip, and this file could not pose it.**
+# Row 6d, round 1; ruling **R92**, and the question ruling **R80** put FIRST in this
+# row's kill-row lens as **Q82** -- the register's only carried-forward suspicion until
+# it was constructed.
+#
+# **Why it was unfalsifiable here, countably.** Before this axis, a grep of this file for
+# `reversed(`, `shuffle` or `itertools.permutations` returned **0**. Every fixture in
+# every axis read its backend's NATURAL order, so a guard whose answer is a function of
+# page order could not be failed by any of them -- in the file built to enumerate exactly
+# these guards. That is R58's own class, *a guard never reads a page*, and it is the
+# sharpest form of this checker's recurring indictment: not *a question its fixtures
+# could not pose*, but **a question its fixtures could not pose in principle.**
+#
+# **What the axis drives.** `merge_types` is the one collapsing caller with an ESCAPE --
+# it excuses a holder that is another spelling of `left.name` -- so it is the only door
+# where an unlucky page can hide a genuine holder behind an excused one. Every
+# permutation of the store's active rows is driven and the verdict must be IDENTICAL in
+# all of them. **[Observed before the fix]** 60 of 120 orders refused and 60 were
+# swallowed; the swallowed half left two ACTIVE rows on one word with `resolve_type` at
+# confidence 1.0.
+#
+# `OrderedAdapter` is a LEGAL backend: PACKAGE.md 3.3 guarantees no ordering, so a
+# backend free to page its rows in any order is conformant. The double exercises that
+# freedom rather than breaking a rule.
+
+
+def _holders_of(registry: Registry, word: str) -> list[str]:
+    """Every ACTIVE row answering to ``word`` -- `C16-06`'s invariant, read directly."""
+    out = []
+    for entry in registry.list_types("predicate", include_retired=False).types:
+        if same_word(entry.name, word) or any(
+            same_word(a, word) for a in (entry.aliases or ())
+        ):
+            out.append(entry.name)
+    return out
+
+
+def _page_order_store(registry: Registry) -> str | None:
+    """The SEVENTEENTH trip's fixture: a moving word, an escape-firer, and a holder.
+
+    `gamma`, `beta` and `delta` are predicates with identical non-empty extents, so
+    5.10's refusal #2 passes honestly throughout and this is not a #2 evasion.
+    """
+    for name in ("gamma", "beta", "delta"):
+        _seed(registry, name, kind="predicate", definition="a capability")
+    _seed(registry, "aaa_note", predicates=["gamma", "beta", "delta"])
+    written = registry.import_types(
+        [{"name": "gamma", "kind": "predicate", "definition": "a capability",
+          "aliases": ["zeta"], "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+    if not written or "zeta" not in (written[0].aliases or ()):
+        return _NOT_REACHABLE + "this backend did not keep the alias the fixture needs"
+    # **`gamma_` is minted BEFORE the retirement, and finding out why is change 1
+    # working.** `same_word("gamma_", "gamma")` is True, so once `gamma` is a tombstone
+    # the mint doors hand back the holder with `word_previously_retired` and write
+    # nothing -- change 1's own cross-kind fix. The first cut of this axis seeded the
+    # escape-firer AFTER the retirement, so it was never created, `_alias_clash` returned
+    # one holder in every order, and the axis reported `held` for 24 permutations while a
+    # REVERTED guard survived. **A fixture that cannot build its own subject reports the
+    # guard as sound**, which is this file's recurring finding pointed at itself.
+    _seed(registry, "gamma_", kind="entity", definition="the escape firer")
+    # **`gamma` is RETIRED with NO successor -- an ordinary, permitted governance act**,
+    # and INTERFACE.md 5.8 keeps the tombstone's words. That is what makes `zeta` a word
+    # the merge MOVES rather than one it already owns, and leaving this step out was this
+    # axis's own first defect: without it the store starts with TWO active holders and
+    # the invariant below cannot tell a swallowed merge from the fixture.
+    gone = registry.retire("gamma", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire the holder ({gone.reason})"
+    # `delta` is a GENUINE holder of the moving word, seeded below the doors because the
+    # shipped doors refuse to build it -- see `check_tombstone_cells` for why that is the
+    # fix working rather than a gap.
+    live = registry.adapter.get_type("default", "delta", kind="predicate")
+    if live is None:
+        return _NOT_REACHABLE + "delta was not written"
+    registry.adapter.put_type(type(live)(**{**live.__dict__, "aliases": ("zeta",)}))
+    return None
+
+
+def check_page_order() -> tuple[list[str], list[str], list[str]]:
+    """Axis 12 -- every page order of one store must give one verdict."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    #: `gamma_` is the ESCAPE-FIRER. If the guard reads ONE holder, a page that puts it
+    #: first hides `delta`, which genuinely holds the moving word.
+    rows = ("aaa_note", "beta", "delta", "gamma_")
+
+    for leg, build, _knowable in _legs():
+        if leg != "sqlite":
+            # One leg is enough, and more is wasteful: page order is decided by the
+            # DOUBLE, not by the backend under it. Driving every permutation on three
+            # legs would open three times the connections to prove one thing three
+            # times, and the connection ceiling this file reached in row 6d is why that
+            # sentence is here rather than learned again.
+            continue
+        verdicts: dict[str, int] = {}
+        holders_after: set[int] = set()
+        blocked: str | None = None
+        for order in itertools.permutations(rows):
+            registry = build()
+            registry.adapter = OrderedAdapter(registry.adapter, by_name_order(order))
+            built = _page_order_store(registry)
+            if built is not None:
+                blocked = built[len(_NOT_REACHABLE):]
+                _release(registry)
+                break
+            out = registry.merge_types(
+                "gamma", "beta", "one and the same", merged_by="user:sd",
+                acknowledge=(
+                    "definitions_diverge", "no_consumer_evidence", "retired_operand",
+                ),
+            )
+            verdict = out.reason if isinstance(out, Refusal) else "MERGED"
+            verdicts[verdict] = verdicts.get(verdict, 0) + 1
+            holders_after.add(len(_holders_of(registry, "zeta")))
+            _release(registry)
+        if blocked is not None:
+            unreachable.append(f"{leg} / page order: {blocked}")
+            lines.append(
+                f"  {leg:15s} {'merge_types':17s} {'page order':24s} NOT REACHABLE"
+            )
+        elif len(verdicts) > 1 or (holders_after - {1}):
+            problems.append(
+                f"{leg} / page order: this guard's answer is a FUNCTION OF SORT ORDER "
+                f"-- {sorted(verdicts.items())} over {sum(verdicts.values())} "
+                f"permutations of ONE store, leaving {sorted(holders_after)} active "
+                f"holders of one word. A non-overridable identity guard that answers "
+                f"differently depending on which row the backend paged first is R58's "
+                f"own class, and PACKAGE.md 3.3 guarantees no ordering at all"
+            )
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'page order':24s} FAILED")
+        else:
+            label = "page order (%d perms)" % sum(verdicts.values())
+            lines.append(f"  {leg:15s} {'merge_types':17s} {label:24s} held")
+
+        # **The TRUNCATION half, in the same axis because it is the same sentence.** The
+        # EIGHTEENTH trip is `merge_types` binding `_alias_clash`'s `why` and never
+        # reading it: `alias_check_incomplete` appeared ZERO times in the method, so a
+        # merge over a scan the backend cut short was byte-identical to one over a scan
+        # that finished. Rule U on the LOOK -- reported, never refused on.
+        registry = build()
+        registry.adapter = DegradedAdapter(registry.adapter, page_cap=2)
+        built = _page_order_store(registry)
+        if built is not None:
+            unreachable.append(f"{leg} / truncated collision scan: " + built[len(_NOT_REACHABLE):])
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'truncated scan':24s} NOT REACHABLE")
+            _release(registry)
+            continue
+        _holders, why = registry._alias_clash("default", "beta", "predicate", ("gamma", "zeta"))
+        out = registry.merge_types(
+            "gamma", "beta", "one and the same", merged_by="user:sd",
+            acknowledge=("definitions_diverge", "no_consumer_evidence", "retired_operand"),
+        )
+        said = [
+            w for w in (getattr(out, "warnings", None) or ())
+            if w.startswith("alias_check_incomplete:collision scan:")
+        ]
+        _release(registry)
+        if why is not None and not isinstance(out, Refusal) and not said:
+            problems.append(
+                f"{leg} / truncated collision scan: `_alias_clash` could not finish "
+                f"({why!r}) and `merge_types` said NOTHING -- a merge over a scan that "
+                f"was cut short is byte-identical to one over a scan that finished, and "
+                f"the caller cannot tell. That is the FIFTH trip's operand at a guard "
+                f"the THIRTEENTH trip's fix added"
+            )
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'truncated scan':24s} FAILED")
+        elif why is None:
+            unreachable.append(
+                f"{leg} / truncated collision scan: this backend answered the scan in "
+                f"full, so there is no `why` to drop"
+            )
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'truncated scan':24s} NOT REACHABLE")
+        else:
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'truncated scan':24s} held")
+
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -3096,6 +3284,12 @@ def main() -> int:
             "  and THE 2x2x2 -- the kill row's FIFTEENTH and SIXTEENTH trips: axis ten "
             "drove ONE of its eight cells:",
             check_tombstone_cells,
+        ),
+        (
+            "  and PAGE ORDER -- the kill row's SEVENTEENTH trip: a "
+            "non-overridable guard whose answer depended on which row the backend "
+            "paged first:",
+            check_page_order,
         ),
     ):
         print()
