@@ -1238,3 +1238,49 @@ async def test_c12_25_a_field_this_call_ignores_is_stated(adapter, make_registry
     assert not any(
         w.startswith("import_field_ignored") for w in (quiet[0].warnings or ())
     ), quiet[0].warnings
+
+async def test_c12_26_the_import_name_door_holds_the_byte_identical_tombstone(
+    adapter, make_registry
+):
+    """**The kill row's TWENTY-FIRST trip.** Row 6d, round 2; countersigned by **R93**.
+
+    `named = [r for r in retired_here if r.name != name and same_word(r.name, name)]`
+    discarded the **byte-identical** tombstone. `standing` is `None` exactly when no row
+    *of that kind* carries the name, so such a row can only be a tombstone of **another
+    kind** — precisely the cell change 1 dropped `kind=` to expose. **The clause was inert
+    while the scan was kind-scoped and became live the moment it was widened**, so the fix
+    walked past it.
+
+    Worse than the fifteenth trip's own outcome: the tombstone is not refused, it is
+    **unreachable** — `reinstate` takes no `kind`, so no call exists that could bring it
+    back. That residual is declined in this change and carried as **Q96**.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "w", kind="entity", definition="a thing")
+    gone = await registry.retire("w", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+
+    # CONTROL: `propose_type` has no such exclusion and answers this way.
+    control = await registry.propose_type(
+        "w", "another kind entirely", [Evidence(kind="data", summary="a sample")],
+        "user:sd", kind="predicate",
+    )
+    assert isinstance(control, TypeEntry)
+    assert "name_previously_retired" in (control.warnings or ()), control.warnings
+
+    out = await registry.import_types(
+        [{"name": "w", "kind": "predicate", "definition": "another kind entirely",
+          "status": "active"}],
+        namespace="default", kind="predicate",
+    )
+    assert out and out[0].name == "w" and out[0].kind == "entity", (
+        "the holder comes back, and it is the entity tombstone", out[0].name, out[0].kind
+    )
+    assert "name_previously_retired" in (out[0].warnings or ()), out[0].warnings
+    assert not [
+        t for t in (await registry.list_types("predicate")).types if t.name == "w"
+    ], "nothing is written"
+    assert isinstance(
+        await registry.reinstate("w", "we were wrong", reinstated_by="user:sd"), TypeEntry
+    ), "the tombstone must still be reachable"
