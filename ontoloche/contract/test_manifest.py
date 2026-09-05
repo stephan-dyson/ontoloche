@@ -37,9 +37,9 @@ EXPECTED_PER_GROUP = {
     16: 8,
     17: 53,
     18: 10,
-    19: 99,
+    19: 103,
 }
-TOTAL = 391
+TOTAL = 395
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 

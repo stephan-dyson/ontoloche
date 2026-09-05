@@ -7991,12 +7991,64 @@ class Registry:
         # is the FIRST trip's operand pointing the wrong way.
         if not mine or not theirs:
             return None
-        diverging = {
-            key: [mine.get(key), theirs.get(key)]
-            for key in self._GOVERNANCE_KEYS
-            if mine.get(key) != theirs.get(key)
-        }
+        # **THE DEFECT THIS ROW MADE, AND REMOVED HERE** (round 3, findings A1 and A2;
+        # ruling **R94** part three). `304967a` -- this row's own A3 fix -- compared every
+        # governance key with `!=`. Three of the four are SCALARS (`str | None`), where
+        # `!=` is exactly right and no ordering question arises. **`effects` is a LIST**,
+        # so two families whose governance is IDENTICAL but whose effects are written in a
+        # different order were refused `action_declarations_diverge` -- **non-overridably,
+        # at all three doors, under every acknowledgement and under `force=True`**, on
+        # sqlite and on postgres. It CLOSED A LEGAL OPERATION, which is why it was the
+        # most urgent thing left on this surface.
+        #
+        # **`ACTIONS.md` settles this against the old comparison three times over.** §2.5:
+        # *"Two effects are the same effect when `(op, namespace, family, kind)` match;
+        # `why` is not part of identity"* for the three protocol ops. §3.3's whole
+        # mechanism is SET CONTAINMENT over effects. §1's non-goals: *"no ordering."*
+        # Nothing in that document makes an effect's POSITION load-bearing.
+        #
+        # **And the package already had the right comparison, 2,000 lines away.**
+        # `record_invocation` asks §3.3's question as
+        # `declared = {effect_identity(e) for e in effects_of_record}`. One fact, two
+        # homes, opposite answers -- so this call now uses the SHARED function rather than
+        # a second opinion about what an effect is.
+        #
+        # **A set, not a multiset and not a sort.** §3.3's mechanism is set containment, so
+        # a duplicated effect is already invisible to `record_invocation`; refusing a
+        # merge over a duplicate the mechanism cannot see would be inventing a rule. A
+        # sort would be sufficient but would re-implement §2.5's `why` rule by hand --
+        # `effect_identity` gets order, `why`-excluded-for-protocol-ops and
+        # `why`-IS-identity-for-`host_state` in one call, and removes the second home.
+        diverging: dict[str, list] = {}
+        for key in self._GOVERNANCE_KEYS:
+            left, right = mine.get(key), theirs.get(key)
+            if key == "effects":
+                if self._effect_identities(left) == self._effect_identities(right):
+                    continue
+            elif left == right:
+                continue
+            diverging[key] = [left, right]
         return diverging or None
+
+    @staticmethod
+    def _effect_identities(raw) -> frozenset:
+        """`ACTIONS.md` §2.5's identity for a declared effect list, as a SET.
+
+        A malformed entry keeps its own raw shape rather than being coerced into
+        agreement: `Effect.from_dict` on a non-mapping would raise, and a guard that
+        crashes on a stored row is worse than one that reports the row as divergent.
+        **Rule U's shape at a comparison** -- *we could not read this as an effect* is not
+        *this is the same effect*.
+        """
+        out = []
+        for e in raw or ():
+            if isinstance(e, Effect):
+                out.append(effect_identity(e))
+            elif isinstance(e, dict):
+                out.append(effect_identity(Effect.from_dict(e)))
+            else:  # pragma: no cover -- a shape ACTIONS.md 2.5 does not define
+                out.append(("<unreadable>", repr(e)))
+        return frozenset(out)
 
     def _retired_holder(
         self,

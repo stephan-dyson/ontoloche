@@ -2417,6 +2417,76 @@ siblings, and every one of them is one this row made.
 
 ---
 
+### 6.22 Round 3's fix set, change 1 of 4 — **the `effects` comparison, and the row removes the defect it made**
+
+*Ruling [R94](../decisions/2026-09-05-6d-supervisor-ruling-R94.md) countersigned `K1` as the
+**TWENTY-THIRD** trip and [R95](../decisions/2026-09-05-6d-supervisor-ruling-R95.md) ruled `K2` not a
+trip but BLOCKING as the **`I-4` mis-keyed** cell. **The count is TWENTY-THREE.** The fix set opens on
+`A1`/`A2` because they close a legal operation, and because they are this row's own.*
+
+#### The defect, and whose it is
+
+`git log -S'mine.get(key) != theirs.get(key)' -- ontoloche/registry.py` returns **`304967a`** — this
+row's A3 fix, a pure addition. Three of the four `_GOVERNANCE_KEYS` are scalars, where `!=` is right.
+**`effects` is a LIST**, so two families whose governance is identical but whose effects are written
+in a different order were refused `action_declarations_diverge` — **non-overridably, at all three
+doors, under every acknowledgement and under `force=True`**, on sqlite and postgres.
+
+**`ACTIONS.md` settles it three times over**: §2.5 defines effect identity as
+`(op, namespace, family, kind)` with `why` excluded for the three protocol ops; §3.3's mechanism is
+set containment; §1's non-goals say *"no ordering."* And the package already asked the question
+correctly at `record_invocation` — `{effect_identity(e) for e in ...}`. **My guard was a second
+opinion about what an effect is, not a stricter one.** It now calls the shared function.
+
+**A set, not a multiset and not a sort.** §3.3's mechanism is set containment, so a duplicated effect
+is already invisible to `record_invocation`; refusing a merge over a duplicate the mechanism cannot
+see would be inventing a rule. A sort would be sufficient and would re-implement §2.5's `why` rules
+by hand — `effect_identity` gets order, `why`-excluded-for-protocol-ops and
+`why`-IS-identity-for-`host_state` in one call.
+
+#### The ids, and two of them exist because no id drove their key
+
+| id | asserts |
+|---|---|
+| `C19-100` | the same effects in a different order are the same declaration |
+| `C19-101` | a `why` on a protocol op is not part of effect identity |
+| `C19-102` | **the narrowing the fix must not delete** — two different `host_state` admissions are two effects and still refuse |
+| `C19-103` | an extra effect **and** a differing `min_auto_tier` still refuse |
+
+Round 3's actions lens cut `_GOVERNANCE_KEYS` to `("approval_mode", "reversibility")` and the suite
+stayed **identical to baseline**: all three A3 fixtures build `effects=[]` and `min_auto_tier=None`
+on **both sides**, so two of the four keys were load-bearing for **zero** ids. *A fixture that cannot
+fail on its own subject*, which is exactly why the mutation removing half the rule survived.
+
+#### Mutation proof
+
+| mutation | gate | ids |
+|---|---|---|
+| **MR1** order-sensitive `!=` restored (the defect) | green — **G2** | **RED** |
+| **MR2** `host_state`'s `why` dropped from identity | green — **G2** | **RED** |
+| **MR3** `_GOVERNANCE_KEYS` cut to two keys | green — **G2** | **RED** |
+
+The gate column is green on all three because `action_declarations_diverge` occurs **zero** times in
+`check_merge_guard.py`. That is `G2`, and **R94 makes it change 2**, landing next.
+
+#### MR2's first cut was a NO-OP dressed as a survivor, and that is the eleventh of this class
+
+My first `MR2` sliced `effect_identity(e)[:4]`. **`effect_identity` returns a 2-tuple for
+`host_state`** — `('host_state', why)` — so the slice changed nothing and the mutation reported
+GREEN. A survivor on a cell I had just written a test for was implausible, so I checked the function's
+actual return shape and rebuilt the mutation to hand-roll the key; it went RED. **This row has now
+met *a check that cannot fail on its own subject* eleven times, and this is the first time it was in
+my own mutation rather than in a fixture.**
+
+#### Rule U at two cells
+
+On `stores_events=False` the merge is refused `cannot_record_override` **before governance is
+compared at all**, so `C19-100` and `C19-101` record **NOT REACHABLE, never a pass** — gated on the
+capability, so a store that *can* record events and still refused would be a finding rather than a
+skip.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.

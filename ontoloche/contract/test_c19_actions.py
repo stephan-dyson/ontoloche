@@ -4626,3 +4626,181 @@ def test_c19_99_two_agreeing_families_still_merge(adapter, make_registry):
         "actions must remain mergeable when their governance agrees -- ACTIONS.md 2.1",
         getattr(out, "reason", None),
     )
+
+
+def _effect(op, *, family=None, namespace="default", kind=None, why=""):
+    """A declared effect as `ACTIONS.md` §2.5 shapes one."""
+    return Effect(op=op, family=family, namespace=namespace, kind=kind, why=why)
+
+
+def _verb_fx(registry, name, *, effects, mode="auto", rev="reversible", tier=None):
+    """A family whose declaration carries EFFECTS -- the half no A3 fixture drove.
+
+    An `add_edge` effect may only name a REGISTERED edge family (§2.5 rule 2.5-7), so the
+    caller registers `person_links` first; that refusal is `C19`'s own and not this id's.
+    """
+    return seed(
+        registry,
+        name,
+        kind="action",
+        definition="one and the same verb",
+        attributes=action_attributes(
+            reversibility=rev, approval_mode=mode, effects=list(effects),
+            min_auto_tier=tier,
+        ),
+    )
+
+
+def test_c19_100_effects_declared_in_a_different_order_are_the_same_declaration(
+    adapter, make_registry
+):
+    """**Findings A1 and A2 — the defect this row MADE, removed.** Round 3; ruling **R94**.
+
+    `304967a` — this row's own A3 fix — compared every governance key with `!=`. Three of
+    the four are scalars, where that is right. **`effects` is a LIST**, so two families
+    whose governance is IDENTICAL but whose effects are written in a different order were
+    refused `action_declarations_diverge` — **non-overridably, at all three doors, under
+    every acknowledgement and under `force=True`**. It closed a legal operation.
+
+    `ACTIONS.md` settles it three times: §2.5 defines effect identity as
+    `(op, namespace, family, kind)`, §3.3's mechanism is set containment, §1's non-goals
+    say *"no ordering."* And the package already asked the question correctly at
+    `record_invocation` — `{effect_identity(e) for e in ...}` — so the guard was a second
+    opinion about what an effect is, not a stricter one.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    edge_family(registry, "person_links")
+
+    fx = [_effect("add_edge", family="person_links"),
+          _effect("propose_type", kind="entity")]
+    _verb_fx(registry, "pay_out", effects=fx)
+    _verb_fx(registry, "payout_", effects=list(reversed(fx)))
+
+    out = registry.merge_types(
+        "pay_out", "payout_", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    if isinstance(out, Refusal) and out.reason == "cannot_record_override":
+        # NOT REACHABLE, never a pass: this backend cannot record the acknowledgements the
+        # collapse needs, so the door refuses before governance is compared at all. Gated
+        # on the CAPABILITY, so a store that CAN record and still refused is a finding.
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", out.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the acknowledgement before the "
+            "governance keys are compared"
+        )
+    assert not isinstance(out, Refusal), (
+        "the same effects in a different order are the same declaration -- ACTIONS.md "
+        "2.5 defines identity as (op, namespace, family, kind) and 1 says NO ORDERING",
+        getattr(out, "reason", None), getattr(out, "detail", None),
+    )
+
+
+def test_c19_101_a_why_on_a_protocol_op_is_not_part_of_effect_identity(
+    adapter, make_registry
+):
+    """**Finding A2**, the half that is not about order. Round 3; ruling **R94**.
+
+    `ACTIONS.md` §2.5: *"`why` is not part of identity for the three protocol ops, so
+    amending a sentence does not turn one declared effect into two."* Under `!=` a single
+    full stop closed the merge permanently.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    edge_family(registry, "person_links")
+
+    _verb_fx(registry, "pay_out",
+             effects=[_effect("add_edge", family="person_links", why="links the payer")])
+    _verb_fx(registry, "payout_",
+             effects=[_effect("add_edge", family="person_links", why="links the payer.")])
+
+    out = registry.merge_types(
+        "pay_out", "payout_", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    if isinstance(out, Refusal) and out.reason == "cannot_record_override":
+        # NOT REACHABLE, never a pass: this backend cannot record the acknowledgements the
+        # collapse needs, so the door refuses before governance is compared at all. Gated
+        # on the CAPABILITY, so a store that CAN record and still refused is a finding.
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", out.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the acknowledgement before the "
+            "governance keys are compared"
+        )
+    assert not isinstance(out, Refusal), (
+        "a full stop in a protocol op's `why` is not a second effect -- ACTIONS.md 2.5",
+        getattr(out, "reason", None),
+    )
+
+
+def test_c19_102_host_state_why_IS_its_identity_and_still_refuses(
+    adapter, make_registry
+):
+    """**The narrowing this fix must not delete**, and `ACTIONS.md` §2.5 states it in the
+    same breath as the rule above: *"`host_state` has no target at all, so its `why` IS
+    its identity"* (contortion **ACT9**, ruling **R46**).
+
+    A set comparison keyed on `effect_identity` gets this for free; a hand-rolled sort
+    would have had to re-implement it, which is why the fix uses the shared function.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+
+    _verb_fx(registry, "pay_out",
+             effects=[_effect("host_state", namespace=None, why="debits a ledger")])
+    _verb_fx(registry, "payout_",
+             effects=[_effect("host_state", namespace=None, why="credits a ledger")])
+
+    out = registry.merge_types(
+        "pay_out", "payout_", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    assert isinstance(out, Refusal), (
+        "two DIFFERENT host_state admissions are two effects -- ACTIONS.md 2.5", out,
+    )
+    assert out.reason == "action_declarations_diverge", out.reason
+
+
+def test_c19_103_an_extra_effect_and_a_differing_tier_still_refuse(
+    adapter, make_registry
+):
+    """**The other two narrowings**, and `min_auto_tier` is here because **no id drove it**.
+
+    Round 3's actions lens ran the mutation: cutting `_GOVERNANCE_KEYS` to
+    `("approval_mode", "reversibility")` left the suite **identical to baseline**, because
+    the three A3 fixtures build `effects=[]` and `min_auto_tier=None` on BOTH sides. Two
+    of the four keys were load-bearing for zero ids — *a fixture that cannot fail on its
+    own subject*, which is why the mutation that removes half the rule survived.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    edge_family(registry, "person_links")
+
+    base = [_effect("add_edge", family="person_links")]
+    _verb_fx(registry, "pay_out", effects=base)
+    _verb_fx(registry, "payout_", effects=base + [_effect("propose_type", kind="entity")])
+    extra = registry.merge_types(
+        "pay_out", "payout_", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    assert isinstance(extra, Refusal), ("one side declares an effect the other does not", extra)
+    assert extra.reason == "action_declarations_diverge", extra.reason
+    assert "effects" in extra.detail["diverging"], extra.detail
+
+    _verb_fx(registry, "c_verb", effects=base, mode="auto", tier="ai:opus")
+    _verb_fx(registry, "d_verb", effects=base, mode="auto", tier="ai:haiku")
+    tier = registry.merge_types(
+        "c_verb", "d_verb", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    assert isinstance(tier, Refusal), ("min_auto_tier is a governance key", tier)
+    assert "min_auto_tier" in tier.detail["diverging"], tier.detail
