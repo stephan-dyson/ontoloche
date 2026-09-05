@@ -1436,6 +1436,118 @@ commit recorded** — which is the third of this section's three claims-that-nee
 recorded rather than left for round 3.
 
 
+### 6.10 Round 2, lens 2 to return — **the CROSS-NAMESPACE lens. NOT YET: 2 BLOCKING, 2 MAJOR, 2 MINOR — and X7 is a REGRESSION this row introduced.**
+
+*Written to disk as the lens returned, before any fix. X7, X9 and X12 were re-verified by the worker
+against the repo, because all three contradict claims `9d2f203` made.*
+
+> **A CORRECTION TO §6.9'S OWN HEADLINE, one section later.** §6.9 said *three of my five fix commits
+> assert something that is not true.* With this lens in, it is **four of five**: `9d2f203` made two
+> false claims of its own — a door table entry (X9) and the measure R90 set as the form of done
+> (X12). The count is corrected upward rather than left standing, because a headline that undercounts
+> is the same defect as a door table that overclaims.
+
+#### X7 — BLOCKING — **`alternatives` names a row that does not exist, under a `complete=True` seal, and it is a regression from `9d2f203`**
+
+**The defect, and it is mine.** **[Observed, worker-verified at `registry.py:1952`]** the label for a
+cross-namespace hit is built from the **caller's** spelling:
+
+```python
+label = f"{other}:{candidate}"        # 1952 -- the CALLER's word
+...
+label = f"{other}:{rec.name}"         # 1948 -- the scored rows use the ROW's name
+```
+
+Before `9d2f203`, `exact_elsewhere` fired only on a **byte-exact** match, so `candidate` **was** the
+row's name and the label named a real row. **My keyed probe widened the producer and I never updated
+the consumer.**
+
+**Worker's independent re-run:**
+
+```
+complete       = True   why = ''
+outcome        = proposal        scoped_to = dot
+alternatives   = (('roadway',0.125), ('dpr:bike__lane',1.0), ('dpr:bike_lane',None))   known = 3
+   'dpr:bike__lane'  -> A ROW
+   'dpr:bike_lane'   -> *** NO SUCH ROW, under complete=True ***
+```
+
+**On live NYC data, not a contrivance:** `uvpi-gqnh`'s `zipcode` against `erm2-nwe9`'s
+`incident_zip`, where 311 keeps DPR's word as an alias — the ordinary UC3 act — yields
+`('oti_311:zipcode', None)`, naming nothing, with `known=2` for one row.
+
+**It breaks three shipped rules at once.** §5.3.1 rule 3 says a hit lands as
+`("<namespace>:<name>", score)` — this `<name>` names nothing. Rule 5 says `None` means *nothing
+scored it* — **this row was scored, at 1.0, two entries above.** And rule 5's own note says a taken
+word is listed **once**, *"because listing it twice would double-count Rule K's `known`"* — `known`
+is `len(alternatives)` and now counts **3 for 2 rows**.
+
+> **A confident POSITIVE about a row nobody holds, under the seal R6 introduced — the inverse of the
+> confident negative X1 was raised for, produced by X1's own fix.**
+
+**Provenance:** the same three fixtures at `9d2f203^` return only real rows. The async mirror carries
+it. **§6.8: named by no R2-P** — it confirms R2-P1 and R2-P10's first clause and **falsifies
+R2-P10's second clause**, because it is in `registry.py`, not the harness.
+
+#### X8 — BLOCKING — X2's third site is closed in ONE DIRECTION, and reverting it entirely is a FULL-SUITE mutation survivor
+
+`_word_spellings(w)` returns at most `{w, identity_key(w)}`, so the rejections query widens only when
+the **caller's** spelling is non-canonical. A rejection stored under a non-canonical spelling, asked
+canonically, is still invisible — **and its namespace may hold no type, so nothing else can see it
+either**: `complete=True`, `why_incomplete=''`.
+
+**That is X1's own sentence reproduced inside the commit that claims to close it**, at the site the
+commit body singles out as *"worth naming"*. The commit says the query is *"asked for every spelling
+this registry considers one word"*; `_word_spellings`' own docstring says the opposite and states the
+residual — but states it for `_alias_holder`/`_alias_clash`, which close it by scanning
+`_active_page`. **There is no other end at the proposal store.**
+
+**Mutation: deleting the fix outright is a full-suite survivor** — `490 passed, 675 skipped`, exit 0.
+
+#### The rest
+
+| # | severity | the defect | §6.8 |
+|---|---|---|---|
+| **X9** | MAJOR | **`_prior_rejections` — the home half my own door table calls *"N/A … already right"* — is byte-exact.** **[Observed, worker-verified]** `ProposalQuery(namespace=namespace, name=candidate, status="rejected")` at `registry.py:2103`, with **0** identity comparisons in the whole method. A `dpr` caller asking the canonical `bike_lane` cannot see `dpr`'s own rejection of `bike__lane`; the byte-exact control sees it. **The contrast the entire commit is built on — *cross keyed, home already keyed* — is false for the store `alternatives` is half fed from** | NONE |
+| **X10** | MAJOR | **Guard #4's move is pinned by nothing, contradicts the unamended §5.10, and skips #1/#2/#3 silently.** Restoring the pre-fix order is a **full-suite survivor with all gates green**; `INTERFACE.md` §5.10's *"Full refusal list, **in order**"* still lists #4 fourth and was not amended; and `predicate_merge` — annotated in §5.10 as *"the `ROADMAP.md` kill row"* — is now **unreachable across a namespace boundary**. The early return never touches `merge_warnings`, **declared three lines above it precisely because "a skip nobody is told about is the NINETEENTH trip."** X5 has no contract id: the commit shipped three ids for six findings | half-confirms **R2-P3** |
+| **X11** | MINOR | **X6's warning is dropped on every `import_types` refusal path, and `import_field_ignored:<field>` binds exactly one field.** `extra_import_warnings` is discarded by every `continue` branch — and the pre-existing `alias_check_incomplete` warnings ride the same accumulator and are lost with it | **CONFIRMS R2-P3** at the newest accumulator, which the prediction table did not list as a carrier |
+| **X12** | MINOR | **R90's countable form of done does not reproduce under R90's own command.** **[Observed, worker-verified]** `sed -n '1750,1990p' … \| grep -c 'same_word\|identity_key'` returns **1**, not 6. My reported *0 → 6* summed a **widened pattern** (`\|_answers_to`) over a **wider range** (through `_rejections_everywhere`). The honest number: **executable identity comparisons in the cross-namespace read went 0 → 5** — three in `_search_namespaces` through `_answers_to`, two in `_rejections_everywhere` — **and R90's literal command returns 1 because the keying lives in a shared helper.** Both numbers are now on the record; the 6 is not defended | NONE |
+
+#### The verdict this lens owed on round 1's six findings
+
+| # | verdict |
+|---|---|
+| **X1** | **PARTIAL — closed at the sentence, broken at the list.** The tombstone-by-alias reaches `reason`, and mutation proves `C3-17` real. But the `alternatives` entry X1's fix adds names **no row** — X7 |
+| **X2** | **PARTIAL — two of three sites closed, the third half-closed, and a FOURTH mis-declared closed.** Sites 1 and 2 keyed and mutation-caught; site 3 one-directional and a full-suite survivor (X8); `_prior_rejections` unkeyed and called *"already right"* (X9) |
+| **X3** | **NOT CLOSED.** The commit claims X2's probe closed it *"without a second fix"*. With `kind=` supplied the answer is now `(('dpr:bike_lane', None),)` **and nothing else** — one label pointing at nothing, while the row that holds the word is unreachable. **X3's "total silence" became a false pointer, which is worse than silence** |
+| **X4** | **EXACTLY AS DECLINED, and marginally better in one respect** the decline did not claim: `why_incomplete` now names the sibling scopes to a caller who searched only its own. Q96 and R79 reproduce as recorded |
+| **X5** | **BEHAVIOURALLY CLOSED, EVIDENTIALLY NOT** — see X10 |
+| **X6** | **CLOSED ON THE HAPPY PATH ONLY** — see X11 |
+| **G1** | **OPEN and worse.** Gate namespace literals rose **11 → 14 across this row's own five fix commits**, and all fourteen are `"default"` |
+
+#### The two negatives round 1 drove — **both still hold**
+
+1. **No write door crosses the boundary.** `_answers_to` has exactly two call sites, both inside
+   `_search_namespaces`, both read-only.
+2. **No cross-namespace row reaches an identity answer.** Every keyed hit — alias and variant
+   spelling included — still returns `outcome='proposal'` scoped to the caller's own namespace.
+
+**Nothing constructed here lets two identities answer to one word. Not a trip; the count stays
+NINETEEN.**
+
+#### The sentence round 2 has now produced twice, and it names the pattern in my fix set
+
+**G1: a scan widened, and the filter that discards its result left alone.**
+**X7: a probe widened, and the label constructor that consumes it left alone.**
+
+> **Both BLOCKING findings of round 2's first two lenses are one sentence: I widened a matcher and did
+> not follow it to its consumer.** Four matchers were widened across the fix set — `_word_rows`'s kind
+> filter, `_alias_clash`'s return, `_answers_to`'s keying, `_word_spellings`' query — and **the
+> consumers of three of them were not updated**. That is the SIXTH trip's diagnosis (*a guard written
+> for one call over a fact more than one call can change*) pointed at a **producer/consumer pair**
+> rather than at two callers, and it is the thing this row should have predicted and did not.
+
+
 ---
 
 ## 7. The fix set
