@@ -1262,3 +1262,43 @@ async def test_c10_23_the_escape_is_evaluated_over_the_whole_holder_set(adapter,
         "a non-overridable identity guard answered differently depending on which row "
         "the backend paged first", verdicts,
     )
+
+async def test_c10_24_merge_states_a_skipped_identity_guard_too(adapter, make_registry):
+    """**The NINETEENTH trip at the door that asks refusal #1 DIRECTLY.** Row 6d; R92.
+
+    `import_types` reaches #1 through the alias door; `merge_types` reaches it through
+    `_identity_breach` itself, where nobody passes computed gate sets, so both sides are
+    read off stored rows and both come back blank on a backend declining
+    `indexes_membership`.
+
+    Driving only the door the trip was found at would be *a rule minted at the caller
+    that prompted it* — **standing rule (d)**, and this register has counted that failure
+    by number often enough to enumerate instead. `C12-24` is the alias door; this is the
+    merge door.
+    """
+    degraded = await make_registry(
+        AsyncDegradedAdapter(adapter, indexes_membership=False), approval_policy="auto"
+    )
+    await seed(degraded, "meta_p", kind="predicate", definition="a meta capability")
+    await seed(degraded, "ent_a", kind="entity", definition="a thing", predicates=["meta_p"])
+    await seed(degraded, "ent_b", kind="entity", definition="a thing")
+    out = await degraded.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    if isinstance(out, Refusal):
+        pytest.skip(f"this backend cannot register a consumer ({out.reason})")
+
+    merged = await degraded.merge_types(
+        "ent_a", "ent_b", "one and the same", merged_by="user:sd",
+        acknowledge=("definitions_diverge", "no_consumer_evidence"),
+    )
+    if isinstance(merged, Refusal):
+        pytest.skip(f"this backend refused for another reason ({merged.reason})")
+    assert any(
+        w.startswith("identity_guard_skipped:different_consumer_sets:")
+        for w in (merged.warnings or ())
+    ), (
+        "the merge door must state a guard it could not evaluate, exactly as the alias "
+        "door does -- standing rule (d), the doors a rule binds",
+        merged.warnings,
+    )

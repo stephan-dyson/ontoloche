@@ -234,6 +234,19 @@ WARNING_VALUES = (
     # otherwise quietly do nothing.
     "retire_no_op",
     "reinstate_alias_check_unavailable",
+    # INTERFACE.md 5.4, row 6d's first round -- the THIRTY-EIGHTH, and the kill row's
+    # NINETEENTH trip (ruling R92).
+    # An identity guard that could not be EVALUATED because the backend declines a
+    # capability it needs. Detail: `<guard>:<capability>`.
+    # **Not `alias_check_incomplete`, and the difference is the whole point.** That value
+    # says *a LOOK did not finish* -- a scan the backend capped, where there is more to
+    # read. This says *a GUARD was never asked* -- there is nothing more to read, because
+    # the store does not hold the fact at all. Trips 1 and 9 asked whether `unknowable`
+    # equals `equal` or `different`; the nineteenth asked whether it equals **nothing to
+    # say**, and the shipped answer was yes: refused non-overridably on one backend,
+    # written with `warnings=()` on another, and `resolve_type` cashing it at 1.0.
+    # One word for two facts is 2.3's Cause B, which is why this is its own value.
+    "identity_guard_skipped",
     "import_refused",
     "not_durable_until_host_commits",
     "gate_unregistered",

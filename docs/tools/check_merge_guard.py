@@ -833,7 +833,36 @@ def _legs():
         # there is nowhere to hold a pending proposal.
         return Registry(adapter, policies={"default": NamespacePolicy(approval_policy="auto")})
 
-    legs = [("sqlite", sqlite, True), ("sqlite_minimal", minimal, False)]
+    def degraded():
+        # **`indexes_membership=False` as a LEG, and until row 6d this file had none.**
+        # The kill row's NINETEENTH trip lived exactly here: refusal #1 compares CONSUMER
+        # SETS, and on a backend that cannot report membership both sides read blank and
+        # #1 passes vacuously -- so the same five calls were refused
+        # `different_consumer_sets` NON-OVERRIDABLY on sqlite and written with
+        # `warnings=()` here, with `resolve_type` cashing it at 1.0.
+        #
+        # **Why the file could not see it, countably.** The degraded double WAS driven --
+        # at the extent-state axis and at the staleness axis -- but **never at the one
+        # axis that drives refusal #1**. The CONSUMER-SET axis (axis seven, added by the
+        # ELEVENTH trip precisely because #1 had been unfalsifiable) iterated `_legs()`
+        # and wrapped nothing, so it held **zero** of this file's `DegradedAdapter`
+        # occurrences. **Refusal #1 had never been driven degraded, on any leg, in any
+        # axis, since the axis was built** -- the eleventh trip's own indictment in a new
+        # dress: then it was zero `register_consumer`, now it is zero degradation on the
+        # only axis that drives it.
+        #
+        # Making it a LEG rather than another wrapper inside one axis is the point: every
+        # axis now poses its question on a backend that declines the capability, and a
+        # future axis inherits that without having to remember to.
+        adapter = SQLiteAdapter(":memory:")
+        adapter.migrate()
+        return Registry(DegradedAdapter(adapter, indexes_membership=False))
+
+    legs = [
+        ("sqlite", sqlite, True),
+        ("sqlite_minimal", minimal, False),
+        ("sqlite_degraded", degraded, False),
+    ]
     dsn = os.environ.get("OO_POSTGRES_DSN")
     if dsn:
         from ontoloche.backends.postgres import PostgresAdapter
@@ -3197,6 +3226,183 @@ def check_page_order() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+# ======================================================================== axis 13
+# **A SKIPPED GUARD MUST SAY SO. The kill row's NINETEENTH trip** (row 6d, round 1;
+# ruling **R92**).
+#
+# Refusal #1 compares CONSUMER SETS. On `indexes_membership=False` a stored row's
+# `predicates` come back empty, so both sides read blank and #1 compares equal
+# **vacuously** -- and until row 6d the caller was told **nothing at all**. The same five
+# ordinary calls: refused `different_consumer_sets` NON-OVERRIDABLY on sqlite, written
+# with `warnings=()` on the degraded adapter, and `resolve_type` answering at **1.0**.
+# That is UC1 Tenshen's own declared shape, and the FIRST trip's backend.
+#
+# Trips 1 and 9 asked whether *unknowable* equals *equal* or *different*. **This asks
+# whether it equals NOTHING TO SAY, and the shipped answer was yes.**
+#
+# **Why axis SEVEN could not pose it, and why a new leg alone does not fix that.** Axis
+# seven drives refusal #1 and needs `consumers()` to report which consumer gates on a
+# predicate -- which the degraded backend cannot do, so it correctly reports NOT
+# REACHABLE there. The question this axis asks is the other one: **not "does #1 fire?"
+# but "does the door SAY that #1 was never asked?"** A backend that cannot answer the
+# guard's question is exactly where the answer must be stated.
+#
+# The comparison itself is deliberately unchanged -- R53's boundary, and refusing would
+# ban these doors on that backend, which is `C10-09`'s lesson, `C3-13`'s and `C12-13`'s.
+
+
+def _skip_pair(registry: Registry) -> str | None:
+    """`_consumer_pair`'s store, built where the backend CANNOT report the gate sets.
+
+    Deliberately does not assert that `consumers()` reports anything: on this leg it
+    cannot, and that is the subject rather than an obstacle.
+    """
+    # **ENTITIES, not predicates, and that is what isolates refusal #1.** On this leg the
+    # extents are unknowable too, so a PREDICATE pair is refused by #2 (`predicate_merge`)
+    # and the door refuses for a reason that has nothing to do with the skip -- the axis
+    # would then report `held` having proved nothing, which is the shape this file keeps
+    # finding in itself. An ENTITY pair is guarded by #1 alone, which is exactly the
+    # construction the NINETEENTH trip used.
+    _seed(registry, _GATE_PREDICATE, kind="predicate", definition="a meta capability")
+    for word in ("ent_a", "ent_b"):
+        _seed(
+            registry,
+            word,
+            kind="entity",
+            definition="a thing",
+            predicates=[_GATE_PREDICATE] if word == "ent_a" else [],
+        )
+    out = registry.register_consumer(
+        Consumer(id="svc:meta", gate=_GATE_PREDICATE, on_unknown="drop", owner="ops")
+    )
+    if isinstance(out, Refusal):
+        return _NOT_REACHABLE + (
+            f"this backend cannot register a consumer at all: {out.reason}"
+        )
+    gone = registry.retire(
+        "ent_a", "no longer used", retired_by="user:sd", force=True
+    )
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire the row ({gone.reason})"
+    return None
+
+
+def check_skipped_guards() -> tuple[list[str], list[str], list[str]]:
+    """Axis 13 -- on a backend that declines the capability, the skip is STATED."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    for leg, build, knowable in _legs():
+        if knowable:
+            # Nothing is skipped where the capability is present; the axis has no
+            # question to ask there, and saying so is ruling R12's own requirement.
+            unreachable.append(
+                f"{leg} / skipped guard: this backend indexes membership, so refusal #1 "
+                f"is evaluated rather than skipped -- axis seven is its subject"
+            )
+            lines.append(f"  {leg:15s} {'import_types':17s} {'skip is stated':24s} NOT REACHABLE")
+            continue
+        registry = build()
+        built = _skip_pair(registry)
+        if built is not None:
+            unreachable.append(f"{leg} / skipped guard: " + built[len(_NOT_REACHABLE):])
+            lines.append(f"  {leg:15s} {'import_types':17s} {'skip is stated':24s} NOT REACHABLE")
+            _release(registry)
+            continue
+        rows = registry.import_types(
+            [{"name": "ent_b", "kind": "entity", "definition": "a thing",
+              "aliases": ["ent_a"], "status": "active"}],
+            namespace="default", kind="entity",
+        )
+        said = [
+            w
+            for row in (rows or ())
+            for w in (row.warnings or ())
+            if w.startswith("identity_guard_skipped:")
+        ]
+        refused = [
+            w
+            for row in (rows or ())
+            for w in (row.warnings or ())
+            if w.startswith("import_refused:")
+        ]
+        _release(registry)
+        if refused:
+            # The door refused for some other reason, so this fixture did not isolate the
+            # skip. That is NOT a pass -- reporting it as one is how a check goes green
+            # for a reason other than the one it claims.
+            unreachable.append(
+                f"{leg} / skipped guard: the door refused {refused} rather than reaching "
+                f"the skipped guard, so this fixture did not isolate refusal #1"
+            )
+            lines.append(
+                f"  {leg:15s} {'import_types':17s} {'skip is stated':24s} NOT REACHABLE"
+            )
+            continue
+        if not said:
+            problems.append(
+                f"{leg} / skipped guard: this backend declines `indexes_membership`, so "
+                f"refusal #1 compared two blank consumer sets and passed VACUOUSLY -- "
+                f"and the door said NOTHING. The identical five calls are refused "
+                f"`different_consumer_sets` NON-OVERRIDABLY where the capability is "
+                f"present. A guard that was never ASKED is not a guard that PASSED; "
+                f"trips 1 and 9 asked whether `unknowable` equals `equal` or "
+                f"`different`, and this asks whether it equals NOTHING TO SAY"
+            )
+            lines.append(f"  {leg:15s} {'import_types':17s} {'skip is stated':24s} FAILED")
+        else:
+            lines.append(
+                f"  {leg:15s} {'import_types':17s} {'skip is stated':24s} held"
+            )
+
+        # **`merge_types` asks refusal #1 through `_identity_breach` DIRECTLY, not
+        # through the alias door**, and that path skips #1 by a different route: nobody
+        # passes computed gate sets, so both sides are read off stored rows, both come
+        # back blank on this leg, and #1 compares equal vacuously. Driving only the alias
+        # door would leave this one silent -- *a rule minted at the caller that prompted
+        # it is half-applied until the commit names every other caller it binds*, which
+        # is standing rule (d) and the reason this row enumerates doors rather than fixes
+        # the one it found.
+        registry = build()
+        built = _skip_pair(registry)
+        if built is not None:
+            unreachable.append(f"{leg} / skipped guard at merge: " + built[len(_NOT_REACHABLE):])
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'skip is stated':24s} NOT REACHABLE")
+            _release(registry)
+            continue
+        back = registry.reinstate("ent_a", "we were wrong", reinstated_by="user:sd")
+        out = registry.merge_types(
+            "ent_a", "ent_b", "one and the same", merged_by="user:sd",
+            acknowledge=("definitions_diverge", "no_consumer_evidence", "retired_operand"),
+        )
+        said = [
+            w for w in (getattr(out, "warnings", None) or ())
+            if w.startswith("identity_guard_skipped:")
+        ]
+        _release(registry)
+        if isinstance(out, Refusal):
+            unreachable.append(
+                f"{leg} / skipped guard at merge: the door refused {out.reason!r} rather "
+                f"than reaching the skipped guard, so this fixture did not isolate #1"
+                + ("" if not isinstance(back, Refusal) else f" (reinstate: {back.reason})")
+            )
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'skip is stated':24s} NOT REACHABLE")
+        elif not said:
+            problems.append(
+                f"{leg} / skipped guard at merge: `merge_types` compared two blank "
+                f"consumer sets on a backend that declines `indexes_membership` and said "
+                f"NOTHING. The alias door states its skip; this door reaches refusal #1 "
+                f"through `_identity_breach` directly and must state it too -- standing "
+                f"rule (d), the doors a rule binds"
+            )
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'skip is stated':24s} FAILED")
+        else:
+            lines.append(f"  {leg:15s} {'merge_types':17s} {'skip is stated':24s} held")
+
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -3290,6 +3496,11 @@ def main() -> int:
             "non-overridable guard whose answer depended on which row the backend "
             "paged first:",
             check_page_order,
+        ),
+        (
+            "  and A SKIPPED GUARD SAYS SO -- the kill row's NINETEENTH trip: "
+            "refusal #1 compared two blank consumer sets and the door said nothing:",
+            check_skipped_guards,
         ),
     ):
         print()
