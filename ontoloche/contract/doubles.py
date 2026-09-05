@@ -554,3 +554,51 @@ class WithoutAttributeStore:
         # handed, and a proxy that kept the attribute for itself would silently make the
         # test pass against the untouched inner migrations.
         setattr(self.inner, name, value)
+
+
+class OrderedAdapter:
+    """Wraps a conformant adapter and RE-ORDERS every ``find_types`` page.
+
+    **A legal backend, not a broken one, and that is the whole point.**
+    ``PACKAGE.md`` §3.3 guarantees **no ordering** on a page, so a backend free to return
+    its rows in any order is conformant -- and this double exercises that freedom rather
+    than violating anything. Everything but the ordering passes straight through.
+
+    **The kill row's SEVENTEENTH trip needed exactly this and the gate did not have it**
+    (row 6d, round 1; ruling **R92**). ``check_merge_guard.py`` contained **zero**
+    occurrences of ``reversed(``, ``shuffle`` or ``permutations``: every fixture read its
+    backend's natural order, so a guard whose answer is a function of page order was
+    **unfalsifiable by the file built to enumerate these guards**. `_alias_clash`
+    returned whichever holder came first and `merge_types` excused a holder that was
+    another spelling of ``left.name``; over all 120 page orders of one five-row store
+    **60 refused and 60 were swallowed**.
+
+    ``order`` takes the tuple of records and returns a re-ordered tuple.
+    """
+
+    def __init__(self, inner, order):
+        self.inner = inner
+        self._order = order
+
+    def __getattr__(self, item):
+        return getattr(self.inner, item)
+
+    def find_types(self, q: TypeQuery) -> TypePage:
+        page = self.inner.find_types(q)
+        return dataclasses.replace(
+            page, records=tuple(self._order(tuple(page.records)))
+        )
+
+
+def by_name_order(names):
+    """An ``order`` callable putting ``names`` first, in that order, then the rest.
+
+    Rows the caller did not name sort last and keep their backend order, so a fixture
+    names only the rows whose relative position it is actually testing.
+    """
+
+    def order(records):
+        index = {name: i for i, name in enumerate(names)}
+        return tuple(sorted(records, key=lambda r: index.get(r.name, len(index) + 1)))
+
+    return order
