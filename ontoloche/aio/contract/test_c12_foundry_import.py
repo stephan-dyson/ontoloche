@@ -1145,3 +1145,60 @@ async def test_c12_23_the_import_alias_door_refuses_a_word_a_tombstone_answers_t
         await registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd"), TypeEntry
     ), "R11's governance act must survive the write that used to burn it"
     assert tombstone.name == "alpha"
+
+async def test_c12_24_a_skipped_identity_guard_says_so(adapter, make_registry):
+    """**The kill row's NINETEENTH trip.** Row 6d, round 1; countersigned by **R92**.
+
+    §5.10's refusal **#1** compares CONSUMER SETS. On a backend declaring
+    `indexes_membership=False` a stored row's `predicates` come back empty, so both sides
+    read blank and #1 compares equal **vacuously** — and the door said **nothing at all**.
+    The same five ordinary calls were refused `different_consumer_sets`
+    **non-overridably** where the capability is present and written with `warnings=()`
+    where it is not, with `resolve_type` answering at **1.0**.
+
+    That is UC1 Tenshen's own declared shape and the **FIRST** trip's backend. Trips 1 and
+    9 asked whether *unknowable* equals *equal* or *different*; **this asks whether it
+    equals nothing to say, and the shipped answer was yes.**
+
+    **The comparison is deliberately unchanged.** R53's boundary forbids this row to
+    change what a guard compares, and refusing instead would ban `import_types` from
+    writing any aliased row on that backend — `C10-09`'s lesson, `C3-13`'s and `C12-13`'s.
+    What changes is that the caller is told: `identity_guard_skipped:<guard>:<capability>`,
+    the thirty-eighth warning value.
+
+    **ENTITIES, not predicates, and that is what isolates #1** — the extents are
+    unknowable on this backend too, so a predicate pair is refused by #2 for a reason that
+    has nothing to do with the skip.
+    """
+    degraded = await make_registry(
+        AsyncDegradedAdapter(adapter, indexes_membership=False), approval_policy="auto"
+    )
+    await seed(degraded, "meta_p", kind="predicate", definition="a meta capability")
+    await seed(degraded, "ent_a", kind="entity", definition="a thing", predicates=["meta_p"])
+    await seed(degraded, "ent_b", kind="entity", definition="a thing")
+    out = await degraded.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    if isinstance(out, Refusal):
+        pytest.skip(f"this backend cannot register a consumer ({out.reason})")
+    gone = await degraded.retire("ent_a", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the row ({gone.reason})")
+
+    rows = await degraded.import_types(
+        [{"name": "ent_b", "kind": "entity", "definition": "a thing",
+          "aliases": ["ent_a"], "status": "active"}],
+        namespace="default", kind="entity",
+    )
+    assert rows, rows
+    warnings = rows[0].warnings or ()
+    if any(w.startswith("import_refused:") for w in warnings):
+        pytest.skip(f"this backend refused for another reason ({warnings})")
+    assert any(
+        w.startswith("identity_guard_skipped:different_consumer_sets:")
+        for w in warnings
+    ), (
+        "a guard that was never ASKED is not a guard that PASSED -- the door must say "
+        "which guard it skipped and which capability it needed",
+        warnings,
+    )

@@ -2716,6 +2716,9 @@ class AsyncRegistry:
         #: page bans `retire(successor=)` on every paging backend -- the lesson `C10-09`,
         #: `C3-13`, `C4-12` and `C12-13` each taught once.
         retire_word_why: str | None = None
+        #: `identity_guard_skipped` notes from every guard this call asks. A guard that
+        #: was never ASKED is not a guard that PASSED -- the NINETEENTH trip.
+        retire_skips: list[str] = []
         #: the successor that took the words, once the write has actually happened --
         #: ``None`` whenever nothing moved, which is what keeps the warning below a
         #: statement about a write rather than about an intention.
@@ -2804,6 +2807,7 @@ class AsyncRegistry:
                         f"`resolve_type` for this word at confidence 1.0"
                     ),
                     order=("different_consumer_sets",),
+                    skipped=retire_skips,
                 )
                 if breach is not None:
                     reason_value, sentence, detail = breach
@@ -2931,6 +2935,7 @@ class AsyncRegistry:
                         f"`resolve_type` for this word at confidence 1.0"
                     ),
                     order=("kind_mismatch",),
+                    skipped=retire_skips,
                 )
                 if breach is not None:
                     reason_value, sentence, detail = breach
@@ -2959,6 +2964,7 @@ class AsyncRegistry:
                         f"redirects every `resolve_type` for the first to the second"
                     ),
                     order=("predicate_merge",),
+                    skipped=retire_skips,
                 )
                 if breach is not None:
                     reason_value, sentence, detail = breach
@@ -3052,6 +3058,7 @@ class AsyncRegistry:
                         # fact trips 9 and 10 were built on, unfixed at the doors those
                         # trips did not come through.
                         declared_predicates=succ.predicates or (),
+                        skipped=retire_skips,
                     )
                     if breach is not None:
                         reason, sentence = breach
@@ -3366,6 +3373,7 @@ class AsyncRegistry:
                         if retire_word_why is not None
                         else ()
                     )
+                    + tuple(retire_skips)
                 ),
             )
         )
@@ -3597,6 +3605,7 @@ class AsyncRegistry:
                 # `existing / 1.0` across a reinstatement, on a pair `merge_types`
                 # refuses non-overridably.
                 declared_predicates=rec.predicates or (),
+                skipped=alias_warnings,
             )
             if breach is not None:
                 reason, sentence = breach
@@ -3850,6 +3859,7 @@ class AsyncRegistry:
         order: Sequence[str] = IDENTITY_GUARD_ORDER,
         there_gates: set[str] | None = None,
         here_gates: set[str] | None = None,
+        skipped: list[str],
     ) -> tuple[str, str, dict] | None:
         """INTERFACE.md 5.10's refusals **#1, #2 and #3**, in one place. **Ruling R53.**
 
@@ -3920,6 +3930,27 @@ class AsyncRegistry:
                 # bucket it was in, and the disagreement had a `force=True` door in it:
                 # the SIXTH trip collapsed a pair refused under all seven
                 # acknowledgements through `retire(successor=, force=True)`.
+                # **A guard that was never ASKED is not a guard that PASSED, and
+                # saying nothing about the difference was the kill row's NINETEENTH
+                # trip** (row 6d, round 1; ruling R92). Where both sides have to be read
+                # off stored rows and the backend declines `indexes_membership`, both
+                # come back blank and #1 compares equal **vacuously** -- on UC1 Tenshen's
+                # own declared shape, which is the FIRST trip's backend.
+                #
+                # The comparison is NOT changed here: R53's boundary forbids this row to
+                # change what a guard compares, and refusing instead would ban these
+                # doors on that backend -- `C10-09`'s lesson, `C3-13`'s and `C12-13`'s.
+                # What changes is that the caller is TOLD. Trips 1 and 9 asked whether
+                # *unknowable* equals *equal* or *different*; this asks whether it equals
+                # **nothing to say**, and until now the shipped answer was yes.
+                if (
+                    not self.caps.indexes_membership
+                    and here_gates is None
+                    and there_gates is None
+                ):
+                    note = "identity_guard_skipped:different_consumer_sets:indexes_membership"
+                    if note not in skipped:
+                        skipped.append(note)
                 mine = (
                     here_gates
                     if here_gates is not None
@@ -4068,12 +4099,19 @@ class AsyncRegistry:
         #
         # **This door's order is 5.10's own** -- #1, then #2, then #3 -- because this is
         # the call 5.10 was written about.
+        # **The warning channel is declared HERE, above the first guard**, because
+        # refusal #1 can be SKIPPED for want of `indexes_membership` and a skip nobody is
+        # told about is the NINETEENTH trip. Change 2 introduced this list for the
+        # EIGHTEENTH; change 3 moves its declaration up rather than adding a second one,
+        # because two channels on one door is how a caller ends up told half a story.
+        merge_warnings: list[str] = []
         breach = await self._identity_breach(
             left,
             right,
             claim=(
                 f"merging {from_!r} into {into!r} makes one word answer for both"
             ),
+            skipped=merge_warnings,
         )
         if breach is not None:
             # **The detail is returned untouched.** `C10-03` asserts `kind_mismatch`'s by
@@ -4116,6 +4154,7 @@ class AsyncRegistry:
                 right.kind,
                 transferred,
                 declared_predicates=right.predicates or (),
+                skipped=merge_warnings,
             )
             if breach is not None:
                 reason, sentence = breach
@@ -4184,13 +4223,13 @@ class AsyncRegistry:
         # could not finish has not said the words are free, and refusing on a short page
         # would ban `merge_types` on every paging backend -- the lesson row 4d learned
         # three times. It warns and proceeds.
+        # (declared earlier, above refusal #1 -- see the note at its declaration)
         # **This door had no warning channel at all until now**, which is why the
         # EIGHTEENTH trip could drop `clash_why` in silence. `_retired_holder`'s own
         # `why` is wired here rather than left for the next change: shipping a fix
         # that drops the signal its own scan emits would be the FIFTH trip inside the
         # fix for the FIFTEENTH, and *the next defect lives in the last fix* is this
         # register's most-counted sentence.
-        merge_warnings: list[str] = []
         moving = tuple(a for a in (left.name,) + tuple(left.aliases) if a)
         holders, clash_why = await self._alias_clash(target_ns, right.name, right.kind, moving)
         # **The escape is evaluated over the WHOLE SET, and evaluating it over the first
@@ -4771,6 +4810,7 @@ class AsyncRegistry:
                     # than against a fallback that made it equal by construction. The
                     # NINTH kill-row trip walked exactly that fallback.
                     declared_predicates=predicates,
+                    skipped=extra_import_warnings,
                 )
                 if breach is not None:
                     reason, sentence = breach
@@ -6843,6 +6883,7 @@ class AsyncRegistry:
         aliases: Sequence[str],
         *,
         declared_predicates: Sequence[str],
+        skipped: list[str],
     ) -> tuple[str, str] | None:
         """§5.10's identity guards #2 and #3, applied to an ALIAS write. Row 4c.
 
@@ -7035,6 +7076,16 @@ class AsyncRegistry:
                 # applied to a FIX rather than to a guard, which is the eighth trip's own
                 # shape. Both sides are computed the same way and from what the write
                 # will leave behind.
+                if not self.caps.indexes_membership:
+                    # **The skip is STATED to the caller, and it was silent until row
+                    # 6d** -- the NINETEENTH trip. See `_identity_breach` for why the
+                    # comparison itself is left exactly as it was.
+                    note = (
+                        "identity_guard_skipped:different_consumer_sets:"
+                        "indexes_membership"
+                    )
+                    if note not in skipped:
+                        skipped.append(note)
                 if self.caps.indexes_membership:
                     checks.append(
                         (
@@ -7085,6 +7136,7 @@ class AsyncRegistry:
                         order=(guard,),
                         there_gates=there_gates,
                         here_gates=here_gates,
+                        skipped=skipped,
                     )
                     if breach is not None:
                         return (breach[0], breach[1])
