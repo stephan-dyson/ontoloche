@@ -1973,6 +1973,105 @@ variable rule — it is no deletion at all.
 
 ---
 
+### 6.17 Round 3, lens 1 — **the FIX AUDITOR. NOT YET: 9 findings, 2 BLOCKING — and G1 is REAL**
+
+*Written to disk before any fix, as every round has been. The two BLOCKING findings and the wrong
+number were **re-derived by this worker against the real tree** before this section was written; the
+lens's own harness is not taken on trust, which is round 2's lesson about a lens that measured a
+shadow copy.*
+
+#### G1 — asked directly, and the answer is that six declarations were six restatements of a REAL hole
+
+**But not the hole I had been naming.** I had been calling G1 *"the gate's zero `cross_namespace`
+fixtures"* as though its subject were the cross-namespace **read**. The auditor separates the two and
+it is right to:
+
+- **The READ half is adequately covered.** `_search_namespaces` writes nothing and §5.3.1 rule 4
+  forbids it ever making an outcome `existing`, so it cannot collapse two identities. `C3-17`,
+  `C3-18`, `C3-19` and `C12-25` cover it, and `MB1` still turns the ids RED.
+- **The WRITE half is pinned by nothing, and that is `X10`** — declined by changes B, C **and** D.
+  `9d2f203` moved guard #4 (`cross_namespace_merge`) **ahead** of guards #1/#2/#3 at
+  `registry.py:4595`, and `INTERFACE.md` §5.10's *"full refusal list, **in order**"* still prints the
+  old order.
+
+**Verified by this worker, mutating the real file rather than a copy** — `MX10`, guard #4 moved back
+to fourth position:
+
+| | baseline | with `MX10` |
+|---|---|---|
+| `check_merge_guard.py` | exit 0 | **exit 0 — SURVIVOR** |
+| contract ids (two legs) | green | **503 passed / 686 skipped — SURVIVOR** |
+
+**A survivor on BOTH.** The cell it leaves untested is specific: *a cross-namespace pair that guards
+#1–#3 would refuse for a different reason*. Today `dpr:borough`(predicate) against
+`oti_311:borough`(entity) answers `cross_namespace_merge`; with the pre-fix order it answers
+`predicate_merge` — **a guard answering with the wrong reason has told a caller something false about
+their store**, the register's own rule from row 3c, and `predicate_merge` is the value §5.10
+annotates as the kill row.
+
+**`C10-04` is the suite's only `into_namespace` test and cannot fail on its own subject**, because
+its operands make guards #1–#3 silent: `_identity_breach` returns `None` for that pair, so the test
+answers the same whether guard #4 fires first or fourth. **The ninth instance of *a fixture that
+cannot fail on its own subject* in this row.**
+
+#### The findings
+
+| id | sev | claim | origin |
+|---|---|---|---|
+| **G1** | **BLOCKING** | restoring the pre-X5 guard order is a full-suite **and** four-gate survivor: `merge_types`' refusal #4 ordering is pinned by nothing | **PRE-EXISTING** (`9d2f203`), declined by B, C and D as `X10` |
+| **G2** | **BLOCKING** | change B's subject line — *"every `alternatives` label now names a ROW"* — is **false**, and it is restated in `PACKAGE.md` and in `C3-19`'s docstring | path PRE-EXISTING; the **claim** INTRODUCED by `f8fc284` |
+| **G3** | MAJOR | `C10-04` cannot fail on guard order | PRE-EXISTING |
+| **G4** | MAJOR | change A publishes *"drives **six** cells"*; its own `_NAME_CELLS` tuple at that commit has **eight** | **INTRODUCED** by `8d717c9` |
+| **G5** | MAJOR | change C asserted `check_links … exit 0` and it did not | INTRODUCED by `9d90992`, **self-caught in change D and independently confirmed here** |
+| **G6** | MAJOR | the `effects`-order false refusal is untouched, declined by all four commits while all four call it the most urgent thing left | PRE-EXISTING |
+| **G7** | MINOR | change A's consumers table names **five** of **six** `_word_rows` sites and prints two **pre-commit** line numbers | INTRODUCED by `8d717c9` |
+| **G8** | MINOR | *"the FOURTEENTH by the file's own numbering"* — the gate's axis banners stop at 13, and two commits use two different derivation formulas | INTRODUCED by `8d717c9` / `9d90992` |
+| **G9** | MINOR | change A's declined `reinstate(kind=)` leaves a door unable to address one of two rows sharing a word (A5) | PRE-EXISTING, an honest decline |
+
+#### G2, stated precisely, because the shipped door is NOT the defect
+
+`registry.py:1996` builds `f"{other}:{name}"` from a **rejected proposal**, which is not a row — and
+that is **correct by design**: §5.3.1 rule 8b legitimises surfacing prior rejections, and `C3-07`
+asserts the score is `None` *"because nothing scored a rejection; 0.0 would be a claim we did not
+make"*. **The door is right and the guarantee I published is wrong.** X7's fix made every label built
+from a *matching row* name a row; my subject line said **every label**, and the sentence is now in
+two specs and a docstring.
+
+#### The mechanism behind three of the four wrong claims
+
+**Three of the four commits publish a figure measured before their own last edit.** G4 counted six
+cells before `_tombstone_exact_store` added the two the commit body itself narrates adding; G7's line
+numbers were read before the commit's own diff; G5's gate run preceded §6.14 being written. **X12's
+rule was not broken by failing to re-derive — it was broken by not re-deriving LAST.** Change D
+caught its own instance; change A's two went unnoticed for a whole round.
+
+#### Claims the auditor verified TRUE, which I record because they are the ones I would rather not check
+
+`C16-08` does kill `MD3`. Axis 15 does kill `MC1`. `MC2` turns axis 12 RED over 24 permutations.
+`MB1` is gate-0 / ids-RED exactly as change B published. Change A's twelve-row mint matrix: **12 held,
+0 broken**. And **every other published number re-derives** — ids 385/386/388/391, `26 of 79` and its
+per-door table 11/9/2/2/1/1, `extra=extra_import_warnings` → 5, `name_previously_retired` 0 → 3,
+33/39, the sorted-return grep → 1, change A's emit lines 2320/2764/5170, two legs 1043/1372.
+
+#### Scored
+
+| # | score |
+|---|---|
+| **R3-P2** | **CONFIRMED** — four untrue assertions across three of the four commits (G2, G4, G8, G5). The falsifier is dead |
+| **R3-P6** | **CONFIRMED** — G4, falsified by its own defining artefact. **A third round running in which a number this row published about its own work is the clean falsification** |
+| **R3-P9** | **PARTIAL, and its *"shown unnecessary"* branch is FALSIFIED** — G1 is not unnecessary; `MX10` survives everything at HEAD. It closes in this round or the falsifier fires |
+| **R3-P5** | **early support** — G1, the round's first BLOCKING, is **in the harness**, not in `registry.py` |
+
+#### What the lens could NOT establish, recorded rather than rounded off
+
+Three-leg tallies (no postgres leg was run; the two-leg figure re-derives exactly); change C's *"1
+distinct return over 6 page orders"* as literally measured, for which it verified the stronger fact
+instead; and whether G1 ends the round declared open a seventh time, which resolves at the close.
+**Rule U applies to a lens's own report**, and this one did not turn *"I could not finish looking"*
+into *"there is nothing there"*.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
