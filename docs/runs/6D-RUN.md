@@ -1293,7 +1293,19 @@ ruling along — and **this row does not get to overturn `C12-09` by fixing some
 `check_merge_guard.py`'s axis 11 drives the six closed cells and **not** cells 3 and 4, so the gate
 records the gap rather than hiding it.
 
-**For the supervisor.** Q95 is the supervisor's rather than the founder's on its face — it is a
-narrowing of a contract id, not a change to a shipped guarantee — **unless** answer 2 is taken, in
-which case what `C12-09` asserts changes and the founder's Q56 territory is one step nearer.
+**Q95 IS THE FOUNDER'S, and the worker's first routing of it was wrong.** This row filed it as the
+supervisor's *"on its face — a narrowing of a contract id, not a change to a shipped guarantee"*.
+The supervisor corrected that, and the correction is recorded here rather than edited over:
+
+> **Reversing `C12-09`'s narrowing changes what the registry DECLINES TO SERVE, which is the Q56
+> class and the founder's decision.** `C12-09` is not a test's private business — it pins an
+> operation a caller may legally perform, and narrowing it removes a write that works today.
+
+**The worker's decline is the default in force**, and Q95 **rides with Q94 in the founder item** —
+one decision, not two, exactly as R92 folded the twelfth and thirteenth `stop` puts together.
+
+**The general lesson this row takes from being corrected**, because it is the same shape the row has
+been finding all round: *whether a question belongs to the supervisor or to the founder is decided by
+what changes if it is answered, not by which artefact the change lands in.* A contract id looks like
+a test and `C12-09` is a guarantee wearing one.
 
