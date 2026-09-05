@@ -731,3 +731,179 @@ honestly, so it is graded **MINOR and unconstructed** rather than confirmed.
 > inside predictions §0 wrote before the lens existed. **This round's yield is concentrated where §0
 > already pointed, which is evidence about the lenses' aim rather than a victory.**
 
+### 6.4 Round 1, lens 4 to return — **the KILL ROW (twenty-two records as one lens). NOT YET: 5 BLOCKING, 4 MAJOR/MINOR — and Q82 is CONSTRUCTED.**
+
+*Written to disk as the lens returned, before any fix. The headline construction was re-run by the
+worker independently, including the full 120-permutation sweep. **[Observed, worker-verified]**
+`git diff --stat d4b86a8 HEAD -- ontoloche/` is **empty**: no code has moved since the
+pre-registration, so every finding stands at HEAD.*
+
+#### K1 — BLOCKING — **R80 / Q82 is CONSTRUCTED. The register's only carried-forward suspicion is now a state.**
+
+**Ruling [R80](../decisions/2026-09-03-6c-rulings-R79-R82.md) put this first in this row's kill-row
+lens and gave it two possible discharges: construct the state, or prove the doors refuse it. **The
+first was achieved.** R80's second half does not apply.**
+
+**The defect.** `merge_types`' non-overridable `alias_collision` escapes on
+`not same_word(holder, left.name)` (`registry.py:4430`) while `_alias_clash` returns only the
+**first** active holder in page order (`registry.py:7441`). So a live row whose **name** is another
+legal spelling of `left.name` fires the escape, and the genuine third holder behind it in the page
+is never seen. **A non-overridable identity guard's answer is a function of sort order.**
+
+**Worker's independent re-run — every page order of the five active rows [Observed]:**
+
+```
+page orders in which the guard REFUSED alias_collision : 60 of 120
+page orders in which the guard was SWALLOWED           : 60 of 120
+ACTIVE holders of 'zeta' after a REFUSED order         : [1]
+ACTIVE holders of 'zeta' after a SWALLOWED order       : [2]
+every SWALLOWED order begins with : ['aaa_note','bbb_memo','beta','gamma_']
+every REFUSED  order begins with  : ['aaa_note','bbb_memo','beta','delta']
+
+beta.aliases                          : ('gamma', 'zeta')
+ACTIVE rows answering to 'zeta' AFTER : [('predicate','beta',('gamma','zeta')),
+                                         ('predicate','delta',('zeta',))]
+resolve_type('zeta')                  : outcome='existing' "'beta' matches at 1.0" confidence=1.0 warnings=()
+THE PAIR ASKED DIRECTLY               : Refusal('predicate_merge', overridable=False)
+CONTROL, step 5 (the escape-firer) not made
+                                      : Refusal('alias_collision', overridable=False, held_by='delta')
+```
+
+**Two ACTIVE rows answering to one word — `C16-06`'s whole-store invariant and mechanism 4 — with
+`resolve_type` at §5.3's guarantee, on a pair the same registry refuses non-overridably under every
+acknowledgement.** Reproduced on the **async mirror** (2 of 4 driven orders swallowed) and on **both
+paging doubles**.
+
+**Which record, and it is a NEW SENTENCE rather than a new door.** Trip 13's own guard (`C10-20`), at
+the escape R80 named: *a guard that excuses a holder by comparing the holder's NAME to `left.name`
+cannot tell `left` from a different live row that is another spelling of `left.name`.* It is also
+**N6 on the type half** — a set of two holders reported as one.
+
+**Why the gate exits 0, countably. [Observed, worker-verified]**
+`grep -c "reversed(\|shuffle\|itertools.permutations" docs/tools/check_merge_guard.py` → **0**. **The
+ten-axis gate contains ZERO page-order controls**; every fixture reads its backend's natural order,
+so a guard whose answer is a function of page order is **unfalsifiable by it**. R58's own class —
+*a guard never reads a page* — arriving at the file built to enumerate these guards.
+
+**§0 scoring: S2 CONFIRMED, and its falsifier is FALSE.** §0.2 stated the falsifier as *"every page
+order is driven and the guard refuses in **every** order."* It refuses in **half**.
+
+#### K4 — BLOCKING — a capability-degraded SKIP whose outcome is indistinguishable from a pass, on **UC1 Tenshen's own declared shape**
+
+**The defect.** `_alias_identity_breach` appends refusal #1's check only `if self.caps.indexes_membership`
+(`registry.py:7137`). On a backend declaring it `False` — **the very shape the FIRST trip was about**
+— the guard is skipped and **nothing at all is said to the caller**.
+
+**[Observed]**, the same five calls on two backends:
+
+```
+A  fully capable sqlite (the CONTROL)
+   consumers('ent_a') / ('ent_b')      : ['svc:meta'] vs []
+   import aliases=['ent_a'] onto ent_b : warnings=('near_duplicate:ent_a',
+                                                   'import_refused:different_consumer_sets')
+   resolve_type('ent_a')               : outcome='proposal' type=None confidence=0.8
+
+B  DegradedAdapter(indexes_membership=False)
+   consumers('ent_a') / ('ent_b')      : [] vs []
+   import aliases=['ent_a'] onto ent_b : TypeEntry(aliases=('ent_a',), warnings=())
+   any warning naming a SKIPPED guard  : []
+   resolve_type('ent_a')               : outcome='existing' "'ent_b' matches at 1.0" confidence=1.0
+```
+
+**Refused non-overridably on one backend, written with `warnings=()` on another, and `resolve_type`
+cashes it at 1.0.** The shipped comment at 7158 names the residual as **Q69** — *in the docstring,
+not to the caller*.
+
+**Which record — a NEW SENTENCE.** Trips 1 and 9 asked whether *unknowable* equals *equal* or
+*different*. **This asks whether *unknowable* equals *nothing to say*.**
+
+**§0 scoring: T1 CONFIRMED and its falsifier FALSE** — §0.3 required *"either refuses or emits a
+stated warning naming the skip."* It does neither. **T9 CONFIRMED as a count**: of `_identity_breach`'s
+**five** call sites (3092, 3219, 3247, 4312, 7175), **only 7175** passes `there_gates`/`here_gates`;
+the other four take the `None` default — the eleventh trip's required-keyword rule un-applied to the
+sibling guard.
+
+**Why the gate exits 0.** `_legs()` builds `sqlite`, `sqlite_minimal` and optional Postgres;
+`DegradedAdapter(indexes_membership=False)` appears **0** times as a leg. The twelve `page_cap`
+doubles are the only degradation the file drives.
+
+#### K2, K3, K5, K6 — four constructions that arrived at findings other lenses reached independently
+
+| # | severity | what it is | independent arrival |
+|---|---|---|---|
+| **K2** | BLOCKING | The tombstone's word at the **alias-write** doors — `_alias_identity_breach` calls `_word_rows(namespace, alias)` at `registry.py:7023` with `match_aliases` **defaulted `False`**. Reproduced at D3's alias write **and** at D4's R75 transfer; `reinstate` then refuses non-overridably | **= §6.3's F4.** Two lenses, different briefs, same construction |
+| **K3** | BLOCKING | `clash_why` bound and never used, so a truncated scan reads as *the words are free* **silently** — and this lens chains it further than the fix auditor did: behind `page_cap=3` the merge proceeds to **two live holders and `resolve_type` at 1.0**, where §6.3's F3 stopped at *byte-identical warnings* | **= §6.3's F3, escalated MAJOR → BLOCKING.** The escalation is accepted: F3 showed the caller cannot tell; K3 shows what it costs |
+| **K5** | BLOCKING | `approve` **raises `AlreadyExists`** out of a call typed `-> TypeEntry \| Refusal`, because nothing holds a pending proposal's word and `import_types` mints the row underneath it | **= §6.3's F5**, reached by a different route (import under a pending proposal, rather than the self-skip) |
+| **K6** | MAJOR | The **cross-kind** cell — a word a retired predicate answers to is free to an entity mint, and `reinstate` then refuses it | **= §6.2's A1 and §6.3's F1. Three lenses, three briefs, one cell** |
+
+#### K7 — MAJOR — **the round's UNPREDICTED finding, and it was found twice**
+
+**[Observed]** on a store `PACKAGE.md` §4.1 **blesses**, built by two ordinary proposals that are
+each accepted with no refusal:
+
+```
+merge_types('alpha','beta') -> RAISED AmbiguousKind: 'alpha' exists under kinds ['entity','predicate']
+retire('alpha')             -> RAISED AmbiguousKind
+reinstate('alpha')          -> RAISED AmbiguousKind
+```
+
+`merge_types:4297` and `reinstate:3654` call `self._require(namespace, name)` with **no `kind=`**,
+and `_require:540` byte-matches. **Chained with K6, an operator who reuses a tombstone's word
+cross-kind lands in a store whose three governance doors are dead for that word.**
+
+**This is §6.2's A5, reached independently.** Neither lens was told about the other. **No §0
+prediction names this address** — §0.7 said in advance that *an unpredicted finding is the most
+valuable thing a lens can return*, and this round produced exactly one, **found twice**.
+
+**Which record.** Trip 8's fourth defect — *"`resolve_type` omitted `kind=` and raised `AmbiguousKind`
+out of the call designed against mechanism 2, on a store `PACKAGE.md` §4.1 explicitly blesses"* — at
+**three doors the fix did not reach**. A rule-(d) failure by number.
+
+#### K8, K9 — the remainder
+
+**K8** (MAJOR) restates T8/G1 from the word side — `same_word('org:beacon','org_beacon')` is `True`,
+both namespaces accept `alpha` with `warnings=()`, both answer at 1.0. **This is §6.1's X4** and is
+not counted twice. **K9** (MINOR): the same `import_types` batch run three times returns a written
+row each time with **no no-op value**, and three active predicates were each given the raw alias
+`状态` with no refusal and no warning, because `identity_key('状态') == ''`. `resolve_type('状态')`
+correctly answers `none`, **so no 1.0 collapse follows and the harm is bounded** — recorded with its
+bound rather than dressed up. **T2 CONFIRMED; T12 CONFIRMED for `import_types` and FALSIFIED for
+`approve`.**
+
+#### The four §0 predictions this lens reports FALSE — **three accepted, ONE REJECTED**
+
+*This is the row's job rather than a lens's: two lenses disagree about S4, and the worker resolves it
+against evidence rather than by averaging.*
+
+| # | the lens's falsification | the worker's adjudication |
+|---|---|---|
+| **T7** | The `_word_spellings` residual is **not** reachable at `_alias_identity_breach`, because `registry.py:7023` runs `_word_rows(namespace, alias)` — a keyed scan over rows of **every status** — beside the `name_in` probe. That is **T7's own stated falsifier**, verbatim. The other site (`retire`'s successor lookup at 3154) feeds only the `found_in` **advice** in a `successor_unregistered` detail and gates nothing | **ACCEPTED. T7 is FALSIFIED.** And it leaves a smaller finding the lens did not name: **`_word_spellings`' docstring still states a residual that the call site above it closes.** A documented residual that no longer exists is a §2.3 Cause-B hazard for the next reader, and it is recorded here rather than fixed |
+| **T12 (half)** | `approve` **does** have the no-op T12 says is missing: run twice it returns `Refusal('already_decided')`. Only `import_types` lacks one | **ACCEPTED. T12 is confirmed for `import_types` and FALSIFIED for `approve`** — a half-score, recorded as a half rather than rounded up |
+| **T3 (as a collapse)** | `reinstate` is genuinely unenumerated — `_word_rows` appears **0** times in its body — but **no state could be constructed in which `reinstate` CREATES a second live holder**. In every construction `reinstate` is the **victim** (`alias_collision`, non-overridable), never the door | **ACCEPTED, and it sharpens §6.3(a)4.** The rule-(d) enumeration gap is real and stands; **the predicted *failure by number at D6* does not.** §0.3 predicted a harm at D6 and there is none. Recorded as a partial falsification |
+| **S4** | *"The kill-row lens driven at `kind="action"` through the six doors found exactly what the `kind="predicate"` lens found (K2 reproduces verbatim) and nothing additional"* — which is S4's own stated falsifier | **REJECTED, and the reason is evidential rather than a preference between lenses.** This lens's `kind="action"` sweep drove **word-identity** constructions — *does the same word collapse?* — and those do transfer verbatim, which is a true and useful result. But **§6.2's A3 is a DECLARATION collapse reached through D3, D4 and D5 — the word doors — whose `kind="predicate"` control is refused `predicate_merge` NON-OVERRIDABLY at every door.** A3 and A4 are therefore exactly *"something the same lens at `kind="predicate"` does not already find"*, at the doors S4 names. This lens did not run A3's construction **because its own brief told it not to spend the round on the ACTIONS layer**, so its sweep could not have reached the finding that decides the prediction. **S4 stands CONFIRMED (§6.2).** The falsification is recorded, not discarded — a lens's negative that the worker overrules belongs on the record with the argument that overruled it |
+
+#### The lens's own report on §0.5, and it is the most important sentence of the round
+
+The lens checked §0.5's central claim against its own findings — *the round's `why the checker exited
+0` reasons will be among G1–G4, written down before the round* — and reported it **honestly and
+against itself**:
+
+> **G4 is K5's reason verbatim; rule (c)'s field gap is K2's; G2 is K6's; G1 is K8's. K1's and K3's
+> reasons are NEW counts — zero page-order controls, and one `alias_check_incomplete` assertion — so
+> §0.5 is NOT falsified, but it is NOT clean either: two of six gate-blindness reasons were not among
+> the four.**
+
+**That grading is adopted without amendment.** §0.5 predicted the gate's blind spots in advance and
+got **four of six**. The register does not get to call that a clean confirmation, and this row does
+not.
+
+#### Scoring from this lens
+
+**CONFIRMED:** S1, **S2**, T1, T2, T5, T8, T9, T10, T11, T13, T14, N1, N5, N6, G1, G2, G3, G4.
+**FALSIFIED:** T7 (accepted), T12 for `approve` (half), T3 as a collapse (partial). **S4's
+falsification REJECTED** with the argument above.
+**Not probed by this lens, stated plainly rather than scored:** T6, N2, N3, N4, N7, N8.
+
+**Routed to the supervisor for countersignature (R83): K1, K2, K3, K4 and K5.** The count stays
+**FOURTEEN**; classification is not the worker's.
+
