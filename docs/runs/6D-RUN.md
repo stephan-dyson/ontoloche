@@ -1548,6 +1548,250 @@ NINETEEN.**
 > rather than at two callers, and it is the thing this row should have predicted and did not.
 
 
+### 6.11 Round 2, lens 3 — **the ACTIONS-TWIN lens. NOT YET: 4 BLOCKING, 5 MAJOR. A3 IS NOT CLOSED.**
+
+*Written to disk before any fix. A9 and A13 were re-verified by the worker against the repo.*
+
+#### A9 — BLOCKING — **A3 is not closed: the rule binds three COLLAPSE doors and none of the three DECLARATION doors**
+
+**Worker's independent re-run, four ordinary calls, no `force`, on both collapse doors:**
+
+```
+step3 collapse (merge_types / retire(successor=))  -> SUCCEEDED   (C19-99's own legal case)
+step4 amend the survivor via import_types          -> active auto reversible  warnings=()
+resolve_type('pay_out')  -> ('existing', 'payout', 1.0)
+preflight('pay_out')     -> ('refused',  human, irreversible)
+preflight('payout')      -> ('allowed',  auto,  reversible)
+record_invocation('pay_out','applied','ai:haiku') -> applied
+invocations(family='payout').known  -> 0        invocations(family='pay_out').known -> 1
+```
+
+**That is §6.2's A3 evidence block reproduced line for line with the fix live.** Collapse two families
+whose governance *agrees* — the case `C19-99` pins as legal — then **amend the survivor**, and the
+guard is never re-asked. A second route needs no amendment at all: `ACTIONS.md` rule 2.2-1 makes a
+family declaring none of the eight keys a legal `TypeEntry`, and the guard returns `None` when either
+side has no attributes, so the collapse is staged through the undeclared family and the declaration
+written afterwards.
+
+> **My commit's own argument for that early return — *unknowable is not equal, and it is not
+> DIFFERENT either* — is sound for the COMPARISON and wrong for the DOOR. Nothing re-asks the
+> question when the absence is later filled.**
+
+**Routing:** per **R91** this is **governance identity — Q94, counted separately from the trips.** It
+does not touch the nineteen. **§6.8: NONE**, and it **falsifies R2-P10's second clause** — the
+unpredicted finding is in `registry.py`, not the harness.
+
+#### The other three BLOCKING
+
+| # | the defect |
+|---|---|
+| **A7** | **`effects` compared by order-sensitive list equality, and the false refusal has NO path back.** Two families declaring the same effects in opposite order are refused at all three doors — and `merge_types` with **every** acknowledgement including `action_declarations_diverge`, and `retire(successor=, force=True)`, still refuse. **A legal operation closed permanently.** **R2-P4 CONFIRMED**, falsifier FALSE |
+| **A8** | **The same comparison contradicts the package's own `effect_identity`.** `actions.py:585` excludes `why` from effect identity *"so that amending a sentence does not turn one declared effect into two."* `_action_declarations_diverge` compares the raw `to_dict()`, `why` included — so **a full stop in a prose field permanently closes a merge the package's own identity function calls the same effect.** A second home for one fact |
+| **A10** | **The import door of A3's rule is pinned by NOTHING.** `304967a` enumerates three doors and ships two ids (`C19-97` merge, `C19-98` retire). **[Observed]** deleting the entire 48-line import-door block from both trees: `1017 passed`, gate exit 0, drift exit 0. **And narrowing `_GOVERNANCE_KEYS` from four keys to two survives too** — `min_auto_tier` and `effects` are load-bearing for nothing. A rule-(d) failure inside the commit that invoked rule (d) by name |
+
+#### The five MAJOR
+
+**A11** — the A3 import check **fires before `_alias_clash` and steals `alias_collision`'s reason**,
+losing the `near_duplicate` warning. **That is change 1's own recorded lesson #1 repeated inside
+change 4.** **A12** — the import guard reads the **incoming** row's attributes, so an import row with
+no `attributes` key skips it entirely and **silently erases the stored family's eight declared keys**:
+`warnings=()`, `attributes={}`. **A13** — `304967a` added a **new** dropped `why`:
+**[Observed, worker-verified]** `git blame -L 5288,5288` → **`304967a`**, and `= self._word_rows(`
+has **6** call sites of which **3** drop the `why` (5108 = F2, **5288 = new**, 7490). The call also
+omits `match_aliases=True`, so it asks *is this word a row's NAME?* and not *does any row ANSWER TO
+this word?* — the fourteenth trip's own operand. **A14** — R2-P3 at the new door. **A15** — R2-P8 at
+`merge_types`, six distinct details in six page orders.
+
+#### The verdict this lens owed on round 1's six
+
+| # | verdict |
+|---|---|
+| **A1** | **CLOSED.** `9a4e140` holds at all three mint doors in all three kind directions, and `C16-07`'s narrowing holds |
+| **A2** | **STILL OPEN, unchanged** — `_word_rows` → `[]` where `_alias_clash` → `('alpha_act',)` |
+| **A3** | **NOT CLOSED — and WORSE than recorded**, because a fix that false-refuses a legal merge (A7/A8) now sits on top of a rule that is still walkable (A9) |
+| **A4** | **STILL OPEN. Nothing was fixed.** After `retire`, `preflight` → `allowed` with no warning while `resolve_type` says the word is not a live type |
+| **A5** | **STILL OPEN. Nothing was fixed.** `reinstate` still has **no `kind` parameter**, so a §4.1-blessed word can never be reinstated by any caller |
+| **A6** | **UNCHANGED, mitigated not closed** — `aio/registry.py` carries 103 identity-field writes, invisible to Part A, covered by a `nonbinding` test |
+
+**Asked plainly and answered plainly: A4 and A5 were both MAJOR and neither was fixed.**
+
+#### The TWIN TABLE re-run — the layer now inherits **fifteen of nineteen**
+
+Round 1 found nine of fourteen. Trips 15 and 16 are **closed** at `kind="action"`; trip 7 **became**
+closed (change 2's keying fixed what round 1 recorded as reproducing). The four gaps: trip 17's
+**detail** (A15), trip 18 (A13, A14), trip 19's **refusal path** (A14), and trip 4's cell — **Q95**,
+declined. **Three of the four are inside this row's own fix set.**
+
+---
+
+### 6.12 Round 2, lens 4 — **the KILL ROW. NOT YET: 3 BLOCKING, 2 MAJOR — and the bisect changes what round 2 means**
+
+*Written to disk before any fix. K1 re-run by the worker; K3 is §6.9's G1 and was verified there.*
+
+#### K1 — BLOCKING — **the escape excuses a STRANGER, and `PACKAGE.md` §4.1 is what makes it one** — ROUTED
+
+Change 2's escape reads `blocking = tuple(h for h in holders if not same_word(h, left.name))`, on the
+stated ground that *"a holder that is merely another spelling of `left.name` is `left` itself under a
+different skin."* **§4.1 blesses one word under two kinds**, so it need not be. **Change 2 fixed
+*which* holders are examined and never questioned *what excuses one*.**
+
+**Worker's re-run, `sqlite`, ordinary calls, no `force`:**
+
+```
+CONTROL: import_types beta aliases=['alpha'] -> warnings=('import_refused:kind_mismatch',)   [#3, non-overridable]
+5. merge_types('alpha' -> 'beta')            -> MergeResult aliases_added=('alpha',)
+   ACTIVE holders of 'alpha' after: [('entity','alpha_',()), ('predicate','beta',('alpha',))]
+   resolve_type('alpha', kind='entity')    -> existing / alpha_ / 1.0
+   resolve_type('alpha', kind='predicate') -> existing / beta  / 1.0
+```
+
+**One word, two identities, both at 1.0 — and the alias door refuses the identical write
+non-overridably in the same store.** *Worker's own qualification, because the tail of the run reads
+the other way:* on **`sqlite_minimal` the construction is refused** `predicate_merge`, because extents
+are empty on that leg. **It reproduces on `sqlite`, `postgres` and the async mirror; it does not on
+`sqlite_minimal`.**
+
+**New sentence:** *a guard's excuse clause identifies a row by its WORD, where the registry permits
+two rows to share one.* **Gate reason, countable:** `excused` — the detail key change 2 minted for
+exactly this set — occurs **once** in the gate, **inside a comment**. Live assertions: **0**.
+
+#### K2 and K3 — the same two doors the fix auditor found, reached independently
+
+**K3 = §6.9's G1** (approve has no name-holder branch) and **K2 = §6.9's G2** (import's `r.name !=
+name` filter). Two lenses, two briefs, one pair of doors. K3's gate reason is the sharpest count this
+round produced:
+
+> **[Observed]** `name_previously_retired` occurs **0** times in `check_merge_guard.py` and **0**
+> times in `test_c5_approve_reject.py`. **The EIGHTH trip's own warning value has never been asserted
+> at any door, on any leg, in any of the thirteen axes.** The cause is one fixture: `_alias_only_store`
+> retires `searchable` and every mint door then mints `commentable`, so `same_word(tombstone.name,
+> word)` is **False in every fixture in the file** — the three cells labelled `name × …` drive the
+> incoming name against a tombstone's **alias**, never against a tombstone's **NAME**.
+
+#### THE BISECT, and it is the most important fact round 2 produced
+
+**[Observed, shadow package from `git archive d4b86a8`]** **K1, K2 and K3 are all PRE-EXISTING at
+`d4b86a8`** — the pre-registration commit, before a single fix landed.
+
+> **The five fixes did not introduce them. They wrote AROUND them.**
+
+**That falsifies the direction of R2-P2.** The prediction said *the fix auditor's findings will be
+inside the five commits*, and every one of K1–K3 is at a line one of those commits **edited** — but
+the defect was there first. **The register's counted policy holds for the ADDRESS and not for the
+PROVENANCE this round**, and that distinction is new: for seven rows *the next defect lives in the
+last fix* has meant *the fix introduced it*. Here it means *the fix stood next to it and did not see
+it.*
+
+#### K4, K5 and the predictions
+
+**K4** is A7/G5 (the `effects` order refusal) reached a third time. **K5** confirms **R2-P3 and
+R2-P9 together**: on `sqlite_degraded` a predicate pair has refusal #1 skipped, the note appended to
+`merge_warnings`, and then `predicate_merge` fires and the note is discarded — **so R2-P9's falsifier
+is FALSE in both directions**: the note does not reach a predicate caller, and the skip *does* arise
+there. Gate reason: axis 13's merge branch files a refusal as `NOT REACHABLE`, so **the axis built to
+prove the note is stated scores the exact configuration in which it is dropped as out of scope.**
+
+**What the lens could NOT reach, and said so:** Q95's cells 3 and 4 — it drove the transfer doors and
+could not build a harm the blessed `C12-09` write does not already produce one door earlier, so **the
+row's decline stands on the evidence available**. And `_alias_holder`'s single holder: it tried to
+break the *no caller has an escape clause* argument and could not. **That argument survives this
+lens** — which matters, because §6.10 shows the *other* single-holder argument (the escape clause at
+`merge_types`) did not.
+
+
+### 6.13 Round 2, totalled — **four lenses, four verdicts of NOT YET, and the findings did NOT shrink**
+
+| lens | raw | BLOCKING |
+|---|---|---|
+| fix auditor (§6.9) | 9 | 3 |
+| cross-namespace (§6.10) | 6 | 2 |
+| actions-twin (§6.11) | 9 | 4 |
+| kill row (§6.12) | 5 | 3 |
+| **raw total** | **29** | **12** |
+| **DISTINCT** | **21** | **9** |
+
+**Round 1: 19 distinct, 8 BLOCKING. Round 2: 21 distinct, 9 BLOCKING.** The count went **up**, over a
+surface five commits had just been written across. Row 7a's own sentence applies unchanged: *a loop
+whose findings do not shrink is still productive*, and the honest reading is that the fixes did not
+run out of things to find.
+
+**Five findings were reached by more than one lens** — the approve door (G1 = K3), the import filter
+(G2 = K2), the `effects`-order refusal (G5 = A7 = K4, **three lenses**), the accumulators lost on
+refusal paths (G4 = A14 = K5 = X11, **four lenses**), and the page-order **detail** (G6 = A15).
+
+#### THREE constructions routed to the supervisor for countersignature
+
+*Each reaches a shipped door with ordinary calls and leaves two identities answering to one word, or
+answers at §5.3's guarantee on a pair the registry refuses non-overridably. **The worker classifies
+none of them. The count is NINETEEN.***
+
+| # | construction | ordinary calls? | provenance |
+|---|---|---|---|
+| **K3 / G1** | **`approve` has no name-holder branch**: a tombstone whose own name is another spelling of the approved word is minted over with `warnings=()`, at the door **R40 forces every predicate down**; `reinstate` then refused non-overridably | four ordinary calls, **no `force`** | **PRE-EXISTING at `d4b86a8`** |
+| **K2 / G2** | **`import_types`' name door discards the byte-identical cross-kind tombstone** — `r.name != name`, a clause that was inert until change 1 widened the scan past it; the tombstone becomes **unreachable**, because `reinstate` has no `kind` parameter | three ordinary calls | **PRE-EXISTING at `d4b86a8`** |
+| **K1** | **`merge_types`' escape excuses a stranger** — it identifies a row by its WORD where §4.1 permits two rows to share one; `alpha_`(entity) and `beta`(predicate) both answer to `alpha` at **1.0**, and the alias door refuses the identical write `kind_mismatch` non-overridably | ordinary calls, no `force`; **reproduces on sqlite / postgres / async, NOT on `sqlite_minimal`** | escape shipped before this row; the SET was change 2's |
+
+**And one construction routed as governance identity rather than as a trip:** **A9 — A3 is not
+closed.** Per R91 that is **Q94**, counted separately, and it does not touch the nineteen.
+
+#### The four things round 2 is owed, stated against the row
+
+**1. FOUR of my five fix commits assert something that is not true.** `9a4e140`'s door table
+(G1/G2), `f8992f3`'s comment that a detail cannot depend on page order (G6, and 60 of 120 orders say
+otherwise), `a446b89`'s mutation proof that holds only under a cleaner mutation than the one
+recorded, and `9d2f203`'s two — a door table calling the home half *"already right"* when it is
+byte-exact (X9), and **the measure R90 set as the form of done, which returns 1 under R90's own
+command and not the 6 I published** (X12). §6.9's headline said three; §6.10 corrected it upward to
+four; it stays four.
+
+**2. THE PATTERN, and it is one sentence.** *I widened four matchers and did not follow three of them
+to their consumers.* `_word_rows`' kind filter widened, the filter that discards its result left
+alone (G1, G2). `_answers_to`'s keying widened, the label constructor left alone (X7). `_alias_clash`
+widened to a SET, the detail left in scan order (G6, A15). **Two of round 2's nine BLOCKING are that
+sentence, and §6.8 did not predict it** — the row predicted defects *inside* its fixes and missed the
+class *between* a fix and its consumer.
+
+**3. THE BISECT INVERTS WHAT "THE NEXT DEFECT LIVES IN THE LAST FIX" MEANS THIS ROUND.** K1, K2 and
+K3 are all at lines the five commits **edited**, and all three are **pre-existing at `d4b86a8`**. For
+seven rows that policy has meant *the fix introduced it*. Here it means **the fix stood next to it
+and did not see it** — which is a different and, for the `stop` question, a more interesting fact:
+the loop is still finding the surface's own defects rather than the row's regressions, exactly as the
+thirteenth and fourteenth countersignatures said it had begun to.
+
+**4. THE HARNESS AUDIT WAS REAL, and it is the half I would have skipped.** Four of the twenty-one
+distinct findings are in the gate itself — two mutation survivors on the degraded leg (G3), a cell
+the table records as CLOSED that **no fixture drives** (G7), a `why` nothing asserts (G8), and a
+coverage claim off by 4× (G9). §6.8's second falsifier — *if every finding is in `registry.py` and
+none in the gate, the harness audit was not real* — **does not bite.**
+
+#### §6.8's ten, scored
+
+| # | outcome |
+|---|---|
+| **R2-P1** | **CONFIRMED** — four of four NOT YET |
+| **R2-P2** | **CONFIRMED for the address, FALSIFIED for the provenance** — the fix auditor did find the most, and its findings do cite the five commits; but bisect shows the three routed constructions pre-date them |
+| **R2-P3** | **CONFIRMED by four lenses independently** — every accumulator is dropped on every refusal path, `Refusal` has no `warnings` field at all |
+| **R2-P4** | **CONFIRMED, falsifier FALSE**, and **extended** by A8 beyond order to `why`-in-`effects` |
+| **R2-P5** | **CONFIRMED twice** — G3 and G7, the fifth and sixth fixture defects in five changes |
+| **R2-P6** | **FALSE** — one added scan, not three; measured, bounded, linear, 4× cheaper than the precedent. **The true half stands: no commit in the fix set carries a measurement** |
+| **R2-P7** | **FALSE as stated** — 21 rows, not 89. **Its substance is confirmed by K5**: one of those rows *is* wrong — axis 13 files the refusal path as NOT REACHABLE, and that is the case the note is lost in |
+| **R2-P8** | **CONFIRMED as a class, its SITE falsified** — the unfixed detail is at `merge_types`, change 2's own door, not `import_types` |
+| **R2-P9** | **CONFIRMED, falsifier FALSE in both directions** — the note does not reach a predicate caller, and the skip does arise there |
+| **R2-P10** | **First clause CONFIRMED, second clause FALSIFIED** — there were four unpredicted findings and the three most serious (K1, K2/G2, K3/G1, A9) are in `registry.py`, not the harness |
+
+**Scored: 6 CONFIRMED · 2 PARTIAL · 2 FALSE.** Round 1 scored 21/30 confirmed on a surface nobody
+had touched; round 2 scored 6/10 on a surface the row had just rewritten, **and the two clean
+falsifications are both numbers this row published about its own work.**
+
+#### The stop condition — **round 2 does NOT close the loop**
+
+Standing constraint 7: two consecutive clean rounds, or three rounds plus an honest convergence note.
+**Round 2 was not clean.** Round 3 is available under the cap and the convergence note comes only
+when it closes. **The fix set round 2 obliges is written before round 3's lenses run**, and its
+subject is named by the pattern above rather than by the finding list: **every matcher this row
+widened, followed to every consumer.**
+
+
 ---
 
 ## 7. The fix set
