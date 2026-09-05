@@ -570,14 +570,43 @@ ALL_ACKNOWLEDGEMENTS = [
 ]
 
 
-def _seed(registry: Registry, name: str, *, kind="entity", predicates=(), definition=None):
+def _seed(
+    registry: Registry,
+    name: str,
+    *,
+    kind="entity",
+    predicates=(),
+    definition=None,
+    namespace="default",
+    attributes=None,
+):
+    """Seed one row.
+
+    **`namespace` and `attributes` are findings G1 and G2, and their absence here is the
+    countable reason two whole axes could not be written** (row 6d, round 3). Every
+    fixture in this file was born in `"default"` with no declaration, so:
+
+    * `cross_namespace` occurred **0** times and `namespace="` **16** times, all
+      `"default"` -- so `merge_types`' refusal **#4** and, after `9d2f203` moved it ahead
+      of #1/#2/#3, its whole ORDER, were driven by nothing. Restoring the old order was a
+      full-suite and four-gate SURVIVOR.
+    * `kind="action"` occurred **1** time and that hit was a COMMENT asserting the count
+      was zero, and `action_declarations_diverge` **0** times -- so the A3 rule this row
+      minted was invisible to the identity gate, and cutting `_GOVERNANCE_KEYS` in half
+      left the whole suite byte-identical.
+
+    A helper that cannot express a fixture is a checker that cannot pose a question, and
+    this file spent three rounds declaring the consequence as a decline.
+    """
     out = registry.propose_type(
         name,
         definition or f"a {name}, for the purposes of this check",
         EVIDENCE,
         "user:sd",
         kind=kind,
+        namespace=namespace,
         predicates=list(predicates),
+        attributes=attributes,
     )
     if isinstance(out, TypeEntry):
         return out
@@ -3597,6 +3626,234 @@ _NAME_CELLS = (
 )
 
 
+def check_cross_namespace_order() -> tuple[list[str], list[str], list[str]]:
+    """Axis 16 -- **which refusal a CROSS-NAMESPACE pair gets, and in what order.**
+
+    **Finding G1 / X10, declared open in SIX consecutive commits of this row and closed
+    here.** `9d2f203` moved refusal **#4** (`cross_namespace_merge`) AHEAD of #1/#2/#3 on
+    the argument that *these two rows are not comparable at all* is the FIRST fact about
+    the pair, not the fourth. The argument is right. **Nothing pinned it**: restoring the
+    old order was a survivor on the full suite AND on all four gates, because
+    `cross_namespace` occurred ZERO times in this file and all sixteen `namespace="`
+    literals said `"default"`.
+
+    `C10-04` is the suite's ONLY `into_namespace` test and **cannot fail on this
+    subject**: its operands make guards #1-#3 silent (`_identity_breach` returns `None`),
+    so it answers the same whether #4 fires first or fourth. *A fixture that cannot fail
+    on its own subject* -- the ninth instance in this row, and the one that hid G1.
+
+    **The cell, stated so it can only pass for its own reason.** `dpr:borough` is an
+    ENTITY and `oti_311:borough` a PREDICATE, so guards #1-#3 would answer
+    `predicate_merge` -- the value INTERFACE.md 5.10 annotates as the kill row. The
+    shipped order answers `cross_namespace_merge`. **A guard that answers with the wrong
+    REASON has told a caller something false about their store**, which is row 3c's own
+    rule and `C9-19`'s class.
+    """
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    for leg, build, _knowable in _legs():
+        registry = build()
+        try:
+            _seed(registry, "borough", kind="entity", definition="a thing",
+                  namespace="dpr")
+            _seed(registry, "borough", kind="predicate", definition="a capability",
+                  namespace="oti_311")
+            if registry.adapter.get_type("oti_311", "borough", kind="predicate") is None:
+                unreachable.append(
+                    f"{leg} / cross-namespace order: the oti_311 row was not written"
+                )
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'cross-ns refusal':24s} NOT REACHABLE"
+                )
+                continue
+            out = registry.merge_types(
+                "borough", "borough", "one and the same", merged_by="user:sd",
+                namespace="dpr", into_namespace="oti_311",
+                acknowledge=("definitions_diverge", "no_consumer_evidence"),
+            )
+            reason = out.reason if isinstance(out, Refusal) else "MERGED"
+            if reason == "cross_namespace_merge":
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'cross-ns refusal':24s} held"
+                )
+            elif reason == "MERGED":
+                problems.append(
+                    f"{leg} / cross-namespace order: two rows in DIFFERENT namespaces "
+                    f"were collapsed. 2.6's whole purpose is keeping two words apart"
+                )
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'cross-ns refusal':24s} FAILED"
+                )
+            else:
+                problems.append(
+                    f"{leg} / cross-namespace order: the door answered {reason!r} where "
+                    f"`cross_namespace_merge` is the FIRST fact about this pair. These "
+                    f"two rows are not comparable at all -- 2.6 -- so a reason drawn "
+                    f"from COMPARING them tells the caller something false about their "
+                    f"store. That is row 3c's rule and `C9-19`'s class, and this axis "
+                    f"exists because restoring the pre-`9d2f203` order was a survivor "
+                    f"on the full suite and on all four gates"
+                )
+                lines.append(
+                    f"  {leg:15s} {'merge_types':17s} {'cross-ns refusal':24s} FAILED"
+                )
+        finally:
+            _release(registry)
+
+    return problems, lines, unreachable
+
+
+#: The governance cells, each a pair of `kind="action"` families and the answer the merge
+#: door owes them. **Finding G2**: before this axis, `kind="action"` appeared ONCE in this
+#: file and that occurrence was a COMMENT asserting the count was zero, while
+#: `action_declarations_diverge` appeared ZERO times.
+_ACTION_CELLS = (
+    # (label, left attrs, right attrs, expected)
+    ("effects reordered", "order_a", "order_b", None),
+    ("why on a protocol op", "why_a", "why_b", None),
+    ("host_state why", "host_a", "host_b", "action_declarations_diverge"),
+    ("min_auto_tier", "tier_a", "tier_b", "action_declarations_diverge"),
+    ("approval_mode", "mode_a", "mode_b", "action_declarations_diverge"),
+)
+
+
+def _action_attrs(which: str) -> dict:
+    """The eight-key declaration for one side of a governance cell."""
+    add_edge = {"op": "add_edge", "family": "person_links", "namespace": "default",
+                "kind": None, "why": ""}
+    propose = {"op": "propose_type", "family": None, "namespace": "default",
+               "kind": "entity", "why": ""}
+    base = dict(reversibility="reversible", approval_mode="auto", min_auto_tier=None)
+    if which == "order_a":
+        return dict(base, effects=[add_edge, propose])
+    if which == "order_b":
+        return dict(base, effects=[propose, add_edge])
+    if which == "why_a":
+        return dict(base, effects=[dict(add_edge, why="links the payer")])
+    if which == "why_b":
+        return dict(base, effects=[dict(add_edge, why="links the payer.")])
+    if which == "host_a":
+        return dict(base, effects=[{"op": "host_state", "family": None,
+                                    "namespace": None, "kind": None,
+                                    "why": "debits a ledger"}])
+    if which == "host_b":
+        return dict(base, effects=[{"op": "host_state", "family": None,
+                                    "namespace": None, "kind": None,
+                                    "why": "credits a ledger"}])
+    if which == "tier_a":
+        return dict(base, effects=[add_edge], min_auto_tier="ai:opus")
+    if which == "tier_b":
+        return dict(base, effects=[add_edge], min_auto_tier="ai:haiku")
+    if which == "mode_a":
+        return dict(base, effects=[add_edge])
+    if which == "mode_b":
+        return dict(base, effects=[add_edge], approval_mode="human",
+                    reversibility="irreversible")
+    raise AssertionError(which)  # pragma: no cover
+
+
+def check_action_governance() -> tuple[list[str], list[str], list[str]]:
+    """Axis 17 -- **the governance operand at the merge door, on `kind="action"` rows.**
+
+    **Finding G2, declared open in three commits of this row and closed here.** Before
+    this axis `kind="action"` appeared in this file exactly ONCE -- inside a comment
+    asserting the count was zero -- and `action_declarations_diverge` appeared ZERO
+    times. So the rule row 6d minted at `304967a` was invisible to the identity gate, and
+    round 3's lens cut `_GOVERNANCE_KEYS` from four keys to two and the entire suite
+    stayed **byte-identical to baseline**.
+
+    **Both directions, deliberately.** Two cells must MERGE (the same effects in a
+    different order; a `why` on a protocol op) because `304967a` refused them
+    non-overridably and that CLOSED A LEGAL OPERATION. Three must REFUSE (`host_state`'s
+    `why` IS its identity per ACTIONS.md 2.5; a differing `min_auto_tier`; a contradictory
+    `approval_mode`). An axis that only drove the refusing half would go green on the very
+    defect this row shipped.
+    """
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    for leg, build, _knowable in _legs():
+        for label, left, right, expected in _ACTION_CELLS:
+            registry = build()
+            try:
+                if not registry.caps.stores_attributes:
+                    unreachable.append(
+                        f"{leg} / action governance / {label}: this backend stores no "
+                        f"attributes, so a family cannot be DECLARED at all"
+                    )
+                    lines.append(
+                        f"  {leg:15s} {'merge_types':17s} {label:24s} NOT REACHABLE"
+                    )
+                    continue
+                # There is no separate call to create an edge family -- EDGES.md 2.3's
+                # own argument -- so it is a `kind="edge"` row with 2.4's five keys, and
+                # an `add_edge` effect may only name a REGISTERED one (2.5 rule 2.5-7).
+                try:
+                    _seed(
+                        registry, "person_links", kind="edge",
+                        definition="the person_links relationship",
+                        attributes={
+                            "level": "instance", "symmetric": False,
+                            "inverse_label": None,
+                            "endpoint_kinds": {"src": ["entity"], "dst": ["entity"]},
+                            "payload_schema": None,
+                        },
+                    )
+                except AssertionError as exc:
+                    unreachable.append(
+                        f"{leg} / action governance / {label}: no edge family ({exc})"
+                    )
+                    lines.append(
+                        f"  {leg:15s} {'merge_types':17s} {label:24s} NOT REACHABLE"
+                    )
+                    continue
+                _seed(registry, "pay_out", kind="action", definition="a verb",
+                      attributes=_action_attrs(left))
+                _seed(registry, "payout_", kind="action", definition="a verb",
+                      attributes=_action_attrs(right))
+                out = registry.merge_types(
+                    "pay_out", "payout_", "one and the same", merged_by="user:sd",
+                    acknowledge=("definitions_diverge", "no_consumer_evidence"),
+                )
+                got = out.reason if isinstance(out, Refusal) else None
+                if got == "cannot_record_override":
+                    # Rule U at the axis: the acknowledgement cannot be recorded here, so
+                    # governance is never compared. NOT REACHABLE, never a pass.
+                    unreachable.append(
+                        f"{leg} / action governance / {label}: the door refused "
+                        f"`cannot_record_override` before governance was compared"
+                    )
+                    lines.append(
+                        f"  {leg:15s} {'merge_types':17s} {label:24s} NOT REACHABLE"
+                    )
+                elif got == expected:
+                    lines.append(f"  {leg:15s} {'merge_types':17s} {label:24s} held")
+                elif expected is None:
+                    problems.append(
+                        f"{leg} / action governance / {label}: the door REFUSED "
+                        f"{got!r} a collapse whose governance is IDENTICAL. ACTIONS.md "
+                        f"2.5 defines effect identity as (op, namespace, family, kind), "
+                        f"3.3's mechanism is set containment and 1 says NO ORDERING -- "
+                        f"so this closes a LEGAL operation, which is what `304967a` did"
+                    )
+                    lines.append(f"  {leg:15s} {'merge_types':17s} {label:24s} FAILED")
+                else:
+                    problems.append(
+                        f"{leg} / action governance / {label}: expected {expected!r} and "
+                        f"got {got!r}. One word with TWO governance answers is the harm "
+                        f"`304967a` exists to prevent -- `resolve_type` at 1.0 one way "
+                        f"and `preflight` refusing the other"
+                    )
+                    lines.append(f"  {leg:15s} {'merge_types':17s} {label:24s} FAILED")
+            finally:
+                _release(registry)
+
+    return problems, lines, unreachable
+
+
 def check_merge_escape() -> tuple[list[str], list[str], list[str]]:
     """Axis 15 -- the kill row's TWENTY-SECOND trip: **who may the escape excuse?**
 
@@ -3843,6 +4100,16 @@ def main() -> int:
             "PACKAGE.md 4.1 pair, one word under two kinds, which no fixture above "
             "could pose:",
             check_merge_escape,
+        ),
+        (
+            "  and WHICH REFUSAL A CROSS-NAMESPACE PAIR GETS -- finding G1/X10, declared "
+            "open in SIX commits: every fixture above was born in `default`:",
+            check_cross_namespace_order,
+        ),
+        (
+            "  and THE GOVERNANCE OPERAND ON `kind=\"action\"` ROWS -- finding G2: "
+            "`action_declarations_diverge` appeared ZERO times in this file:",
+            check_action_governance,
         ),
     ):
         print()

@@ -2487,6 +2487,61 @@ skip.
 
 ---
 
+### 6.23 Round 3's fix set, change 2 of 4 — **G1 and G2 close, and the reason both were open is ONE helper**
+
+*One file, `check_merge_guard.py`. `G1` had been declared open in **six** consecutive commits of this
+row and `G2` in **three**. Change D's own commit said I would stop calling that a decline.*
+
+#### The reason both axes were impossible, and it is not that I forgot
+
+`_seed` — the helper every fixture in the file is built from — took **no `namespace` and no
+`attributes`**. So every row in `check_merge_guard.py` was born in `"default"` with no declaration,
+and two whole questions could not be *expressed*, let alone asked:
+
+| | before | why it mattered |
+|---|---|---|
+| `cross_namespace` | **0** → **8** | `namespace="` appeared 16 times, **all `"default"`** — so refusal #4 and, after `9d2f203` moved it ahead of #1/#2/#3, its whole **order**, were driven by nothing |
+| `kind="action"` | **1** (a **comment** asserting the count was zero) → **8** | `action_declarations_diverge` appeared **0** times, now **7** — the rule this row minted at `304967a` was invisible to the identity gate |
+
+**A helper that cannot express a fixture is a checker that cannot pose a question**, and this file
+spent three rounds declaring the consequence as a decline instead of widening the helper.
+
+#### Axis 16 — which refusal a cross-namespace pair gets, and in what order
+
+`dpr:borough` is an **entity**, `oti_311:borough` a **predicate**, so guards #1–#3 *would* answer
+`predicate_merge` — the value §5.10 annotates as the kill row. The shipped order answers
+`cross_namespace_merge`, and the argument for that is right: *these two rows are not comparable at
+all* is the FIRST fact about the pair, not the fourth. **Nothing pinned it.** The cell is built so it
+can only pass for its own reason: a pair on which #1–#3 are silent would answer the same either way,
+which is exactly why `C10-04` — the suite's only `into_namespace` test — **cannot fail on this
+subject**.
+
+#### Axis 17 — the governance operand, and it drives BOTH directions on purpose
+
+Five cells. **Two must MERGE** (the same effects in a different order; a `why` on a protocol op),
+because `304967a` refused them non-overridably and that **closed a legal operation**. **Three must
+REFUSE** (`host_state`'s `why` IS its identity; a differing `min_auto_tier`; a contradictory
+`approval_mode`). *An axis that drove only the refusing half would go green on the very defect this
+row shipped* — and the two keys round 3's lens found load-bearing for zero ids are now driven here.
+
+#### Mutation proof — every one of these was GREEN on the gate before this change
+
+| mutation | gate now | the cell that catches it |
+|---|---|---|
+| **MX10** guard #4 back to fourth — **G1's six-commit survivor** | **RED** | `cross-ns refusal`, on sqlite and sqlite_minimal |
+| **MR1** order-sensitive `!=` restored | **RED** | `effects reordered`, `why on a protocol op` |
+| **MR2** `host_state`'s `why` dropped from identity | **RED** | `host_state why`, on sqlite and sqlite_degraded |
+| **MR3** `_GOVERNANCE_KEYS` cut to two keys | **RED** | `host_state why`, `min_auto_tier` |
+
+#### Rule U at both axes
+
+`sqlite_minimal` stores no attributes, so a family **cannot be declared there at all** — all five
+governance cells record **NOT REACHABLE, never a pass**, with the capability named. And a cell
+refused `cannot_record_override` records NOT REACHABLE too: the acknowledgement could not be written,
+so governance was never compared.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
