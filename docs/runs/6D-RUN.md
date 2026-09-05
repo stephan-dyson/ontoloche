@@ -1796,14 +1796,14 @@ widened, followed to every consumer.**
 
 ### 6.14 Round 2's fix set, changes A–C — **every matcher this row widened, followed to every consumer**
 
-*Ruling [R93](../decisions/2026-09-04-6d-supervisor-ruling-R93.md)'s subject, stated as the
+*Ruling [R93](../decisions/2026-09-05-6d-supervisor-ruling-R93.md)'s subject, stated as the
 register's reading: **a widened matcher IS a minted rule and its consumers ARE its doors.***
 
 | change | matcher | consumers followed | commit |
 |---|---|---|---|
 | **A** | `_word_rows`' kind filter | 5 doors, 2 fixed | **`8d717c9`** — the TWENTIETH and TWENTY-FIRST trips; ids 383 → 385, axis 14 |
 | **B** | `_answers_to`'s keying | 5 consumers, 1 fixed | **`f8fc284`** — X7, a label naming NO ROW under a `complete=True` seal; ids 386 |
-| **C** | `_alias_clash`'s SET | 3 callers, all 3 touched | *this section* — the TWENTY-SECOND trip **and** the page-order DETAIL; ids 388, axis 15 |
+| **C** | `_alias_clash`'s SET | 3 callers, all 3 touched | **`9d90992`** — the TWENTY-SECOND trip **and** the page-order DETAIL; ids 388, axis 15 |
 
 #### Change C's two cells
 
@@ -1850,6 +1850,73 @@ NOT on `sqlite_minimal`"*).
 
 ---
 
+### 6.15 Change D — **the accumulator family, and the rule this row minted itself was half-applied**
+
+| change | matcher | consumers followed | commit |
+|---|---|---|---|
+| **D** | the ACCUMULATOR family | 6 doors + `_refused_import` | *this section* — `Refusal` gains `warnings`; ids 391 |
+
+**Reached by FOUR lenses independently** — G4 = A14 = K5 = X11, the only finding in either round with
+four separate provenances.
+
+#### The defect
+
+Every door accumulates skip notes as it walks its guards — `retire_skips`, `alias_warnings`,
+`merge_warnings`, `extra_import_warnings` — and **every one dropped the accumulator the moment it
+refused**, because `Refusal` had no `warnings` field at all. So the NINETEENTH trip's own value,
+minted precisely so a caller is told when a guard could not run, **reached a caller only when the
+call succeeded**.
+
+That is **standing rule (d) at a rule this row minted itself**, and it is the worse half: *"we could
+not finish looking"* matters MOST to the caller being told no, because it is the difference between
+**we checked and the answer is no** and **we could not check and the answer is no anyway** — Rule U
+at the surface rather than inside a guard.
+
+#### The doors, counted rather than summarised
+
+**26 of the 79 `Refusal` returns** in `registry.py` are reachable with a non-empty accumulator; all
+26 now carry it. The other 53 precede every fill of their accumulator, and the AST command that
+separates the two is published in the commit rather than left to a reading of the diff.
+
+| door | accumulator | returns |
+|---|---|---|
+| `retire` | `retire_skips` | 11 — filled by `_identity_breach(skipped=…)` **by reference**, which is why a line-order survey missed them |
+| `merge_types` | `merge_warnings` | 9 |
+| `propose_type` | `warnings` | 2 |
+| `reinstate` | `alias_warnings` | 2 |
+| `neighbors` | `warnings` | 1 |
+| `record_invocation` | `warnings` | 1 |
+
+**And the same family where the door returns no `Refusal` at all** — X11. `_refused_import` returned
+`import_refused:<reason>` **alone**; the accumulator is filled at **five** sites and was read at
+exactly **one**. `C12-27`.
+
+#### Three findings this change made about itself
+
+1. **Removing the new vocabulary check was a mutation SURVIVOR.** `Refusal.__post_init__` now checks
+   `warnings` against §5.4 the way it has always checked `reason` against §5.12 — and **nothing
+   pinned it**. Found by running the mutation, not by reading the diff. **The eighth time this row
+   has hit that class**, and `C16-08` closes it.
+2. **Change C (`9d90992`) asserted `check_links.py … exit 0`, which was true when I ran it and false
+   at the commit.** §6.14 was written *after* the gate run and its R93 link carried the wrong date.
+   The rule is all four gates green **before** each push; running them before the last edit is not
+   that rule. **The fifth commit of mine to assert something untrue — and the first I caught myself.**
+3. **Axis 13's new import-decline cell first ran on one leg of three**, because I put it inside the
+   `if knowable: continue` guard though it turns on `stores_aliases` and has nothing to do with
+   membership indexing. Caught by reading the gate's own output rather than by the cell passing.
+
+#### The storage contract — **ADDITIVE, and pinned rather than asserted**
+
+`PACKAGE.md` §3.1 requires `Refusal` to appear **nowhere** in `adapter.py` or under `backends/`, and
+`C0-04` asserts it by source inspection. So a field added to `Refusal` **cannot** change the storage
+contract: the primitive signatures are untouched, `CAPABILITY_FLAGS` is unchanged, no backend
+implements or imports the shape, and `warnings` defaults to `()` as the last field so every existing
+construction site is unchanged. **Not additive for the INTERFACE contract**, and the two are not
+blurred: §5.5's printed shape carries the field and §5.4's carrier column names `Refusal` for three
+values. A surface **addition** — nothing a caller reads today reads differently — but a surface edit.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
@@ -1872,7 +1939,7 @@ declined (R88), with all three legs green before it is pushed.*
 
 ## 8. Questions this row raises — **Q95 onward**
 
-*R1–R92 exist; Q94 was minted by R91. The next question number is **Q96**.*
+*R1–R93 exist; **Q94** was minted by R91, **Q95** by change 1 (`9a4e140`) and **Q96** by this row at `d8289b3`. **The next question number is Q97.** R93's closing line said Q96, and the supervisor corrected it by erratum at `20c1cf6` — Q96 was already minted, and the correction is recorded here rather than edited over, which is the same treatment my own Q95 routing error got.*
 
 ### Q95 — does the tombstone-word rule bind a tombstone's own NAME at the TRANSFER doors, and if it does, what happens to `C12-09`?
 
@@ -1942,3 +2009,43 @@ been finding all round: *whether a question belongs to the supervisor or to the 
 what changes if it is answered, not by which artefact the change lands in.* A contract id looks like
 a test and `C12-09` is a guarantee wearing one.
 
+---
+
+### Q96 — should `namespace` be subject to the same word-identity rule as every other word this registry compares?
+
+**Minted by this row at `d8289b3`, as the half of finding X4 the cross-namespace change declined.**
+Written out here because it was referenced three times (§6.8, §6.10, §6.13) and never defined —
+*a question that is cited and not stated is a decline that has stopped being legible*, which is this
+row's own complaint about its declines, one artefact along.
+
+**The observation.** Re-derived at HEAD by its defining command — `same_word`/`identity_key` call
+sites in `registry.py`, and how many take a namespace value:
+
+> **34 keyed comparisons, and ZERO applied to a namespace value.**
+
+X4 recorded **27** when it was raised; the difference is comparisons *this row added*, and none of
+them changed the second number. `nyc_dpr`, `NYC_DPR`, `nyc__dpr` and `nyc-dpr` are **one word** by
+`same_word` and **four scopes** by every door in the package. Each answers its own word at confidence
+**1.0**. And no door can reconcile them afterwards: `merge_types` refuses `predicate_merge` and
+`retire(successor=)` refuses `successor_is_self`, so **one agency with two loaders becomes N scopes
+with no way back**. That is the EIGHTH trip — *`identity_key` manufacturing mechanism 4* — one field
+along, and the cross-namespace change (`9d2f203`) made the *read* find the sibling scopes without
+making the *write* stop creating them.
+
+**Why it is a question and not a fix.** Keying `namespace` changes **what the registry declines to
+serve**: today a caller may create `NYC_DPR` beside `nyc_dpr` and both are legal, addressable scopes,
+and keying them makes the second call a refusal. That is the **Q56 class** — the same class the
+supervisor named when correcting my routing of Q95 — and it is decided by what changes if it is
+answered, not by which artefact the change lands in. It also cannot be applied retroactively: any
+store that already holds two keyed-equal scopes becomes **unaddressable** at the door that would
+enforce it, and this row has no migration for that.
+
+**MY DECLINE, WHICH IS THE DEFAULT IN FORCE.** `namespace` stays **unkeyed**, and the cross-namespace
+read is the mitigation: `why_incomplete` now names the sibling scopes to a caller who searched only
+its own, so the split is **visible** rather than silent. That is strictly less than reconciliation
+and I am not going to describe it as more. **What the decline costs, stated plainly:** the split can
+still be *created* by an ordinary call, and once created it cannot be *undone* by any call in §5.
+
+**R79's flat-form half is ruled and unbuilt**, and it is not this question — it rides alongside it.
+
+---

@@ -1303,3 +1303,52 @@ def test_c12_26_the_import_name_door_holds_the_byte_identical_tombstone(
     assert isinstance(
         registry.reinstate("w", "we were wrong", reinstated_by="user:sd"), TypeEntry
     ), "the tombstone must still be reachable"
+
+
+def test_c12_27_a_declined_row_still_carries_what_the_call_could_not_check(
+    adapter, make_registry
+):
+    """**Finding X11**, row 6d round 2 — the accumulator family at the door that does not
+    return a `Refusal` at all.
+
+    `_refused_import` returned `warnings=("import_refused:<reason>",)` **alone**, so every
+    note `import_types` had collected on the way to declining the row was thrown away by
+    the `continue` that followed: X6's own `import_field_ignored`, and the
+    `alias_check_incomplete` values beside it that say a scan did not finish. The
+    accumulator is filled at **five** sites and was read at exactly **one** — the success
+    path.
+
+    Same sentence as `C10-27` at a different shape, which is why both land in one change:
+    *a rule applied at the success path is half-applied until the commit names the decline
+    paths it also binds* — **standing rule (d)**. And the decline path is where it counts
+    most: `import_field_ignored:namespace` means **this row went somewhere other than
+    where its own column said**, and a caller who is also being told the row was refused
+    has MORE need of that sentence, not less.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    seed(registry, "plaza", kind="entity", definition="a public space", namespace="dpr")
+
+    # `esplanade` carries its own `namespace` (ignored, per X6) AND an alias the live
+    # `plaza` already answers to, so the row is DECLINED after the note was collected.
+    out = registry.import_types(
+        [{"name": "esplanade", "namespace": "dot", "definition": "a walk",
+          "aliases": ["plaza"], "status": "active"}],
+        namespace="dpr", kind="entity",
+    )
+    assert out, out
+    warnings = tuple(out[0].warnings or ())
+    if not any(w.startswith("import_refused:") for w in warnings):
+        # NOT REACHABLE, never a pass: without stored aliases there is no collision to
+        # decline the row, so this fixture cannot pose the question on this backend.
+        assert registry.caps.stores_aliases is False, (
+            "this backend stores aliases, so the row should have been declined -- that "
+            "is a finding, not a capability", warnings,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_aliases=False drops the alias that declines the row"
+        )
+    assert any(w.startswith("import_field_ignored:namespace:") for w in warnings), (
+        "the row was declined AND its namespace was ignored; the caller is owed both "
+        "sentences, and the decline path dropped the second one",
+        warnings,
+    )
