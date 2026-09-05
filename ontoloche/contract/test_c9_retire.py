@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+from ..adapter import TypeRecord
 from ..types import Consumer, Refusal, ResolveContext, TypeEntry
 from ._support import seed
 from .doubles import DegradedAdapter
@@ -1051,12 +1052,33 @@ def test_c9_23_reinstate_asks_the_collision_question_its_sibling_asks(
         TypeEntry,
     )
 
-    # While it is dormant, another live entry comes to answer to the same word.
-    registry.import_types(
+    # **AMENDED, row 6d, the fix for the SIXTEENTH trip.** This step used to be an
+    # ordinary `import_types` alias write, and that write is now REFUSED
+    # `word_held_by_tombstone` -- it is the sixteenth trip's own construction, and the
+    # door that let the collision be built is the door that fix closes. The subject of
+    # this id is `reinstate`'s collision question, not the route to the state, so the
+    # route moves BELOW the doors and the door's new refusal is asserted here as the
+    # proof it is closed. That is ruling **R80**'s own pattern for a state the doors no
+    # longer permit: *pin the impossibility as a test rather than carry it as a claim.*
+    blocked = registry.import_types(
         [{"name": "taggable", "kind": "predicate", "definition": "a capability",
           "aliases": ["commentable"], "status": "active"}],
         namespace="default", kind="predicate",
     )
+    assert "import_refused:word_held_by_tombstone" in (blocked[0].warnings or ()), (
+        "the alias-write door must refuse a word a tombstone still answers to -- "
+        "the kill row's SIXTEENTH trip"
+    )
+    written = adapter.get_type("default", "taggable", kind="predicate")
+    assert written is not None and "commentable" not in (written.aliases or ()), (
+        "nothing was written: a refusal is a refusal, not a warning on a completed act"
+    )
+
+    # The state this id is about, seeded BELOW the doors, because no door will build it
+    # any more. `reinstate`'s guard must still refuse it.
+    live = adapter.get_type("default", "taggable", kind="predicate")
+    assert live is not None
+    adapter.put_type(TypeRecord(**{**live.__dict__, "aliases": ("commentable",)}))
 
     refusal = registry.reinstate("searchable", "unparked", reinstated_by="user:sd")
     assert isinstance(refusal, Refusal), (
@@ -1697,3 +1719,86 @@ def test_c9_35_a_retirement_that_skipped_every_word_still_says_so(
     )
     assert skipped[0].detail["aliases_added"] == []
     assert skipped[0].detail["aliases_not_added"] == ["commentable"], skipped[0].detail
+
+
+def _tombstone_holding(registry, word="zzz_moved"):
+    """A RETIRED predicate that still answers to ``word``, and nothing named ``word``."""
+    seed(registry, "alpha", kind="predicate", definition="a capability")
+    seed(registry, "aaa_note", predicates=["alpha"])
+    written = registry.import_types(
+        [{"name": "alpha", "status": "active", "aliases": [word],
+          "definition": "a capability"}],
+        kind="predicate",
+    )
+    if not written or word not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    return gone
+
+
+@pytest.mark.requires_capability("indexes_membership")
+# **Declared, and the declaration is the finding.** On a backend that cannot
+# report membership, both extents come back EMPTY and §5.10's refusal #2 fires
+# FIRST -- honestly, and for the reason trip 2 minted it: *empty is not equal*.
+# The door still refuses; it refuses with the older, more specific reason, so
+# this id cannot assert its own value there. `check_capability_matrix.py` caught
+# the omission within one run of the fix, which is what R2's matrix is for.
+def test_c9_36_the_r75_transfer_refuses_a_word_a_tombstone_answers_to(
+    adapter, make_registry
+):
+    """**The SIXTEENTH trip at the TRANSFER door.** Row 6d; ruling **R91**.
+
+    Ruling **R75** re-points a retired row's aliases onto its successor. Nothing asked
+    whether a **second** tombstone still answers to one of those words — and if one does,
+    the transfer leaves it permanently un-reinstatable, which is the governance act
+    ruling **R11** created `reinstate` to provide. `word_held_by_tombstone`,
+    non-overridable: `force` overrides what could be SEEN, never what would become TRUE.
+    """
+    registry = make_registry(adapter)
+    first = _tombstone_holding(registry)
+    assert first.name == "alpha"
+
+    # A second row that carries the SAME word, and a successor to move it onto.
+    seed(registry, "gamma", kind="predicate", definition="a capability")
+    seed(registry, "delta", kind="predicate", definition="a capability")
+    # Identical NON-EMPTY extents, so §5.10's refusals #1/#2/#3 pass honestly and the
+    # door reaches the guard this id is about. They run FIRST by design -- see the
+    # ordering note at `INTERFACE.md` §5.12's `word_held_by_tombstone`.
+    seed(registry, "bbb_memo", predicates=["gamma", "delta"])
+
+    # **The alias is seeded BELOW the doors, and finding out why is worth more than the
+    # id.** The first cut of this test built it with `import_types`, and the fix's own
+    # alias-door guard (`C12-23`) REFUSES that write -- so the test SKIPPED on every leg
+    # and asserted nothing while reporting green. *A check that is green for a reason
+    # other than the one it claims* is this register's own repeated finding (M1, A9,
+    # §6.10e-i), and it arrived inside the fix for the fifteenth and sixteenth trips.
+    #
+    # The state is nonetheless real and the guard is not dead code: **every store written
+    # before this fix shipped can hold it**, which is exactly what a guard for legacy
+    # state is for. That the ordinary doors now refuse to build it is asserted at
+    # `C12-23`, and this id drives the transfer over a store that already has it.
+    live = adapter.get_type("default", "gamma", kind="predicate")
+    assert live is not None
+    adapter.put_type(TypeRecord(**{**live.__dict__, "aliases": ("zzz_moved",)}))
+
+    out = registry.retire(
+        "gamma", "superseded", retired_by="user:sd", successor="delta", force=True
+    )
+    assert isinstance(out, Refusal), (
+        "the transfer would burn the tombstone that still answers to this word", out
+    )
+    assert out.reason == "word_held_by_tombstone", out.reason
+    assert out.detail["overridable"] is False
+    assert out.detail["holder"] == "alpha", out.detail
+    assert "path_back" in out.detail and out.detail["path_back"], out.detail
+
+    # Nothing was written: the word did not reach the successor, and `gamma` is not
+    # retired. A refusal is a refusal, not a warning on a completed act.
+    moved_to = adapter.get_type("default", "delta", kind="predicate")
+    assert moved_to is not None and "zzz_moved" not in (moved_to.aliases or ()), (
+        "the transfer must not spend a word a tombstone still answers to"
+    )
+    still_live = adapter.get_type("default", "gamma", kind="predicate")
+    assert still_live is not None and still_live.status == "active", still_live.status

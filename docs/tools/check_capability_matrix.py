@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import re
 import sys
 from pathlib import Path
@@ -64,10 +65,35 @@ def _fresh() -> SQLiteAdapter:
 
 def _run(factory) -> tuple[int, dict[str, int]]:
     buf = io.StringIO()
-    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-        code = run_contract_suite(
-            factory, args=["-q", "--no-header", "-p", "no:cacheprovider", "--tb=no"]
-        )
+    # **The POSTGRES leg is not this matrix's subject, and inheriting its DSN made every
+    # configuration red for a reason that had nothing to do with the configuration.**
+    # 3.2's claim is about a backend that DECLINES an optional capability, and the double
+    # under test is a `DegradedAdapter` over in-memory SQLite. With `OO_POSTGRES_DSN` set,
+    # each of the eighteen sub-suites also ran the postgres leg -- and each one includes
+    # `test_manifest.py`'s gate test, which shells out to `check_merge_guard.py`, which
+    # opens its own postgres connections. Eighteen configurations x that footprint
+    # reaches `max_connections` and the run dies `FATAL: sorry, too many clients
+    # already`, reported as **exactly one failure in every configuration** -- the
+    # signature of a harness fault wearing a conformance verdict's clothes.
+    #
+    # **[Observed]** identical configuration, same tree, only the env var differing:
+    # without the DSN `stores_events=False` is `275 passed, 0 failed`; with it,
+    # `274 passed, 1 failed` and the failure is the gate test. **And it reproduces at
+    # `60cdb70` with none of row 6d's changes applied**, so it is pre-existing rather
+    # than introduced by the fix set that found it.
+    #
+    # *A check that is red for a reason other than the one it claims* is this register's
+    # own repeated finding (M1, A9, §6.10e-i) with its sign reversed.
+    env = dict(os.environ)
+    os.environ.pop("OO_POSTGRES_DSN", None)
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            code = run_contract_suite(
+                factory, args=["-q", "--no-header", "-p", "no:cacheprovider", "--tb=no"]
+            )
+    finally:
+        os.environ.clear()
+        os.environ.update(env)
     tally: dict[str, int] = {}
     for line in buf.getvalue().splitlines():
         if " passed" in line or " failed" in line:

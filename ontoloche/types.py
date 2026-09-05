@@ -95,6 +95,20 @@ REFUSAL_REASONS = (
     # `successor_unregistered` -- which says *register the successor first* -- is a lie a
     # caller would act on when the word is registered, live, and is the type itself.
     "successor_is_self",
+    # INTERFACE.md 5.9, row 6d's first round -- the THIRTY-SECOND, and the transfer half
+    # of the FIFTEENTH and SIXTEENTH trips (ruling R91).
+    # A door that MOVES a word onto a live row -- `merge_types`' word move,
+    # `retire(successor=)`'s R75 transfer, `import_types`' alias write -- when a RETIRED
+    # row still answers to that word, by its NAME or by one of its ALIASES, of ANY kind.
+    # The state is not two ACTIVE rows, so `alias_collision` is the wrong sentence and
+    # `C16-06` is not what fails; what fails is that the tombstone becomes permanently
+    # un-reinstatable, which is the governance act ruling R11 created `reinstate` to
+    # provide. **Its OWN value, for the reason trip 14 minted `word_previously_retired`
+    # rather than reusing `name_previously_retired`:** *this word IS spoken for by a
+    # tombstone* and *these two extents may not be unified* are two facts, and one word
+    # for two facts is INTERFACE.md 2.3's Cause B. Non-overridable: `force` overrides
+    # what could be SEEN, never what would become TRUE.
+    "word_held_by_tombstone",
     "different_consumer_sets",
     "predicate_merge",
     "kind_mismatch",

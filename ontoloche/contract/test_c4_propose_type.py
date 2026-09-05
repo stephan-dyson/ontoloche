@@ -526,3 +526,77 @@ def test_c4_15_a_word_a_tombstone_answers_to_is_not_free_at_propose_type(
     assert isinstance(back, TypeEntry), (
         "R11's governance act must still be available", back
     )
+
+
+def test_c4_16_a_tombstones_word_is_held_against_every_kind(adapter, make_registry):
+    """**The kill row's FIFTEENTH trip** — the trip-14 fix was KIND-SCOPED. Row 6d.
+
+    `_word_rows` was called `kind=`-scoped at all three mint doors, so a word a retired
+    row still answered to was free to a mint of **another kind** — while `_alias_clash`,
+    which applies no kind filter, saw it at `reinstate` and refused `alias_collision`
+    **non-overridably**. One store, one word, two guards, opposite answers, and the
+    tombstone left permanently un-reinstatable — ruling **R11**'s own governance act.
+
+    **[Observed, row 6d round 1]** five ordinary calls, no `force` on the mint, no
+    acknowledgement, on both legs and in **both** directions; countersigned as the
+    fifteenth trip by ruling **R91**.
+
+    The narrowing this must not delete is `C16-07`: two **LIVE** rows may still share a
+    word across kinds, which `PACKAGE.md` §4.1 blesses.
+    """
+    registry = make_registry(adapter)
+    tombstone = _tombstone_holding(registry)
+
+    # SAME kind is the control -- answered this way since trip 14 (`C4-15`).
+    same = registry.propose_type(
+        "zzz_moved", "same kind", [DATA_EVIDENCE], "user:sd", kind="predicate"
+    )
+    assert isinstance(same, TypeEntry)
+    assert f"word_previously_retired:{tombstone.name}" in same.warnings
+
+    # A DIFFERENT kind reached the same word, and that was the trip.
+    out = registry.propose_type(
+        "zzz_moved", "another kind entirely", [DATA_EVIDENCE], "user:sd", kind="entity"
+    )
+    assert isinstance(out, TypeEntry), out
+    assert f"word_previously_retired:{tombstone.name}" in out.warnings, out.warnings
+    assert not [
+        t for t in registry.list_types("entity", include_retired=True).types
+        if t.name == "zzz_moved"
+    ], "nothing is written at the cross-kind mint door either"
+
+    back = registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd")
+    assert isinstance(back, TypeEntry), ("R11's governance act must survive", back)
+
+
+def test_c16_07_two_live_rows_may_still_share_a_word_across_kinds(adapter, make_registry):
+    """**The half a careless fix deletes.** Row 6d, beside `C4-16`.
+
+    `PACKAGE.md` §4.1 **blesses** one word under two kinds, and `_alias_holder` gates its
+    NAME side on `other.kind == kind` for exactly that reason. The fifteenth trip's fix
+    makes a **tombstone's** words kind-blind; it must leave **live** rows alone.
+
+    This register keeps a narrowing beside every guard it tightens — `C10-09`, `C12-09`,
+    `C12-15`, `C10-19` — because a fix that closes a legal operation is worse than the
+    defect it closes.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "beta", kind="predicate", definition="a capability")
+
+    out = registry.propose_type(
+        "beta", "the same word, another kind", [DATA_EVIDENCE], "user:sd", kind="entity"
+    )
+    assert not isinstance(out, Refusal), (
+        "PACKAGE.md 4.1 blesses one word under two kinds for LIVE rows", out
+    )
+    assert "word_previously_retired" not in " ".join(out.warnings or ()), out.warnings
+    if not isinstance(out, TypeEntry):
+        # The review path R40 forces every predicate down; an entity may take it too.
+        approved = registry.approve(out.id, "user:sd")
+        assert isinstance(approved, TypeEntry), approved
+    live = {
+        (t.kind, t.name)
+        for t in registry.list_types(include_retired=True).types
+        if t.name == "beta"
+    }
+    assert ("predicate", "beta") in live and ("entity", "beta") in live, live
