@@ -641,3 +641,73 @@ async def test_c3_16_the_successor_walk_never_raises_and_says_when_it_stopped(re
         f"the walk stopped before it found a live row and must say so: {capped.reason}"
     )
     assert "hops" in capped.why_incomplete
+
+async def test_c3_17_a_tombstone_elsewhere_is_found_by_the_words_it_answers_to(
+    adapter, make_registry
+):
+    """**Finding X1, row 6d round 1 (ruling R90).** The cross-namespace read was built out
+    of **none** of the identity machinery.
+
+    `_search_namespaces` is the only guard in this package that reads more than one
+    namespace, and it tested `rec.status == "retired" and rec.name == candidate` — the
+    row's **name only**. So a word a live tombstone in another namespace still answers to
+    **as an alias** was invisible, and invisible under a **`complete=True` seal**: Rule
+    U's confident negative in the very call ruling **R6** exists to prevent, whose own
+    words are *"scoping without lookup reintroduces mechanism 2"*.
+
+    §5.8 keeps a tombstone's words **by design** and standing rule (c) calls them an
+    *unconsumed permission*. This is that rule at the one read that crosses a namespace.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "boroname", namespace="dpr", definition="the borough of a park")
+    written = await registry.import_types(
+        [{"name": "boroname", "status": "active", "aliases": ["boro_nm"],
+          "definition": "the borough of a park"}],
+        namespace="dpr", kind="entity",
+    )
+    if not written or "boro_nm" not in (written[0].aliases or ()):
+        pytest.skip("this backend did not keep the alias the fixture is built on")
+    gone = await registry.retire(
+        "boroname", "consolidated", retired_by="user:sd", namespace="dpr", force=True
+    )
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+
+    # CONTROL: the tombstone's own NAME has been surfaced since row 3e.
+    by_name = await registry.resolve_type(
+        "boroname", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert "RETIRED" in by_name.reason, by_name.reason
+
+    # ...and a word the SAME tombstone answers to must be surfaced too.
+    by_alias = await registry.resolve_type(
+        "boro_nm", ResolveContext(), namespace="oti_311", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert "RETIRED" in by_alias.reason, (
+        "a tombstone's aliases are an unconsumed permission -- 5.8 keeps them by design",
+        by_alias.reason,
+    )
+
+async def test_c3_18_the_cross_namespace_read_compares_words_not_bytes(adapter, make_registry):
+    """**Finding X2, row 6d round 1 (ruling R90).** One word is not one string — at the
+    one read that crosses a namespace, which had never been told.
+
+    `_word_rows`, `_alias_holder` and `_alias_clash` have compared by `identity_key` since
+    the **SEVENTH** trip. `_search_namespaces` compared **bytes**, so `dpr:bike__lane` was
+    a near miss to a `dot` caller asking for `bike_lane` rather than the loud *already
+    taken* the byte-exact case gets — and `NAME_RE` admits `foo__bar`, so this is UC3's
+    ordinary case rather than a contrivance.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    await seed(registry, "bike__lane", namespace="dpr", definition="a cycle route")
+
+    out = await registry.resolve_type(
+        "bike_lane", ResolveContext(), namespace="dot", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert "TAKEN" in out.reason and "dpr" in out.reason, (
+        "a variant spelling is the same WORD and R6 owes the caller that word",
+        out.reason,
+    )

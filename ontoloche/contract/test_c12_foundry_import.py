@@ -1219,3 +1219,40 @@ def test_c12_24_a_skipped_identity_guard_says_so(adapter, make_registry):
         "which guard it skipped and which capability it needed",
         warnings,
     )
+
+
+def test_c12_25_a_field_this_call_ignores_is_stated(adapter, make_registry):
+    """**Finding X6, row 6d round 1 (ruling R90).** Accepted-and-ignored, said out loud.
+
+    `import_types` takes ONE `namespace` for the whole batch — §2.5's Foundry mapping is a
+    per-call scope, not a per-row one — and a row carrying its own `namespace` had that key
+    **silently dropped**: the identity was written into the CALLER's scope with
+    `warnings=()`, so a dump with a namespace column landed its rows in the wrong place
+    with nothing said.
+
+    **Not a refusal.** The write is legal and the mapping is the documented one; what was
+    missing is that it says so. Accepted-and-ignored is the `mark_reviewed` shape row 6c
+    fixed one call along: a caller who supplies a field and sees no effect is owed the
+    sentence.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    out = registry.import_types(
+        [{"name": "plaza", "namespace": "dot", "definition": "a public space",
+          "status": "active"}],
+        namespace="dpr", kind="entity",
+    )
+    assert out, out
+    assert out[0].namespace == "dpr", "the call's namespace is the one that applies"
+    assert any(
+        w.startswith("import_field_ignored:namespace:") for w in (out[0].warnings or ())
+    ), out[0].warnings
+
+    # ...and a row that asks for the call's own namespace is not warned about.
+    quiet = registry.import_types(
+        [{"name": "esplanade", "namespace": "dpr", "definition": "a walk",
+          "status": "active"}],
+        namespace="dpr", kind="entity",
+    )
+    assert not any(
+        w.startswith("import_field_ignored") for w in (quiet[0].warnings or ())
+    ), quiet[0].warnings

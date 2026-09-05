@@ -262,6 +262,15 @@ WARNING_VALUES = (
     # written with `warnings=()` on another, and `resolve_type` cashing it at 1.0.
     # One word for two facts is 2.3's Cause B, which is why this is its own value.
     "identity_guard_skipped",
+    # INTERFACE.md 5.4, row 6d's first round -- the THIRTY-NINTH, and finding X6.
+    # `import_types` takes ONE namespace for the whole batch and one default kind, and a
+    # row carrying its own `namespace` had that key silently dropped: the identity was
+    # written into the CALLER's scope with `warnings=()`, and a Foundry dump with a
+    # namespace column landed its rows in the wrong place with nothing said. Detail:
+    # `<field>:<value the row asked for>`.
+    # Accepted-and-ignored is the `mark_reviewed` shape row 6c fixed one call along: a
+    # caller who supplied a field and sees no effect is owed the sentence.
+    "import_field_ignored",
     "import_refused",
     "not_durable_until_host_commits",
     "gate_unregistered",
