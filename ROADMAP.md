@@ -249,6 +249,62 @@ the build row's declared inputs — E22 first, E2 second.
 
 ---
 
+### Row 6d — the identity-surface row. **LANDED NOT CLEAN 2026-09-05, at TWENTY-THREE trips.**
+
+[`docs/runs/6D-RUN.md`](docs/runs/6D-RUN.md) · opened by the founder under **R89** · rulings
+[R90–R95](docs/decisions/) · **the kill row goes 14 → 23**.
+
+**What the row DID:** hardened the guards that decide when two words name one thing —
+`ontoloche/registry.py`'s identity surface — across **three adversarial rounds and thirteen lens
+verdicts**. Contract ids **366 → 399**; `check_merge_guard.py` **10 → 18 axes**; `Refusal.reason`
+**31 → 33**, the `warnings` vocabulary **37 → 39**; three legs **1861 passed / 602 skipped / 0
+failed** at landing. Thirty-eight commits.
+
+**Nine trips were countersigned here** — the fifteenth and sixteenth (the 2×2×2 the fourteenth
+trip's fix closed one cell of), the seventeenth and eighteenth (a guard whose answer, then whose
+*detail*, was a function of page order), the nineteenth (a capability-degraded guard that skipped and
+said nothing), the twentieth through twenty-second (a minted rule walked to three of its four
+consumers, twice), and the **twenty-third**: `reinstate` is the fourth door that makes a word answer
+at confidence 1.0, and it is the one door `word_held_by_tombstone` was never wired to.
+
+**What it costs the roadmap to say plainly:**
+
+1. **The row closes NOT CLEAN.** Three rounds ran, the cap, and **none was clean**. Findings
+   **19 → 21 → 30** — they did not shrink in any round. `R3-P10` predicted the convergence note **in
+   writing before round 3 opened**, so the note is not an outcome the row steered toward.
+2. **The provenance INVERTED, and that is the row's real result.** Round 2's three routed
+   constructions all **pre-dated** the commits standing beside them. In round 3, **roughly 20 of 30
+   findings — 5 of the 9 BLOCKING — are defects this row INTRODUCED**, including a false refusal that
+   **closed a legal operation** for two rounds. A loop that has finished with the surface and started
+   on the row.
+3. **A round-1 grade is WITHDRAWN.** T3's predicted harm at `reinstate` was scored FALSIFIED — before
+   `word_held_by_tombstone` existed as a value. The harm is real and it is the twenty-third trip.
+   T3 moves PARTIAL → CONFIRMED, §0's tally **21/3/1/5 → 22/2/1/5**, and **R93 loses one of the three
+   falsifications its part four leaned on**. The correction *improves* the row's score, which is why
+   it is stated with its mechanism rather than as a tidy-up.
+4. **In all three rounds the clean falsifications were claims this row published about its own
+   work** — including `R3-P4`, the row's own pre-registered prediction against its own last commit,
+   which scored **FALSE**.
+5. **The class the loop converged on:** *door tables with a row missing* — three of them, all
+   published by this row — and *checks that cannot fail on their own subject*, which this register has
+   now met **eleven** times. The sentence the row hands the next one: **a rule is not applied until
+   the commit names every door it binds, and a number is not derived until it is derived LAST.**
+
+**What stays OPEN, named here rather than only in a run record:** `X1` (an accumulator given to one
+branch of a ternary and not its twin), `X2` (17 of one change's 26 sites pinned by nothing, and the
+gate's missing `page_cap` fixtures), `X5` (a carrier widened for 14 §5.4 values), `X7`–`X11`,
+**`INTERFACE.md` §5.10's printed refusal ORDER**, still the pre-`9d2f203` one, and
+`_alias_identity_breach`'s keyed-probe residual — that last **stated at the site and raised as a
+question**, because the one attempt to close it reversed a narrowing whose argument was written at
+the line being edited. `Q94`, `Q95`, `Q96` and R95's across-kinds question are the **founder's**;
+next question number **Q97**.
+
+**`stop` was put for the fifteenth time and is with the founder as OO-6.** The supervisor's
+recommendation stands in [R94](docs/decisions/2026-09-05-6d-supervisor-ruling-R94.md): *continue to
+the row's own end and no further.* **Nothing further opens without the founder.**
+
+---
+
 ## Phase 4 — Generalise
 
 Only after Phase 3 works for a real outside user, and ideally after a second organisation in a different sector confirms the shape. **[Inferred]** from N=2 that generalisation exists; that is not licence to design for it yet.
