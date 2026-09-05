@@ -547,3 +547,187 @@ in `ontoloche/contract/test_c19_actions.py` and its `aio/` twin: `successor=` **
 
 **§0 predictions found FALSE by this lens: one — T4, at the first of the two addresses it names.**
 
+### 6.3 Round 1, lens 3 to return — **the FIX AUDITOR. NOT YET: 3 BLOCKING (two new), 2 MAJOR — and two more constructions ROUTED FOR COUNTERSIGNATURE.**
+
+*Written to disk as the lens returned, before any fix. Both new BLOCKING constructions and every
+countable claim were re-verified by the worker against the shipped code.*
+
+**A correction to the brief, and the lens was right to make it. [Observed, worker-verified]**
+`git log 0c0c7f6..HEAD --oneline -- ontoloche/` returns **zero** commits: `0c0c7f6` is row 6c's
+**doc-only** landing (`ROADMAP.md`, `STATUS.md`, `docs/README.md`, `6C-RUN.md`). The last fixes on
+the identity surface are **`2da0433`** (the fourteenth trip — three mint doors and axis 10) and
+**`dcb1c5a`**, with **`e5540ff`** (the thirteenth trip) one commit back. The brief said *"`0c0c7f6`
+and everything since"*; the lens widened to the commits that actually contain the fixes, which is
+what the lens is for.
+
+#### F4 — BLOCKING — **the trip-14 rule was applied to the incoming NAME only; the same word arriving as an incoming ALIAS is free at three doors**
+
+**The defect.** `2da0433` closed the *retired × alias* quadrant for a word arriving as a row's
+**name**. The identical word arriving as an incoming **alias** passes `_alias_identity_breach`, whose
+only keyed scan is — **[Observed, worker-verified at `registry.py:7023`]** —
+
+```python
+keyed, _keyed_why = self._word_rows(namespace, alias)
+```
+
+**`match_aliases` defaulted to `False`: the exact operand whose absence IS the fourteenth trip**,
+and the scan's `why` discarded in the same line. §0.3's **T11** predicted this call site by name and
+by line before the lens existed.
+
+**Worker's independent re-run — five ordinary calls, no `force` on the mint side, no
+acknowledgement [Observed]:**
+
+```
+import_types(name='beta', aliases=['commentable'])
+   -> [('beta','predicate','active',('commentable',),('predicate_requires_review',))]   <- nothing about the tombstone
+reinstate('searchable') -> Refusal alias_collision  overridable=False  path_back=None
+merge_types('searchable'->'beta') -> Refusal predicate_merge  overridable=False
+resolve_type('commentable') -> existing / beta / 1.0
+
+CONTROL, identical fixture, the word arriving as a NAME:
+import_types(name='commentable') -> ('searchable','retired',(…,'word_previously_retired:searchable'))
+reinstate('searchable') -> TypeEntry        <- the fix works, at the door it was written for
+```
+
+**It is worse than the trip it descends from.** The name door's refusal carries a `path_back`; this
+one carries **`path_back=None`**. The tombstone is permanently un-reinstatable and the caller is not
+told how it could have been avoided.
+
+**The same state is reached at two more doors** — `retire(successor=)`'s R75 transfer (warnings
+`('predicate_requires_review','aliases_transferred:beta')`, nothing about the tombstone) and
+`merge_types`' word move. **Three unenumerated doors, one rule.**
+
+**Causation proved by mutation, and the fix is a SURVIVOR in both directions.** A one-line shadow
+change of `_word_rows(namespace, alias)` → `_word_rows(namespace, alias, match_aliases=True)` closes
+**all three** doors — import refuses `import_refused:predicate_merge`, the transfer and the merge
+drop the word, `reinstate` returns a `TypeEntry`. **And with that change the shadow gate exits 0 and
+the shadow suite passes.** Nothing pins either answer.
+
+**Class:** the **FOURTEENTH** trip's own harm, one field along — standing rule (c) at the doors that
+**write an alias** rather than the doors that **mint a name**.
+
+**Why the gate exits 0, countably. [Observed, worker-verified]** axis 10's door list is literally
+`doors = ("propose_type", "import_types", "approve")` (`check_merge_guard.py:2695`) — **three mint
+doors, zero alias-write doors, zero transfer doors.** And `word_previously_retired` appears **0**
+times in `merge_types` (4275–4674), **0** in `reinstate` (3620–3895), **0** in `retire` (2942–3619),
+and **0** in `import_types`' alias-write region.
+
+**Routed to the supervisor for countersignature (R83). The count stays FOURTEEN.**
+
+#### F5 — BLOCKING — **`_alias_holder`'s exact self-skip fires on a STRANGER at `_write_approved`, and `approve` RAISES out of a public governance call**
+
+**The defect.** The row-4d guard at `registry.py:2624` exists for *"the word was free when the
+proposal was made and may not be now."* `_alias_holder`'s first line is
+`if other.name == name and other.kind == kind: continue` — an **exact self-skip written for a caller
+whose row already exists**. At `_write_approved` the row does **not** exist yet, so the skip fires on
+a **different** row that took the exact word; the refusal is unreachable for the exact spelling, and
+control falls through to `put_type(expect_absent=True)`.
+
+**Worker's independent re-run [Observed], three ordinary calls on the path R40 forces every
+`kind="predicate"` down:**
+
+```
+A. the EXACT spelling -- what an ordinary import writes
+   import_types(name='commentable')            -> [('commentable','active')]
+   _alias_holder('commentable','predicate')    -> holder=None  why=None      <- a live row holds it
+   approve                                     -> RAISED ontoloche.errors.AlreadyExists
+
+B. a VARIANT spelling -- the guard's own trip-8 case
+   _alias_holder('commentable','predicate')    -> holder='commentable_'
+   approve                                     -> Refusal alias_collision     <- the guard works
+
+C. two pending proposals for ONE word
+   second propose -> a DIFFERENT proposal, warnings=('predicate_requires_review',)
+   approve(#1) -> TypeEntry active
+   approve(#2) -> RAISED ontoloche.errors.AlreadyExists
+```
+
+> **The guard answers the exotic case and crashes on the ordinary one.** And the trip-14 fix at 2658
+> is layered directly on top of a guard that cannot fire in its own headline case.
+
+**Worker's addition, not in the lens's report. [Observed]** `grep -n "AlreadyExists"
+docs/specs/INTERFACE.md` returns **nothing**: this is an **undocumented exception escaping a
+specified governance call**, where §5's contract is a `TypeEntry` or a `Refusal`. A caller written
+against the specification cannot catch it.
+
+**Class:** the **TENTH** trip — *one door disagreeing with itself* — and trip 4's shape, a guard
+reused at a caller it was not written for.
+
+**§0 scoring, and this exceeds the prediction. N5** predicted *"between `propose_type` and `approve`
+nothing holds the word."* **Confirmed — and the second approval does not merely write, it raises.**
+**T10** predicted *"a fact checked at D1 and not re-checked at D2"*; the fact is `get_type`, and the
+re-check is the one that crashes.
+
+**[Inferred], and the lens said so rather than claiming it:** the async mirror makes the same call at
+`aio/registry.py:2320` with a byte-identical self-skip, but its async probe hung and produced no
+output, so **no `[Observed]` is claimed on that leg**. Recorded as the lens recorded it.
+
+**Why the gate exits 0, countably.** `ONE_WORD_DOORS` has **3** entries and none is the approve
+door; the approve-window branch builds its store with `_alias_only_store` alone, which writes the
+word as an **alias**. `_door_import_name` — the only fixture that takes the word as a **NAME** —
+appears in the approve window **0** times.
+
+**Routed to the supervisor for countersignature (R83). The count stays FOURTEEN.**
+
+#### The rest
+
+| # | severity | the defect | disposition |
+|---|---|---|---|
+| **F1** | BLOCKING | **Duplicate of §6.2's A1** — the trip-14 fix is kind-scoped — reported for two things A1 does not carry. **(i) It is not action-specific:** constructed at a `kind="predicate"` tombstone → `kind="entity"` mint, all three doors, `resolve_type('commentable')` → `existing / commentable(entity) / 1.0` while `reinstate` refuses non-overridably. **(ii) It is a MUTATION SURVIVOR:** widening the trip-14 scan to all kinds at D1 — i.e. **repairing** it — leaves `gate exit=0, 183 passed, 240 skipped`. **The kind dimension of this fix is unpinned in both directions** | **ACCEPTED, OPEN, folded into A1's routing.** Two lenses reached it independently from different briefs, which is worth more than either report — the same thing row 6c recorded when two lenses collided on `projection`'s pool |
+| **F2** | MAJOR | **`import_types`' name door drops the trip-14 scan's `why`; the two sibling doors report it.** `variants, _variant_why = self._word_rows(...)` at `registry.py:4769`, and `git blame` puts line 4770 (`match_aliases=True`) inside `2da0433` — **the fix widened the question at that call and left its `why` on the floor.** **[Observed]** with six retired rows over a `page_cap=3` and the active rows under it, so the retired-inclusive scan truncates and the active-only scan does not: `import_types` → `('predicate_requires_review',)`, **`alias_check_incomplete` absent**; `propose_type` and `approve` on the identical store → `alias_check_incomplete:this backend caps an unlimited query at 3 rows` | **ACCEPTED, OPEN.** The **FIFTH** trip — *partial is not equal* — **inside the fourteenth trip's own fix**. **T5 CONFIRMED (import half), N1 CONFIRMED.** Countable gate reason: `alias_check_incomplete` occurs **1** time in the whole gate, in the propose-door axis; **no axis asserts the truncation contract at `import_types`** |
+| **F3** | MAJOR | **`merge_types` binds `clash_why` and never uses it, while its own comment says *"It warns and proceeds."*** **[Observed, worker-verified]** `clash_why` has **1** occurrence in `merge_types`' body — the binding — and `alias_check_incomplete` has **0**. A merge over a look that finished and a merge over a look that did not are **byte-identical to the caller**: both return `('definitions_similarity:0.6667','definitions_uncertified')` | **ACCEPTED, OPEN.** The FIFTH trip again, at the door `e5540ff` (the thirteenth trip's fix) added. **T5 CONFIRMED (merge half)** — §0.3 named both call sites, 4429 and 4769, before either lens existed |
+
+#### (a) Rule-(d) failures, by number — the countable form R85 minted
+
+1. **`INTERFACE.md` §5.9's new bullet and §5.4's `word_previously_retired:<holder>` row (`2da0433`).** The rule is *a retired row's ALIASES are not reusable*; the commit enumerates **three** doors. **Unenumerated doors it binds:** `import_types`' **alias** write, `retire(successor=)`'s R75 transfer, `merge_types`' word move — **all three constructed at F4** — and `reinstate`'s dormant-alias re-activation.
+2. **The same rule, second unenumerated dimension: `kind`.** The rule as written says nothing about the holder's kind; the implementation is kind-scoped. Unenumerated door: every mint door at a cross-kind tombstone (**F1 / A1**).
+3. **`INTERFACE.md` §5.4's `aliases_transferred:<successor>` row (`dcb1c5a`, `C9-33`).** The rule is *the one act that moves a word between identities must be announced at the call*. **[Observed]** `aliases_transferred` occurs **0** times in `merge_types`' body — and `merge_types` moves `(left.name,) + left.aliases` onto `right`. Unenumerated door: `merge_types`.
+4. **T3 confirmed countably at D6.** `_word_rows` occurs **0** times inside `reinstate`'s body. **The lens could not construct a harm there beyond a refusal that carries a `path_back`, and recorded it as a rule-(d) failure rather than as a construction** — which is the honest grade and is kept.
+
+#### (b) R88 failures — fix commits that did not list what they DECLINED
+
+**[Observed]** `git log -1 --format=%B <sha> | grep -ci "declin"` → **0** for both.
+
+1. **`2da0433`** in fact declined: the incoming-**alias** doors (F4), the `kind` dimension (F1/A1), and `_variant_why` **at the very line it edited** (F2). Its "honest counterweight" paragraph states a *cost*, not a decline list.
+2. **`dcb1c5a`** in fact declined: `merge_types`' `clash_why` (F3) — its own housekeeping paragraph edits the comment **three lines above that binding** and says nothing about it — and `merge_types` having no `aliases_transferred` equivalent.
+
+#### (c) Mutation survivors — **2 of 10**, and a survivor count is the measure (E23), not a red count
+
+Baseline `gate exit=0, 183 passed, 240 skipped`.
+
+| mutation | gate | tests | verdict |
+|---|---|---|---|
+| M1–M3 — trip-14 guard off at D1 / D2 / D3 | 1 | 1 | **red** — axis 10 is honestly proved for its own case, one row each |
+| **M4 — widen the trip-14 scan to all kinds at D1** | **0** | **0** | **SURVIVOR** |
+| M5–M9 — `aliases_transferred`, `aliases_not_added`, `C9-35`, `aliases_removed` | 0 | 1 | red in the **contract suite only**, never in the gate |
+| **`match_aliases=True` at 7023 — F4's repair** | **0** | **0** | **SURVIVOR** |
+
+**The reading, and it is more precise than *the gate is weak*:** axis 10 **is** honestly proved for
+the case it claims — M1/M2/M3 each turn exactly one `tombstone word` row red, so it is not green for
+a reason other than the one it states. What it does not pin is **the two dimensions either side of
+it**: the `kind` argument and the incoming-alias door. And **five of nine** mutations are caught by
+the contract suite and not by the gate at all.
+
+#### (d) Scoring, and one methodological near-miss the lens volunteered
+
+**CONFIRMED by this lens:** **S1**, **T5** (both halves), **T10**, **T11**, **T13**, **T14**, **N1**,
+**N5** (exceeded — it raises rather than merely writing), **G2**, **G3** (`include_retired` = 2),
+**G4** (`status="proposed"` fixtures = 0). **T3** confirmed as a rule-(d) failure by count rather
+than as a construction, and graded that way. **T9** confirmed as a **shape only** — `_identity_breach`
+has **5** call sites and **1** passes `there_gates=`/`here_gates=`; the lens could not build a defect
+from the default because the `None` branch falls back to reading the consumer report off the store
+honestly, so it is graded **MINOR and unconstructed** rather than confirmed.
+
+**§0 predictions found FALSE by this lens: none.**
+
+> **The near-miss, recorded because §0.6 asked for exactly this.** The lens's first, coarser fixture
+> for T5 made `import_types` *appear* to satisfy T5's falsifier — the active scan truncated too and
+> fed the warning by another path — and only the sharpened fixture (retired rows over the cap, active
+> rows under it) isolated the trip-14 scan. **A less careful lens would have scored T5 FALSIFIED.**
+> That is a fact about how much a falsification in this row's scoring table is worth, and it belongs
+> beside the table rather than in a footnote.
+
+> **And §0.6 point 1, applied by the lens to itself:** F1 duplicates A1, and F2, F3 and F5 all live
+> inside predictions §0 wrote before the lens existed. **This round's yield is concentrated where §0
+> already pointed, which is evidence about the lenses' aim rather than a victory.**
+
