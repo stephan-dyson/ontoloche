@@ -2244,6 +2244,179 @@ found the test, and restated K5 at its true narrower width.
 
 ---
 
+### 6.20 Round 3, lens 4 — **the ACCUMULATOR lens. NOT YET, and R3-P4 is FALSE**
+
+*To disk before any fix.*
+
+#### R3-P4 — **FALSE.** My prediction against my own commit did not bite
+
+I predicted change D's *"53 of 79 are empty by construction"* was wrong because the AST keyed on line
+order rather than control flow. **It is not wrong.** The lens established that four ways, and the
+fourth is the one that settles it: a frame probe wrapping `Refusal.__post_init__`, driven by the
+full suite on **two legs (1043/1372) and three (1827/588)** — both matching change D's published
+tallies —
+
+```
+Refusal returns WITHOUT a warnings kwarg that fired with a NON-EMPTY accumulator local:
+   NONE.
+```
+
+Not one of the 53 sits inside a loop whose body also fills its accumulator; 41 return before their
+accumulator is even declared; 15 live in helpers with no accumulator at all. **12 of the 53 never
+fired**, and the lens said so rather than counting them as clean.
+
+**The mechanism I named is real and just misses.** `extra_import_warnings` IS declared inside the
+`for row` body, and three decline paths sit before it, so on iteration 2+ the name holds the
+**previous row's list** — none of the three reads it. A latent hazard, recorded, not a defect.
+
+**A false prediction is worth more than a hedged one.** I named the mechanism so it could not be
+scored generously, and it scored FALSE. That is the third clean falsification this row has taken.
+
+#### R3-P7 — **CONFIRMED**
+
+Every assertion on a `Refusal`'s `warnings` in the suite is a **presence** assertion. Nothing pins
+the empty direction at any door, and read with X2 below, a door leaking an unrelated accumulator into
+every refusal would pass the ids and the gate.
+
+#### The two BLOCKING, both verified by me
+
+**X1 — I fixed one branch of a ternary and left its twin.** `registry.py:5457` and `:5478`:
+
+```python
+self._entry(standing, extra_warnings=(f"import_refused:{reason}",))   # <- got NOTHING
+if standing is not None
+else self._refused_import(..., extra=extra_import_warnings)           # <- got the fix
+```
+
+**Standing rule (d) inside a single expression**, which is the tightest instance this row has
+produced. Two rows declined for the same reason carry different notes, and the one that loses it is
+the one with a live standing row. `C12-27`'s fixture uses a *new* name, so **the standing branch has
+zero coverage** — a fixture that cannot fail on half its own subject, the tenth of that class here.
+
+**X2 — 17 of the 26 sites change D added are pinned by nothing.** Emptying `Refusal.warnings` for
+`retire` (11), `reinstate` (2), `propose_type` (2), `neighbors` (1) and `record_invocation` (1)
+leaves the ids at **1043/1372, byte-identical**, and the gate output **`diff`-identical**. The two
+gate cells I added drive `import_types` and `merge_types` only — which is exactly the two doors MD1
+through MD4 mutate. **I mutation-proved the two doors my mutations could reach.**
+
+#### X3 — my "defining command" for the 26/53 split is CIRCULAR, and this one stings
+
+`ast: Return->Call(Refusal) with a warnings kwarg` counts **the edit**, not reachability. The commit
+itself says the count was "0 of 79" before the edit — so the command cannot establish *"26 are
+reachable with a non-empty accumulator"*; it establishes *"I added the kwarg 26 times."* Measured
+dynamically, **only 5 of the 26 ever fire non-empty** across the whole suite, 20 fire empty-only, and
+one never fires at all. **X12's rule says re-derive by the defining command; it does not protect a
+command that defines the wrong thing.**
+
+#### X4 — "filled at FIVE sites" is wrong; it is SIX, and it is in a normative spec
+
+Re-derived by me:
+
+```
+sites GIVEN the accumulator (extra=)         -> 5   (correct as published)
+sites that FILL it (5 appends + 1 by-reference skipped= at 5442) -> 6   (published as 5)
+```
+
+The sixth is `_alias_identity_breach(skipped=extra_import_warnings)` — **a by-reference fill, the
+exact class change D's own commit says a line-order survey misses**, made one accumulator along in
+the same commit. "Five" is published in the commit body, §6.15, **`INTERFACE.md` §5.4 (normative)**
+and two docstrings.
+
+#### The rest
+
+| id | sev | claim |
+|---|---|---|
+| **X5** | MAJOR | change D widened the **carrier** for 14 §5.4 values and updated the column for two; `__post_init__` validates the *value* vocabulary and never the carrier, and **two are already live** |
+| **X6** | MAJOR | R3-P7's substance — no id pins the empty direction |
+| **X7** | MINOR | the commit says §5.4 names `Refusal` for **three** values; it names it for **two** |
+| **X8** | MINOR | the comment cites the success path "at 5590"; it is at **5595** |
+| **X9** | MINOR | the new comment says a list "would make the shape unhashable" — `Refusal` is **already** unhashable (`detail: dict`). The mutability half is true, the hashability half false |
+| **X10** | MINOR | `__post_init__` raises `AttributeError`/`TypeError`, not `ValueError`, on a non-string element. Garbage does not get through; the failure shape is wrong |
+| **X11** | MINOR | `Refusal.warnings` does not round-trip the invocation ledger |
+
+#### And the lens's own headline undercounts its own table by one
+
+It reports *"2 BLOCKING, 4 MAJOR, 4 MINOR"* = 10; the table carries **11** (five MINOR). Recorded
+because this row has spent three rounds on exactly this class, and a lens is not exempt from it.
+
+#### Checked and explicitly NOT findings
+
+The `_entry(standing, …)` at `registry.py:5264` correctly omits `extra=` (it precedes the
+declaration); `INTERFACE.md` §5.5 printing `list[str]` for a tuple field matches the house
+convention; duplicates in `merge_warnings` are unreachable; and **no accumulator value reaching a
+`Refusal` falls outside `WARNING_VALUES`**, so change D's new check turns no refusal into a crash.
+
+---
+
+### 6.21 Round 3, totalled — **four lenses, four NOT YET, and the provenance INVERTS**
+
+| lens | raw | BLOCKING |
+|---|---|---|
+| fix auditor (§6.17) | 9 | 2 |
+| actions-twin (§6.18) | 6 | 3 |
+| kill row (§6.19) | 5 | 2 |
+| accumulator (§6.20) | 11 | 2 |
+| **raw total** | **31** | **9** |
+| **DISTINCT** | **30** | **9** |
+
+One cross-lens duplicate: the fix auditor's `G6` and the actions-twin's `A1` are the same expression.
+
+**Round 1: 19 distinct / 8 BLOCKING. Round 2: 21 / 9. Round 3: 30 / 9.** The findings did not shrink
+in any round, and round 3 found **half again as many as round 2**.
+
+#### The result that decides the stop question — **the provenance inverts**
+
+§6.13 said of round 2: *"the loop is still finding the surface's own defects rather than the row's
+regressions."* **Round 3 reverses that, and it is the clearest signal this row has produced.**
+
+| round | findings the row INTRODUCED | findings PRE-EXISTING |
+|---|---|---|
+| 1 | few — the surface was untouched | most |
+| 2 | **0 of the 3 routed constructions**; all three pre-dated the commits standing next to them | most |
+| 3 | **roughly 20 of 30**, including **5 of the 9 BLOCKING** | the rest |
+
+Round 3's BLOCKING findings that **this row created**: `A1` and `A2` (the `effects`-order refusal —
+`git log -S` returns `304967a`, my own A3 fix, a pure addition), `A3` (the dropped `why` at 5401, the
+same commit), `X1` (one branch of a ternary given the accumulator and not its twin), `X2` (17 of 26
+sites pinned by nothing). And `K1`'s **contradiction** is mine even though its behaviour is not:
+`9a4e140` minted `word_held_by_tombstone` and wired it to three doors of four.
+
+**That is what a loop looks like when it has finished with the surface and started on the row.** It
+is not a comfortable result and it is the honest one: my fixes are now the largest single source of
+findings on this surface.
+
+#### §6.16's ten, scored
+
+| # | outcome |
+|---|---|
+| **R3-P1** | **CONFIRMED** — four of four NOT YET |
+| **R3-P2** | **CONFIRMED** — four untrue assertions across three of the four round-2 commits |
+| **R3-P3** | **CONFIRMED** — the `effects`-order refusal re-found, and sharpened: it is *mine*, not inherited |
+| **R3-P4** | **FALSE** — established four ways including dynamically on two legs and three. The mechanism I named is present in `import_types` and misses. **My prediction against my own commit did not bite** |
+| **R3-P5** | **CONFIRMED** — the round's first BLOCKING (`G1`) is in the harness, and `X2`, `A7`/`G2` and `G3` are too |
+| **R3-P6** | **CONFIRMED** — `G4` (six cells published, eight in the tuple) and `X4` (five fills published, six actual), both falsified by their own defining artefacts |
+| **R3-P7** | **CONFIRMED** — nothing pins the empty direction at any door |
+| **R3-P8** | **CONFIRMED** — `K1` routed as a twenty-third construction, `K2` as a second candidate |
+| **R3-P9** | **PARTIAL, *"shown unnecessary"* branch FALSIFIED** — `G1` is real; `MX10` survives the gate and the ids at HEAD |
+| **R3-P10** | **CONFIRMED** — the cap is three, round 3 was not clean, so the row closes with a convergence note |
+
+**Scored: 8 CONFIRMED · 1 PARTIAL · 1 FALSE.** Round 1: 21/30. Round 2: 6 CONFIRMED / 2 PARTIAL /
+2 FALSE. **And for the third round running, the clean falsifications are numbers or claims this row
+published about its own work** — `G4`, `X4`, and `R3-P4` itself.
+
+#### The stop condition
+
+Standing constraint 7: two consecutive clean rounds, or three rounds plus an honest convergence note.
+**Three rounds are done and none was clean.** The row closes with the note, exactly as `R3-P10`
+predicted in writing before the round opened — so the note is not a result the row steered toward
+after the fact.
+
+**What the note must say, and the fix set that precedes it, are the row's last two acts.** Round 3's
+fix set opens on the findings that close a legal operation or leave a door contradicting its
+siblings, and every one of them is one this row made.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
