@@ -109,6 +109,21 @@ REFUSAL_REASONS = (
     # for two facts is INTERFACE.md 2.3's Cause B. Non-overridable: `force` overrides
     # what could be SEEN, never what would become TRUE.
     "word_held_by_tombstone",
+    # INTERFACE.md 5.10, row 6d's first round -- the THIRTY-THIRD, and finding A3.
+    # A collapse between two `kind="action"` families whose GOVERNANCE DECLARATIONS
+    # contradict each other. 5.10's refusal #2 is skipped for actions by design
+    # (ACTIONS.md 2.1: actions must be mergeable) and NOTHING was put in its place for
+    # what an action family actually IS -- `approval_mode`, `min_auto_tier`,
+    # `reversibility`, `effects`. So `resolve_type` answered the dead word with the
+    # survivor at 1.0 while `preflight` answered it with the TOMBSTONE's policy, and a
+    # Haiku-tier actor recorded `applied` against a verb the survivor declares
+    # human-approval-only and irreversible.
+    # **Non-overridable, and 2.2's own cross-field rule is the argument**: a family
+    # declaring `irreversible` with `approval_mode="auto"` is refused AT DECLARATION with
+    # `attributes_schema_violation`, which no acknowledgement moves. A door that produces
+    # the same contradiction by COLLAPSE must refuse it the same way, or the rule has a
+    # door in it -- which is the THIRD trip's own sentence.
+    "action_declarations_diverge",
     "different_consumer_sets",
     "predicate_merge",
     "kind_mismatch",

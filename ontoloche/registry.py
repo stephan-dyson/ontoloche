@@ -12,6 +12,8 @@ process-global registry makes that impossible.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import logging
 import re
 import uuid
@@ -3198,6 +3200,32 @@ class Registry:
                     },
                 )
             if succ is not None:
+                # **Finding A3 at the door the THIRD trip came through.** A retirement
+                # toward a successor redirects every `resolve_type` for the old word at
+                # confidence 1.0, so joining two action families whose governance
+                # declarations contradict makes one word answer two ways -- and §5.10's
+                # refusal #2, which would have caught the analogous predicate case, is
+                # skipped for actions by design. Non-overridable and `force` INCLUDED:
+                # `force` overrides what could be SEEN, never what would become TRUE.
+                diverging = self._action_declarations_diverge(rec, succ)
+                if diverging is not None:
+                    return Refusal(
+                        "action_declarations_diverge",
+                        {
+                            "type": type,
+                            "successor": successor,
+                            "diverging": diverging,
+                            "overridable": False,
+                            "why": (
+                                f"retiring {type!r} toward {successor!r} redirects the "
+                                f"old word at confidence 1.0 to a family whose governance "
+                                f"declarations contradict this one ({diverging}), so one "
+                                f"word would answer with two policies -- `resolve_type` "
+                                f"with the successor's and `preflight` with this "
+                                f"tombstone's (ACTIONS.md 2.2)"
+                            ),
+                        },
+                    )
                 if succ.status == "retired" and not force:
                     # **A successor that is itself retired leaves the old word resolving
                     # to NOTHING** (row 4d, round 3), which destroys 5.10's *"the old
@@ -4427,6 +4455,38 @@ class Registry:
             reason_value, _sentence, detail = breach
             return Refusal(reason_value, detail)
 
+        # **Finding A3: the DECLARATION operand refusal #2 never had for actions.**
+        # #2 is skipped for `kind="action"` by design (ACTIONS.md 2.1), and nothing stood
+        # in its place -- so two verbs with contradictory governance collapsed here with
+        # no refusal at all. See `_action_declarations_diverge`.
+        #
+        # **This door needed it as much as the other two, and the row's own earlier
+        # narrowing was too kind to it.** §6.2 recorded that `merge_types` refuses
+        # `definitions_diverge` on ordinary calls -- true of the lens's fixture, where the
+        # two definitions differed. **[Observed]** with IDENTICAL definitions the same
+        # collapse MERGES: `definitions_similarity:1.0000`, the only acknowledgement
+        # needed is `no_consumer_evidence`, and that is about consumers rather than about
+        # governance. A narrowing that holds for one fixture is not a narrowing.
+        diverging = self._action_declarations_diverge(left, right)
+        if diverging is not None:
+            return Refusal(
+                "action_declarations_diverge",
+                {
+                    "from": from_,
+                    "into": into,
+                    "diverging": diverging,
+                    "overridable": False,
+                    "why": (
+                        f"merging {from_!r} into {into!r} makes one word answer for two "
+                        f"action families whose governance declarations contradict "
+                        f"({diverging}). `resolve_type` would answer the dead word with "
+                        f"the survivor at confidence 1.0 while `preflight` answers it "
+                        f"with the tombstone's policy -- one word, one identity, TWO "
+                        f"governance answers (ACTIONS.md 2.2)"
+                    ),
+                },
+            )
+
         # 4 -- cross-namespace collision is what namespaces exist to preserve.
         if left.namespace != right.namespace:
             return Refusal(
@@ -5099,6 +5159,64 @@ class Registry:
             # identity field too**, because it decides whether a row's aliases are
             # scored at confidence 1.0.
             if incoming:
+                # **Finding A3 at the alias door.** The word being written as an alias
+                # may be the NAME of an action family, retired or live, whose governance
+                # declarations contradict the incoming row's -- and after the write
+                # `resolve_type` answers that word with THIS row at confidence 1.0 while
+                # `preflight` answers it with the other family's policy.
+                #
+                # Change 1's `_retired_holder` does not catch this: it asks about words a
+                # tombstone holds as an ALIAS, and deliberately not about a tombstone's
+                # own NAME -- the cell Q95 carries. So this asks its own question, over
+                # rows of every status, keyed rather than byte-matched.
+                incoming_kind = row.get("kind", kind)
+                if incoming_kind == "action" and row.get("attributes"):
+                    # **A `SimpleNamespace`, not a class of its own**, and the reason is
+                    # `tools/unasync.py`: it refuses a module with a second
+                    # `def __init__` at method indentation, because the async mirror is
+                    # generated by substitution rather than parsed. A throwaway operand
+                    # that changes how the mirror is produced is a second home for one
+                    # fact -- the row that hand-edits `aio/` to fix that is the row this
+                    # repository's rules exist to prevent.
+                    declared_here = SimpleNamespace(
+                        kind=incoming_kind, attributes=row.get("attributes") or {}
+                    )
+                    for word in incoming:
+                        named, _named_why = self._word_rows(namespace, word)
+                        for other in named:
+                            if other.name == name and other.kind == incoming_kind:
+                                continue
+                            diverging = self._action_declarations_diverge(
+                                declared_here, other
+                            )
+                            if diverging is not None:
+                                out.append(
+                                    self._refused_import(
+                                        namespace,
+                                        name,
+                                        (
+                                            f"{word!r} names the action family "
+                                            f"{other.name!r}, whose governance "
+                                            f"declarations contradict this row's "
+                                            f"({diverging}); writing it as an alias would "
+                                            f"make one word answer with two policies "
+                                            f"(ACTIONS.md 2.2)"
+                                        ),
+                                        reason="action_declarations_diverge",
+                                        kind=incoming_kind,
+                                    )
+                                )
+                                break
+                        else:
+                            continue
+                        break
+                    else:
+                        pass
+                    if out and out[-1].warnings and any(
+                        w == "import_refused:action_declarations_diverge"
+                        for w in out[-1].warnings
+                    ):
+                        continue
                 # **The identity guards run FIRST, and the order is the finding.**
                 # `_alias_clash` asks *"is this word already spoken for by something
                 # ALIVE?"*; this asks *"would this alias make one word resolve to a
@@ -7605,6 +7723,59 @@ class Registry:
                 break
             cursors.add(after)
         return records, why
+
+    #: The declaration keys a COLLAPSE between two action families must not contradict.
+    #: `inputs`, `preconditions`, `reachability` and `payload_schema` are deliberately NOT
+    #: here: they are the family's SHAPE, and a shape divergence does not let a caller
+    #: invoke something they could not invoke before. These four are the blast radius --
+    #: who may run it, at what tier, whether it can be undone, and what it may do.
+    _GOVERNANCE_KEYS = ("approval_mode", "min_auto_tier", "reversibility", "effects")
+
+    def _action_declarations_diverge(self, here, there) -> dict | None:
+        """The governance keys on which two `kind="action"` families contradict, or ``None``.
+
+        **Finding A3, row 6d round 1 (ruling R91).** §5.10's refusal **#2** is skipped for
+        actions **by design** -- `ACTIONS.md` §2.1 argues that actions must be mergeable --
+        and **nothing was put in its place for what an action family actually is.** So two
+        verbs with contradictory governance collapsed with no refusal:
+        `resolve_type('old_verb')` answered `new_verb` at **1.0** while
+        `preflight('old_verb')` answered with the **tombstone's** policy (auto,
+        reversible) and `preflight('new_verb')` with the survivor's (human,
+        irreversible) -- and a **Haiku-tier** actor recorded `applied` against the dead
+        word, with the survivor's ledger empty.
+
+        **One word, one identity, TWO governance answers.** R91 ruled that is not a
+        kill-row trip -- the identity criterion is not met, the word resolves to one row --
+        and minted **Q94** for the founder: *does the kill criterion extend to governance
+        identity?* This closes the BLOCKING without answering that question.
+
+        **Why non-overridable.** `ACTIONS.md` §2.2's single cross-field rule --
+        *`reversibility="irreversible"` ⇒ `approval_mode` MUST be `"human"`* -- is refused
+        **at declaration** with `attributes_schema_violation`, which no acknowledgement
+        moves. A door that produces the same contradiction by **collapse** must refuse it
+        the same way, or the rule has a door in it: the THIRD trip's own sentence, where
+        a pair refused under every acknowledgement collapsed through `retire(successor=)`.
+
+        **Both rows must BE action families.** A family joined to a non-action is already
+        refused `kind_mismatch` by #3, and reading declarations off a row that has none
+        would compare a fact against an absence -- the FIRST trip's operand, which this
+        register does not repeat.
+        """
+        if here.kind != "action" or there.kind != "action":
+            return None
+        mine = getattr(here, "attributes", None) or {}
+        theirs = getattr(there, "attributes", None) or {}
+        # A family that has not DECLARED is not a family that declared differently. Row
+        # 6b's `declared_policy.declared` draws the same line, and refusing on an absence
+        # is the FIRST trip's operand pointing the wrong way.
+        if not mine or not theirs:
+            return None
+        diverging = {
+            key: [mine.get(key), theirs.get(key)]
+            for key in self._GOVERNANCE_KEYS
+            if mine.get(key) != theirs.get(key)
+        }
+        return diverging or None
 
     def _retired_holder(
         self,
