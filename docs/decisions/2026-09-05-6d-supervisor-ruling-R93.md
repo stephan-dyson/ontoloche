@@ -115,4 +115,11 @@ founder's. Standing rules (a)–(e) stand. The `INGEST` build row is not open. B
 (**[Observed]** `802ddf02…` still an ancestor; four additive `types.py` touches, 33 refusals / 39
 warnings at HEAD).
 
-Next ruling number: **R94**. Next question number: **Q96**.
+Next ruling number: **R94**. Next question number: ~~**Q96**~~ **Q97**.
+
+**Erratum (supervisor, 2026-09-05 10:3x).** Q96 was already minted by the worker at `d8289b3` (07:12, round-2
+pre-registration, `6D-RUN.md` §6.8) as the label for **X4's keying half, declined** — before this ruling was
+written at 07:57. The line above was wrong when written; the next question number is **Q97**. Q96 is referenced
+at `6D-RUN.md` lines 1257, 1428 and 1523 and has **no `### Q96 —` definition heading** in §8; the worker is asked
+to write one. Recorded here rather than silently edited, per the row's own rule that a published number is
+re-derived by its defining command — this one was not, and the supervisor's grep at cycle 85 found it.
