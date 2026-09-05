@@ -3328,6 +3328,45 @@ def check_skipped_guards() -> tuple[list[str], list[str], list[str]]:
     unreachable: list[str] = []
 
     for leg, build, knowable in _legs():
+        # **The same family at the door that returns no `Refusal` at all** -- finding
+        # X11. `import_types` hands back a `TypeEntry` carrying `import_refused:<reason>`
+        # and used to carry NOTHING ELSE, so every note collected on the way to declining
+        # the row went out with the `continue`. Driven on every leg because it turns on
+        # `stores_aliases`, not on membership indexing.
+        registry = build()
+        _seed(registry, "plaza", kind="entity", definition="a public space")
+        rows = registry.import_types(
+            [{"name": "esplanade", "namespace": "dot", "definition": "a walk",
+              "aliases": ["plaza"], "status": "active"}],
+            namespace="default", kind="entity",
+        )
+        got = [w for row in (rows or ()) for w in (row.warnings or ())]
+        _release(registry)
+        if not any(w.startswith("import_refused:") for w in got):
+            unreachable.append(
+                f"{leg} / declined row keeps its notes: the door did not decline the row "
+                f"(no stored aliases means no collision), so the cell was never posed"
+            )
+            lines.append(
+                f"  {leg:15s} {'import_types':17s} {'decline keeps notes':24s} NOT REACHABLE"
+            )
+        elif not any(w.startswith("import_field_ignored:namespace:") for w in got):
+            problems.append(
+                f"{leg} / declined row keeps its notes: the row was DECLINED and its own "
+                f"`namespace` column was IGNORED, and the caller was told only the first. "
+                f"`import_field_ignored` means *this row went somewhere other than where "
+                f"its column said*, and a caller also being told the row was refused has "
+                f"MORE need of that sentence, not less -- standing rule (d) at the "
+                f"decline path. Got {got}"
+            )
+            lines.append(
+                f"  {leg:15s} {'import_types':17s} {'decline keeps notes':24s} FAILED"
+            )
+        else:
+            lines.append(
+                f"  {leg:15s} {'import_types':17s} {'decline keeps notes':24s} held"
+            )
+
         if knowable:
             # Nothing is skipped where the capability is present; the axis has no
             # question to ask there, and saying so is ruling R12's own requirement.
@@ -3433,6 +3472,74 @@ def check_skipped_guards() -> tuple[list[str], list[str], list[str]]:
             lines.append(f"  {leg:15s} {'merge_types':17s} {'skip is stated':24s} FAILED")
         else:
             lines.append(f"  {leg:15s} {'merge_types':17s} {'skip is stated':24s} held")
+
+        # **THE REFUSAL PATH, and both halves above are structurally blind to it.**
+        # Findings G4 / A14 / K5 / X11, reached by FOUR lenses independently: each half
+        # records ANY refusal as NOT REACHABLE, so *"the note is dropped the moment the
+        # call refuses"* could not fail this axis on any leg. That was the right shape
+        # while `Refusal` had nowhere to put the note; it is the wrong shape now that it
+        # does, and a check that cannot fail on the case it exists to cover is this
+        # file's own most-repeated defect.
+        #
+        # `ent_c` takes the moving word, so the door refuses AFTER the guard was skipped.
+        # The note matters MOST here: it is the difference between *we checked and the
+        # answer is no* and *we could not check and the answer is no anyway*.
+        registry = build()
+        built = _skip_pair(registry)
+        if built is not None:
+            unreachable.append(
+                f"{leg} / skip on the refusal path: " + built[len(_NOT_REACHABLE):]
+            )
+            lines.append(
+                f"  {leg:15s} {'merge_types':17s} {'skip on refusal':24s} NOT REACHABLE"
+            )
+            _release(registry)
+            continue
+        registry.reinstate("ent_a", "we were wrong", reinstated_by="user:sd")
+        _seed(registry, "ent_c", kind="entity", definition="a thing")
+        live = registry.adapter.get_type("default", "ent_c", kind="entity")
+        if live is None:
+            unreachable.append(f"{leg} / skip on the refusal path: ent_c was not written")
+            lines.append(
+                f"  {leg:15s} {'merge_types':17s} {'skip on refusal':24s} NOT REACHABLE"
+            )
+            _release(registry)
+            continue
+        registry.adapter.put_type(type(live)(**{**live.__dict__, "aliases": ("ent_a",)}))
+        out = registry.merge_types(
+            "ent_a", "ent_b", "one and the same", merged_by="user:sd",
+            acknowledge=("definitions_diverge", "no_consumer_evidence", "retired_operand"),
+        )
+        said = [
+            w for w in (getattr(out, "warnings", None) or ())
+            if w.startswith("identity_guard_skipped:")
+        ]
+        _release(registry)
+        if not isinstance(out, Refusal):
+            # The fixture did not refuse, so it did not pose the question. NOT a pass.
+            unreachable.append(
+                f"{leg} / skip on the refusal path: the door did not refuse, so this "
+                f"fixture did not pose the refusal path at all"
+            )
+            lines.append(
+                f"  {leg:15s} {'merge_types':17s} {'skip on refusal':24s} NOT REACHABLE"
+            )
+        elif not said:
+            problems.append(
+                f"{leg} / skip on the refusal path: the door refused {out.reason!r} and "
+                f"THREW AWAY the note saying a guard could not be evaluated. The same "
+                f"call carries it when it SUCCEEDS -- so a rule minted for the success "
+                f"path is half-applied, which is standing rule (d) at a value this row "
+                f"minted itself, and it is the half that matters more: a caller told no "
+                f"cannot tell `we checked` from `we could not check`"
+            )
+            lines.append(
+                f"  {leg:15s} {'merge_types':17s} {'skip on refusal':24s} FAILED"
+            )
+        else:
+            lines.append(
+                f"  {leg:15s} {'merge_types':17s} {'skip on refusal':24s} held"
+            )
 
     return problems, lines, unreachable
 

@@ -711,6 +711,31 @@ class Refusal:
     reason: str
     detail: dict[str, Any] = field(default_factory=dict)
     refused: bool = True
+    #: **What the call could not check on its way to refusing** -- ``INTERFACE.md``
+    #: 5.4's vocabulary, the same values ``TypeEntry.warnings`` carries.
+    #:
+    #: **Row 6d, round 2, findings G4 / A14 / K5 / X11 -- reached by FOUR lenses
+    #: independently.** Every door in this module accumulates skip notes as it walks its
+    #: guards (``retire_skips``, ``alias_warnings``, ``merge_warnings``,
+    #: ``extra_import_warnings``) and every one of them **dropped the accumulator the
+    #: moment it refused**, because this shape had nowhere to put it. So the NINETEENTH
+    #: trip's own value -- ``identity_guard_skipped``, minted precisely so a caller is
+    #: told when a guard could not run -- **reached a caller only when the call
+    #: succeeded**. A/B on one store: the note is present when nothing else refuses and
+    #: gone when ``alias_collision`` fires after it was collected.
+    #:
+    #: That is **standing rule (d)** at a rule this row minted itself: a rule applied at
+    #: the success path is half-applied until the commit names the refusal paths it also
+    #: binds. And it is the worse half -- *"we could not finish looking"* matters MOST to
+    #: a caller who is being told no, because it is the difference between **we checked
+    #: and the answer is no** and **we could not check and the answer is no anyway**,
+    #: which is `Rule U` at the surface rather than inside a guard.
+    #:
+    #: Validated below against the SAME closed vocabulary, which is strictly more than
+    #: the success path does today: ``TypeEntry.warnings`` is checked at exactly one
+    #: site in the whole package (``record_invocation``, and that line is marked
+    #: ``pragma: no cover``).
+    warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.reason not in REFUSAL_REASONS:
@@ -720,6 +745,20 @@ class Refusal:
             )
         if self.refused is not True:
             raise ValueError("Refusal.refused is always True")
+        if not isinstance(self.warnings, tuple):
+            # A list here would make the shape unhashable and let a caller mutate a
+            # refusal after the fact; every other warnings field in this module is a
+            # tuple and this one is not an exception.
+            object.__setattr__(self, "warnings", tuple(self.warnings))
+        for warning in self.warnings:
+            # `<value>:<detail>` is the shipped form -- `alias_check_incomplete:<why>`,
+            # `identity_guard_skipped:<guard>:<capability>` -- so the VALUE is the part
+            # before the first colon, exactly as `record_invocation` reads it.
+            if warning.split(":", 1)[0] not in WARNING_VALUES:
+                raise ValueError(
+                    f"Refusal.warnings is INTERFACE.md 5.4's closed vocabulary; "
+                    f"{warning!r} is not one of the {len(WARNING_VALUES)}"
+                )
 
 
 @dataclass(frozen=True)

@@ -2090,6 +2090,7 @@ class AsyncRegistry:
                         # me" is a question the caller now has to be able to answer.
                         "schema_name": schema.name,
                     },
+                    warnings=tuple(warnings),
                 )
             if schema and schema.mode == "warn":
                 warnings.extend(f"attributes_invalid:{v}" for v in violations)
@@ -2178,6 +2179,7 @@ class AsyncRegistry:
                         "note": "this backend cannot hold the proposal for review: "
                         + self.caps.reason("stores_proposals"),
                     },
+                    warnings=tuple(warnings),
                 )
             # **The one place R40 cannot be honoured, stated rather than hidden.** There
             # is no proposal table, so there is nowhere to hold a predicate for review:
@@ -2922,6 +2924,7 @@ class AsyncRegistry:
                             "successor": successor,
                             "why": sentence,
                         },
+                        warnings=tuple(retire_skips),
                     )
 
             # `kind=` is passed for the reason `_alias_identity_breach` uses `name_in`:
@@ -2995,6 +2998,7 @@ class AsyncRegistry:
                         ),
                         "overridable": False,
                     },
+                    warnings=tuple(retire_skips),
                 )
             if succ is not None:
                 # **Finding A3 at the door the THIRD trip came through.** A retirement
@@ -3022,6 +3026,7 @@ class AsyncRegistry:
                                 f"tombstone's (ACTIONS.md 2.2)"
                             ),
                         },
+                        warnings=tuple(retire_skips),
                     )
                 if succ.status == "retired" and not force:
                     # **A successor that is itself retired leaves the old word resolving
@@ -3048,6 +3053,7 @@ class AsyncRegistry:
                             "overridable": True,
                             "acknowledge": "force=True",
                         },
+                        warnings=tuple(retire_skips),
                     )
                 # **Refusal #3 through the SHARED function too, and it was the FOURTH
                 # copy** -- found by row 6b's first adversarial lens, which pointed out
@@ -3076,6 +3082,7 @@ class AsyncRegistry:
                             "successor": successor,
                             "why": sentence,
                         },
+                        warnings=tuple(retire_skips),
                     )
                 # **Refusal #2 through the SHARED function** (R53, row 6b). The
                 # expression it runs is unchanged to the letter -- `knowable` folds in
@@ -3105,6 +3112,7 @@ class AsyncRegistry:
                             "successor": successor,
                             "why": sentence,
                         },
+                        warnings=tuple(retire_skips),
                     )
 
         # **The identity guards run FIRST, and that ordering is row 3c's lesson applied
@@ -3200,6 +3208,7 @@ class AsyncRegistry:
                                 "why": sentence,
                                 "overridable": False,
                             },
+                            warnings=tuple(retire_skips),
                         )
                     # Ruling **R75**. The guard has passed on exactly these words, so
                     # these are the words that may be written. Captured here rather than
@@ -3276,6 +3285,7 @@ class AsyncRegistry:
                                     f"word retired"
                                 ),
                             },
+                            warnings=tuple(retire_skips),
                         )
                     if tomb_why is not None:
                         retire_word_why = tomb_why
@@ -3300,12 +3310,14 @@ class AsyncRegistry:
                     "would_override": [c.id for c in report.gates_on],
                     "gates_on_knowable": self.caps.indexes_membership,
                 },
+                warnings=tuple(retire_skips),
             )
 
         if report.gates_on and not force:
             return Refusal(
                 "live_consumers",
                 {"gates_on": [c.id for c in report.gates_on], "type": type},
+                warnings=tuple(retire_skips),
             )
         # An EMPTY gates_on means "nothing gates on this" only when we were able to
         # look. On a backend that cannot index membership, every extent is empty, so
@@ -3342,6 +3354,7 @@ class AsyncRegistry:
                     "overridable": True,
                     "override_with": "force=True",
                 },
+                warnings=tuple(retire_skips),
             )
 
 
@@ -3721,6 +3734,7 @@ class AsyncRegistry:
                     ),
                     "overridable": False,
                 },
+                warnings=tuple(alias_warnings),
             )
         if dormant:
             breach = await self._alias_identity_breach(
@@ -3747,6 +3761,7 @@ class AsyncRegistry:
                         "why": sentence,
                         "overridable": False,
                     },
+                    warnings=tuple(alias_warnings),
                 )
 
         now = self._now()
@@ -4269,7 +4284,7 @@ class AsyncRegistry:
             # is for the two doors that carry one: `retire`, and the import path, which
             # has no `Refusal` to put a detail in at all.
             reason_value, _sentence, detail = breach
-            return Refusal(reason_value, detail)
+            return Refusal(reason_value, detail, warnings=tuple(merge_warnings))
 
         # **Finding A3: the DECLARATION operand refusal #2 never had for actions.**
         # #2 is skipped for `kind="action"` by design (ACTIONS.md 2.1), and nothing stood
@@ -4301,6 +4316,7 @@ class AsyncRegistry:
                         f"governance answers (ACTIONS.md 2.2)"
                     ),
                 },
+                warnings=tuple(merge_warnings),
             )
 
         # 4 -- cross-namespace collision is what namespaces exist to preserve. **Asked
@@ -4344,6 +4360,7 @@ class AsyncRegistry:
                         "why": sentence,
                         "overridable": False,
                     },
+                    warnings=tuple(merge_warnings),
                 )
         # **Moved ABOVE the overridable guards** (row 4d, round 1). It sat last, after
         # `retired_operand`, `definitions_diverge`, `no_consumer_evidence` and the
@@ -4477,6 +4494,7 @@ class AsyncRegistry:
                         f"fifth write door and the kill row's THIRTEENTH trip"
                     ),
                 },
+                warnings=tuple(merge_warnings),
             )
         if clash_why is not None:
             # **The EIGHTEENTH trip: this binding existed and was never read.** The
@@ -4524,6 +4542,7 @@ class AsyncRegistry:
                         f"reinstate {tomb_row.name!r} first, or leave that word retired"
                     ),
                 },
+                warnings=tuple(merge_warnings),
             )
         if tomb_why is not None:
             # **The detail NAMES THE SCAN, because this door now runs two of them** and
@@ -4552,6 +4571,7 @@ class AsyncRegistry:
             return Refusal(
                 "cannot_record_override",
                 {"why": self.caps.reason("stores_events"), "acknowledge": list(acknowledge)},
+                warnings=tuple(merge_warnings),
             )
 
         # 5
@@ -4564,6 +4584,7 @@ class AsyncRegistry:
                     "overridable": True,
                     "acknowledge": "retired_operand",
                 },
+                warnings=tuple(merge_warnings),
             )
 
         # 6 -- the comparison is between the two DEFINITIONS, not the two names: two
@@ -4606,6 +4627,7 @@ class AsyncRegistry:
                     "overridable": True,
                     "acknowledge": "definitions_diverge",
                 },
+                warnings=tuple(merge_warnings),
             )
 
         # 7 -- the one place "we do not know" blocks rather than warns.
@@ -4627,6 +4649,7 @@ class AsyncRegistry:
                     "overridable": True,
                     "acknowledge": "no_consumer_evidence",
                 },
+                warnings=tuple(merge_warnings),
             )
 
         now = self._now()
@@ -5004,7 +5027,8 @@ class AsyncRegistry:
                 if holder is not None:
                     out.append(
                         self._refused_import(
-                            namespace, name, holder, kind=row.get("kind", kind)
+                            namespace, name, holder, kind=row.get("kind", kind),
+                            extra=extra_import_warnings,
                         )
                     )
                     continue
@@ -5066,6 +5090,7 @@ class AsyncRegistry:
                                         ),
                                         reason="action_declarations_diverge",
                                         kind=incoming_kind,
+                                        extra=extra_import_warnings,
                                     )
                                 )
                                 break
@@ -5104,6 +5129,7 @@ class AsyncRegistry:
                         else self._refused_import(
                             namespace, name, sentence, reason=reason,
                             kind=row.get("kind", kind),
+                            extra=extra_import_warnings,
                         )
                     )
                     continue
@@ -5122,7 +5148,8 @@ class AsyncRegistry:
                         await self._entry(standing, extra_warnings=("import_refused:alias_collision",))
                         if standing is not None
                         else self._refused_import(
-                            namespace, name, clash, kind=row.get("kind", kind)
+                            namespace, name, clash, kind=row.get("kind", kind),
+                            extra=extra_import_warnings,
                         )
                     )
                     continue
@@ -5170,6 +5197,7 @@ class AsyncRegistry:
                             ),
                             reason="word_held_by_tombstone",
                             kind=row.get("kind", kind),
+                            extra=extra_import_warnings,
                         )
                     )
                     continue
@@ -6693,7 +6721,8 @@ class AsyncRegistry:
                 # family was searched, and a typo'd name returning a clean empty set is
                 # mechanism C committed by the read seam.
                 return Refusal(
-                    "edge_family_unknown", {"families": unknown, "namespace": namespace}
+                    "edge_family_unknown", {"families": unknown, "namespace": namespace},
+                    warnings=tuple(warnings),
                 )
             # `families_searched` echoes what was ACTUALLY consulted (4.4), which after
             # a family merge is more than the caller named.
@@ -7911,11 +7940,21 @@ class AsyncRegistry:
         *,
         reason: str = "alias_collision",
         kind: str = "entity",
+        extra: Sequence[str] = (),
     ) -> TypeEntry:
         """A row an import declined to write, returned as a shape a caller can read.
 
         There is no standing entry to hand back, so this is the imported row as it would
         have looked, marked ``proposed`` -- nothing was written -- and carrying why.
+
+        **`extra` is finding X11** (row 6d, round 2). This returned
+        ``warnings=(f"import_refused:{reason}",)`` **alone**, so every note
+        ``import_types`` had collected on the way to declining the row -- the
+        ``alias_check_incomplete`` values saying a scan did not finish, and X6's own
+        ``import_field_ignored`` -- was discarded by the ``continue`` that followed. The
+        accumulator is filled at five sites and was read at exactly one, the success
+        path. Same sentence as G4 at a different shape: *a rule applied at the success
+        path is half-applied until the commit names the decline paths it also binds.*
         """
         now = self._now()
         return TypeEntry(
@@ -7942,7 +7981,10 @@ class AsyncRegistry:
                 type=name, gates_on=(), would_drop=(), would_error=(), known=0,
                 complete=False, why_incomplete="nothing was written",
             ),
-            warnings=(f"import_refused:{reason}",),
+            # De-duplicated and ORDER-STABLE, the same treatment the success path gives
+            # this accumulator at 5590 -- a caller must not be able to tell the two
+            # paths apart by the shape of the list.
+            warnings=(f"import_refused:{reason}",) + tuple(dict.fromkeys(extra)),
         )
 
     # ------------------------------------------------------------------ attributes
@@ -9594,6 +9636,7 @@ class AsyncRegistry:
                     "schema_version": schema.version,
                     "why": "the supplied inputs fail this family's payload_schema",
                 },
+                warnings=tuple(warnings),
             )
         # **Rule U on a declared field pointing at nothing** -- EDGES.md 2.5's own
         # `payload_schema_unregistered`, reused rather than re-minted, because it is the

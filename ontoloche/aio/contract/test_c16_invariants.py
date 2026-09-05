@@ -8,7 +8,7 @@
 # if this file and its source have drifted apart.
 # ---------------------------------------------------------------------------------
 
-"""C16 -- whole-store invariants (6).
+"""C16 -- whole-store invariants (8).
 
 PACKAGE.md 6.2 describes these as running once at suite end over everything the suite
 wrote. The suite's adapters are function-scoped so that a failure in one test cannot
@@ -25,9 +25,11 @@ from ontoloche.aio.adapter import TypeQuery
 from ontoloche.types import (
     CREATED_BY,
     STATUSES,
+    WARNING_VALUES,
     Consumer,
     ConsumerReport,
     MergeResult,
+    Refusal,
     TypeEntry,
     TypeListing,
 )
@@ -206,3 +208,29 @@ async def test_c16_06_no_two_active_entries_in_one_namespace_hold_one_word(exerc
                 f"{rec.name!r}, both active -- mechanism 4"
             )
             spoken_for[key] = rec.name
+
+def test_c16_08_refusal_warnings_is_the_same_closed_vocabulary(adapter, make_registry):
+    """**§5.4's vocabulary is closed on the REFUSAL path too** *(row 6d, round 2)*.
+
+    `Refusal.warnings` was added so a caller told *no* learns what the call could not
+    check. A field that accepts anything is a field that will eventually carry anything:
+    `TypeEntry.warnings` is validated at **exactly one site in the whole package**
+    (`record_invocation`, and that line is marked `pragma: no cover`), which is how
+    `created_by` got through un-checked in row 3e and let a third-party backend's garbage
+    reach a caller — the defect `C16-05` exists for.
+
+    **This id was written because removing the check was a mutation SURVIVOR.** The
+    enforcement went in with the field, nothing pinned it, and the change that added it
+    found that out by running the mutation rather than by reading its own diff.
+    """
+    for value in ("identity_guard_skipped:different_consumer_sets:indexes_membership",
+                  "alias_check_incomplete:the scan did not finish"):
+        assert Refusal("alias_collision", {}, True, (value,)).warnings == (value,), value
+        assert value.split(":", 1)[0] in WARNING_VALUES
+
+    with pytest.raises(ValueError, match="closed vocabulary"):
+        Refusal("alias_collision", {}, True, ("not_a_warning_value",))
+
+    # A list is coerced rather than stored: every other warnings field in the package is
+    # a tuple, and a mutable one would let a caller edit a refusal after the fact.
+    assert Refusal("alias_collision", {}, True, []).warnings == ()

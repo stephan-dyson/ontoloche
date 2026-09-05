@@ -1394,3 +1394,73 @@ async def test_c10_26_the_refusal_detail_does_not_depend_on_page_order(
         "the holder set a caller is shown must not depend on which row the backend "
         "paged first -- PACKAGE.md 3.3 guarantees no ordering at all", seen,
     )
+
+async def test_c10_27_a_skip_note_survives_the_refusal_that_follows_it(adapter, make_registry):
+    """**Findings G4 / A14 / K5 / X11 — reached by FOUR lenses independently.**
+
+    Every door in `registry.py` accumulates skip notes as it walks its guards, and every
+    one of them **dropped the accumulator the moment it refused**, because `Refusal` had
+    no `warnings` field at all. So the NINETEENTH trip's own value —
+    `identity_guard_skipped`, minted precisely so a caller is told when a guard could not
+    run — **reached a caller only when the call succeeded**.
+
+    That is **standing rule (d)** at a rule this row minted itself: applied at the success
+    path, it is half-applied until the commit names the refusal paths it also binds. And
+    it is the worse half. *"We could not finish looking"* matters MOST to the caller being
+    told no, because it is the difference between **we checked and the answer is no** and
+    **we could not check and the answer is no anyway** — Rule U at the surface rather than
+    inside a guard.
+
+    This id is `C10-24`'s **mirror**, deliberately: the same store, the same skipped
+    guard, and a refusal arranged to fire *after* the note was collected. `C10-24` files
+    a refusal as `pytest.skip`, which is exactly the blindness §6.9 recorded — *"both
+    `identity_guard_skipped` occurrences sit behind a branch recording any refusal as NOT
+    REACHABLE, so the gate is structurally unable to fail on a refusal path."*
+    """
+    degraded = await make_registry(
+        AsyncDegradedAdapter(adapter, indexes_membership=False), approval_policy="auto"
+    )
+    await seed(degraded, "meta_p", kind="predicate", definition="a meta capability")
+    await seed(degraded, "ent_a", kind="entity", definition="a thing", predicates=["meta_p"])
+    await seed(degraded, "ent_b", kind="entity", definition="a thing")
+    await seed(degraded, "ent_c", kind="entity", definition="a thing")
+    out = await degraded.register_consumer(
+        Consumer(id="svc:meta", gate="meta_p", on_unknown="drop", owner="ops")
+    )
+    if isinstance(out, Refusal):
+        pytest.skip(f"this backend cannot register a consumer ({out.reason})")
+
+    # `ent_c` takes the moving word, so the merge refuses AFTER the guard was skipped.
+    # Written through the adapter because the shipped alias door refuses it -- that
+    # refusal is `C12-23` and asserting it is not this id's subject.
+    live = await adapter.get_type("default", "ent_c", kind="entity")
+    if live is None:
+        pytest.skip("this backend did not write the fixture row")
+    await adapter.put_type(TypeRecord(**{**live.__dict__, "aliases": ("ent_a",)}))
+
+    refused = await degraded.merge_types(
+        "ent_a", "ent_b", "one and the same", merged_by="user:sd",
+        acknowledge=("definitions_diverge", "no_consumer_evidence"),
+    )
+    if not isinstance(refused, Refusal):
+        # NOT REACHABLE, never a pass. The collision is built by writing an alias, so a
+        # backend declining `stores_aliases` drops it and the merge has nothing to refuse
+        # -- the fixture cannot pose the question there. Gated on the CAPABILITY rather
+        # than on the outcome, so a store that CAN hold the alias and merged anyway is a
+        # finding and not a skip.
+        assert degraded.caps.stores_aliases is False, (
+            "this backend stores aliases, so the collision was real and the merge should "
+            "have refused -- that is a finding, not a capability", refused,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_aliases=False drops the alias that builds the "
+            "collision, so this door has nothing to refuse"
+        )
+    assert any(
+        w.startswith("identity_guard_skipped:different_consumer_sets:")
+        for w in refused.warnings
+    ), (
+        "the note was collected and then thrown away because the call refused -- a "
+        "caller told no is entitled to know a guard could not be evaluated",
+        refused.reason, refused.warnings,
+    )
