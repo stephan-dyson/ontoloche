@@ -2739,6 +2739,30 @@ class Registry:
         word_rows, word_why = self._word_rows(
             rec.namespace, rec.name, match_aliases=True
         )
+        # **THE TWENTIETH TRIP: this door had the ALIAS half and never the NAME half**
+        # (row 6d, round 2; ruling R93). The EIGHTH trip minted `name_previously_retired`
+        # and applied it at `propose_type` (2320) and `import_types` (5138) -- and never
+        # here, at the door ruling **R40 forces every `kind="predicate"` down.** So a
+        # tombstone whose own NAME is another spelling of the approved word was minted
+        # over with `warnings=()`, and `reinstate` was then refused `alias_collision`
+        # NON-OVERRIDABLY: R11's governance act spent, in four ordinary calls with no
+        # `force`. **[Observed]** `propose_type` on the identical store answers
+        # `name_previously_retired` and writes nothing.
+        #
+        # **And it is this row's own pattern, adopted by R93 as the register's reading:**
+        # change 1 widened `_word_rows` past its kind filter and left the filter that
+        # DISCARDS the scan's result alone. *A widened matcher is a minted rule and its
+        # consumers are its doors* -- so the consumer is fixed here, in the same shape the
+        # sibling door has used since the eighth trip.
+        named_here = [
+            r
+            for r in word_rows
+            if r.status == "retired" and same_word(r.name, rec.name)
+        ]
+        if named_here:
+            return self._entry(
+                named_here[0], extra_warnings=("name_previously_retired",)
+            )
         answering = [
             r
             for r in word_rows
@@ -5109,9 +5133,17 @@ class Registry:
                     namespace, name, match_aliases=True
                 )
                 retired_here = [r for r in variants if r.status == "retired"]
-                named = [
-                    r for r in retired_here if r.name != name and same_word(r.name, name)
-                ]
+                # **THE TWENTY-FIRST TRIP: `r.name != name` discarded the byte-identical
+                # tombstone** (row 6d, round 2; ruling R93). `standing` is `None` exactly
+                # when no row OF THAT KIND carries the name, so a `retired_here` row whose
+                # name IS the word can only be a tombstone of ANOTHER kind -- precisely
+                # the cell change 1 dropped `kind=` to expose. The clause was **inert**
+                # while the scan was kind-scoped and became live the moment it was
+                # widened, so the fix walked past it: the tombstone was minted over, and
+                # because `reinstate` takes no `kind` the tombstone became **unreachable**
+                # -- no call exists that could bring it back. `propose_type` (2320) has no
+                # such exclusion and answers `name_previously_retired`.
+                named = [r for r in retired_here if same_word(r.name, name)]
                 if named:
                     standing = named[0]
                 else:

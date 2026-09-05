@@ -3416,6 +3416,128 @@ def check_skipped_guards() -> tuple[list[str], list[str], list[str]]:
     return problems, lines, unreachable
 
 
+def _tombstone_exact_store(registry: Registry) -> str | None:
+    """A RETIRED row whose name is the contested word BYTE FOR BYTE, of another kind.
+
+    **The TWENTY-FIRST trip's own cell, and it is not the variant one.** `import_types`
+    excluded `r.name != name`, so only a BYTE-IDENTICAL tombstone was discarded -- a
+    variant spelling passed the exclusion and was answered correctly. A fixture built on
+    `borough_`/`borough` therefore cannot fail on it: `r.name != name` is True there.
+    Reverting that exclusion is caught by the contract ids and, until this fixture
+    existed, by no axis on any leg.
+    """
+    _seed(registry, "w", kind="entity", definition="a thing")
+    gone = registry.retire("w", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire the holder ({gone.reason})"
+    return None
+
+
+def _tombstone_name_store(registry: Registry) -> str | None:
+    """A RETIRED row whose own NAME is the contested word -- the half no fixture posed.
+
+    **The TWENTIETH and TWENTY-FIRST trips' gate reason, countably: before this fixture,
+    `name_previously_retired` occurred ZERO times in this file.** Axes 10 and 11 both build
+    through `_alias_only_store`, which retires `searchable` and then mints `commentable`,
+    so `same_word(tombstone.name, word)` is **False in every fixture in the file** -- the
+    cells labelled `name x ...` drove the incoming name against a tombstone's ALIAS and
+    never against a tombstone's NAME. The EIGHTH trip's own warning value had never been
+    asserted at any door, on any leg, in any axis.
+    """
+    _seed(registry, "borough_", kind="predicate", definition="a capability")
+    gone = registry.retire(
+        "borough_", "consolidated", retired_by="user:sd", force=True
+    )
+    if isinstance(gone, Refusal):
+        return _NOT_REACHABLE + f"this backend cannot retire the holder ({gone.reason})"
+    return None
+
+
+#: ``(label, the mint kind, the door)`` -- `borough` against the retired `borough_`, which
+#: is the same word by `identity_key` and a different string.
+_NAME_CELLS = (
+    ("name x same x propose", "predicate", "propose_type"),
+    ("name x same x approve", "predicate", "approve"),
+    ("name x same x import", "predicate", "import_types"),
+    ("name x cross x propose", "entity", "propose_type"),
+    ("name x cross x approve", "entity", "approve"),
+    ("name x cross x import", "entity", "import_types"),
+    # The BYTE-IDENTICAL cell -- a different word from the four above, and the only one
+    # the twenty-first trip's exclusion could ever have bitten on.
+    ("name EXACT x cross x propose", "predicate", "propose_type"),
+    ("name EXACT x cross x import", "predicate", "import_types"),
+)
+
+
+def check_tombstone_names() -> tuple[list[str], list[str], list[str]]:
+    """Axis 14 -- a tombstone's own NAME at every mint door, both kind relations."""
+    problems: list[str] = []
+    lines: list[str] = []
+    unreachable: list[str] = []
+
+    for leg, build, _knowable in _legs():
+        for label, mint_kind, door in _NAME_CELLS:
+            registry = build()
+            pending = None
+            if door == "approve":
+                pending = registry.propose_type(
+                    "w" if label.startswith("name EXACT") else "borough",
+                    "a capability", EVIDENCE, "user:sd", kind=mint_kind,
+                )
+                if isinstance(pending, (Refusal, TypeEntry)):
+                    unreachable.append(
+                        f"{leg} / {label}: this backend cannot hold a pending proposal"
+                    )
+                    lines.append(f"  {leg:15s} {label:26s} NOT REACHABLE")
+                    _release(registry)
+                    continue
+            exact = label.startswith("name EXACT")
+            word = "w" if exact else "borough"
+            tomb = "w" if exact else "borough_"
+            built = (
+                _tombstone_exact_store(registry) if exact
+                else _tombstone_name_store(registry)
+            )
+            if built is not None:
+                unreachable.append(f"{leg} / {label}: " + built[len(_NOT_REACHABLE):])
+                lines.append(f"  {leg:15s} {label:26s} NOT REACHABLE")
+                _release(registry)
+                continue
+
+            if door == "propose_type":
+                answer = registry.propose_type(
+                    word, "a capability", EVIDENCE, "user:sd", kind=mint_kind
+                )
+            elif door == "approve":
+                answer = registry.approve(pending.id, "user:sd")
+            else:
+                rows = registry.import_types(
+                    [{"name": word, "kind": mint_kind, "definition": "a capability",
+                      "status": "active"}],
+                    namespace="default", kind=mint_kind,
+                )
+                answer = rows[0] if rows else None
+
+            said = isinstance(answer, TypeEntry) and any(
+                w == "name_previously_retired" for w in (answer.warnings or ())
+            )
+            back = registry.reinstate(tomb, "we were wrong", reinstated_by="user:sd")
+            _release(registry)
+            if not said or isinstance(back, Refusal):
+                problems.append(
+                    f"{leg} / {label}: this door answered a "
+                    f"{type(answer).__name__} without `name_previously_retired` for a "
+                    f"word the RETIRED {tomb!r} IS, and `reinstate` came back "
+                    f"{type(back).__name__} -- the EIGHTH trip's own value at a door it "
+                    f"was never applied to (trips TWENTY and TWENTY-ONE)"
+                )
+                lines.append(f"  {leg:15s} {label:26s} FAILED")
+            else:
+                lines.append(f"  {leg:15s} {label:26s} held")
+
+    return problems, lines, unreachable
+
+
 def main() -> int:
     print("ROADMAP.md's kill row -- is it guarded? Every CALLER, every extent STATE.\n")
 
@@ -3514,6 +3636,11 @@ def main() -> int:
             "  and A SKIPPED GUARD SAYS SO -- the kill row's NINETEENTH trip: "
             "refusal #1 compared two blank consumer sets and the door said nothing:",
             check_skipped_guards,
+        ),
+        (
+            "  and A TOMBSTONE'S OWN NAME AT EVERY MINT DOOR -- the TWENTIETH and "
+            "TWENTY-FIRST trips: the half no fixture in this file could pose:",
+            check_tombstone_names,
         ),
     ):
         print()

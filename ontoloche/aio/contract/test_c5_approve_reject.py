@@ -321,3 +321,51 @@ async def test_c5_14_approve_holds_a_tombstones_word_across_kinds(adapter, make_
     assert isinstance(
         await registry.reinstate("alpha", "we were wrong", reinstated_by="user:sd"), TypeEntry
     ), "R11's governance act must survive an approval that used to burn it"
+
+async def test_c5_15_approve_holds_a_tombstones_own_name(adapter, make_registry):
+    """**The kill row's TWENTIETH trip.** Row 6d, round 2; countersigned by **R93**.
+
+    The EIGHTH trip minted `name_previously_retired` and applied it at `propose_type` and
+    `import_types` — and **never here**, at the door ruling **R40** forces every
+    `kind="predicate"` down. So a tombstone whose own NAME is another spelling of the
+    approved word was minted over with **`warnings=()`**, and `reinstate` was then refused
+    `alias_collision` **non-overridably**: R11's governance act spent, in four ordinary
+    calls with no `force`.
+
+    **It is this row's own pattern**, adopted by R93 as the register's reading: change 1
+    widened `_word_rows` past its kind filter and left the filter that DISCARDS the scan's
+    result alone. *A widened matcher is a minted rule and its consumers are its doors.*
+    """
+    registry = await make_registry(adapter, approval_policy="review")
+    pending = await registry.propose_type(
+        "borough", "the borough of a park", [DATA_EVIDENCE], "user:sd", kind="predicate"
+    )
+    if not isinstance(pending, Proposal):
+        pytest.skip("this backend does not store proposals, so approve has none to judge")
+
+    # `borough_` is NAME_RE-legal and the same word by `identity_key`.
+    await seed(registry, "borough_", kind="predicate", definition="the borough of a park")
+    gone = await registry.retire("borough_", "consolidated", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+
+    # CONTROL: the sibling mint door has answered this way since the EIGHTH trip.
+    control = await registry.propose_type(
+        "borough", "a second borough", [DATA_EVIDENCE], "user:sd", kind="predicate"
+    )
+    assert isinstance(control, TypeEntry)
+    assert "name_previously_retired" in (control.warnings or ()), control.warnings
+
+    out = await registry.approve(pending.id, "user:sd")
+    assert isinstance(out, TypeEntry), out
+    assert "name_previously_retired" in (out.warnings or ()), (
+        "the approve door owes what the two sibling mint doors owe", out.warnings
+    )
+    assert out.name == "borough_" and out.status == "retired", (out.name, out.status)
+    assert not [
+        t for t in (await registry.list_types("predicate")).types if t.name == "borough"
+    ], "nothing is written"
+    assert isinstance(
+        await registry.reinstate("borough_", "we were wrong", reinstated_by="user:sd"),
+        TypeEntry,
+    ), "R11's governance act must survive an approval that used to spend it"
