@@ -1865,6 +1865,9 @@ class Registry:
         alternatives: list[Alternative] = []
         seen_labels: set[str] = set()
         exact_elsewhere: list[str] = []
+        #: ``namespace -> the rows that answer to the candidate there``. X7's fix: the
+        #: label must name a ROW, and only the row knows its own name.
+        exact_rows: dict[str, list] = {}
         ambiguous_elsewhere: list[str] = []
         burned_elsewhere: list[tuple[str, Any]] = []
         capped: list[str] = []
@@ -1904,6 +1907,9 @@ class Registry:
             ]
             if candidates:
                 exact_elsewhere.append(other)
+                # **The matching ROWS are kept, and keeping only the namespace was
+                # finding X7** (row 6d, round 2). See the label block below.
+                exact_rows.setdefault(other, []).extend(candidates)
                 if len({rec.kind for rec in candidates}) > 1:
                     ambiguous_elsewhere.append(other)
             for tombstone in retired_elsewhere.get(other, ()):
@@ -1949,14 +1955,38 @@ class Registry:
                 if label not in seen_labels:
                     seen_labels.add(label)
                     alternatives.append((label, score))
-            label = f"{other}:{candidate}"
-            if (
-                other in exact_elsewhere or other in {n for n, _ in burned_elsewhere}
-            ) and label not in seen_labels:
-                # Score is None, not 0.0: nothing scored it, and Rule U forbids a zero
-                # standing in for "we did not score this".
-                seen_labels.add(label)
-                alternatives.append((label, None))
+            # **The label names a ROW, and building it from the CALLER's spelling was
+            # finding X7** (row 6d, round 2; ruling R93's own pattern). Until this row
+            # keyed the probe, `exact_elsewhere` fired only on a BYTE-EXACT match, so
+            # `candidate` WAS the row's name and `f"{other}:{candidate}"` named a real
+            # row. **Keying the probe widened the producer; this consumer was left
+            # alone** -- so `alternatives` carried `('dpr:bike_lane', None)` for a store
+            # holding only `dpr:bike__lane`, under a `complete=True` seal, on live NYC
+            # data (`uvpi-gqnh`'s `zipcode` against `erm2-nwe9`'s `incident_zip`).
+            #
+            # It broke three shipped rules at once: §5.3.1 rule 3 says the label is
+            # `<namespace>:<name>` and that `<name>` named nothing; rule 5 says `None`
+            # means *nothing scored it* while that row had been scored at 1.0 two entries
+            # above; and rule 5's note says a taken word is listed ONCE, *"because listing
+            # it twice would double-count Rule K's `known`"* -- `known` counted 3 for 2
+            # rows. **A confident POSITIVE about a row nobody holds, in the call R6 added
+            # to end confident negatives.**
+            for rec in exact_rows.get(other, ()) or ():
+                label = f"{other}:{rec.name}"
+                if label not in seen_labels:
+                    # Score is None, not 0.0: nothing scored it, and Rule U forbids a zero
+                    # standing in for "we did not score this". A row the scorer ALREADY
+                    # listed keeps its score -- `seen_labels` is what makes that true, and
+                    # it is why the dedup is by label rather than by namespace.
+                    seen_labels.add(label)
+                    alternatives.append((label, None))
+            for _ns, tombstone in burned_elsewhere:
+                if _ns != other:
+                    continue
+                label = f"{other}:{tombstone.name}"
+                if label not in seen_labels:
+                    seen_labels.add(label)
+                    alternatives.append((label, None))
             # **The proposal store is the OTHER source `alternatives` is fed from**, and
             # ruling R6's first cut searched it in the home namespace only. A word
             # proposed and rejected in another namespace is the cheapest possible record

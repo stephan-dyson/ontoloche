@@ -720,3 +720,53 @@ def test_c3_18_the_cross_namespace_read_compares_words_not_bytes(adapter, make_r
         "a variant spelling is the same WORD and R6 owes the caller that word",
         out.reason,
     )
+
+
+def test_c3_19_every_alternative_label_names_a_row(adapter, make_registry):
+    """**Finding X7, row 6d round 2.** A confident POSITIVE about a row nobody holds.
+
+    Until this row keyed the cross-namespace probe, `exact_elsewhere` fired only on a
+    **byte-exact** match — so the candidate WAS the row's name and `f"{other}:{candidate}"`
+    named a real row. **Keying the probe widened the producer and left this consumer
+    alone**, so `alternatives` carried `('dpr:bike_lane', None)` for a store holding only
+    `dpr:bike__lane`, under a **`complete=True` seal**.
+
+    It broke three shipped rules at once: §5.3.1 rule 3 (`<namespace>:<name>`, and the
+    `<name>` named nothing); rule 5 (`None` means *nothing scored it*, while that row had
+    been scored at **1.0** two entries above); and rule 5's note that a taken word is
+    listed **once**, *"because listing it twice would double-count Rule K's `known`"* —
+    `known` counted 3 for 2 rows.
+
+    **In the call ruling R6 added to end confident NEGATIVES.** The general form is the
+    assertion this id makes and the suite never made: `grep` the 25 `alternatives`
+    mentions in this file and **not one** resolved a returned label back to a row.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    seed(registry, "bike__lane", namespace="dpr", definition="a cycle route")
+    seed(registry, "park", namespace="dpr", definition="a green space")
+    seed(registry, "roadway", namespace="dot", definition="a carriageway")
+
+    out = registry.resolve_type(
+        "bike_lane", ResolveContext(), namespace="dot", tier="opus",
+        search_namespaces=["dpr"],
+    )
+    assert out.alternatives, out
+    for label, _score in out.alternatives:
+        namespace, _, name = label.rpartition(":")
+        if not namespace:
+            namespace = "dot"          # a home-namespace alternative is bare
+        found = [
+            t
+            for t in registry.list_types(
+                namespace=namespace, include_retired=True
+            ).types
+            if t.name == name
+        ]
+        assert found, (
+            "every alternative label must name a ROW -- 5.3.1 rule 3", label,
+            out.alternatives,
+        )
+    assert out.known == len(out.alternatives), ("Rule K", out.known, out.alternatives)
+    assert len({label for label, _ in out.alternatives}) == len(out.alternatives), (
+        "a taken word is listed once, or `known` double-counts it", out.alternatives
+    )
