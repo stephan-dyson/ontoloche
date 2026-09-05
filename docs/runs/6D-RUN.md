@@ -28,7 +28,9 @@ row 7a (a spec row) did not move: **366 ids, sync `837 passed`, async `874 passe
 capability matrix 18/18, `check_merge_guard.py` at ten axes.** This row never drops below it.
 
 **Kill-row trip count at the start of this row: FOURTEEN.** It stays fourteen until the supervisor
-countersigns otherwise; classification is not this worker's (R83).
+countersigns otherwise; classification is not this worker's (R83). **It did: see [§6.6](#66-countersigned--r90-and-r91-the-count-is-sixteen) —
+[R91](../decisions/2026-09-04-6d-supervisor-ruling-R91.md) countersigns the FIFTEENTH and SIXTEENTH trips, both
+PREDICTED at `d4b86a8` before any lens ran. **The count is SIXTEEN.**
 
 ---
 
@@ -1016,4 +1018,100 @@ advance, landing before the next defect** — and that is what round 1's fixes h
 row different from row 7a. Until they do, this row has reproduced row 7a's result one surface along,
 and §6.16a's sentence still stands unanswered: *predicting your own next defect and then shipping it
 is not a success.*
+
+### 6.6 COUNTERSIGNED — [R90](../decisions/2026-09-04-6d-supervisor-ruling-R90.md) and [R91](../decisions/2026-09-04-6d-supervisor-ruling-R91.md). **The count is SIXTEEN.**
+
+> **The trip count in this row is SIXTEEN from here.** Every *"the count stays FOURTEEN"* above records
+> what was true **when that lens returned**, and is left standing rather than edited over — §5.8's rule
+> that *a correction is a new event, never an edit*, applied to this row's own run record. This section
+> is that event.
+
+#### R91 — A1 is the FIFTEENTH trip; F4 is the SIXTEENTH
+
+The supervisor re-ran every countable claim rather than accepting the records — `registry.py:4216`, the
+three `_word_rows` mint-door call sites, `_alias_clash` at 7432, six zero-counts in the gate, and
+`check_merge_guard.py` exiting 0 at HEAD with all four findings live. Both are countersigned; the
+register carries them in the fourteen records' shape.
+
+**And R91's central sentence is one this register has never been able to write:**
+
+> §0.3 predicted both at **`d4b86a8`** before any lens or probe existed — **T14** named the fifteenth
+> **by cell**, **T11** named the sixteenth **by address** (`registry.py:7023`). **Every previous trip
+> surprised its row. These two were named in writing, then constructed, and no build row shipped code
+> through either door in between. This is the first prevention in the register's history.**
+
+**§0.7 is updated accordingly, in R91's own words:** **T14 — CONFIRMED by construction, before any fix.
+T11 — CONFIRMED by construction, before any fix.**
+
+#### The 2×2×2, and what it obliges the fix to be
+
+Trip 14 closed **one** cell: *(retired word × arrives as a NAME × same kind × mint door)*.
+
+| dimension | trip 14 | the FIFTEENTH | the SIXTEENTH |
+|---|---|---|---|
+| how the word arrives | name | name | **alias** |
+| the holder's kind | same | **different** | same |
+| the door | mint | mint | **write / transfer** |
+
+**Eight cells; the fourteenth trip's fix and axis ten drove exactly one.** R91 rules the two trips are
+closed in **ONE change**, **one mutation per cell** so no cell is left a survivor, with the commit
+enumerating all eight and naming what it declines (R85, R88). **A3's fix is a separate change — it is a
+different table.**
+
+#### A3 and F5 are NOT trips — ruled, with their classes
+
+- **A3 — the ninth trip's class at the ACTIONS surface. BLOCKING. Not a trip**, because the word resolves
+  to **one** row: one word, one identity, **two governance answers**. It is the **mis-governed cell
+  (`I-7`) reached in SHIPPED code for the first time**, and it mints **Q94** for the founder: *does the
+  kill criterion extend to governance identity — one word answering with two policies — or is that a
+  separate register?* **Supervisor's default until ruled: separate, recorded beside the trips and never
+  folded into their count.**
+- **F5 — the tenth trip's class and trip 4's shape. BLOCKING. Not a trip**, and the reason is worth
+  keeping: **no second row is written** — the second `approve` raises rather than writing — so the store
+  never ends holding two rows for one word. **Fail-closed by accident.** The async mirror stays
+  `[Inferred]`, as the lens honestly recorded.
+
+#### R90 — the cross-namespace record countersigned, and a correction to §6.1 that is the supervisor's own
+
+R90 adopts §6.1's split of the fourteen-countersignature refrain and rules **not a fifteenth trip**: the
+scoping holds, and the six findings are all in `_search_namespaces`, R6's cross-namespace **advisory**
+read. **From here the register does not write that sentence in its old form again.**
+
+**Two corrections this row records against itself:**
+
+1. **§6.1 said 27 keyed comparisons in `registry.py`; the supervisor's grep gives 41 matching lines.**
+   The difference is the grep's **shape** — §6.1 counted `same_word(`/`identity_key(` with the open
+   paren, R90 counted the bare names and so caught docstring mentions too. **The fact is unchanged and
+   reproduces either way: ZERO inside the one multi-namespace guard, against dozens everywhere else.**
+   Recorded because a number this row published was not the number a reader re-running the obvious grep
+   would get.
+2. **R90 takes the supervisor's own share of §6.1's finding, and this row does not soften it.** R83
+   quoted the refrain approvingly as *"the count's meaning"*, and R84–R88 rested on it. R90's words:
+   *"a claim stated without its evidence is a detectable object, and this one sat undetected for fourteen
+   rounds because everyone who repeated it, including the supervisor, mistook repetition for evidence."*
+
+#### What is NOT yet countersigned — stated plainly, because R91 predates §6.4
+
+**R91 countersigns `aa6d2e5` (§6.2) and `3126023` (§6.3). The kill row's record landed afterwards at
+`85c9eb6` (§6.4), so its constructions are ROUTED AND UNRULED.** Two of them are new and neither
+duplicates a countersigned trip:
+
+| # | construction | why it is routed and not folded in |
+|---|---|---|
+| **K1** | **R80 / Q82 constructed** — 60 of 120 page orders swallow a non-overridable identity guard; **two ACTIVE rows answer to one word** and `resolve_type` answers at 1.0 on a pair refused `predicate_merge` non-overridably | It meets the identity criterion R91 states. It is **not** a cell of the 2×2×2 — its dimension is **page order**, which no cell of that table names. R80 ruled it goes first in this lens and gave two discharges; **the first was achieved**, so R80's second half does not apply |
+| **K4** | a capability-degraded **skip** indistinguishable from a pass: refused non-overridably on one backend, written with `warnings=()` on another, `resolve_type` at 1.0 — on `indexes_membership=False`, **UC1 Tenshen's own declared shape** | Also meets the identity criterion. A **new sentence**: trips 1 and 9 asked whether *unknowable* equals *equal* or *different*; this asks whether *unknowable* equals **nothing to say** |
+
+**The worker does not classify either.** They are reported to the supervisor with §6.4's evidence, and
+the count is **SIXTEEN** until ruled otherwise.
+
+#### The fix set this round owes, per R90 and R91 together
+
+1. **ONE change over the 2×2×2** (R91) — all eight cells enumerated, **one mutation per cell**, nothing
+   left a survivor. The two survivors round 1 measured are both inside this table: widening the trip-14
+   scan to all kinds, and `match_aliases=True` at 7023.
+2. **ONE change over `_search_namespaces`** (R90) — not six fixes in lens order. **The countable form of
+   "done" is R90's own grep going from 0 to a number**, with each identity comparison it gains named
+   against the finding it closes.
+3. **A3's change is separate** (R91) — a different table.
+4. **Both commits list what they DECLINED** (R88), and **enumerate the doors each rule binds** (R85).
 
