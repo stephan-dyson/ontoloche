@@ -260,3 +260,127 @@ register can say for the first time that the gap was written down before anythin
 If a trip arrives whose blindness is **none** of these four, §0.5 said in advance that that is a
 falsification of §0.5, and it will be recorded as one rather than explained away.
 
+### 6.1 Round 1, lens 1 to return — **the CROSS-NAMESPACE lens. NOT YET: 1 BLOCKING, 3 MAJOR, 2 MINOR.**
+
+*Written to disk as the lens returned, before any fix, per constraint 7. Every claim below was
+re-verified by the worker against `ontoloche/registry.py` rather than against the lens's paragraph —
+the standard the twelfth countersignature set — and the headline construction was re-run by the
+worker independently. Where the worker's reading differs from the lens's, the difference is stated
+rather than smoothed.*
+
+#### The answer this row has been unable to write for fourteen countersignatures
+
+*"`namespace` is untouched across all fourteen trips and `cross_namespace_merge` still refuses on
+live NYC data"* appears verbatim in **fourteen** consecutive countersignatures. It is **two claims,
+and they come apart.**
+
+**Half one — *`cross_namespace_merge` still refuses on live NYC data* — TRUE, and for the first time
+it has actually been DRIVEN rather than asserted.** Live NYC Socrata headers (`uvpi-gqnh` 45 columns
+→ `dpr`, `erm2-nwe9` 32 → `oti_311`, `693u-uax6` 16 → `dot`), the seven words two agencies both hold,
+merged across the boundary: **6 of 6 refused `cross_namespace_merge`**, on sqlite and on the paging
+double. **[Observed]** The sentence now has evidence behind it, which it never had.
+
+**Half two — *`namespace` is untouched across all fourteen trips* — TRUE as history and FALSE as
+safety.** It was untouched because **nothing had ever asked it**. Asking produced six findings.
+
+**And two negatives this register has never been able to state with evidence, now driven:**
+
+1. **No write door crosses the boundary.** D1–D6 are correctly scoped. **[Observed]**
+   `merge_types` → `cross_namespace_merge`; `retire(successor=)` → `successor_unregistered` with
+   `found_in: ['dot']`; `reinstate`, `propose_type`, `approve` and `import_types` are
+   single-namespace by construction. There is **no door that writes into namespace A while a guard
+   reads namespace B** — which is the question §0's T-series was written to ask, and the answer is
+   the reassuring one.
+2. **No cross-namespace row reaches an identity answer.** `resolve_type`'s **outcome**,
+   `list_types(namespace=None, predicate=…)` and `_identity_closure` all resolve per namespace;
+   R6 hits stay in `alternatives`. **[Observed]** `list_types(predicate='commentable',
+   namespace=None)` → `[('dot','memo'), ('dpr','doc'), ('dpr','note')]`, each carrying its own scope.
+
+> **So the scoping holds, and the whole defect surface is ONE function: `_search_namespaces`
+> (`registry.py` 1750–1990), ruling R6's cross-namespace *advisory* read.** It is the only guard in
+> the package that reads more than one namespace, **and it is built out of none of the identity
+> machinery.** **[Observed, worker-verified]** `sed -n '1750,1990p' ontoloche/registry.py | grep -c
+> "same_word\|identity_key"` → **0**, against **27** in the file as a whole.
+>
+> **Nothing constructed here lets two identities answer to one word. This is NOT a fifteenth trip
+> and the count stays FOURTEEN.**
+
+#### The findings
+
+| # | severity | the defect | disposition |
+|---|---|---|---|
+| **X1** | **BLOCKING** | **A word a live tombstone in another namespace still answers to is invisible, under a `complete=True` seal.** `_search_namespaces` decides *is this word burned elsewhere?* with `rec.status == "retired" and rec.name == candidate` — **[Observed, worker-verified at `registry.py:1834`]**, the row's **name only**, so the tombstone's `aliases`, which §5.8 says it keeps **by design**, are never consulted. The async mirror carries the identical comparison **[Observed, `ontoloche/aio/registry.py:1530`]** | **ACCEPTED, OPEN.** The **FOURTEENTH** trip's own shape — *a tombstone's `name` and `aliases` are an unconsumed permission* (standing rule (c)) — one scope along, at the read rather than at a mint door. It is also Rule U's confident negative in the call ruling **R6** exists to prevent: *"scoping without lookup reintroduces mechanism 2"* |
+| **X2** | MAJOR | **Cross-namespace matching is by BYTES; the home namespace's is keyed.** `rec.name == candidate` at **[Observed]** `registry.py:1867` (and 1834), mirrored at `aio/registry.py:1563`/1530, plus `ProposalQuery(name=candidate)` in `_rejections_everywhere` — three byte sites, against `_word_rows`/`same_word` governing the same question at home | **ACCEPTED, OPEN.** The **SEVENTH** trip verbatim — *one word is not one string* — at a site §0 named in neither its guard table nor T7 |
+| **X3** | MAJOR | **The kind-blind fix was applied to the exact-name probe only.** `exact_elsewhere` is kind-blind (the row-3e round-1 fix, `registry.py:1866`) while the **scoring pool** three lines later is kind-filtered — **[Observed, worker-verified at `registry.py:1877–1878`]** `if kind is not None: pool = [rec for rec in pool if rec.kind == kind]`. With `kind=` supplied, a word held elsewhere as an **alias** or under a **variant spelling** produces total silence | **ACCEPTED, OPEN.** Standing rule (d)'s countable form — *a fix applied at one call site of N* — which is the NINTH, TENTH and ELEVENTH trips' single sentence, one function along |
+| **X4** | MAJOR | **`namespace` has no word-identity rule, and no door can undo a split it creates.** **[Observed]** 27 keyed comparisons in `registry.py` and **zero** applied to a namespace value, in `registry.py`, `actions.py`, `edges.py` or `attributes.py`. `nyc_dpr` / `NYC_DPR` / `nyc__dpr` / `nyc-dpr` are one word by `same_word` and four scopes by every door; each answers its word at **confidence 1.0**; and `merge_types` refuses `predicate_merge` while `retire(successor=)` refuses `successor_is_self`, so **no door can reconcile them** | **ACCEPTED, OPEN.** The **EIGHTH** trip — *`identity_key` manufacturing mechanism 4* — one field along. One agency with two loaders becomes N scopes and there is no way back |
+| **X5** | MINOR | **Guard #4 fires fourth, over operands the first three have already crossed.** `_identity_breach(left, right)` runs at `registry.py:4312`, `if left.namespace != right.namespace` at 4330, so #1/#2/#3 compare two namespaces' extents as one set. **[Observed]** three of four cross-namespace merges return `predicate_merge` — including a **kind mismatch** — and only identical non-empty extents reach `cross_namespace_merge` | **ACCEPTED.** Outcome safe, story wrong: `C9-19`'s class, named in this method's own comment. On live NYC data #4 does fire 6/6 because the shared columns have empty-but-equal extents |
+| **X6** | MINOR | **`import_types` silently ignores a per-row `namespace`.** **[Observed]** a row carrying `"namespace": "dot"` in a batch called with `namespace="dpr"` is written to `dpr` with `warnings=()`; the `dot` row is untouched. A Foundry dump with a namespace column lands its identities in the wrong scope with nothing said | **ACCEPTED.** Accepted-and-ignored — the `mark_reviewed` shape row 6c fixed at `registry.py:9289` |
+
+#### R79 / Q81 — this row's item 1, and its evidence question is now ANSWERED
+
+R79 rules `namespace_not_flat` in two steps: a **warning** at the three declaration doors now, and a
+**refusal one row later**, *"only after the warning has been live for a row and the `capability`-style
+evidence question — did any reference backend or the design partner's harness ever write one? — has
+an answer."* R79 marked its own answer **[Inferred]**. The lens answered it:
+
+- **[Observed]** every declaration door accepts `org:beacon` and it resolves at **1.0**; the
+  invocation door refuses the same string, and its sentence is exactly the state the warning is for:
+  *"`namespace='org:beacon'` contains ':', which `ACTIONS.md` §2.3's flat identity form spends as a
+  separator — `ref_key` would write a string `parse_ref` RAISES on."* `parse_ref` does raise.
+- **[Observed]** the full namespace-literal census over the repo: the gate is 11 × `"default"`; the
+  contract suite is `default` 176, `dpr` 39, `oti_311` 21, `tenant_a` 13, `dot` 6, `agency` 6,
+  `tenshen` 5 and eight singletons. **No reference backend and no harness has ever written a `:`
+  namespace.** R79's `[Inferred]` becomes `[Observed]`, which is the precondition its step two names.
+- **[Observed]** a driven negative worth keeping: R6's `{namespace}:{name}` alternative label is
+  **not** ambiguous, because `NAME_RE` forbids `:` in a name, so the label splits uniquely at the
+  last colon. And `_CURSOR_SEP` is `\x1f`, not `:`, so keyset pagination survives a `:` namespace
+  (`ontoloche/backends/_sql.py:687`).
+
+#### What the worker verified independently, and the one place the lens's summary overstates
+
+**Verified at source, not taken from the paragraph:** `registry.py:1834` (name-only tombstone test),
+`1867` (byte comparison), `1877–1878` (kind-filtered pool beside a kind-blind probe), the zero/27
+keyed-comparison counts, and the async mirror at `aio/registry.py:1530`. **Re-run independently by
+the worker**, from the probe's own directory with `PYTHONPATH` at the repo root:
+
+```
+resolve_type('boro_nm')  from 'oti_311', naming EVERY namespace
+   complete       = True
+   why_incomplete = ''
+   tombstone seen = []
+   reason = "nothing in the vocabulary fits 'boro_nm'; near misses in other namespaces are
+             listed in alternatives: default:equivalent_to, dpr:boro_ct, dpr:borocode"
+```
+
+— while `dpr:boroname` is a **live tombstone whose `aliases` are `('borough', 'boro_nm')`**. The
+byte-exact name **is** surfaced (`dpr:boroname was RETIRED there`); the two words the same tombstone
+answers to are not.
+
+**The overstatement, recorded rather than smoothed.** The lens's table lists `borough` alongside
+`boro_nm` as silent. **[Observed]** it is not: `resolve_type('borough')` answers *"'borough' is
+already in the vocabulary"*, because the caller's own namespace holds a `borough` column — a
+different fact reached by a different path. **X1 stands on `boro_nm` and `boro_name`**, and stating
+that narrowing here is standing rule (a)'s spirit applied to a lens report: the finding is what
+reproduces, not what the summary says.
+
+#### Scoring — §0's predictions, first four scored
+
+| # | prediction | outcome |
+|---|---|---|
+| **S3** | cross-namespace variants of trip 14 exist; `namespace` is unexamined because nothing asked it | **CONFIRMED — at the READ, and its falsifier's first conjunct was MET.** §0.2 stated the falsifier as *"a cross-namespace lens constructs nothing at any of D1–D6 **and** the gate is extended to pose the question and stays green."* The first conjunct **held**: nothing was constructed at any write door. The second was never reached, and this row does not get to claim a falsification it did not run. **The prediction is confirmed at a surface §0 did not name** — X1–X3 are all `_search_namespaces` |
+| **T8** | `namespace` has no word-identity rule, so two namespaces that are one word are two scopes to every guard | **CONFIRMED, countably** — 27 keyed comparisons, **zero** on a namespace. Both branches of its falsifier are closed: `namespace` is not compared by `name`'s rule at any door, and the *"no door resolves across namespaces"* escape fails, because `_search_namespaces` reads a `namespace=None` census, scores across namespaces, and queries the proposal store across namespaces |
+| **G1** | the gate cannot pose a cross-namespace question | **CONFIRMED, and it reaches further than §0.5 claimed.** `cross_namespace` 0, `into_namespace` 0, `retired_elsewhere` 0 in the gate; 11 namespace literals, all `"default"`. **And the blind spot is in the contract suite too**: the R6 test body carries **0** `alias` and **0** `same_word\|identity_key` — every R6 assertion uses a byte-exact candidate |
+| **T7** | `_word_spellings`' stated residual is reachable | **EXTENDED, not scored.** The seventh trip's shape is live at `_search_namespaces` 1834/1867 — a site §0 named in neither its guard table nor in T7. T7's own subject (`_word_spellings`) was not reached by this lens and stays *pending* |
+
+**§0 predictions this lens found FALSE: none.** Every prediction it touched held.
+
+#### A CORRECTION to §0, appended rather than edited over
+
+§5.8's rule — *a correction is a new event, never an edit* — applied to this row's own
+pre-registration. **§0.1's guard table lists ten guards and every one of them reads a single
+namespace. `_search_namespaces` is filed under *"the read and the gate"* and it is in fact the
+register's ONLY cross-namespace guard** — and it is where three of this lens's four substantive
+findings live. The pre-registration is not edited; the omission is recorded here, and it is a
+**rule-(d) failure by this row against itself**: §0 enumerated the doors a prediction binds and left
+out the one function that crosses the boundary the prediction is about.
+
