@@ -2072,6 +2072,178 @@ into *"there is nothing there"*.
 
 ---
 
+### 6.18 Round 3, lens 2 — **the ACTIONS-TWIN. NOT YET: 6 findings, 3 BLOCKING, and two of the three were INTRODUCED by my own A3 fix**
+
+*To disk before any fix. Every claim below that I act on was re-derived by me against the real tree.*
+
+#### The escalation hypothesis in my brief was FALSE, and the lens said so against it
+
+I briefed this lens that **if** the `effects` order were decided by the backend's page order rather
+than by the caller, the finding would be non-deterministic and its severity would jump. **It is
+caller-controlled.** All 24 page orders of one store give the identical verdict and the identical
+read-back; `_sql.py:86` uses `json.dumps(sort_keys=True)`, which sorts object *keys* and leaves
+arrays alone. **A lens that takes an escalation offered by its own brief is a lens confirming the
+brief**, and this one declined it in writing. I record that because the next round should be able to
+see that the pressure was applied and refused.
+
+#### A1 / A2 — the `effects`-order false refusal, and it is MY defect, not an inherited one
+
+Re-derived by me: `git log -S'mine.get(key) != theirs.get(key)' -- ontoloche/registry.py` returns
+**`304967a`** — the A3 fix, *my own change*, a pure addition. So the finding three round-2 lenses
+reached is not a pre-existing hole this row stood next to. **This row made it.**
+
+`registry.py:7994-7998` compares `mine.get(key) != theirs.get(key)` across `_GOVERNANCE_KEYS`.
+Three of the four keys are scalars, where `!=` is right. **`effects` is a LIST**, so two families
+whose governance is identical but whose effects are listed in a different order are refused
+`action_declarations_diverge` — **non-overridably, at all three doors, under every acknowledgement
+and under `force=True`**, on sqlite *and* postgres.
+
+**And `ACTIONS.md` settles the semantics against me three times over.** §2.5: *"Two effects are the
+same effect when `(op, namespace, family, kind)` match; **`why` is not part of identity** for the
+three protocol ops."* §3.3's mechanism is set containment. §1's non-goals: *"no ordering."*
+
+**The package already implements the correct comparison 2,000 lines away.** `actions.py:585` defines
+`effect_identity`, and `registry.py:9892` uses it for exactly this question:
+`declared = {effect_identity(e) for e in effects_of_record}`. **One fact, two homes, opposite
+answers** — and my guard never calls the shared function at all.
+
+#### A3 — a NEW BLOCKING nobody had recorded, and it is A3's own harm with A3's fix live
+
+`registry.py:5401` reads `named, _named_why = self._word_rows(namespace, word)` — **the `why` is
+dropped**. Re-derived by me across all six `_word_rows` call sites: **three drop it (5212, 5401,
+7608), three keep it.** So a **legal** `PACKAGE.md` §3.4-conformant backend that cannot finish a page
+turns *"we could not look"* into *"no divergence"*, the guard is skipped, **and the alias is
+written**. Rule U's exact violation, at the guard this row added to enforce Rule U's sibling.
+
+**Change A's consumers table does not list `registry.py:5401`.** Its *kind* claim holds —
+`_action_declarations_diverge` opens `if here.kind != "action" ... return None`, so the kind-blind
+widening is genuinely absorbed. The claim is incomplete on the **other axis**: the widening made the
+scan LARGER, which makes an incomplete page MORE likely, at the one call site that reads
+incompleteness as agreement.
+
+#### The findings
+
+| id | sev | claim | origin |
+|---|---|---|---|
+| **A1** | **BLOCKING** | `effects` compared order-sensitively; closes a legal collapse at all three doors, non-overridably, under `force` | **INTRODUCED by `304967a`** |
+| **A2** | **BLOCKING** | the same expression contradicts the package's own `effect_identity`; a full stop in a `why` closes the merge permanently | **INTRODUCED by `304967a`** |
+| **A3** | **BLOCKING** | a truncating legal backend skips the guard and writes the alias — `resolve_type` 1.0 one way, `preflight` refused the other | **INTRODUCED by `304967a`**; change D did not touch it |
+| **A4** | MAJOR | **A9 / Q94 still reproduces at HEAD**, at `retire` **and** at `merge_types`. The rule binds three collapse doors and **zero** declaration doors | PRE-EXISTING to the four round-2 commits |
+| **A5** | MAJOR | an `import_types` row with no `attributes` key silently erases a declared family's eight governance keys, `warnings=()` | PRE-EXISTING (`2f21667`) |
+| **A6** | MAJOR | the A3 guard fires before `_alias_clash` and takes its reason; which refusal a caller gets flips on a `why` byte | INTRODUCED by `304967a` |
+
+#### G2, re-derived by me, and it is worse than "zero fixtures"
+
+```
+grep -c 'kind="action"' docs/tools/check_merge_guard.py   -> 1
+grep -c "action_declarations_diverge" ... -> 0
+```
+
+**The single `kind="action"` hit is at line 2852 and it is a COMMENT asserting the count is zero.**
+Live fixtures: zero. The entire A3 rule is invisible to the identity gate.
+
+**And the ids cannot tell the fix from the defect.** The three A3 ids build both sides through one
+helper with `effects=[]` and `min_auto_tier=None`, so two of the four `_GOVERNANCE_KEYS` are never
+driven to differ. The lens ran the mutation: `_GOVERNANCE_KEYS` cut to two keys →
+**`105 passed, 188 skipped`, identical to baseline.** `min_auto_tier` and `effects` are load-bearing
+for **zero** contract ids.
+
+#### What the lens could not establish
+
+A9's second route (staging the collapse through an undeclared family) — one construction tried, the
+harm not reached, **reported as not-closed rather than as absent.**
+
+---
+
+### 6.19 Round 3, lens 3 — **the KILL ROW. A TWENTY-THIRD CONSTRUCTION, routed, and it is standing rule (d) at a rule I minted myself**
+
+*To disk before any fix. **I rebuilt the construction independently** — my own script, ordinary §5
+calls, no `force` and no adapter write on the defect path — because a routed construction is the one
+thing this row must never take on trust.*
+
+#### K1 — `reinstate` is the FOURTH door that makes a word answer at 1.0, and the one door the rule was never wired to
+
+**My own run, at HEAD:**
+
+```
+1. import alpha            -> status='active' aliases=('zeta',)
+3. retire alpha succ=beta  -> TypeEntry 'retired'      (R75 moves `zeta` onto beta)
+4. retire beta             -> TypeEntry 'retired'      (an ordinary governance act)
+   store: alpha status='retired' aliases=('zeta',)
+   store: beta  status='retired' aliases=('zeta',)
+
+   CONTROL, same store, identical act at a WIRED door:
+   import_types(gamma aliases=[zeta]) -> warnings=('import_refused:word_held_by_tombstone',)
+
+5. reinstate('alpha')      -> TypeEntry status='active' aliases=('zeta',) warnings=()
+6. resolve_type('zeta')    -> outcome='existing' type='alpha' confidence=1.0
+7. reinstate('beta')       -> Refusal 'alias_collision' overridable=False
+```
+
+**Four ordinary calls, no `force`, no adapter write.** Step 7 is the harm §5.12 line 937 names in its
+own words: *"the tombstone becomes **permanently un-reinstatable**, which is the governance act
+ruling **R11** created `reinstate` to provide."*
+
+#### The countable reason, re-derived by me
+
+```
+_retired_holder call sites:  retire 3589 | merge_types 4849 | import_types 5510
+reinstate (lines 3854-4136): _retired_holder calls = 0
+word_held_by_tombstone in check_merge_guard.py: 1  (a COMMENT)
+```
+
+**`9a4e140` — my own change 1 — minted `word_held_by_tombstone` and followed it to three of the four
+doors that make a word answer at 1.0.** That is R93's adopted reading exactly — *a widened matcher is
+a minted rule and its consumers are its doors* — with `reinstate` as the consumer nobody walked to.
+At `d4b86a8` every door was silent, so `reinstate` was no more permissive than its siblings: **the
+behaviour is pre-existing and the CONTRADICTION is mine.**
+
+#### And it un-falsifies one of §0's own grades, which I am not going to leave standing
+
+§0 pre-registered **T3** with the discharge condition *"`reinstate` provably cannot make live a word
+a tombstone still answers to — **proved, not asserted**."* Round 1's kill row graded it:
+
+> *"no state could be constructed in which `reinstate` CREATES a second live holder. In every
+> construction `reinstate` is the **victim**, never the door"* — **the predicted harm at D6 is
+> FALSIFIED.**
+
+**That grade is false at HEAD, and the reason is a sequencing error rather than a bad reading.**
+Round 1 asked whether `reinstate` creates a second *LIVE* holder; it does not, and `C9-23` correctly
+pins that. The *tombstone*-holder question **did not exist as a value** until `9a4e140`, which
+shipped **after** round 1 graded T3. **The grade was taken before the rule was minted, and the rule
+then went to three doors of four.** §6.13 counts "T3's harm at D6 falsified" among the three
+falsifications offered as evidence the loop is trustworthy; **one of those three is withdrawn here.**
+
+#### The findings
+
+| id | sev | claim |
+|---|---|---|
+| **K1** | **BLOCKING — ROUTED** | `reinstate` makes a live row answer to a word a tombstone still holds, silently, while three doors refuse the identical act non-overridably in the same store |
+| **K2** | **BLOCKING — routed as a second candidate** | `import_types` skips its own `_alias_holder` NAME guard when `standing` was set to a tombstone of another kind: the identical row is refused `alias_collision` without a bystander tombstone and **written** with it, born un-reinstatable. Same consumer as the TWENTY-FIRST trip, three lines down — change A fixed `r.name != name` and left this |
+| **K3** | MAJOR | the three MINT doors hand back a **different row of a different kind** across legal page orders — `named[0]`, `named_here[0]`, `answering[0]` are unsorted consumers of change 1's kind-blind scan. Not a detail: the ROW the caller acts on |
+| **K4** | MAJOR | `_retired_holder` returns the first tombstone paged, so `word_held_by_tombstone`'s detail — including **`path_back`** — names a different row across legal page orders. Change C sorted `_alias_clash` and left the sibling |
+| **K5** | MAJOR | `merge_types`' `alias_collision` snapshots `merge_warnings` **before** `clash_why` is appended. **`C10-27` drives this exact return but with `indexes_membership=False`, where `clash_why` is always `None`** — the id that pins change D cannot fail on the other accumulator at its own door |
+
+#### Backends
+
+K1 reproduces on **sqlite, postgres, `page_cap=2`, and three `DegradedAdapter` variants**. It does
+**not** reproduce on `sqlite_minimal` or `stores_events=False` (the fixture cannot be built) or
+`stores_aliases=False` (no alias to move). The async mirror was established **structurally, not by
+running it**, and the lens said so.
+
+#### Negative results, which are results
+
+`_alias_holder`'s single-holder argument **survived a second independent lens** — every route to two
+ACTIVE holders of one word is closed. `retire(successor=)` has no `_alias_clash` call at all, and the
+lens could not walk that to a harm: **recorded as an unexercised gap, not a construction.** And a
+`stores_aliases=False` Rule-U gap is **stated and not constructed**, because such a backend cannot
+hold the alias that would create the collision.
+
+**The lens also retracted one of its own claims mid-report** — it first said `C10-27` has no test,
+found the test, and restated K5 at its true narrower width.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
