@@ -1217,6 +1217,72 @@ change, measured by R90's own grep going from 0 to a number). **K7 and F5 travel
 touches their door, each named.** Every fix commit **enumerates the doors its rule binds** (R85) **and
 lists what it DECLINED** (R88).
 
+### 6.8 ROUND 2 — **PRE-REGISTERED PREDICTIONS, committed before any lens is dispatched**
+
+> **The ordering is the row's whole point and it is checkable in `git log`:** this section lands
+> before round 2's first lens exists. §0 did it for the surface; this does it for **the fix set**,
+> which is the harder case — *the next defect lives in the last fix* is this register's
+> most-counted sentence, and the last fix is now mine.
+
+**The five commits under audit**, and every one of them is this row's own:
+
+| commit | what it changed |
+|---|---|
+| **`9a4e140`** | the 2×2×2 — `_retired_holder`, the kind-blind mint scans, `word_held_by_tombstone`, axis 11 |
+| **`f8992f3`** | page order + truncation — `_alias_clash` returns the SET, `merge_warnings`, `OrderedAdapter`, axis 12 |
+| **`a446b89`** | the degraded skip — `skipped` accumulators, `identity_guard_skipped`, the `sqlite_degraded` LEG, axis 13 |
+| **`304967a`** | A3 — `_action_declarations_diverge` at three collapse doors, `action_declarations_diverge` |
+| **`9d2f203`** | the cross-namespace read — `_answers_to`, the keyed rejections query, guard #4 moved first, `import_field_ignored` |
+
+**And the harness is under audit with them.** A gate is an artefact and takes the same rule as the
+probes it runs: **axes 11, 12 and 13, and the `sqlite_degraded` leg**, are as much this row's diff
+as `registry.py` is. Every one of them was written by the person who wrote the fix it checks.
+
+#### KNOWN OPEN before the round starts — stated as facts, NOT scored as predictions
+
+*Recording these as predictions would be scoring a confirmation. They are [Observed] now, and the
+round's job is to find what is **not** on this list.*
+
+1. **F2 bound no commit, and it is R88's own failure mode inside this row.** §6.3 ACCEPTED F2 —
+   `import_types`' name door discards `_variant_why` while `propose_type` and `_write_approved`
+   fold theirs in — and change 1 **declined** it into change 2. Change 2's subject was
+   `_alias_clash`'s `why`; F2 is `_word_rows`' `why`, a different scan. **[Observed]**
+   `registry.py:5108` still reads `variants, _variant_why = self._word_rows(...)`. *A fix commit
+   lists what it declined, or a later round finds it and counts it* — and the later round is this
+   one, on a decline this row wrote down and then did not carry.
+2. **G1 and G2 are open by declaration.** `check_merge_guard.py` still holds **zero**
+   `cross_namespace` fixtures and **zero** `kind="action"` fixtures; both were named as declined
+   in the commits that could have closed them.
+3. **Cells 3 and 4 of the 2×2×2** remain declined — **Q95**, the founder's.
+4. **X4's keying half** remains declined — **Q96**. **R79's flat-form half** is ruled and unbuilt.
+
+#### The predictions — **R2-P1 … R2-P10**, each with the falsifier stated in advance
+
+| # | prediction | why | falsifier |
+|---|---|---|---|
+| **R2-P1** | **The round will NOT be clean. At least one BLOCKING.** | Seven rows of this register have run this loop and **not one closed clean**. Round 1 here went 8 BLOCKING across 19 distinct findings. A clean round immediately after five fix commits would be evidence about the lenses, not about the fixes. | any lens returning NOT YET |
+| **R2-P2** | **The fix auditor finds the most, and its findings cite the five commits.** | The register's counted policy, right for seven rows running: 3e 4-of-10, #4 round 3 2-of-4, 4d round 2 five inside round 1's fixes, 6b round 2 the tenth trip inside the ninth's fix, 6c round 3 **every** finding inside a fix of that row, 7a rounds 2 and 3. | which lens has the highest BLOCKING count, and whether its findings cite `9a4e140`…`9d2f203` |
+| **R2-P3** | **A skip note or a `why` is collected and then LOST on a refusal path.** `retire_skips` is surfaced at exactly one place — **[Observed]** `registry.py:3781`, inside the success return — and `merge_warnings` only reaches a `MergeResult`. So a guard skipped on a call that then refuses for another reason says **nothing**. | This is the EIGHTEENTH trip's own shape (a signal collected and not read) applied to the fix for the NINETEENTH. Three changes added accumulators; none of them audited the refusal paths. | a probe showing every accumulator reaches the caller on both the success and the refusal path, at all four doors |
+| **R2-P4** | **`_action_declarations_diverge` compares `effects` by equality, and equality of a LIST is order-sensitive.** Two families declaring the same effects in a different order will be refused `action_declarations_diverge` — a false refusal that closes a legal merge. | `C10-09`, `C12-09`, `C12-15` and `C16-07` exist because a fix that closes a legal operation is worse than the defect. A3's own narrowing (`C19-99`) pins only the case where the four keys are byte-identical. | a probe showing two families whose `effects` differ only in order still merge |
+| **R2-P5** | **The three new axes contain at least one fixture that cannot build its own subject** — and therefore reports `held` while a reverted guard survives. | This row has hit that class **four times already**: C9-36 and C10-21 vacuous (change 1), axis 12 decorative on its first cut (change 2), axis 13 passing for the wrong reason on its first cut (change 3). Four for four is not a run of bad luck; it is what writing a fixture against your own fix does. | a mutation run over every row of axes 11, 12 and 13 with no survivors |
+| **R2-P6** | **`merge_types` now performs three full namespace scans per call** — `_identity_breach`, `_alias_clash` and `_retired_holder` — and **nobody measured the cost.** | `_word_spellings`' own docstring records the last time this register shipped a per-call scan without measuring: 64,840 records and 1.56 s for twenty import rows. Row 6b measured 200,020 row reads for twenty returned rows. **No commit in this row's fix set carries a measurement.** | a measurement showing the added scans are bounded and stated |
+| **R2-P7** | **The `sqlite_degraded` leg is 89 rows of NOT REACHABLE and at least one of them is wrong** — a row reported unreachable that is in fact reachable, or reachable and silently uninteresting. | A leg added late is a leg every existing axis meets for the first time, and `NOT REACHABLE` is the verdict this file uses when a fixture cannot be built. R12's rule is that a coverage line is part of the claim; 89 unexamined coverage lines is a claim nobody read. | every `sqlite_degraded` NOT REACHABLE line shown to name a real capability the fixture needs |
+| **R2-P8** | **A detail field is still page-order dependent even though the verdict is not.** Change 2 made `merge_types`' escape read the whole SET, and `reinstate` reports `held_by_all` — but `import_types` still reports `clashes[0]`. | The SEVENTEENTH trip was a verdict that depended on page order; a DETAIL that depends on it is the same defect one field along, and this row fixed the verdict at three doors and the detail at one. | every door's refusal detail shown to be stable across page orders |
+| **R2-P9** | **`identity_guard_skipped` is pinned for ENTITIES only.** Axis 13's `_skip_pair` uses entities deliberately — a predicate pair is refused by #2 first — so the predicate path of the same skip is asserted by nothing. | This is axis 13's own recorded reasoning, and it means the note is proved at one kind of two. *A rule minted at the caller that prompted it* is standing rule (d); *a rule proved at one kind of two* is the same sentence one dimension along. | a probe showing the skip note reaches the caller on a predicate pair too, or an argument that it cannot arise there |
+| **R2-P10** | **At least one finding will be UNPREDICTED by this table**, and it will be in the harness rather than in `registry.py`. | Round 1's one unpredicted finding (`AmbiguousKind` at the §4.1-blessed store) was found twice and named by no §0 prediction. This round's diff is half harness by line count, and a harness is the artefact this row has been least careful with — four fixture defects in five changes. | every round-2 finding mapping onto R2-P1…R2-P9 or onto the known-open list |
+
+#### What would falsify the ROW's reading rather than confirm it
+
+1. **If the round comes back clean**, that is not a victory — it is evidence the lenses were pointed
+   where the fixes already looked, and the convergence note must say so. §0.6 said this before round
+   1 and it is repeated because the temptation is larger now that five commits have landed.
+2. **If every finding is in `registry.py` and none in the gate**, the harness audit was not real.
+   The supervisor's instruction is explicit — *a harness is an artefact and takes the same rule as
+   the probes it runs* — and this row's own record is four fixture defects in five changes.
+3. **A shrinking finding count is the weakest signal this register has** (row #4's round 3). Round 2
+   finding fewer than round 1's nineteen is not convergence and will not be reported as such.
+
+
 ---
 
 ## 7. The fix set
@@ -1228,8 +1294,10 @@ declined (R88), with all three legs green before it is pushed.*
 | # | change | closes | commit |
 |---|---|---|---|
 | **1** | **the 2×2×2** | the FIFTEENTH and SIXTEENTH trips, and K6's cross-kind cell | **`9a4e140`** — 373 ids, `Refusal.reason` 31 → 32, axis 10 → 11, six mutations and no survivors; three legs **1741 passed / 566 skipped / 0 failed**, exit 0 |
-| **2** | page order + truncation | the SEVENTEENTH and EIGHTEENTH trips | *in flight* |
-| **3** | the capability-degraded skip | the NINETEENTH trip | *pending* |
+| **2** | page order + truncation | the SEVENTEENTH and EIGHTEENTH trips | **`f8992f3`** — the page-order grep 0 → 2, axis 12, ids 375 |
+| **3** | the capability-degraded skip | the NINETEENTH trip | **`a446b89`** — `identity_guard_skipped`, axis 13, `sqlite_degraded` as a LEG, ids 377 |
+| **4** | **A3**, separate per R91 | the declaration operand refusal #2 never had | **`304967a`** — at all THREE collapse doors; my own §6.2 narrowing was wrong, ids 380 |
+| **5** | **`_search_namespaces`**, separate per R90 | X1–X6 | **`9d2f203`** — the identity grep 0 → 6, ids 383 |
 
 **Separate, and named as such:** **A3** (governance identity — a different table, R91),
 **`_search_namespaces`** (R90, one change measured by R90's own grep going from 0 to a number).
