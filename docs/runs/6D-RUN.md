@@ -29,8 +29,9 @@ capability matrix 18/18, `check_merge_guard.py` at ten axes.** This row never dr
 
 **Kill-row trip count at the start of this row: FOURTEEN.** It stays fourteen until the supervisor
 countersigns otherwise; classification is not this worker's (R83). **It did: see [§6.6](#66-countersigned--r90-and-r91-the-count-is-sixteen) —
-[R91](../decisions/2026-09-04-6d-supervisor-ruling-R91.md) countersigns the FIFTEENTH and SIXTEENTH trips, both
-PREDICTED at `d4b86a8` before any lens ran. **The count is SIXTEEN.**
+[R91](../decisions/2026-09-04-6d-supervisor-ruling-R91.md) countersigns the FIFTEENTH and SIXTEENTH trips and
+[R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) the SEVENTEENTH, EIGHTEENTH and NINETEENTH. **FOUR of the
+five were PREDICTED at `d4b86a8` before any lens ran. The count is NINETEEN.**
 
 ---
 
@@ -1102,7 +1103,7 @@ duplicates a countersigned trip:
 | **K4** | a capability-degraded **skip** indistinguishable from a pass: refused non-overridably on one backend, written with `warnings=()` on another, `resolve_type` at 1.0 — on `indexes_membership=False`, **UC1 Tenshen's own declared shape** | Also meets the identity criterion. A **new sentence**: trips 1 and 9 asked whether *unknowable* equals *equal* or *different*; this asks whether *unknowable* equals **nothing to say** |
 
 **The worker does not classify either.** They are reported to the supervisor with §6.4's evidence, and
-the count is **SIXTEEN** until ruled otherwise.
+the count is **SIXTEEN** until ruled otherwise. **[R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) ruled: K1 is the SEVENTEENTH trip, K3 the EIGHTEENTH and K4 the NINETEENTH — see [§6.7](#67-countersigned--r92-the-count-is-nineteen).]**
 
 #### The fix set this round owes, per R90 and R91 together
 
@@ -1114,4 +1115,105 @@ the count is **SIXTEEN** until ruled otherwise.
    against the finding it closes.
 3. **A3's change is separate** (R91) — a different table.
 4. **Both commits list what they DECLINED** (R88), and **enumerate the doors each rule binds** (R85).
+
+### 6.7 COUNTERSIGNED — [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md). **The count is NINETEEN.**
+
+> **The trip count in this row is NINETEEN from here.** §6.6's *"the count is SIXTEEN"* records what was
+> true when R91 was countersigned; this section is the next event, per §5.8.
+
+**R92 countersigns the three constructions §6.4 routed and §6.6 flagged as unruled:**
+
+| # | trip | the new sentence |
+|---|---|---|
+| **K1** | **SEVENTEENTH** | **a non-overridable identity guard's answer is a function of SORT ORDER.** 60 of 120 page orders swallow it. **R80's first discharge achieved** — Q82, the register's only carried-forward suspicion, is now a state |
+| **K3** | **EIGHTEENTH** | **the FIFTH trip's operand, un-applied to a guard the THIRTEENTH's fix added.** `_alias_clash` did not exist when trip 5 closed *partial is not equal*, and its `why` was never wired. R92: *"a guard added later inherited the rule's exemption, not the rule"* — rule (d) by number, R84's clause in its purest form |
+| **K4** | **NINETEENTH** | **`unknowable` treated as `nothing to say`, on UC1's own declared shape.** Trips 1 and 9 asked whether *unknowable* equals *equal* or *different*; **this asks whether it equals *nothing to say*, and the shipped answer is yes** |
+
+**R92 accepts §6.4's escalation of K3 from the fix auditor's MAJOR to BLOCKING** — *F3 showed the caller
+cannot tell; K3 shows what it costs* — and records the acknowledgement caveat on K1 without letting it
+change the classification: the merge door requires acknowledgements on the **specified** path (they are
+not `force`), and **the escape under test needs none**.
+
+**Round 1 produced FIVE trips — the fifteenth through the nineteenth, more than any round in this
+register's history.** R92 states the three facts that sit beside that without softening it: every one was
+reached on **shipped code no build row had changed** (`git diff --stat d4b86a8 HEAD -- ontoloche/` is
+empty); **four of five were predicted before the lens ran** — T14, T11, S2, T1 — and the fifth, K3, is
+T5's cell reached one guard further than T5 named; and **they cost one round of a row with no diff of its
+own**, where the alternative was the next four build rows each paying for the cells they happened to
+touch, as trips 8/12/13/14 were paid for.
+
+#### The reconciliation R92 asked for — **§6.4's gate reason for K4 was imprecise, and the correct one is sharper**
+
+**What §6.4 published:** *"`_legs()` builds `sqlite`, `sqlite_minimal` and optional Postgres;
+`DegradedAdapter(indexes_membership=False)` appears **0** times as a leg."*
+
+**The supervisor counted the string `indexes_membership=False` **4** times. Here is what those four are
+[Observed, `docs/tools/check_merge_guard.py` at `eddb017`]:**
+
+| line | what it is | live or prose |
+|---|---|---|
+| **12** | module docstring, narrating the FIRST trip (`0e89037`, row 3c) | **prose** |
+| **66** | the docstring's extent-state table — the row `unknowable \| indexes_membership=False \| REFUSED` | **prose** |
+| **904** | Part B's **extent-state** axis: `("unknowable", lambda a: DegradedAdapter(a, indexes_membership=False))`, driven for every caller in `PROBES` over `_both(registry, ["note"], ["doc"])` | **LIVE — drives the EXTENT operand, refusal #2** |
+| **1241** | the **staleness** axis: `("stale (unknowable)", lambda a: DegradedAdapter(a, indexes_membership=False), False)`, driven for every caller in `STALE_PROBES` | **LIVE — drives the staleness comparison** |
+
+**The verdict on the published sentence, stated against this row.** It is **narrowly true**: `_legs()`
+yields `("sqlite", …, True)`, `("sqlite_minimal", …, False)` and optionally `("postgres", …, True)`, and
+**0 of the file's 13 `DegradedAdapter` occurrences are legs**. But it was **misleading as a gate reason**,
+because a reader takes *"appears 0 times as a leg"* to mean *the gate never drives this adapter* — and it
+does, at two axes. **The sentence should not have been published in that form.**
+
+**The correct reason is stronger than the one it replaces, and it is countable:**
+
+> **The degraded adapter IS driven — at the extent-state axis and at the staleness axis. It is never
+> driven at the ONE axis that drives the guard K4 skips.** Refusal #1 is exercised only by the
+> **CONSUMER-SET axis** — axis seven, added by the ELEVENTH trip precisely because refusal #1 had been
+> unfalsifiable — and **[Observed]** that axis (lines 1815–2117) contains **0** of the file's **13**
+> `DegradedAdapter` occurrences: it iterates `_legs()` and wraps nothing. **So refusal #1 has never been
+> driven degraded, on any leg, in any axis, since the axis was built.**
+
+**That is the ELEVENTH trip's own indictment recurring in a new dress.** Then it was countable as *zero
+occurrences of `register_consumer`*, which made refusal #1 a guard the checker could not fail on. Now it
+is *zero degradation on the only axis that drives it* — the axis built to end that exact problem,
+exercising the guard on capable backends alone. **A gate that added an axis to make a guard falsifiable,
+and then drove that axis only where the guard is never skipped.**
+
+#### §0.7 updated, per R92 — the trip number recorded beside each prediction it named in advance
+
+| # | prediction | outcome, as scored after R91 and R92 |
+|---|---|---|
+| **S2** | the `C10-20` page-order escape (Q82 / R80) | **CONFIRMED BY CONSTRUCTION — the SEVENTEENTH trip.** Falsifier FALSE: refuses in 60 of 120 orders, not in every one. **R80's first discharge achieved; its second half does not apply** |
+| **T1** | capability-degraded skip = pass | **CONFIRMED BY CONSTRUCTION — the NINETEENTH trip.** Falsifier FALSE: K4 neither refuses nor emits a warning naming the skip |
+| **T5** | `clash_why` / `_variant_why` dropped at two of six sites | **CONFIRMED BY CONSTRUCTION — the EIGHTEENTH trip** (the `clash_why` half; the `_variant_why` half is F2, MAJOR and open). §0 named **both** lines — 4429 and 4769 — before either lens existed |
+| **T14** | the 2×2 is a 2×2×2 with `kind` as the third axis | **CONFIRMED BY CONSTRUCTION, BEFORE ANY FIX — the FIFTEENTH trip** (R91) |
+| **T11** | `match_aliases` defaulted to the trip-14 answer | **CONFIRMED BY CONSTRUCTION, BEFORE ANY FIX — the SIXTEENTH trip** (R91), named by line at `registry.py:7023` |
+
+**Four of the five trips this round were named in §0 before any lens ran.** The fifth, the eighteenth, is
+**T5's cell reached one guard further than T5 named** — §0 predicted the dropped `why`, and the lens
+carried it to the collapse.
+
+**Running score, unchanged in its totals: 21 CONFIRMED · 3 PARTIAL · 1 FALSIFIED · 5 NOT REACHED.**
+
+#### What R92 adopts from §6.5, and one thing it singles out
+
+R92 adopts §6.5's table and singles out the **adjudications made against the row** as the reason it can be
+trusted — T7 falsified, T3's harm at D6 falsified, T12 half-falsified — and the one made **for** the row
+over a lens's objection, **S4 CONFIRMED**, with the standard stated: *overruling a lens on evidence and
+keeping the overruled negative on the record.*
+
+**K7 is noted so it is not lost under the trips:** the round's **one unpredicted finding**, found twice
+independently. Not a trip (a raise, not a second row), MAJOR, rule (d) by number.
+
+#### The fix set, as R92 fixes it — **THREE changes, not one and not nineteen**
+
+| # | change | closes | the countable form of "done" |
+|---|---|---|---|
+| **1** | **the 2×2×2** | 15th, 16th, and K6's cross-kind cell | all **eight** cells enumerated, **one mutation per cell**, no cell left a survivor |
+| **2** | **page order + truncation, together** | 17th, 18th | `_alias_clash` returns the **SET** or answers **`unknowable`**, and its `why` is **consumed at every caller**; the gate gains a **page-order axis**, every fixture driven in at least two orders — **the `reversed(\|shuffle\|permutations` grep goes from 0 to a number** |
+| **3** | **the capability-degraded skip** | 19th | a skipped guard **emits a stated warning naming the skip** (T1's own falsifier); the gate gains **`DegradedAdapter` as a leg** |
+
+**Separate, and named as such:** **A3** (R91 — a different table), **`_search_namespaces`** (R90 — one
+change, measured by R90's own grep going from 0 to a number). **K7 and F5 travel with whichever change
+touches their door, each named.** Every fix commit **enumerates the doors its rule binds** (R85) **and
+lists what it DECLINED** (R88).
 
