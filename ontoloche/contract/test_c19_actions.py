@@ -4517,3 +4517,112 @@ def test_c19_96_a_review_says_whether_the_invocation_was_ever_in_a_queue(
         events["auto_verb"],
     )
     assert events["auto_verb"]["approval_mode_of_record"] == "auto", events["auto_verb"]
+
+
+def _verb(registry, name, *, mode, rev, definition="one and the same verb"):
+    """A live `kind="action"` family with a stated governance declaration."""
+    return seed(
+        registry,
+        name,
+        kind="action",
+        definition=definition,
+        attributes=action_attributes(reversibility=rev, approval_mode=mode),
+    )
+
+
+def test_c19_97_a_merge_refuses_two_contradictory_governance_declarations(
+    adapter, make_registry
+):
+    """**Finding A3, row 6d round 1 (ruling R91).** §5.10's #2 has no operand for actions.
+
+    Refusal **#2** is skipped for `kind="action"` **by design** — `ACTIONS.md` §2.1 argues
+    that actions must be mergeable — and **nothing was put in its place for what an action
+    family actually is.** So two verbs with contradictory governance collapsed with no
+    refusal: `resolve_type` answered the dead word with the survivor at **1.0** while
+    `preflight` answered the same word with the **tombstone's** policy, and a Haiku-tier
+    actor recorded `applied` against a verb the survivor declares human-approval-only and
+    irreversible.
+
+    **The definitions here are IDENTICAL, and that is the point.** The row's own first
+    narrowing said this door already refuses `definitions_diverge` — true of the fixture
+    the lens used, where the definitions differed. **[Observed]** with identical
+    definitions the same collapse MERGES at `definitions_similarity:1.0000`. *A narrowing
+    that holds for one fixture is not a narrowing.*
+
+    Non-overridable, and §2.2's own cross-field rule is the argument: `irreversible` with
+    `approval_mode="auto"` is refused **at declaration** with `attributes_schema_violation`,
+    which no acknowledgement moves.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _verb(registry, "old_verb", mode="auto", rev="reversible")
+    _verb(registry, "new_verb", mode="human", rev="irreversible")
+
+    out = registry.merge_types(
+        "old_verb", "new_verb", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    assert isinstance(out, Refusal), ("one word must not answer with two policies", out)
+    assert out.reason == "action_declarations_diverge", out.reason
+    assert out.detail["overridable"] is False
+    assert "approval_mode" in out.detail["diverging"], out.detail
+
+
+def test_c19_98_a_retirement_toward_a_contradictory_successor_is_refused(
+    adapter, make_registry
+):
+    """**A3 at the door the THIRD trip came through.** Row 6d; R91.
+
+    `retire(successor=)` redirects every `resolve_type` for the old word at confidence
+    1.0, which `INTERFACE.md` §5.3 calls a guarantee. **`force` is included**: it
+    overrides what could be SEEN, never what would become TRUE — the third trip's own
+    sentence, where a pair refused under every acknowledgement collapsed through this
+    door.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _verb(registry, "old_verb", mode="auto", rev="reversible")
+    _verb(registry, "new_verb", mode="human", rev="irreversible")
+
+    out = registry.retire(
+        "old_verb", "superseded", retired_by="user:sd", successor="new_verb", force=True
+    )
+    assert isinstance(out, Refusal), ("force must not move an identity guard", out)
+    assert out.reason == "action_declarations_diverge", out.reason
+    assert out.detail["overridable"] is False
+
+
+@pytest.mark.requires_capability("stores_events")
+# **Declared, and the matrix caught the omission within one run.** This id asserts a
+# merge SUCCEEDS, and the merge carries acknowledgements -- which a backend that
+# cannot record an override refuses `cannot_record_override`, correctly and for its
+# own reason. `C19-97` and `C19-98` need no marker: they assert a REFUSAL, and
+# `action_declarations_diverge` is reached before the audit guard.
+def test_c19_99_two_agreeing_families_still_merge(adapter, make_registry):
+    """**The narrowing a careless fix deletes.** Row 6d, beside `C19-97`.
+
+    The rule is about *contradictory* governance, not about actions being unmergeable —
+    `ACTIONS.md` §2.1 argues the opposite and that argument stands. Two families whose
+    declarations AGREE must still collapse, exactly as `C10-09`, `C12-09`, `C12-15` and
+    `C16-07` keep the operation each of their guards narrowed rather than closed.
+
+    It also pins what is **not** compared: `inputs`, `preconditions`, `reachability` and
+    `payload_schema` are the family's SHAPE, and a shape divergence does not let a caller
+    invoke something they could not invoke before.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _verb(registry, "a_verb", mode="human", rev="irreversible")
+    _verb(registry, "b_verb", mode="human", rev="irreversible", definition="a different sentence entirely")
+
+    out = registry.merge_types(
+        "a_verb", "b_verb", "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+    assert not isinstance(out, Refusal), (
+        "actions must remain mergeable when their governance agrees -- ACTIONS.md 2.1",
+        getattr(out, "reason", None),
+    )
