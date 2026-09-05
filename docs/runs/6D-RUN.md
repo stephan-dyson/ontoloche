@@ -384,3 +384,166 @@ findings live. The pre-registration is not edited; the omission is recorded here
 **rule-(d) failure by this row against itself**: §0 enumerated the doors a prediction binds and left
 out the one function that crosses the boundary the prediction is about.
 
+### 6.2 Round 1, lens 2 to return — **the ACTIONS-TWIN lens. NOT YET: 2 BLOCKING, 3 MAJOR, 1 informational — and TWO constructions routed for countersignature.**
+
+*Written to disk as the lens returned, before any fix, per constraint 7. **Both BLOCKING
+constructions were re-run by the worker independently**, and both were then re-run a second time
+with `force` and every acknowledgement **removed**, because the fourteen records hold themselves to
+*"ordinary calls, no `force`, no acknowledgement"* and the lens's scripts used both. That second run
+changed one of the two findings materially, and the change is recorded here rather than smoothed.*
+
+**[Observed]** `py docs/tools/check_merge_guard.py` → **EXIT 0** at HEAD with every finding below live.
+
+#### The one sentence this lens owes the register
+
+**Eleven rows have asserted that the ACTIONS layer inherits these guards. It inherits nine of
+fourteen.** Trips 8–14 hold at `kind="action"` **same-kind**; trips 1, 2 and 5 are **skipped by
+design** at `registry.py:4216` (`if "predicate" in (here.kind, there.kind)`), per `ACTIONS.md` §2.1,
+**with nothing put in their place**; and two are open — the declaration operand (**A3**) and trip 14
+**cross-kind** (**A1**).
+
+#### A1 — BLOCKING — the fourteenth trip's fix is KIND-SCOPED, so the tombstone's word is free one kind along
+
+**The defect.** A word a retired `kind="action"` family still answers to as an alias is minted as a
+`kind="predicate"` row's **name** at the mint doors with **no refusal and no warning**, and
+`reinstate` then refuses `alias_collision` **non-overridably** — the tombstone permanently
+un-reinstatable, which is ruling **R11**'s whole reason for existing. That is the **fourteenth
+trip's own harm**, at the cell axis 10 cannot pose.
+
+**Worker's independent re-run, with `force` REMOVED — five ordinary calls, no `force`, no
+acknowledgement, which is the fourteen records' own standard [Observed]:**
+
+```
+sqlite :: tombstone kind='action' -> mint kind='predicate'
+  step2_resolve_zeta: ('existing', 'alpha_act', 'action', 1.0)
+  step3_retire:       ('retired', ['zeta'], [])
+  step4_propose:      ('WRITTEN via approve', 'zeta', 'predicate', 'active', [])   <- warnings EMPTY
+  step5_reinstate:    ('REFUSED', 'alias_collision', overridable=False,
+                       path_back="retire 'zeta' first, or leave this word retired")
+  step5_resolve_zeta: ('existing', 'zeta', 'predicate', 1.0, [])
+  D3_import_types:    ('zeta', 'predicate', 'active', ['predicate_requires_review'])
+```
+
+**Reproduces in BOTH directions** (action tombstone → predicate mint, and predicate tombstone →
+action mint) and **on the async mirror**. **The same-kind controls are the proof it is a defect and
+not the design [Observed]:** action→action and predicate→predicate both answer step 4 with
+`word_previously_retired:alpha_same`, write nothing, and **reinstate successfully**.
+
+**Why it is T14 exactly.** §0.3 predicted *"the open cell is (aliases × retired × a different kind),
+and the three guards give three different answers to* does any row answer to this word?"
+**[Observed, worker-verified]** `_word_rows` is called `kind=`-scoped at all three mint doors
+(`registry.py` 2176, 2658, 4769) so the action tombstone is not in the scan; `_alias_clash`
+(`registry.py:7432`) filters by **no kind at all** and therefore *does* see it at `reinstate`. **One
+store, one word, two guards, opposite answers** — the tenth trip's *one door disagreeing with
+itself*, with `kind` as the disagreeing dimension (**A2**).
+
+**Why the gate exits 0, countably.** `grep -c 'kind="action"' docs/tools/check_merge_guard.py` →
+**0**. Axis 10's fixture `_tombstone_word_store` seeds a `kind="predicate"` tombstone and drives all
+three mint doors at `kind="predicate"` — **one kind on both sides in every fixture**, so the third
+axis of the 2×2×2 has never been driven on any leg. This is **G2**, and §0.5 counted it in advance.
+
+**Routing.** This reaches shipped doors with ordinary calls and ends in the fourteenth trip's own
+harm. **It meets the fourteen records' standard and is routed to the supervisor for
+countersignature (R83). The count stays FOURTEEN; classification is not the worker's.**
+
+#### A3 — BLOCKING — §5.10's identity refusals have NO OPERAND for an action family's declaration
+
+**The defect.** Two action families with **contradictory governance declarations** are collapsed
+with no refusal and no warning; `resolve_type` then answers the dead word with the survivor at
+**1.0**, while `preflight` answers the same word with the **tombstone's** policy — and a Haiku-tier
+machine actor records `applied` against a verb the surviving family declares **human-approval-only
+and irreversible**.
+
+**Worker's independent re-run with `force` and ALL acknowledgements REMOVED. This is where the
+finding NARROWS, and the narrowing is the worker's, not the lens's [Observed]:**
+
+| door | lens's run (`force=True`, `acknowledge=ALL_ACK`) | **worker's ordinary-calls run** |
+|---|---|---|
+| **D5 `merge_types`** | `('MERGED', 'new_verb', ['old_verb'], …)` | **`('REFUSED', 'definitions_diverge', overridable=True)`** — the door is **not** silent; it is *acknowledgeable past* |
+| **D4 `retire(successor=)`** | `('RETIRED','retired',[])` | **`('RETIRED', 'retired', [])`** — **no `force`, no acknowledgement** |
+| **D3 `import_types`** | `('new_verb', ['old_verb'], [])` | **`('new_verb', ['old_verb'], [])`** — **warnings EMPTY**, no `force`, no acknowledgement |
+
+**So A3 stands on TWO of three doors with ordinary calls, not three**, and the merge door's real
+defect is a weaker and different one: an **overridable** `definitions_diverge` is the only thing
+between a caller and a governance collapse that `preflight` treats as non-overridable at invocation
+time. The lens's *"all three doors succeed"* is true only under `ALL_ACK` and is corrected here.
+
+**What follows on the two doors that do walk it, unchanged by the narrowing [Observed]:**
+
+```
+resolve_type('old_verb')  -> ('existing', 'new_verb', 'action', 1.0, [])      <- 5.3's guarantee
+preflight('old_verb')     -> ('allowed',  approval_mode=auto,  reversibility=reversible,   warnings=[])
+preflight('new_verb')     -> ('refused',  approval_mode=human, reversibility=irreversible, warnings=[])
+record_invocation('old_verb', outcome='applied', actor='ai:haiku', tier='haiku')
+                          -> ('RECORDED', 'applied', 'old_verb', ['declaration_unjudged', 'approval_unrecorded'])
+invocations(family='new_verb') -> 0        <- the survivor's ledger is EMPTY; the record is filed under the dead word
+```
+
+**The guards are not inert — they run and have nothing to compare, and the control proves it.**
+**[Observed, worker-verified]** give the two families diverging declared `predicates` with a consumer
+gating on one, and `merge_types` **and** `retire(successor=)` both refuse `different_consumer_sets`,
+**`overridable=False`**. Refusal #2 is skipped at `registry.py:4216` on
+`if "predicate" in (here.kind, there.kind)` — a **deliberate** skip per `ACTIONS.md` §2.1, since
+actions must be mergeable — and **nothing was ever put in its place for what an action family
+actually is**: `approval_mode`, `min_auto_tier`, `reversibility`, `effects`.
+
+> **This is the NINTH trip's sentence at a surface it was never asked about** — *a guard that cannot
+> read a fact must compute it if the fact is computable, skip and say so if it is not, and never
+> refuse for want of looking.* Here the fact **is** in the caller's hand: both families' declarations
+> are stored attributes. The guard neither computes nor says so; it passes.
+
+**Why the predicate lens cannot find it.** For predicates, refusal #2 refuses the identical
+construction non-overridably at every door. **[Observed]** every predicate control in the lens's twin
+table is refused. This is precisely what §0.2's **S4** falsifier asked for — *does the action lens
+find anything the predicate lens does not?* — and the answer is yes.
+
+**Why the gate exits 0, countably. [Observed]** in `check_merge_guard.py`: `preflight` **0**,
+`record_invocation` **0**, `approval_mode` **0**, `reversibility` **0**, `ActionFamily` **0**. The
+gate **cannot construct an action family at all**, let alone drive one through a collapse door. And
+in `ontoloche/contract/test_c19_actions.py` and its `aio/` twin: `successor=` **0**, `reinstate(`
+**0** — the ACTIONS layer has never been driven through D4-with-successor or D6 on any leg.
+
+**Routing.** Two shipped doors, ordinary calls, one word carrying two governance identities at
+§5.3's guarantee, ending in `applied` at Haiku tier against an irreversible human-approval verb.
+**Routed to the supervisor for countersignature (R83). The count stays FOURTEEN.**
+
+#### The rest
+
+| # | severity | the defect | disposition |
+|---|---|---|---|
+| **A2** | MAJOR | **The three guards give three different answers to *does any row answer to this word?* on ONE store.** **[Observed]** with `action:alpha_act` ACTIVE `aliases=('zeta',)` and `action:beta_act` RETIRED `aliases=('omega',)`, asked as `kind="predicate"`: `omega` → `_word_rows` `[]`, `_alias_holder` `None`, `_alias_clash` `None`, but `_word_rows(kind=None)` `['action:beta_act[retired]']`; `alpha_act` → `_word_rows` `[]`, `_alias_holder` `None`, **`_alias_clash` `alpha_act`** | **ACCEPTED, OPEN.** The TENTH trip — *one door disagreeing with itself* — with `kind` as the disagreeing dimension. It is the mechanism A1 walks through, and it is **T14**'s second clause |
+| **A4** | MAJOR | **A RETIRED action family still preflights `allowed` and still records `applied`.** **[Observed]** after `retire`, `preflight` → `('allowed', …)` with **no warning at all**, while `resolve_type` in the same store answers `('proposal', None, 0.4615)` — *this word is not a live type*. `_action_family` (`registry.py:7835`) passes `rec.status` into `ActionFamily` and **no caller ever tests it** | **ACCEPTED, OPEN, and it is standing rule (d) verbatim.** Ruling **R71** minted `edge_family_retired:<name>` for a *declared edge family* retired after declaration, with the words *"`preflight` went on answering `allowed` and `record_invocation` went on warning nothing."* **The identical question about the action family ITSELF was never asked.** **[Observed]** `grep -c 'family_retired' ontoloche/types.py` → **1**, and it is `edge_family_retired`. This is `I-3`/**N3**'s shape — a rule binding the read with no door that writes |
+| **A5** | MAJOR | **The store `PACKAGE.md` §4.1 BLESSES cannot be resolved, retired or reinstated.** **[Observed]** one word under two kinds — which `propose_type` permits by name — makes `resolve_type`, `retire` and `reinstate` all **raise `AmbiguousKind`** out of the return type. `retire` and `reinstate` have **no `kind` parameter at all**, so a §4.1-blessed word can never be retired or reinstated by any caller | **ACCEPTED, OPEN, and NOT action-specific** — reproduces at `entity`+`predicate` too, and is reported as kind-general rather than dressed as a twin. It is the **EIGHTH** trip's fourth defect surviving: that record says `resolve_type` *"raised `AmbiguousKind` out of the call designed against mechanism 2, on a store `PACKAGE.md` §4.1 explicitly blesses"*, it was fixed **at the successor lookups**, and `registry.py:1381` — the **first** lookup in the same function — still takes `kind=None`. **A fix applied at one call site of N, inside the fix for a trip whose diagnosis is that sentence** |
+| **A6** | informational | **T4 settled, in both directions.** **[Observed, worker-verified]** `ontoloche/actions.py` writes **no** identity field onto a stored record — `grep -nE "(aliases\|successor)\s*="` returns nothing. **T4's named address is FALSIFIED.** But `ontoloche/aio/registry.py` carries **53** `aliases=`/`successor=`/`status=` writes, and Part A's `REGISTRY_SOURCE` (`check_merge_guard.py:126`, parsed at 316 and 454) is `ontoloche/registry.py` **alone**; `grep -c aio docs/tools/check_merge_guard.py` → **0** | **RECORDED.** Mitigated, not closed: `ontoloche/aio/contract/test_generated_matches_source.py` compares the mirror byte for byte — **and [Observed, line 22] it carries `pytestmark = pytest.mark.nonbinding`.** The only thing standing between Part A and a second writer of every identity field is a check ruling **R2** makes non-binding |
+
+#### The TWIN TABLE — all fourteen trips at `kind="action"`, which no row has ever produced
+
+| # | trip | twin at `kind="action"` |
+|---|---|---|
+| 1 | unknowable extent | **NOT CONSTRUCTIBLE** — refusal #2 skipped at `registry.py:4216`; deliberate per `ACTIONS.md` §2.1. **What replaces it is nothing: that is A3** |
+| 2 | empty extent | **NOT CONSTRUCTIBLE**, same gate. `merge_types` on two bare action families returns a `MergeResult`; the predicate control is `REFUSED predicate_merge, overridable=False` |
+| 3 | `retire(successor=)` redirects at 1.0 | **CONSTRUCTED, REPRODUCES.** Harmless between identical declarations; **A3** is this row with the declarations diverging |
+| 4 | alias onto a retired word | **CONSTRUCTED, REPRODUCES** — written, no refusal, no warning; `resolve_type` at 1.0. Predicate control: `import_refused:predicate_merge`. Subsumed by A3 |
+| 5 | partial extent | **NOT CONSTRUCTIBLE**, same gate as 1 and 2 |
+| 6 | alias rides across two merges | **CONSTRUCTED, REPRODUCES** — no two active rows on one word, so the harm is the declaration. Subsumed by A3 |
+| 7 | one word is not one string (alias door) | **CONSTRUCTED, REPRODUCES** — `aliases=['Commentable_W']` written with no warning; predicate control refuses `predicate_merge`. Subsumed by A3 |
+| 8 | variant of a retired NAME | **REFUSED** `name_previously_retired`. The `identity_key` fix is kind-independent and holds |
+| 9 | nothing on the right-hand side | **REFUSED** `different_consumer_sets`, non-overridable. `_gates_on` is kind-independent |
+| 10 | one branch of two | **REFUSED**, same evidence |
+| 11 | one call site of four | **REFUSED**, driven at all four call sites |
+| 12 | retire the same row twice | **REFUSED** `retire_no_op:already_retired`. `C9-29` holds |
+| 13 | merge a spent tombstone twice | **REFUSED** `alias_collision`, non-overridable. `C10-20` holds — **and `_alias_clash`'s lack of a kind filter is why**, which is the same asymmetry that makes A1 possible. *One guard's missing kind filter closes trip 13 and opens trip 14's twin* |
+| 14 | a tombstone's word at the mint door | **SPLITS.** Same kind **REFUSED** (`word_previously_retired`, reinstate succeeds); **different kind REPRODUCES — that is A1** |
+
+#### Scoring
+
+| # | prediction | outcome |
+|---|---|---|
+| **S4** | the ACTIONS layer has an untested twin of every trip | **CONFIRMED.** Its falsifier — *"finds nothing the same lens at `kind="predicate"` does not already find"* — fails on A1, A3 and A4, each invisible to a predicate lens because the predicate control is refused non-overridably |
+| **T14** | the 2×2 is a 2×2×2 with `kind` as the third axis | **CONFIRMED, both clauses** — A1 (the open cell) and A2 (three guards, three answers). §4.1's blessing does **not** make the disagreement correct: `reinstate` refuses the state `propose_type` blesses, and A5 shows the blessed store cannot be governed at all |
+| **G2** | the gate has never driven an action family | **CONFIRMED**, worker-verified: `kind="action"` **0**; `predicate` 60, `edge` 4, `entity` 3, `data` 1. The falsifier's escape — *`kind="action"` is structurally unable to reach D1–D6* — is **closed**: it reached all six |
+| **N3** | a read-bound rule with no write door gated | **CONFIRMED on the ACTIONS surface** — A4: retirement binds `resolve_type` and no invocation door consults it |
+| **T4** | an identity-field writer outside `registry.py` | **FALSIFIED at the address §0 named, CONFIRMED one directory along.** §0.3 named `ontoloche/actions.py` **or** `ontoloche/aio/`; the first is wrong and the second is right. **The record scores this as a partial falsification rather than a confirmation**, because a prediction that names two addresses and is right about one has not earned a clean confirmation, and this register does not grade its own predictions generously |
+
+**§0 predictions found FALSE by this lens: one — T4, at the first of the two addresses it names.**
+
