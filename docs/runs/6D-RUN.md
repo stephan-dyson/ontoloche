@@ -1917,6 +1917,62 @@ values. A surface **addition** — nothing a caller reads today reads differentl
 
 ---
 
+### 6.16 Round 3, **pre-registered before any lens runs** — R3-P1 … R3-P10
+
+*Written and pushed before a single round-3 lens is dispatched. §0's rule, unchanged: **a prediction
+written after a probe is a confirmation, and the record will say which.** Round 1 scored 21/30 on a
+surface nobody had touched; round 2 scored 6 CONFIRMED / 2 PARTIAL / 2 FALSE on a surface this row
+had just rewritten, and **both clean falsifications were numbers this row published about its own
+work.** Nine commits now stand over this surface.*
+
+**The cap.** Standing constraint 7 allows three rounds. **This is the third.** Round 3 either closes
+the loop with two consecutive clean rounds — impossible, since round 2 was not clean — or the row
+closes with an **honest convergence note**. So round 3's job is not to be clean; it is to establish
+*what the loop is still finding*, and the note has to say so plainly either way.
+
+#### The ten
+
+| # | prediction | why I expect it | falsifier, stated in advance |
+|---|---|---|---|
+| **R3-P1** | **Not clean.** At least one lens returns NOT YET | rounds 1 and 2 both did, and round 2's count went **up** over a surface five commits had just crossed | all four lenses return CLEAN |
+| **R3-P2** | **At least one of round 2's four fix commits asserts something that is not true** | round 2 found this of **four of my five** round-1 commits; change D already caught a fifth (change C's `check_links` claim) **before** the lens ran | the auditor reads all four and finds every published claim true |
+| **R3-P3** | **The `effects`-order false refusal is re-found, and by more than one lens** | three lenses reached it in round 2 (A7 = G5 = K4) and **no commit since has touched it**; it CLOSES A LEGAL OPERATION | no lens raises it, or it turns out already fixed |
+| **R3-P4** | **My "53 of 79 are empty by construction" claim is WRONG for at least one return.** The AST analysis behind change D keyed on `n.lineno > first` — **line order inside a function, not control flow**. A `Refusal` returned textually *before* the first fill, but inside a **loop** that has already run an iteration, carries a non-empty accumulator and I counted it as empty | this is the sharpest self-suspicion I have, and I am naming the mechanism rather than the possibility so it cannot be scored generously. `import_types` is a loop with `continue` branches and is where I would look first | every one of the 53 is shown unreachable with a non-empty accumulator, by control flow rather than by line number |
+| **R3-P5** | **At least two findings land in the harness rather than in `registry.py`** | round 2 put 4 of 21 there, and this row has now hit *a fixture that cannot fail on its own subject* **eight** times | every finding is in shipped code and none in the gate |
+| **R3-P6** | **A number published in one of round 2's four commits is wrong** | both of round 2's clean falsifications were exactly this, and X12's rule was minted *because* of it. Change D publishes an AST-derived 26 that R3-P4 says may be wrong | every published number re-derives to what the commit says |
+| **R3-P7** | **`Refusal.warnings` is pinned in one direction only.** `C10-27` asserts the note is **present** when a guard was skipped; **nothing asserts it is EMPTY when nothing was skipped**, so a door that leaks an unrelated accumulator into every refusal would pass | I wrote the positive case and did not write its negative, which is the `alias_check_incomplete` shape one field along | an id is found that pins the empty case, or the leak is shown impossible |
+| **R3-P8** | **At least one new construction is routed for countersignature** — the count does not stay at TWENTY-TWO | rounds 1 and 2 each produced trips, and all three of round 2's were **pre-existing**, i.e. the loop is still finding the surface's own defects rather than this row's regressions | zero constructions routed by any lens |
+| **R3-P9** | **G1 closes in this round or is shown unnecessary.** It has been declared open in **six** consecutive commits, which is why the fix auditor is pointed at it first | a decline restated six times has stopped being a decline; it is an open finding this row has not closed, and I said in change D I would not call it one again | round 3 ends with G1 declared open a seventh time |
+| **R3-P10** | **The row closes with a convergence note, not a clean loop** | the cap is three and round 2 was not clean, so two consecutive clean rounds are arithmetically out of reach | round 3 is clean AND the constraint is somehow satisfied |
+
+#### What each lens is for, and the order
+
+1. **THE FIX AUDITOR, FIRST, POINTED AT G1** — the four round-2 fix commits (`8d717c9`, `f8fc284`,
+   `9d90992`, `4f8db52`) read against what they claim, and `G1` (the gate's zero `cross_namespace`
+   fixtures) as its named first subject. R3-P2, R3-P6 and R3-P9 are its.
+2. **THE KILL ROW** — constructions only, against the register's twenty-two. R3-P8 is its.
+3. **THE ACCUMULATOR LENS** — change D's own subject, control flow rather than line order. R3-P4 and
+   R3-P7 are its, and it is the one I most expect to cost me.
+4. **THE ACTIONS-TWIN** — the `effects`-order refusal, still the most urgent thing on this surface.
+   R3-P3 is its.
+
+#### Two things that would falsify the round rather than a prediction
+
+- **If every finding is in `registry.py` and none in the harness**, R3-P5 fails and the harness audit
+  was not real — the same falsifier §6.8 carried, which did not bite in round 2.
+- **If no lens finds anything in change D**, either the change is sound or the lenses were pointed
+  away from the newest code. Round 2's auditor found the most *because* it was aimed at the freshest
+  commits; a round 3 that finds nothing there needs to say which of the two it was.
+
+**The rm rule, carried in the binding form.** Every round-3 lens brief forbids constructing a
+deletion **outright** — not with a variable, not with a literal, not for cleanup. My round-2 brief
+said *"`rm` takes a literal absolute path, never a `$var`; prefer deleting nothing"*, and a lens
+still built `SC=…; rm -rf "$SC"`, which cost the supervisor two adjudications. **A prompt the
+supervisor cannot read is a prompt the supervisor declines**, and the fix for that is not a better
+variable rule — it is no deletion at all.
+
+---
+
 ## 7. The fix set
 
 *Three changes, as ruling [R92](../decisions/2026-09-04-6d-supervisor-ruling-R92.md) fixed them.
