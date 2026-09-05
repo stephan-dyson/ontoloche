@@ -4886,6 +4886,17 @@ class AsyncRegistry:
         out: list[TypeEntry] = []
         now = self._now()
         for row in rows:
+            # **Declared as the FIRST statement of the row body, and that placement is
+            # the fix rather than a tidy-up** (row 6d, round 3). It used to be declared
+            # part-way down, so a `_word_rows` scan earlier in the body had nowhere to
+            # report a truncation -- which is what let this method read *we could not
+            # finish looking* as *there is nothing to find*. Round 3's accumulator lens
+            # also measured the latent half: three decline paths sat BEFORE the old
+            # declaration, so on iteration 2 and later the name was still bound to the
+            # PREVIOUS row's list. None of the three read it, so nothing leaked -- and a
+            # per-iteration accumulator that exists before the first statement that could
+            # fill it removes the hazard rather than relying on that.
+            extra_import_warnings: list[str] = []
             name = row["name"]
             foundry_status = (row.get("status") or "active").lower()
             predicates = list(row.get("predicates") or ())
@@ -4961,9 +4972,20 @@ class AsyncRegistry:
                 # trips -- and `import_types` is a NAME door in its own right, observed
                 # minting the identical row in the trip's own reproduction.
                 # Kind-blind, for the FIFTEENTH trip's reason (R91).
-                variants, _variant_why = await self._word_rows(
+                variants, variant_why = await self._word_rows(
                     namespace, name, match_aliases=True
                 )
+                # **THE SAME DEFECT AS THE ACTION-DECLARATION SCAN, ONE SCAN ALONG**
+                # (row 6d, round 3). A truncated read makes `retired_here` SHORT, so the
+                # twentieth and twenty-first trips' guard below finds no tombstone and
+                # the row is minted over it -- *we could not finish looking* read as
+                # *there is nothing to find*, at the guard those trips exist to enforce.
+                # The scan is NAMED in the detail because this door runs several, which
+                # is the EIGHTEENTH trip's own sentence.
+                if variant_why is not None:
+                    extra_import_warnings.append(
+                        "alias_check_incomplete:tombstone name scan: " + variant_why
+                    )
                 retired_here = [r for r in variants if r.status == "retired"]
                 # **THE TWENTY-FIRST TRIP: `r.name != name` discarded the byte-identical
                 # tombstone** (row 6d, round 2; ruling R93). `standing` is `None` exactly
@@ -5024,7 +5046,6 @@ class AsyncRegistry:
             # that the surface could not otherwise produce it was wrong twice over.
             # Row 3e, third adversarial round. `C16-06` is the mechanical form of this.
             incoming = tuple(row.get("aliases") or ())
-            extra_import_warnings: list[str] = []
             # **Finding X6: a field the caller supplied and this call ignores.** This
             # method takes ONE `namespace` for the whole batch (§2.5's Foundry mapping is
             # a per-call scope, not a per-row one), and a row carrying its own
@@ -5150,7 +5171,40 @@ class AsyncRegistry:
                         kind=incoming_kind, attributes=row.get("attributes") or {}
                     )
                     for word in incoming:
-                        named, _named_why = await self._word_rows(namespace, word)
+                        # **THE `why` IS READ, and dropping it was finding A3** (row 6d,
+                        # round 3; ruling **R94**'s change 4). This read
+                        # `named, _named_why = ...` -- bound and never used -- so on a
+                        # **legal** `PACKAGE.md` §3.4-conformant backend that could not
+                        # finish a page, `named` came back SHORT and the loop below
+                        # concluded *no divergence*. **The guard was skipped and the
+                        # alias was WRITTEN**: A3's own harm with A3's fix live,
+                        # `resolve_type` answering at 1.0 one way while `preflight`
+                        # refused the other.
+                        #
+                        # **Rule U at the call site rather than at the comparison.**
+                        # *We could not finish looking* is not *there is nothing to
+                        # find*, and this was the one site in the method that read
+                        # incompleteness as agreement.
+                        #
+                        # **And it is change A's consumer table one line short.**
+                        # `8d717c9` enumerated five consumers of the widened `_word_rows`
+                        # -- `propose_type` 2256, `_write_approved` 2739, `import_types`
+                        # 5108, `_alias_identity_breach` 7490, `resolve_type` 1653 -- and
+                        # **did not list this one**. Its *kind* claim holds:
+                        # `_action_declarations_diverge` opens
+                        # `if here.kind != "action" ... return None`, so a non-action row
+                        # surfaced by the kind-blind scan is discarded and the widening is
+                        # genuinely absorbed. The claim is incomplete on the OTHER axis --
+                        # **the widening made the scan LARGER, which makes an incomplete
+                        # page MORE likely, at the one call site that read incompleteness
+                        # as agreement.** A rule-(d) miss on an axis the table did not
+                        # have a column for.
+                        named, named_why = await self._word_rows(namespace, word)
+                        if named_why is not None:
+                            extra_import_warnings.append(
+                                "alias_check_incomplete:action declaration scan: "
+                                + named_why
+                            )
                         for other in named:
                             if other.name == name and other.kind == incoming_kind:
                                 continue
@@ -7357,6 +7411,21 @@ class AsyncRegistry:
             # a refusal.** The residual -- a variant-spelled row missed because the scan
             # was truncated -- is stated rather than paid for with a false refusal, and
             # it is raised as a question.
+            # **THE `why` IS DROPPED HERE ON PURPOSE, and round 3 tried to "fix" it.**
+            # `partial_why` below does not merely REPORT -- it **REFUSES**
+            # (`kind_mismatch` / `predicate_merge`, non-overridably). Seeding it from the
+            # keyed probe therefore turns a truncated scan into a false refusal, which is
+            # the exact thing this method's own comment above forbids and which `C12-13`
+            # exists to catch: *refusing this bans the ingestion path on every paging
+            # backend.* The residual -- a variant-spelled row missed because the keyed
+            # probe was short -- is **stated rather than paid for with a false refusal**,
+            # and it is raised as a question rather than closed here.
+            #
+            # The two sibling sites (the action-declaration scan and the tombstone name
+            # scan in `import_types`) DO carry their `why`, because there it rides in a
+            # warning and changes no verdict. **Three call sites, two of them one family
+            # and the third deliberately not** -- and this comment is here because round
+            # 3 read the argument above and changed the line anyway.
             keyed, _keyed_why = await self._word_rows(namespace, alias)
             partial_why: str | None = None
             others.extend(keyed)

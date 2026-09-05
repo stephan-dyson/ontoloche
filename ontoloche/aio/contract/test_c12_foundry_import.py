@@ -17,6 +17,7 @@ call performs it -- deviation D-8 in docs/runs/2A-RUN.md.
 
 from __future__ import annotations
 import pytest
+from ontoloche.actions import action_attributes
 from ontoloche.types import Consumer, Evidence, Refusal, ResolveContext, TypeEntry
 from ontoloche.aio.contract._support import seed
 from ontoloche.aio.contract.doubles import AsyncDegradedAdapter
@@ -517,9 +518,21 @@ async def test_c12_13_a_legal_import_is_not_banned_by_a_backend_that_pages(adapt
     )
     assert entry.status == "active" and "a_brand_new_word" in (entry.aliases or ())
 
-    # The truncation is REPORTED, exactly once.
+    # **The truncation is REPORTED, once per SCAN, and this assertion was amended in
+    # round 3.** It read `len(said) == 1`, written when this method had ONE scan that
+    # could truncate. It now has two -- the tombstone NAME scan (whose truncation means a
+    # tombstone may have been missed, which is the twentieth and twenty-first trips) and
+    # the alias-holder scan (whose truncation means a LIVE holder may have been missed).
+    # **Those are two facts, and one value for two facts is INTERFACE.md 2.3's Cause B**
+    # -- the EIGHTEENTH trip's own sentence, which `merge_types` already answers by
+    # naming the scan in its detail. So: at least one report, no duplicates, and a
+    # caller can tell which look came up short.
     said = [w for w in entry.warnings if w.startswith("alias_check_incomplete:")]
-    assert len(said) == 1, f"reported once, not zero and not twice: {entry.warnings}"
+    assert said, f"the truncation must be reported at all: {entry.warnings}"
+    assert len(said) == len(set(said)), (
+        f"each scan reports at most once -- a repeated line is noise, not a second "
+        f"fact: {entry.warnings}"
+    )
 
 @pytest.mark.requires_capability("stores_aliases", "indexes_membership")
 async def test_c12_14_the_ninth_trip_a_row_that_does_not_exist_yet_has_no_consumers_to_read(
@@ -1330,5 +1343,86 @@ async def test_c12_27_a_declined_row_still_carries_what_the_call_could_not_check
     assert any(w.startswith("import_field_ignored:namespace:") for w in warnings), (
         "the row was declined AND its namespace was ignored; the caller is owed both "
         "sentences, and the decline path dropped the second one",
+        warnings,
+    )
+
+async def test_c12_28_each_truncated_scan_in_this_method_names_itself(adapter, make_registry):
+    """**Finding A3 and its sibling — Rule U at the CALL SITE, not at the comparison.**
+    Row 6d, round 3; ruling **R94**'s change 4.
+
+    `import_types` runs several scans that can come up short, and two of them **bound the
+    `why` and never read it**: the tombstone NAME scan (`variants, _variant_why`) and the
+    action-declaration scan (`named, _named_why`). On a **legal** `PACKAGE.md` §3.4
+    backend that cannot finish a page the list came back SHORT and the guard below
+    concluded *nothing found* — **the guard was skipped and the row was written**, which
+    is *we could not finish looking* read as *there is nothing to find*.
+
+    Each report **names its scan**, because a truncated NAME scan means a tombstone may
+    have been missed (the twentieth and twenty-first trips) and a truncated ALIAS scan
+    means a live holder may have been missed. Two facts; one value for two facts is §2.3's
+    Cause B, and the EIGHTEENTH trip already answered it at `merge_types` this way.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_aliases:
+        pytest.skip("this backend stores no aliases, so no scan of them can truncate")
+    for i in range(6):
+        await seed(registry, f"row_{i}", definition="a row")
+
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=3), approval_policy="auto")
+    entry = (await capped.import_types(
+        [{"name": "imported_here", "kind": "entity", "definition": "a row",
+          "aliases": ["a_brand_new_word"], "status": "active"}],
+        namespace="default", kind="entity",
+    ))[0]
+    assert any(
+        w.startswith("alias_check_incomplete:tombstone name scan:")
+        for w in (entry.warnings or ())
+    ), (
+        "the scan that asks whether a TOMBSTONE holds this name came up short, and a "
+        "caller told nothing would read the silence as `no tombstone holds it` -- which "
+        "is what let the row be minted over one",
+        entry.warnings,
+    )
+
+async def test_c12_29_a_truncated_action_declaration_scan_says_so(adapter, make_registry):
+    """**Finding A3 itself**, at the site ruling **R94** named. Row 6d, round 3.
+
+    `registry.py`'s action-declaration loop read `named, _named_why = self._word_rows(...)`
+    — bound and never used. A truncating backend therefore made
+    `_action_declarations_diverge` see fewer rows, find no divergence, and **write the
+    alias**: `resolve_type` answering at 1.0 one way while `preflight` refused the other,
+    which is A3's own harm with A3's fix live.
+
+    **And it is change A's consumer table one line short.** `8d717c9` enumerated five
+    consumers of the widened `_word_rows` and did not list this one. Its *kind* claim
+    holds — a non-action row is discarded by the guard's own first line — but the widening
+    made the scan LARGER, which makes an incomplete page MORE likely, at the one call site
+    that read incompleteness as agreement.
+    """
+    registry = await make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    if not registry.caps.stores_aliases:
+        pytest.skip("this backend stores no aliases, so the alias write cannot happen")
+    for i in range(6):
+        await seed(registry, f"verb_{i}", kind="action", definition="a verb",
+             attributes=action_attributes(reversibility="reversible",
+                                          approval_mode="auto"))
+
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=3), approval_policy="auto")
+    rows = await capped.import_types(
+        [{"name": "pay_out", "kind": "action", "definition": "a verb",
+          "aliases": ["verb_0"], "status": "active",
+          "attributes": action_attributes(reversibility="irreversible",
+                                          approval_mode="human")}],
+        namespace="default", kind="action",
+    )
+    warnings = tuple(rows[0].warnings or ())
+    assert any(
+        w.startswith("alias_check_incomplete:action declaration scan:") for w in warnings
+    ), (
+        "the scan that asks whether this word already names a family with CONTRADICTORY "
+        "governance came up short, and a caller told nothing would read that as `no "
+        "divergence` -- which writes the alias and leaves one word with two policies",
         warnings,
     )

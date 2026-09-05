@@ -1801,9 +1801,27 @@ register's reading: **a widened matcher IS a minted rule and its consumers ARE i
 
 | change | matcher | consumers followed | commit |
 |---|---|---|---|
-| **A** | `_word_rows`' kind filter | 5 doors, 2 fixed | **`8d717c9`** — the TWENTIETH and TWENTY-FIRST trips; ids 383 → 385, axis 14 |
+| **A** | `_word_rows`' kind filter | **6 consumers, not the 5 the commit listed** — see the correction below | **`8d717c9`** — the TWENTIETH and TWENTY-FIRST trips; ids 383 → 385, axis 14 |
 | **B** | `_answers_to`'s keying | 5 consumers, 1 fixed | **`f8fc284`** — X7, a label naming NO ROW under a `complete=True` seal; ids 386 |
 | **C** | `_alias_clash`'s SET | 3 callers, all 3 touched | **`9d90992`** — the TWENTY-SECOND trip **and** the page-order DETAIL; ids 388, axis 15 |
+
+#### **CORRECTION to change A's consumer table** *(round 3, ruling R94's change 4)*
+
+`8d717c9` enumerated **five** consumers of the widened `_word_rows` — `propose_type` 2256,
+`_write_approved` 2739, `import_types` 5108, `_alias_identity_breach` 7490, `resolve_type` 1653. There
+are **six**. The missing one is the **action-declaration loop** inside `import_types`, and it is the
+one that mattered:
+
+- its *kind* claim **holds** — `_action_declarations_diverge` opens
+  `if here.kind != "action" ... return None`, so a non-action row surfaced by the kind-blind scan is
+  discarded and the widening is genuinely absorbed;
+- and it is **incomplete on the other axis**: the widening made the scan **LARGER**, which makes an
+  incomplete page **MORE likely**, at the one call site that read incompleteness as agreement. It
+  bound the `why` and never read it, so a truncating backend skipped the guard and **wrote the
+  alias**.
+
+**A door table with one row missing is what standing rule (d) is for**, and this is the third time
+this row has published one. `C12-29`.
 
 #### Change C's two cells
 
@@ -2615,6 +2633,71 @@ with the capability named (no event table, so the fixture's `force` cannot be re
 `stores_events=False` gives `cannot_record_override` before the guard is consulted at `reinstate`,
 as it does at `merge_types` in change 1. Both ids record **NOT REACHABLE, never a pass**, gated on
 the capability. **Stated once as a pattern rather than met three times as an accident.**
+
+---
+
+### 6.25 Round 3's fix set, change 4 of 4 — **Rule U at the CALL SITE, and one of the three sites was deliberately different**
+
+*Ruling [R94](../decisions/2026-09-05-6d-supervisor-ruling-R94.md)'s change 4. R94 named one site.
+The family has three, and the third one is the finding.*
+
+#### The three `_word_rows` sites that bound the `why` and never read it
+
+| site | before | after | id |
+|---|---|---|---|
+| the **action-declaration** scan — R94's named subject | dropped | **carried** | `C12-29` |
+| the **tombstone name** scan in `import_types` | dropped | **carried** | `C12-28` |
+| `_alias_identity_breach`'s **keyed probe** | dropped | **left dropped, on purpose** | — |
+
+On a legal `PACKAGE.md` §3.4 backend that cannot finish a page, the first two came back **short** and
+the guard below concluded *nothing found* — **the guard was skipped and the row was written**. That
+is *we could not finish looking* read as *there is nothing to find*, at the guards the twentieth,
+twenty-first and A3 fixes exist to enforce.
+
+#### The third site: I changed it, `C12-13` caught it, and the argument was written at the site
+
+`partial_why` there does **not** merely report — it **REFUSES** (`kind_mismatch` /
+`predicate_merge`, non-overridably). Seeding it from the keyed probe turns a truncated scan into a
+**false refusal**, which is exactly what that method's own comment forbids —
+
+> *"scan once, and never turn 'we could not finish looking' into a refusal. The residual … is stated
+> rather than paid for with a false refusal, and it is raised as a question."*
+
+— and exactly what `C12-13` exists to catch: *refusing this bans the ingestion path on every paging
+backend.* **I had read that comment earlier in this session and changed the line anyway.** The revert
+carries a note saying so, so the next reader does not repeat it.
+
+**Three call sites, two of them one family and the third deliberately not.** Treating a shape as a
+family without checking each member is the same error as treating three doors as four.
+
+#### I amended a shipped id, and say so rather than let it be noticed later
+
+`C12-13` asserted the truncation is reported **exactly once** — written when this method had ONE scan
+that could truncate. It now has two, and they are **different facts**: a short NAME scan means a
+tombstone may have been missed (the twentieth and twenty-first trips); a short ALIAS scan means a
+LIVE holder may have been missed. One value for two facts is §2.3's Cause B, and the EIGHTEENTH trip
+already answered it at `merge_types` by naming the scan. The assertion is now *at least one, no
+duplicates* — **weaker in count, stronger in what it distinguishes**.
+
+#### The accumulator moved to the first statement of the row body
+
+It was declared part-way down, so a scan **earlier** in the body had nowhere to report — which is
+what made this defect possible to write. It also removes the latent hazard round 3's accumulator lens
+measured: three decline paths preceded the old declaration, so on iteration 2+ the name was still
+bound to the **previous row's** list. None of them read it, so nothing leaked; a per-iteration
+accumulator that exists before the first statement that could fill it removes the hazard rather than
+relying on that.
+
+#### Mutation proof — two were SURVIVORS until their ids existed
+
+| mutation | gate | ids |
+|---|---|---|
+| **MD5** the action-declaration scan drops its `why` | green | **RED** *(was GREEN — survivor)* |
+| **MD6** the tombstone name scan drops its `why` | green | **RED** *(was GREEN — survivor)* |
+| **MD7** the accumulator declared late again | green | **RED** |
+
+The gate is green on all three: no `page_cap` fixture drives these scans. **That is X2's family and
+it stays declared open** rather than quietly counted as covered.
 
 ---
 
