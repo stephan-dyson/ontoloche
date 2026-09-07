@@ -527,12 +527,24 @@ write without also refusing a `C12-09`-blessed write, the idea is dead and the r
    tombstone.* Nothing needs to be added to `_retired_holder`, so its aliases-only cut is untouched and no
    `C12-09`-blessed write changes its refusal status.
 
-2. **`merge_types` already computes the exact set to warn about, and puts it in a detail field.** The
-   escape at `registry.py:4874` is
-   `blocking = tuple((n, k) for n, k in holders if not (n == left.name and k == left.kind))`, and the
-   refusal detail carries **`"excused": [n for n, k in holders if n == left.name and k == left.kind]`**.
-   The warning's subject is that `excused` set — *already computed, already named, and the complement of
-   what the door refuses.* Warning on the carve-out cannot refuse the carve-out.
+2. **`merge_types` already computes the exact set to warn about, and puts it in a detail field.** Two
+   lines, and they are different lines — the citation is given per line because a cited line is a number
+   and this project has been bitten four times by a number in prose the code does not derive:
+   - **`registry.py:4874`** carries the escape — the set the door **refuses**:
+     `blocking = tuple((n, k) for n, k in holders if not (n == left.name and k == left.kind))`.
+   - **`registry.py:4895`** carries the refusal detail's key — the set the door **excuses**:
+     `"excused": [n for n, k in holders if n == left.name and k == left.kind]`.
+
+   The warning's subject is the **`excused`** set at **4895**, not the `blocking` set at 4874 —
+   *already computed, already named, and the exact complement of what the door refuses.* Warning on the
+   carve-out cannot refuse the carve-out.
+
+   *(Correction, appended rather than edited over the record of what was said: the commit message and
+   first text of this section cited **4874** for `"excused"`. 4874 is `blocking`, its complement; the
+   `"excused"` literal is at **4895**. Caught by the supervisor's independent re-run of the citations,
+   2026-09-07. The claim is unchanged — both lines are in the same escape and both were read — but a
+   line number quoted for the wrong half is the defect this row spent twenty-three entries describing,
+   and it is fixed in place with the correction visible, per the governance register's standing rule 4.)*
 
 3. **Both doors already return a warnings channel and already populate it on the success path.**
    `MergeResult.warnings` exists (`ontoloche/types.py`) and the success return at `registry.py:5111` fills
