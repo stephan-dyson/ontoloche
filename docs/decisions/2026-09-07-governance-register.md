@@ -113,8 +113,10 @@ refusal and no warning. Afterwards `resolve_type` answers the dead word with the
 > ### What is now open, and where it goes
 >
 > Deciding **which of `ACTIONS.md` §2.2's eight declared keys are GOVERNANCE** is not an implementation call
-> — it decides what the registry refuses, the same class as `Q56` and `Q50`. It is minted as **`Q99`** and
-> goes to the founder. The write-door change itself is the row AFTER 6f; row 6f is fenced off the write
+> — it decides what the registry refuses, the same class as `Q56` and `Q50`. It is minted as **`Q99`** and was
+> **RULED `all eight` by the founder on 2026-09-09 — [R102](2026-09-09-founder-ruling-R102.md)**.
+> Every key an action family declares is part of the identity two families must share before they may
+> collapse. Row 6g implements it at the write doors; **A3 does not close until that lands.** The write-door change itself is the row AFTER 6f; row 6f is fenced off the write
 > doors and did not touch them.
 
 **Reachability — row 6d ROUND 1's re-run with `force` removed and ALL acknowledgements removed [Observed

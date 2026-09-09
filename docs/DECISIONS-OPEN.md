@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 7 ruled · 6 FYI**
+**1 open · 8 ruled · 6 FYI**
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,31 +12,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 2 items
-
-### 12 · `Q99` — the registry compares FOUR of the EIGHT things an action family declares. Which four *should* it compare?
-
-*New, and it came out of a measurement rather than a review.*
-
-**TL;DR.** Row 6f went to verify that A3's harm was real and found the register's account of it was **stale**, then found the harm **still reproduces by a different route**. That route is this: `ACTIONS.md` §2.2 makes an action family declare **eight** things, and the comparator that decides whether two families contradict each other looks at **four** of them — `approval_mode`, `min_auto_tier`, `reversibility`, `effects`. It never looks at **`inputs`, `preconditions`, `reachability`, `payload_schema`.** So two families that agree on the four and disagree on `preconditions` collapse with **nothing refusing**, and the comparator cannot see the contradiction it exists to catch.
-
-**Verified at `HEAD`, by me, not taken from the row's report:** the collapse goes through with no refusal, no `force` and no acknowledgement; `resolve_type` then answers the dead word at **`confidence=1.0`**; a Haiku-tier actor records `applied`; and the survivor's ledger reads **`n=0`** — the record filed under the dead word. That is A3's own sentence, end to end.
-
-**Why it is yours.** Which of the eight keys count as *governance* decides **what the registry refuses**. That is the same class as Q56, which you ruled this morning, and Q50. It is not an implementation call: `preconditions` is plainly about whether an action may run, `reachability` is about where it is exposed, and `payload_schema` governs what an invocation may carry — but calling them all governance widens what the registry declines to serve, and calling none of them governance leaves the hole you can see above.
-
-- **`all eight`** — anything a family declares is part of its identity. Safest, and the most refusals.
-- **`name a set`** — tell me which keys, and the rest stay uncompared by design with that written down.
-- **`recommend`** — I bring you a proposed set with the evidence for each key, as its own item.
-
-**Ask: `all eight`, `name a set`, or `recommend`.** No default is in force, because the current four are not a decision anyone made — they are what row 6d needed for the case in front of it.
-
-**One thing that changed since I wrote this item, and it is material to how you rule.** Row 6f's read-side change **already scores on all eight keys.** It got there the hard way: its first cut reused the write door's own four-key comparison, the probe still returned a clean `1.0`, and it widened only because the measurement contradicted the tidier design.
-
-So the two sides may end up deliberately asymmetric. **If you rule a narrow set** — the current four, say — then two families differing only on `preconditions` are, by your ruling, legitimately one identity, and the write doors will let them join. **The read will still hand the caller a confidence below `1.0`** for that difference, because "may these be joined?" and "do these two words still denote one thing?" are different questions and the read answers the second.
-
-That is defensible and it is not a veto: the read refuses nothing, so a narrow ruling is not overridden — the caller is simply told the declarations differ and decides with its own `min_confidence`. But you should know it is there rather than discover it, and **your ruling gets to overturn it**: say so and the read narrows to match.
-
-The fix itself is a **write-door** change and belongs to the row after 6f. Row 6f is fenced off the write doors and has not touched them.
+## A. Decide when you want to — 1 item
 
 ### 10 · `oo-pg` is carrying 625 leftover schemas. Drop them, or leave them?
 
@@ -67,7 +43,23 @@ The fix itself is a **write-door** change and belongs to the row after 6f. Row 6
 
 ---
 
-## E. Ruled — 7 items
+## E. Ruled — 8 items
+
+### 12 · Q99 — which of the eight declared keys are governance → **RULED: `all eight`** *(2026-09-09)*
+
+Recorded as [R102](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R102.md). **Everything an action family declares is part of its identity.**
+
+**What it fixes.** The comparator saw four keys and never `inputs`, `preconditions`, `reachability` or `payload_schema` — so two families differing only on `preconditions` collapsed with nothing refusing, a machine actor recorded the action, and the survivor's ledger read zero. **That is the route by which A3 still fires your stop criterion**, and this closes it at the write door.
+
+**It also dissolves the asymmetry you were warned about.** The read side already scored on all eight; a narrow ruling would have left the two sides deliberately out of step. They now stand on the same definition — the read scores agreement and never refuses, the write refuses a contradiction.
+
+**What it costs, stated plainly:** this is the most refusing option, so collapses that succeed today will refuse tomorrow. That is what you chose.
+
+**And one specific way to get it wrong, which this project has already been burned by.** An earlier row compared a list-valued key with `!=` and refused two families whose governance was identical and whose entries were merely in a different order — it **closed a legal operation**, non-overridably, at all three doors. Going from four keys to eight adds **three more list-valued keys**, tripling that surface. Row 6f already solved it on the read side by comparing those as sets; the write side must match, and R102 says so.
+
+**Still not decided, and the row must raise rather than assume:** whether every key deserves the same non-overridable severity, what to do when one side declares nothing, and how many currently-legal collapses this refuses — that last one is a measurement it owes you.
+
+
 
 ### 9 · Q56 — verify the identity claim where it is MADE → **RULED: `read`** *(2026-09-09)*
 
