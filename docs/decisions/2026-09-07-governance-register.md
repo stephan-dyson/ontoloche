@@ -10,7 +10,7 @@ folding them would make one number that cannot be read:
 | **Kill row** ([`2026-08-29-3c-rulings-R6-R12.md`](2026-08-29-3c-rulings-R6-R12.md)) | **Meaning destroyed by flattening.** Two distinct things end up answering to one identity. |
 | **Governance** (this file) | **Authority granted that the declaration withholds.** One identity, correctly one, carries two contradictory governance answers — and the weaker one gets used. |
 
-## Its stop criterion — DRAFTED by the supervisor, **not yet ruled**. This is Q97.
+## Its stop criterion — **ARMED 2026-09-09 by founder ruling [R100](2026-09-09-founder-ruling-R100.md)**. Q97 is closed.
 
 Written in the same spirit as `ROADMAP.md`'s kill criterion — now, while it is cheap to be honest, and
 before the register has entries that would tempt it to be written favourably:
@@ -22,9 +22,24 @@ before the register has entries that would tempt it to be written favourably:
 > layer that cannot hold the line on who may act is worse than no curation layer, because the record it
 > produces reads as authorised.
 
-**Q97 is the founder's:** adopt this criterion as written, amend it, or rule that this register counts
-entries without carrying a stop criterion of its own. **Default until ruled:** the criterion above is
-recorded but **not armed** — entries accrue, nothing stops.
+**Q97 was the founder's, and on 2026-09-09 he ruled `arm`.** The criterion above is adopted **as written** —
+`amend` was offered and not taken. It is **LIVE**.
+
+> ### ⛔ THE CRITERION IS FIRED. Entry 1 (A3) meets it.
+>
+> This was disclosed before the word was given: the decision page said *"the criterion goes live and entry 1
+> (A3) fires it immediately, because A3 is exactly that shape."* He armed it anyway, which makes the halt
+> **deliberate** rather than an accident of drafting. See [R100](2026-09-09-founder-ruling-R100.md) for the
+> clause-by-clause match and for what the firing does and does not halt.
+>
+> **In force:** no further ACTIONS-surface row launches until A3's doors refuse or warn; A3's fix is the
+> gating work on that surface; and because the criterion's stated harm is that *the produced record reads as
+> authorised*, any `applied` already written through this path is suspect and must be established rather
+> than assumed absent.
+>
+> **Not halted:** the project, and the read-side row opened by [R99](2026-09-09-founder-ruling-R99.md) — a
+> different surface, and one whose ruling removes A3's delivery step. Firing adds **no entry**: this register
+> still counts **ONE**, and standing rule 1 keeps it out of the kill-row count, which stays at **TWENTY-THREE**.
 
 *(Numbering note: Q97 was previously earmarked-if-numbered for R95's across-kinds question
 (`alias_collision` across kinds at `import`/`reinstate` under `PACKAGE.md` §4.1). That question is still
@@ -56,8 +71,12 @@ refusal and no warning. Afterwards `resolve_type` answers the dead word with the
 different: an *overridable* `definitions_diverge` is the only thing between a caller and a collapse that
 `preflight` treats as **non-overridable** at invocation time.
 
-**Severity: BLOCKING.** Separate register does **not** mean deferred, and does not mean fixed either — as of
-this entry it is **open and unfixed**. Contract ids `C19-97`, `C19-98`, `C19-99` were added by row 6d for the
+**Severity: BLOCKING, and as of 2026-09-09 it FIRES THIS REGISTER'S ARMED STOP CRITERION** (R100). Separate
+register does **not** mean deferred, and does not mean fixed either — it is **open and unfixed**, and the
+surface is now halted on it rather than merely labelled. **[R99](2026-09-09-founder-ruling-R99.md) removes
+its DELIVERY** — `resolve_type` may now refuse or answer below 1.0 instead of handing the machine actor a
+confident survivor — **but does not close it**: the two write doors above still neither refuse nor warn on
+ordinary calls. **A3 closes when both halves land.** Contract ids `C19-97`, `C19-98`, `C19-99` were added by row 6d for the
 declaration operand §5.10's refusal #2 never had, with `C19-99` pinning only the case where the four
 governance keys are byte-identical.
 

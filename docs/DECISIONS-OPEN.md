@@ -1,84 +1,31 @@
 # Ontoloche — decisions open to the founder
 
-**As of 2026-09-09.** Scope: the `ontoloche` project only. Ordered by what your answer unblocks, not by age. **Item numbers are stable across days** — item 9 stays item 9 until it is ruled.
+**As of 2026-09-09.** Scope: the `ontoloche` project only. Ordered by what your answer unblocks, not by age. **Item numbers are stable across days** — a ruled item keeps its number and moves to section E rather than being deleted.
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**3 open · 1 is the biggest call in the project · 4 resolved 2026-09-07 · 2 FYI**
+**1 open · 7 ruled · 2 FYI**
 
-Nothing here is decaying. The repo is clean and fully pushed, row 6e is closed, and no session is running. These are decisions waiting on you rather than problems waiting on anyone. **Item 9 (Q56) is the one that matters**; the other two are small and have defaults in force.
+**2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
----
-
-## A. Decide now — 3 items
-
-### 9 · Q56 — the audit found ONE design defect, and it is a question you were asked at trip 6 and have never ruled
-
-*The biggest call in the project.*
-
-**TL;DR.** Row 6e answered. The twenty-three kill-row trips are **four recurring implementation families (18 of 23), one order-dependence singleton, and ONE design defect** — and that design defect is the mechanism that **delivers the harm in twenty-one of the twenty-three**. It is not a discovery. It is **Q56**, flagged to you as the sixth trip's root cause and **named the class-closing question nine times without a ruling**. Under [ROADMAP.md](https://github.com/stephan-dyson/ontoloche/blob/main/ROADMAP.md)'s criterion, one design defect means `stop` fires. **My recommendation is that you rule Q56 and let that ruling decide whether `stop` fires, not the reverse.**
-
-**Q56, verbatim from the register:**
-
-> "should an identity claim be verified where it is MADE (`resolve_type`'s 1.0), or only where it is WRITTEN? — FLAGGED TO THE FOUNDER, not ruled. This is the sixth trip's root cause and the only question that closes a class."
-
-**What the defect is, in mechanics.** Writes are guarded: is this word free, do these two predicates denote the same set, does a tombstone still hold this name. Reads are not. `resolve_type` answers with **confidence 1.0**, which [INTERFACE.md](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INTERFACE.md) §5.3 calls a *guarantee*, and nothing re-establishes at read time the facts that guarantee rests on. So a guard failing at a write does not produce a quiet inconsistency. It produces a registry that *confidently* tells the next caller the wrong thing at 1.0.
-
-**Why it counted as design when four other recurring statements did not.** The audit's bar was *does a local fix remove it?* A comparison, a caller list, a matcher's width and a scan's order each have a line you can change, and all four were classified implementation however often they recurred. This one names *when a guarantee is granted relative to when its fact is checked*. There is no line. Your own shipped spec already says so, at INTERFACE.md §5.3:
-
-> "Refusing to answer, or answering below 1.0, **would change the guarantee this section makes**, and deciding what this registry declines to serve is not an implementation call. It is Q56, it is the founder's, and it is open."
-
-The cheap half shipped (warn when extents disagree); trips 12 and 13 proved that warning **structurally blind to transferred words**. The expensive half was never taken, explicitly because it changes the design.
-
-**Why twenty-three countersignatures missed it.** Every one tested "is this design?" with the same narrow question — *is `namespace` untouched?* — which appears **ten times** in the register, and which **R90 had already found to be two claims, one never tested in six rulings**. `namespace` can be untouched in every trip while the read-side guarantee is what makes each one reach the harm. That is what "individually right, wrong in series" looks like.
-
-#### Your options
-
-| Rule Q56 | What it does | What it costs |
-| --- | --- | --- |
-| **`read`** | `resolve_type` re-establishes the identity claim when it answers, and may warn below 1.0 or refuse. **This removes the design defect**, and with it the delivery step in twenty-one of the twenty-three trips. `stop` becomes moot: you are fixing the thing it would have fired on. | It **changes a shipped guarantee**, which is why it was always yours. Reads get more expensive (an extent re-read on predicate hits). Callers who rely on 1.0 meaning 1.0 get a new answer shape. |
-| **`write`** | Current behaviour becomes **deliberate and permanent**. The registry keeps promising 1.0 on write-time facts. | Then **`stop` genuinely fires**, because you have confirmed the delivery mechanism as design rather than defect. The register should also stop counting its consequences as defects: they are consequences of a ruled choice. |
-| **`hold`** | I park row 6e and stop asking. | The question stays open, as it has since trip 6. |
-
-**The trap, stated rather than hidden.** "It's a known issue" is both a fair reason not to panic *and* exactly how a design defect survives twenty-three trips. Nine deferrals of one decision, with twenty-one trips accumulating on it, is either ordinary prioritisation or precisely what a design defect looks like from the inside. I cannot measure which, and neither could the twenty-three countersignatures that each concluded *"implementation, not design."*
-
-**The counterweight, in the audit's own words.** Every trip was caught **in test, none in a real merge**; two of the last five were **predicted in writing before the lens ran**; and this question has been open and visible since trip 6. Its closing sentence:
-
-> "A founder may reasonably read E as a design question already on the table rather than a design defect, and the difference between those two readings is a ruling, not a measurement."
-
-**Evidence.** The audit's full record is [6E-RUN.md](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/6E-RUN.md). Its pre-registration (§0) is committed at `9dc994d` and is provably the **first and only** commit touching that file, which is what makes its falsifier binding: it fixed **eight** as the number of recurring/design trips below which its hypothesis dies, and got **eighteen**. I re-ran its load-bearing claims myself rather than countersigning on trust — *"answering to one identity"* occurs **zero** times in the register and **zero** in ROADMAP.md, whose actual criterion text is *"a capability predicate gets merged as a duplicate"*; Q56 is named the class-closing question **nine** times; its re-derivation script contains no write or mutation call.
-
-**Ask: `read` or `write`, but not today unless you already know.** This is the only question in the project that closes a class, and I would rather you took it cold than fast. Say `hold` and I park row 6e and stop asking.
+One new item is below, and it exists because ruling item 4 uncovered it rather than because anything went wrong.
 
 ---
 
-### 6 · Q97 — the governance register has a stop criterion. Arm it, or leave it recorded and inert?
+## A. Decide when you want to — 1 item
 
-*Created by your own ruling.*
+### 10 · `oo-pg` is carrying 625 leftover schemas. Drop them, or leave them?
 
-**TL;DR.** Your `separate` opened a second register. A register that counts but can never say `stop` is a tally, not a criterion, so I drafted one — deliberately **before** the register has entries that would tempt me to write it favourably. It is **recorded and NOT armed** until you rule.
+*Low stakes. Raised by your item-4 ruling, not blocking anything.*
 
-**Drafted criterion:** "An actor performs, or records as performed, a governed action that the surviving declaration reserves to a different authority, and no door refuses or warns."
+**TL;DR.** Your `drop it` on item 4 authorised deleting one namespace attributed to row 6d. That namespace **does not exist** (see item 4 in section E). What *does* exist is **625 `oo_*` schemas** on the `oo-pg` container, left by every three-leg suite run this project has made. **I did not touch them**, because they are a different and much larger object than the one you ruled on, and reading your word as covering them would be taking a destructive action you did not sanction.
 
-**Reading if it fires:** the registry is granting authority it was told to withhold. Stop — a curation layer that cannot hold the line on who may act is worse than none, because the record it produces reads as authorised.
+**The facts.** 625 as of today, up from **476** on 2026-09-05 and **193** during row 6c. The container has `RestartCount=0` and a persistent volume, so they accumulate indefinitely. They **slow the postgres leg** of the three-leg suite; they have never failed it.
 
-- **`arm`** — the criterion goes live and **entry 1 (A3) fires it immediately**, because A3 is exactly that shape. That is the honest consequence and you should know it before saying the word.
-- **`record`** — entries accrue, nothing stops, and you keep the option to arm it later once you see whether the register grows.
-- **`amend`** — tell me what it should say instead.
+- **`drop them`** — I confirm each is a suite artefact and nothing else's, report the list length, then remove. The postgres leg gets faster. Nothing in the repo depends on them.
+- **`leave them`** — they keep accumulating. The cost is suite time, and it grows.
 
-**Ask: `arm`, `record`, or `amend`.** Default in force: **record** (drafted, not armed). Register: [2026-09-07-governance-register.md](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-governance-register.md).
-
----
-
-### 4 · Row 6d left a Postgres namespace behind — drop it or leave it?
-
-*Low stakes, carried.*
-
-**TL;DR.** The row's actions lens created `r3lens_de7fdace` on the `oo-pg` container and it was left in place under the project's no-deletion rule. Deleting anything is your call. Nothing is blocked by it.
-
-**Now verifiable.** `oo-pg` is **Up**, so I can read the namespace list on your word rather than guessing at it.
-
-**Ask: `drop it` or `leave it`.** On `drop it` I confirm the namespace is the row's and nothing else's, and report before removing.
+**Ask: `drop them` or `leave them`.** Default in force: **leave** (the project's no-deletion default).
 
 ---
 
@@ -90,11 +37,51 @@ The cheap half shipped (warn when extents disagree); trips 12 and 13 proved that
 - [INTERFACE.md](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INTERFACE.md) — §5.3 is the guarantee Q56 is about
 - [PACKAGE.md](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/PACKAGE.md) — C12-09 lives in §6.2
 - [STATUS.md](https://github.com/stephan-dyson/ontoloche/blob/main/STATUS.md) — the project status page
-- Rulings: [R96](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-founder-ruling-R96.md) · [R97](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-founder-ruling-R97.md) · [R98](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-founder-ruling-R98.md)
+- The [governance register](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-governance-register.md) — its stop criterion is now ARMED and FIRED
+- Rulings 2026-09-09: [R99](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R99.md) · [R100](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R100.md) · [R101](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R101.md)
+- Rulings 2026-09-07: [R96](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-founder-ruling-R96.md) · [R97](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-founder-ruling-R97.md) · [R98](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-07-founder-ruling-R98.md)
 
 ---
 
-## E. Resolved 2026-09-07 — 4 items (history)
+## E. Ruled — 7 items
+
+### 9 · Q56 — verify the identity claim where it is MADE → **RULED: `read`** *(2026-09-09)*
+
+Recorded as [R99](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R99.md). **The oldest open question in the project, closed after ten days and twenty-three kill-row trips.**
+
+**What it decides.** The *cheap half* of Q56 already shipped in row 4d on 2026-08-30: `resolve_type` re-reads both predicate extents on an alias or successor hit and carries `identity_stale` when they disagree — but **confidence stayed 1.0**, because acting on what it found was yours. `read` takes the **expensive half**: `resolve_type` may now answer **below 1.0** and may **refuse**. That changes `INTERFACE.md` §5.3's shipped guarantee, which is exactly why it was never the supervisor's.
+
+**What it does to the kill row.** It removes statement **`E`** — *the registry treats a fact checked at WRITE time as true at READ time* — which row 6e's audit found is the mechanism **delivering the harm in twenty-one of the twenty-three trips**. So the criterion **does not fire**, and **the fifteenth `stop` is RESOLVED, explicitly not declined a sixteenth time**: a decline says *the criterion tripped and we are continuing anyway*, and that is not what happened. Its subject is being removed. **Count stays TWENTY-THREE** — a ruling is not a trip.
+
+**What it does not decide.** Refuse-versus-score, what confidence a stale redirect carries, and whether any of this reaches past predicates are all still open. They belong to the row this ruling opens, which is spec-first: §5.3's guarantee is amended before the resolver changes.
+
+### 6 · Q97 — the governance register's stop criterion → **RULED: `arm`** *(2026-09-09)*
+
+Recorded as [R100](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R100.md). **The criterion is LIVE and entry 1 (A3) fired it immediately** — which was disclosed on this page before you gave the word, so the halt is deliberate rather than an accident of drafting.
+
+**Why A3 meets it.** A Haiku-tier machine actor *records `applied`* against a verb the surviving family declares *human-approval-only and irreversible*, and **no door refuses or warns**: `retire(successor=)` returns `('RETIRED','retired',[])` and `import_types` returns **warnings EMPTY**, both on ordinary calls with `force` and every acknowledgement removed.
+
+**In force now.** No further ACTIONS-surface row launches until A3's write doors refuse or warn; A3's fix is the gating work on that surface; and because the criterion's stated harm is that *the produced record reads as authorised*, any `applied` already written through this path is **suspect until established otherwise** rather than assumed absent.
+
+**Not halted:** the project, and the read-side row R99 opens. Firing adds **no entry** — the governance register still counts **ONE**, and it is never folded into the kill-row count.
+
+### The two rulings meet on A3, from opposite ends
+
+This is the part worth knowing, because it changes what gets built. A3's harm is delivered by `resolve_type` answering the dead word with the survivor **at 1.0** while `preflight` answers it with the tombstone's policy. **That delivery step is `E`.** So **R99 removes A3's delivery** and **R100 halts the surface until A3's write doors are fixed**. Neither closes A3 alone, and **A3 closes only when both halves land**. It is still open and unfixed. The practical consequence: the read-side work R99 opens and the read-side half of A3's fix are **the same work**, and sequencing them as two rows would build the same thing twice.
+
+### 4 · The row 6d namespace → **RULED: `drop it`** — and there was nothing to drop *(2026-09-09)*
+
+Recorded as [R101](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R101.md). **Nothing was deleted.**
+
+This page promised that on `drop it` I would *"confirm the namespace is the row's and nothing else's, and report before removing."* The confirmation found that **`r3lens_de7fdace` does not exist** — not in `open_ontology`, not in `postgres`. This is not lost state: the container has **`RestartCount=0`** and a persistent volume dating to 2026-08-28, and 625 other schemas from the same era are still there.
+
+**The name has no source in the row's own record.** It appears nowhere in `6D-RUN.md`. Its only occurrences anywhere are in the supervisor documents that carried the item forward. **So this item spent four days on your page naming an object that was never observed.** The page did disclose it was unverified, which is why this is a hygiene failure rather than a false claim — but verifying it was one command, and it should have happened when the item was written, not when you ruled on it. The standing correction is recorded in the supervisor's handoff.
+
+The real residue is 625 `oo_*` schemas, which is **item 10** above rather than something folded into a word you gave about something else.
+
+---
+
+## E2. Resolved 2026-09-07 — 4 items (history)
 
 ### 5 · `git push` — fixed, and fixed durably
 
