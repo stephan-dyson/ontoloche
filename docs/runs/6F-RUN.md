@@ -1079,6 +1079,39 @@ all three known instances took the unwatched one. *(Counts the supervisor's, re-
 its own first figure of 114.)* **Routed as a follow-on row, explicitly NOT this row's** — a census checker
 over 113 call sites is new tooling on a surface this row was not sent to touch.
 
+> ### ⚠ The two-way distinction above is INCOMPLETE. There is a THIRD category.
+>
+> **Corrected after landing, by the supervisor running its own checker against `daa86e7` rather than
+> re-reading the rule.** Its script reported *"result-conditioned skips left: 6"* in
+> `test_c3_resolve_type.py`; it then classified them **by hand instead of publishing the number**, and the
+> number was wrong — it had counted every `pytest.skip`, not the result-conditioned ones. **[Observed]**,
+> re-derived here, the six are:
+>
+> | line | guard | category |
+> |---|---|---|
+> | 472 | `if not registry.caps.indexes_membership` | **ENVIRONMENT** — legitimate |
+> | 1201 | *(a comment describing the skip this row FIXED)* | not a skip |
+> | 689 | `if not written or "boro_nm" not in aliases` | **SETUP RESULT** |
+> | 694 | `if isinstance(gone, Refusal)` — did `retire` refuse | **SETUP RESULT** |
+> | 1430 | `if isinstance(out, Refusal)` — does the write door refuse | **SETUP RESULT** |
+> | 1294 | `if answer.type is None or answer.type.name != "searchable"` | **BORDERLINE — and it is in `C3-27`, this row's own new id** |
+>
+> **A skip that reads the result of a SETUP step is the missing middle**, and it is not obviously
+> illegitimate: a fixture that cannot be built on this backend genuinely has nothing to assert. So
+> *"reads a result"* is **too blunt to be a checker's rule** — a gate built on the two-way version would
+> have flagged five and been wrong about three.
+>
+> **The line needs drawing between the value UNDER TEST and the preconditions of the fixture**, and the
+> borderline at 1294 shows the boundary is not crisp: it reads `answer.type` from the call under test, but
+> what it is asking is *did this leg pose the question at all*. This row does not settle it — the three-way
+> distinction goes into the census row's brief, which is where a rule that has to survive 113 call sites
+> belongs.
+>
+> **And it is this row's own §9.11 method failure, committed by the supervisor and named as such by it:**
+> a rule generalised from three clean instances that did not survive contact with the fifth, **caught by
+> running it rather than by re-reading it.** Two parties, one day, the same error — which is the argument
+> for the rule being written down rather than for either party being more careful.
+
 ### §9.9 — A finding against this row's own tooling
 
 Round 1's mutation script reported **`CAUGHT M5 … by test_c3_24`**. That kill never happened.
