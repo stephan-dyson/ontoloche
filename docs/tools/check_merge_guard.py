@@ -1139,15 +1139,21 @@ def _stale_probe_resolve(registry: Registry, *, knowable: bool) -> str | None:
             f"resolve_type('commentable') answered {resolution.type.name!r}, not the "
             f"survivor 'searchable' -- the fixture is not in the state it claims"
         )
-    if resolution.confidence != 1.0:
+    # **AMENDED BY R99, 2026-09-09 (row 6f).** This axis used to require
+    # `confidence == 1.0` and said lowering it was *"the FOUNDER's half of Q56 rather
+    # than this row's."* **He took that half** -- his word was `read` -- so the axis now
+    # requires the OPPOSITE, and a 1.0 here is the defect it once demanded.
+    if resolution.confidence is not None and resolution.confidence >= 1.0:
         return (
-            f"resolve_type('commentable') answered at confidence "
-            f"{resolution.confidence!r}; 5.3 calls the successor redirect a guarantee at "
-            f"1.0, and lowering it is the FOUNDER's half of Q56 rather than this row's"
+            f"resolve_type('commentable') still answered at confidence "
+            f"{resolution.confidence!r} over an identity that has gone stale. R99 ruled "
+            f"Q56 `read`, and INTERFACE.md rule 5.3.2-9 lowers the confidence to how "
+            f"much of the claim still holds -- 1.0 here is statement E still running"
         )
     if "identity_stale" not in resolution.type.warnings:
         return (
-            f"resolve_type('commentable') answered 'searchable' at confidence 1.0 "
+            f"resolve_type('commentable') answered 'searchable' at confidence "
+            f"{resolution.confidence!r} "
             f"carrying {list(resolution.type.warnings)} -- and the two predicate extents "
             f"that claim stands on no longer agree"
             + ("" if knowable else " (and cannot be known to agree on this backend)")

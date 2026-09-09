@@ -1,4 +1,4 @@
-"""C3 -- ``resolve_type`` (16). Mechanism 2, with mechanism 1 as the gate.
+"""C3 -- ``resolve_type`` (29). Mechanism 2, with mechanism 1 as the gate.
 
 No test here may pass or fail because of resolver *quality*: the assertions are about
 outcomes and shapes, never about a score's value.
@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import pytest
 
+from .._resolve import identity_key
+from ..actions import Effect, InputSpec, Precondition, action_attributes
+from .doubles import DegradedAdapter
 from ..types import Refusal, Resolution, ResolveContext, TypeEntry
 from ._support import seed, snapshot
 
@@ -503,8 +506,18 @@ def test_c3_14_a_redirect_whose_identity_claim_went_stale_says_so(registry):
     stale = registry.resolve_type("commentable", ResolveContext(), tier="opus")
     assert stale.outcome == "existing", "5.10 promises the old word still resolves"
     assert stale.type is not None and stale.type.name == "searchable"
-    assert stale.confidence == 1.0, (
-        "the redirect is a GUARANTEE (5.3). Lowering it is the founder's half of Q56"
+    # **SUPERSEDED BY R99, 2026-09-09.** This assertion used to read
+    # `stale.confidence == 1.0`, with the reason *"the redirect is a GUARANTEE (5.3).
+    # Lowering it is the founder's half of Q56."* **The founder took that half** -- his
+    # word was `read` -- so the id now pins the OPPOSITE, and INTERFACE.md rule 5.3.2-3
+    # is struck rather than deleted for the same reason this comment exists.
+    assert stale.confidence is not None and stale.confidence < 1.0, (
+        "R99 took Q56's expensive half: a redirect whose identity claim went stale no "
+        "longer answers at the guarantee (INTERFACE.md 5.3, rule 5.3.2-9)"
+    )
+    assert stale.outcome == "existing", (
+        "and it is NOT a refusal -- rule 5.3.2-11. 5.10 still promises the old word "
+        "resolves, so the answer is handed over with the vouching withdrawn"
     )
     assert "identity_stale" in stale.type.warnings, (
         "the two predicate extents this 1.0 stands on no longer agree, and the answer "
@@ -770,3 +783,654 @@ def test_c3_19_every_alternative_label_names_a_row(adapter, make_registry):
     assert len({label for label, _ in out.alternatives}) == len(out.alternatives), (
         "a taken word is listed once, or `known` double-counts it", out.alternatives
     )
+
+
+# ============================================================ R99, row 6f: Q56's
+# expensive half. INTERFACE.md rules 5.3.2-9 to 5.3.2-13. Founder ruling R99,
+# 2026-09-09, his word `read`: the claim is verified where it is MADE, and this call
+# may act on what the verification found.
+
+
+def _stale_predicate_store(registry):
+    """A LEGAL join, then ordinary vocabulary growth. Door 1's own walk.
+
+    Returns nothing; the store is left with `commentable` retired toward `searchable`,
+    written extents `{note}` and `{doc, note}`, and no governance act in between.
+    """
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+    retired = registry.retire(
+        "commentable", "superseded", retired_by="user:sd", successor="searchable"
+    )
+    assert isinstance(retired, TypeEntry), retired
+    seed(registry, "doc", predicates=["searchable"])
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c3_20_the_stale_confidence_is_derived_from_the_extents_not_chosen(registry):
+    """**Rule 5.3.2-9.** The number is `min(resolver_score, Jaccard(L, R))`.
+
+    **This id exists to make a CONSTANT fail.** Row 6f pre-registered, before the
+    resolver was opened, that the confidence *"must be computed from a quantity this
+    call already reads"* and that *"replacing the derivation with a constant must make
+    at least one contract id fail"* -- because row 4d's third round found two rule rows
+    that could be deleted with the whole suite green. So this test drives **two stores
+    whose Jaccard differs** and asserts each answer equals the value computed from the
+    extents the test reads back itself. Any constant fails one of them, and a
+    containment ratio fails the first.
+    """
+    _stale_predicate_store(registry)
+
+    stale = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    left, _, _ = registry._written_extent("default", "commentable", include_retired=True)
+    right, _, _ = registry._written_extent("default", "searchable", include_retired=True)
+    lset, rset = set(left), set(right)
+    expected = len(lset & rset) / len(lset | rset)
+    assert stale.confidence == pytest.approx(expected), (
+        f"5.3.2-9: the confidence is the extents' own Jaccard, not a chosen number. "
+        f"L={sorted(lset)} R={sorted(rset)} -> {expected}, got {stale.confidence}"
+    )
+    assert expected == pytest.approx(0.5), (
+        "the fixture's own arithmetic, stated so a silent fixture change is visible"
+    )
+    # **Containment would score this 1.0 and hide it** -- `{note}` is a subset of
+    # `{doc, note}`. 5.3.2's own note refuses containment for the warning in those
+    # words, and this line is why the same objection binds the score.
+    assert stale.confidence < 1.0, "containment would have answered 1.0 here"
+
+    # A SECOND store with a different cardinality, so no single constant passes both.
+    for name in ("taggable", "labelable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "post", predicates=["taggable", "labelable"])
+    assert isinstance(
+        registry.retire("taggable", "superseded", retired_by="user:sd", successor="labelable"),
+        TypeEntry,
+    )
+    for extra in ("page", "clip", "reel"):
+        seed(registry, extra, predicates=["labelable"])
+    second = registry.resolve_type("taggable", ResolveContext(), tier="opus")
+    l2, _, _ = registry._written_extent("default", "taggable", include_retired=True)
+    r2, _, _ = registry._written_extent("default", "labelable", include_retired=True)
+    expected2 = len(set(l2) & set(r2)) / len(set(l2) | set(r2))
+    assert second.confidence == pytest.approx(expected2)
+    assert expected2 != pytest.approx(expected), (
+        "the two stores must disagree, or a constant passes this test"
+    )
+
+
+@pytest.mark.requires_capability("stores_attributes", "indexes_membership")
+def test_c3_21_an_action_familys_identity_is_verified_by_its_declaration(registry):
+    """**Rule 5.3.2-10.** `kind="action"` has no extent, so its own operand is used.
+
+    This is the governance register's entry **A3** at the read: `resolve_type` answered
+    the dead word with the survivor at **1.0** while `preflight` answered it with the
+    tombstone's policy, and a Haiku-tier actor recorded `applied`. Statement `E` at
+    `kind="action"`, and the 4d gate could not see it -- it requires BOTH sides to be
+    `kind="predicate"`.
+
+    **A3 is NOT closed by this id.** Its write doors still let the collapse through on
+    a key they do not compare; this pins only that the READ stops delivering a clean
+    1.0 over it.
+    """
+    common = dict(
+        approval_mode="auto",
+        min_auto_tier="haiku",
+        reversibility="reversible",
+        effects=(Effect(op="propose_type", namespace="default", kind="entity"),),
+    )
+    seed(registry, "old_verb", kind="action", attributes=action_attributes(**common))
+    seed(registry, "guardrail", kind="predicate", definition="a capability")
+    seed(
+        registry,
+        "new_verb",
+        kind="action",
+        attributes=action_attributes(
+            inputs=(InputSpec(name="target", ref="instance", kinds=("entity",)),),
+            preconditions=(
+                Precondition(
+                    kind="predicate_holds",
+                    subject="target",
+                    predicate="guardrail",
+                    why="the survivor protects this verb; the absorbed family did not",
+                ),
+            ),
+            **common,
+        ),
+    )
+    retired = registry.retire(
+        "old_verb", "superseded", retired_by="user:sd", successor="new_verb"
+    )
+    assert isinstance(retired, TypeEntry), (
+        f"the four governance keys AGREE, so the write doors permit this collapse -- "
+        f"that is the point of the fixture, and it is Q99's subject: {retired}"
+    )
+
+    answer = registry.resolve_type("old_verb", ResolveContext(), tier="haiku")
+    assert answer.outcome == "existing" and answer.type is not None
+    assert answer.type.name == "new_verb", "5.10 still promises the old word resolves"
+    assert answer.confidence is not None and answer.confidence < 1.0, (
+        "A3's delivery step: a machine actor must not receive a CLEAN 1.0 over two "
+        "families whose declarations do not agree (rule 5.3.2-10)"
+    )
+    assert "identity_stale" in answer.type.warnings, (
+        "the SAME value, not a minted variant -- it names the same fact, and R71's "
+        "precedent is that a value gains carriers rather than growing a twin"
+    )
+
+    # **The control, and it is the half a careless fix breaks:** two families whose
+    # declarations agree are NOT stale, and still answer at 1.0.
+    seed(registry, "alpha_verb", kind="action", attributes=action_attributes(**common))
+    seed(registry, "beta_verb", kind="action", attributes=action_attributes(**common))
+    assert isinstance(
+        registry.retire(
+            "alpha_verb", "superseded", retired_by="user:sd", successor="beta_verb"
+        ),
+        TypeEntry,
+    )
+    agreeing = registry.resolve_type("alpha_verb", ResolveContext(), tier="haiku")
+    assert agreeing.confidence == 1.0, (
+        "identical declarations are not a stale identity; a warning here is a signal "
+        "that never turns off"
+    )
+    assert agreeing.type is not None
+    assert "identity_stale" not in agreeing.type.warnings
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c3_22_a_stale_redirect_is_never_a_refusal(registry):
+    """**Rule 5.3.2-11.** R99 authorised refusing. This call does not, and here is why.
+
+    In every state reachable by ordinary calls the registry **can** name the correct
+    answer -- 5.10 promises the old word still resolves -- so refusing would withhold a
+    correct answer. Refusing on an *unknowable* read would additionally ban this door on
+    a legal declared-degraded backend, which is `C10-09`'s, `C3-13`'s and `C12-13`'s
+    lesson three times over.
+
+    **The id exists so that a later row cannot quietly turn the score into a refusal**
+    without a founder ruling saying so.
+    """
+    _stale_predicate_store(registry)
+    answer = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert not isinstance(answer, Refusal), "5.3 returns a Resolution; it has no refusal"
+    assert answer.outcome == "existing", (
+        "R99 permits refusing and row 6f declines to -- the answer is handed over with "
+        "the vouching withdrawn, not withheld"
+    )
+    assert answer.type is not None and answer.type.name == "searchable"
+
+
+@pytest.mark.requires_capability("indexes_membership", "stores_events")
+def test_c3_23_min_confidence_governs_the_redirect_path(registry):
+    """**Rule 5.3.2-12.** The CALLER's bar decides, and until row 6f it could not.
+
+    **[Observed, row 6f]** the exact-hit redirect returned at `registry.py:1705`,
+    *before* the `min_confidence` test at `1707`, so `min_confidence=2.0` still answered
+    `existing` at 1.0. That was invisible while the redirect always answered 1.0 and
+    goes live the moment 5.3.2-9 lowers it: a score no bar can act on is decoration.
+
+    Honouring the bar here is **5.3's own stated rule** -- *"Below `min_confidence`,
+    return `none` with `alternatives` populated. Never return the best of a bad set as
+    `existing`"* -- applied to the one path that returned before reaching it.
+    """
+    _stale_predicate_store(registry)
+
+    baseline = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    scored = baseline.confidence
+    assert scored is not None and scored < 1.0
+
+    # **A caller that set no bar is untouched.** This is the v0-caller line: R99 costs
+    # a caller who never asked for anything exactly nothing.
+    default = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert default.outcome == "existing", "min_confidence defaults to 0.0 -- no change"
+
+    at_bar = registry.resolve_type(
+        "commentable", ResolveContext(), tier="opus", min_confidence=scored
+    )
+    assert at_bar.outcome == "existing", "the bar is a floor, not a strict inequality"
+
+    above = registry.resolve_type(
+        "commentable", ResolveContext(), tier="opus", min_confidence=1.0
+    )
+    assert above.outcome == "none", (
+        "5.3: never return the best of a bad set as `existing` -- and this path used to"
+    )
+    assert above.type is None
+    assert any(label == "searchable" for label, _ in above.alternatives), (
+        "the survivor is still NAMED. Rule 5.3.2-11 refuses nothing, so a caller that "
+        "wants it anyway can take it out of `alternatives`"
+    )
+    _assert_rule_k(above, "the successor path, below the bar")
+
+    # **The ALIAS path below the bar, and it is here because the first cut of this id
+    # drove only the successor path -- so the defect two reviewers found lived on the
+    # branch no new test reached.** A merge writes the alias, and a variant spelling
+    # reaches the survivor through the near-miss list, whose first entry is the winner
+    # itself. Appending the survivor there listed one word twice.
+    for name in ("taggable", "labelable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "post", predicates=["taggable", "labelable"])
+    merged = registry.merge_types(
+        "taggable", "labelable", "same capability", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    seed(registry, "clip", predicates=["labelable"])
+
+    for spelling in ("taggable", "Taggable", "TAGGABLE"):
+        under = registry.resolve_type(
+            spelling, ResolveContext(), tier="opus", min_confidence=1.0
+        )
+        _assert_rule_k(under, f"the alias path below the bar, spelled {spelling!r}")
+
+
+def _assert_rule_k(resolution, where: str) -> None:
+    """Rule K, asserted on a path this row added. `C3-19`'s sentence, at a new door.
+
+    One word names one row, so it is listed ONCE -- otherwise `known` counts a single
+    taken word twice, and a caller reading `alternatives` gets two different confidences
+    for the same name and cannot tell which this call stands behind.
+    """
+    labels = [label for label, _ in resolution.alternatives]
+    assert len(labels) == len(set(labels)), (
+        f"a taken word is listed once, or `known` double-counts it ({where}): "
+        f"{resolution.alternatives}"
+    )
+    assert resolution.known == len(resolution.alternatives), (
+        f"Rule K ({where}): known={resolution.known} vs "
+        f"{len(resolution.alternatives)} alternatives"
+    )
+
+
+# ---------------------------------------------------------------- ROUND 1's SURVIVORS
+# Four mutations of rules 5.3.2-9, -10 and -12 passed the entire C3+C10 suite. Each id
+# below exists because of one of them, and each names the mutation it kills. An id that
+# does not kill a mutation of its own rule is decoration -- row 4d proved that by
+# deleting two rule rows with the suite green.
+
+
+@pytest.mark.requires_capability("stores_attributes", "indexes_membership")
+def test_c3_24_a_reordered_declaration_is_the_SAME_declaration(registry):
+    """**Rule 5.3.2-10, the order half.** Kills: `_unordered` returning a list.
+
+    **This is row 6d's round-3 defect, one call along.** Its A3 fix compared `effects`
+    with `!=`, so two families whose governance was IDENTICAL and whose effects were
+    merely written in a different order were refused **non-overridably at all three
+    doors** -- it **CLOSED A LEGAL OPERATION** for two rounds. This row's read reuses
+    `effect_identity` and compares the other declared lists as sets so it cannot repeat
+    that, and `ACTIONS.md` §1's non-goals say *"no ordering"* outright.
+
+    **That protection was UNPINNED until this id.** Round 1's mutation lens reverted the
+    frozenset in `_unordered` to a plain list -- making the comparison order-sensitive
+    again -- and the entire C3 and C10 suite stayed green, because every fixture wrote
+    its lists in the same order on both sides.
+    """
+    first = Effect(op="propose_type", namespace="default", kind="entity")
+    second = Effect(
+        op="host_state",
+        why="the family also mutates state this protocol does not model",
+    )
+    common = dict(approval_mode="human", min_auto_tier=None, reversibility="irreversible")
+    # **`reachability` is here because the first cut of this id varied only `effects`,
+    # and `effects` is compared by `_effect_identities` -- a DIFFERENT helper.** Round
+    # 2's record lens caught it: the id was credited with killing the `_unordered`
+    # mutation and did not exercise `_unordered` at all. Worse, the row's own mutation
+    # script had reported a kill, because its unanchored string replace hit BOTH helpers'
+    # identical `return frozenset(out)` line and the kill belonged to the other one.
+    # These two lists differ only in order and go through `_unordered`.
+    reach_a = ["mcp", "http", "cli"]
+    reach_b = ["cli", "mcp", "http"]
+
+    seed(
+        registry,
+        "old_verb",
+        kind="action",
+        attributes=action_attributes(
+            effects=(first, second), reachability=reach_a, **common
+        ),
+    )
+    seed(
+        registry,
+        "new_verb",
+        kind="action",
+        # **The same declaration, written backwards.** Nothing about what either family
+        # may do differs; only the order the entries were typed in. `effects` exercises
+        # `_effect_identities`, `reachability` exercises `_unordered`, and BOTH have to
+        # be order-blind or this pair scores apart.
+        attributes=action_attributes(
+            effects=(second, first), reachability=reach_b, **common
+        ),
+    )
+    assert isinstance(
+        registry.retire("old_verb", "superseded", retired_by="user:sd", successor="new_verb"),
+        TypeEntry,
+    )
+
+    answer = registry.resolve_type("old_verb", ResolveContext(), tier="haiku")
+    assert answer.outcome == "existing" and answer.type is not None
+    assert sorted(reach_a) == sorted(reach_b) and reach_a != reach_b, (
+        "the fixture must differ ONLY in order, or this id asserts nothing about ordering"
+    )
+    assert answer.confidence == 1.0, (
+        "two identical declarations written in a different order are the SAME "
+        "declaration -- ACTIONS.md 1 says 'no ordering', and scoring them apart is row "
+        "6d's round-3 defect (it CLOSED A LEGAL OPERATION) repeated at the read"
+    )
+    assert "identity_stale" not in answer.type.warnings
+
+
+@pytest.mark.requires_capability("stores_attributes", "indexes_membership")
+def test_c3_25_an_UNDECLARED_action_family_is_unknowable_not_agreeing(registry):
+    """**Rule 5.3.2-10, Rule U's half.** Kills: deleting `_declaration_agreement`'s guard.
+
+    `ACTIONS.md` §2.2-1 permits a family to register with no declaration. Collapsing one
+    of those into a family that declares **human approval only and irreversible** is not
+    evidence the two are one thing -- it is **no evidence at all**, and the FIRST kill-row
+    trip is what happens when a guard treats those as the same.
+
+    Round 1's mutation lens deleted the `if not mine or not theirs: return (True, None)`
+    guard and the suite stayed green.
+
+    **Correction, round 2.** This docstring first said the deleted guard let the pair
+    *"fall through to `(False, 1.0)`, so an undeclared family silently became FULLY
+    VOUCHED."* **That value was asserted rather than traced.** Computed against this
+    fixture, the real fall-through is **`(True, 0.625)`** -- five of the eight keys
+    coincidentally agree, because an absent key and a default-valued one compare equal
+    on several of them. The mutation IS still caught (0.625 is not the asserted `None`),
+    so the kill claim holds; the mechanism behind it did not, and in a row whose whole
+    discipline is that such claims are checked, an unchecked one is a finding whatever
+    the verdict it supported. Caught by round 2's record lens.
+    """
+    seed(registry, "old_verb", kind="action", attributes={})
+    seed(
+        registry,
+        "new_verb",
+        kind="action",
+        attributes=action_attributes(
+            approval_mode="human",
+            min_auto_tier=None,
+            reversibility="irreversible",
+            effects=(Effect(op="propose_type", namespace="default", kind="entity"),),
+        ),
+    )
+    assert isinstance(
+        registry.retire("old_verb", "superseded", retired_by="user:sd", successor="new_verb"),
+        TypeEntry,
+    )
+
+    answer = registry.resolve_type("old_verb", ResolveContext(), tier="haiku")
+    assert answer.outcome == "existing", "5.10 still promises the old word resolves"
+    assert answer.confidence is None, (
+        "a family that DECLARED NOTHING is not a family that declared the same thing. "
+        "Rule U: unknowable is not equal, and it is not 0.0 either"
+    )
+    assert answer.type is not None and "identity_stale" in answer.type.warnings
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c3_26_an_unscorable_identity_does_not_clear_a_bar(registry, adapter, make_registry):
+    """**Rule 5.3.2-12, Rule U's half.** Kills: `_clears` returning True on `None`.
+
+    A caller that asks for `min_confidence` and gets *we could not score this* has not
+    been told the answer clears its bar. §5.3's rule is *"never return the best of a bad
+    set as `existing`"*, and an unscored identity is not a good set.
+
+    Round 1's mutation lens flipped `if scored is None: return False` to `return True`
+    and the suite stayed green, because every `min_confidence` case used a concretely
+    SCORED pair and every unscorable case used no bar. The two halves were each covered
+    and their INTERSECTION -- the only place the branch lives -- was not.
+    """
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+    assert isinstance(
+        registry.retire(
+            "commentable", "superseded", retired_by="user:sd", successor="searchable"
+        ),
+        TypeEntry,
+    )
+    seed(registry, "doc", predicates=["searchable"])
+
+    # Joined on a CAPABLE backend, then read through one that cannot compute an extent.
+    # That is not exotic: it is one deployment reading another's store, which is
+    # `PACKAGE.md` 2.6's production path.
+    blind = make_registry(
+        DegradedAdapter(adapter, indexes_membership=False), approval_policy="auto"
+    )
+    unscored = blind.resolve_type("commentable", ResolveContext(), tier="opus")
+    # **This ASSERTS where it used to SKIP, and the distinction is the finding.** The
+    # first cut read `if unscored.confidence is not None: pytest.skip(...)` -- a skip
+    # decided by **the value this id exists to assert**. An ENVIRONMENT skip says *this
+    # configuration cannot pose the question* and is legitimate; a RESULT skip says *the
+    # answer was not the one I was going to assert* and dresses it as coverage. This
+    # backend declines `indexes_membership` by construction, so the question is always
+    # posed and no configuration makes skipping honest.
+    #
+    # Third occurrence of the shape in this project: row 4d found it in `C3-14`, row 6f
+    # round 1 found it in `C10-16`, and row 6f then wrote it into this id in the same
+    # round it graded the finding. Rule **5.3.2-15** is what it should have pinned.
+    assert unscored.confidence is None, (
+        f"rule 5.3.2-15: a read that could not compute either extent answers `None` -- "
+        f"Rule U at the confidence field, not 0.0 and not a refusal. Got "
+        f"{unscored.confidence!r}"
+    )
+    assert unscored.outcome == "existing", "with NO bar, an unscorable answer still answers"
+
+    barred = blind.resolve_type(
+        "commentable", ResolveContext(), tier="opus", min_confidence=0.1
+    )
+    assert barred.outcome == "none", (
+        "the caller asked for 0.1 and the registry cannot say whether the identity "
+        "holds at all -- Rule U: 'we could not score this' is not 'this cleared 0.1'"
+    )
+
+
+class _FixedScoreResolver:
+    """A resolver that rates an exact alias at a FIXED score below 1.0.
+
+    `PACKAGE.md` 2.6's **production path**: a deployment supplying its own resolver.
+    5.3's own `C3-11` rationale is that *"a promise kept only because the shipped scorer
+    happens to rate an exact name 1.0 is a promise a deployment supplying its own
+    resolver does not get"* -- and this class is that deployment.
+    """
+
+    def __init__(self, value: float) -> None:
+        self.value = value
+
+    def score(self, candidate, context, known, *, tier):
+        out = []
+        for record in known:
+            words = [getattr(record, "name", "")] + list(getattr(record, "aliases", ()) or ())
+            if any(identity_key(w) == identity_key(candidate) for w in words):
+                out.append((record.name, self.value))
+        return out
+
+    def classify(self, candidate, context, *, tier):
+        return None
+
+
+@pytest.mark.requires_capability("indexes_membership", "stores_aliases", "stores_events")
+def test_c3_27_the_confidence_is_the_MIN_of_both_halves(adapter, make_registry):
+    """**Rule 5.3.2-14.** The composition is `min`, and BOTH halves are load-bearing.
+
+    **This id replaces one built on a false premise, and the replacement is the finding.**
+    Round 1 could not kill a mutation of `_compose` to `agreement` alone, instrumented the
+    call, saw the resolver's score was `1.0` every time, and concluded the `min` was
+    *unreachable by construction* -- tagging rule 5.3.2-9 `prose-only:`. **A round-2 lens
+    disproved it by building a legal custom resolver.** Re-measured across a range, the
+    composition is reached for scores **0.9 through 1.0**; the original instrumentation had
+    tested ONE score, found no call, and generalised from a single data point.
+
+    So the `min` is observable, and observing it needs the **agreement to exceed the
+    score** -- which the round-1 fixtures never arranged, because a two-member extent gives
+    `J = 0.5` and every score that reaches the branch is above it. Twenty shared members
+    and one latecomer give `J = 20/21`, above a `0.94` resolver, and then the SCORE is the
+    weaker half and `min` must take it.
+    """
+    registry = make_registry(
+        adapter, resolver=_FixedScoreResolver(0.94), approval_policy="auto"
+    )
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    for i in range(20):
+        seed(registry, f"shared{i:02d}", predicates=["commentable", "searchable"])
+    merged = registry.merge_types(
+        "commentable", "searchable", "same capability", merged_by="user:sd",
+        acknowledge=["definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    seed(registry, "latecomer", predicates=["searchable"])
+
+    left, _, _ = registry._written_extent("default", "commentable", include_retired=True)
+    right, _, _ = registry._written_extent("default", "searchable", include_retired=True)
+    lset, rset = set(left), set(right)
+    agreement = len(lset & rset) / len(lset | rset)
+    assert agreement > 0.94, (
+        f"the fixture must put the AGREEMENT ABOVE the score or the `min` is invisible "
+        f"-- that is exactly why round 1 could not see it. J={agreement}"
+    )
+
+    answer = registry.resolve_type("Commentable", ResolveContext(), tier="opus")
+    if answer.type is None or answer.type.name != "searchable":
+        pytest.skip("this leg does not reach the alias redirect for a variant spelling")
+    assert answer.confidence == pytest.approx(0.94), (
+        f"5.3.2-14: the resolver's score is the WEAKER half here, so `min` takes it. "
+        f"Returning the agreement alone would answer {agreement} and vouch for more than "
+        f"this deployment's resolver did. Got {answer.confidence!r}"
+    )
+    assert answer.confidence < agreement, "and it must be strictly the lower of the two"
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c3_28_an_unknowable_read_answers_None_not_zero(registry, adapter, make_registry):
+    """**Rule 5.3.2-15.** The cell where 5.3.2-9's formula has no input.
+
+    A read that could not compute either extent cannot produce a Jaccard, so it produces
+    **`None`** -- 5.3's own *"`None` means 'did not score', NOT zero."* Scoring it `0.0`
+    would assert the two words share no members, the FIRST trip's operand pointing the
+    other way; refusing would ban the door on a legal degraded backend (5.3.2-11).
+
+    **This rule existed only in prose until round 2**, found by a supervisor spec-read
+    after four lenses on the implementation missed it: 5.3.2-9 defined the confidence as a
+    formula over the extents and said nothing about the state where there are none, so the
+    one cell with no input was the one cell with no rule -- and `C3-26`, the id that
+    touched it, skipped on the value instead of asserting it.
+    """
+    for name in ("commentable", "searchable"):
+        seed(registry, name, kind="predicate", definition="a capability")
+    seed(registry, "note", predicates=["commentable", "searchable"])
+    assert isinstance(
+        registry.retire(
+            "commentable", "superseded", retired_by="user:sd", successor="searchable"
+        ),
+        TypeEntry,
+    )
+    seed(registry, "doc", predicates=["searchable"])
+
+    scored = registry.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert scored.confidence is not None and scored.confidence < 1.0, (
+        "the capable leg must SCORE this pair, or the contrast below asserts nothing"
+    )
+
+    blind = make_registry(
+        DegradedAdapter(adapter, indexes_membership=False), approval_policy="auto"
+    )
+    unknowable = blind.resolve_type("commentable", ResolveContext(), tier="opus")
+    assert unknowable.outcome == "existing", "5.10 still promises the old word resolves"
+    assert unknowable.confidence is None, (
+        f"5.3.2-15: not 0.0, not a number, not a refusal -- {unknowable.confidence!r}"
+    )
+    assert unknowable.type is not None
+    assert "identity_stale" in unknowable.type.warnings
+
+    # **The property 5.3.2-15 states rather than leaves emergent:** ONE store, two
+    # readers, two different confidences for one identity claim. This confidence measures
+    # what THIS READER could establish, not the identity alone.
+    assert scored.confidence != unknowable.confidence
+
+
+@pytest.mark.requires_capability("stores_attributes", "indexes_membership")
+def test_c3_29_a_key_declared_EMPTY_is_not_a_key_never_declared(registry):
+    """**Rule 5.3.2-16.** `E`'s FAMILY, found by round 2 in this row's own operand.
+
+    Not statement `E`
+    itself -- `E` is a WRITE-time fact treated as true at READ time. This is a comparison defect, and what
+    it belongs to is 5.3's own named family: *a confident answer standing in for a fact the system had or
+    could not have*.
+
+    `ACTIONS.md` 2.2: *"an empty list is a positive declaration -- this host exposes me on
+    no named surface -- not a forgotten field."* The first cut of the action operand
+    derived its key set from the union of the two stored dicts and compared
+    `mine.get(key)` against `theirs.get(key)`, so a family positively declaring
+    `reachability=[]` and one that never declared the key **both flattened to the same
+    empty set** and the pair answered a **clean 1.0 with no warning** -- the exact harm
+    this row exists to remove, reached through the operand it added to remove it.
+
+    It survived four lenses in round 1 because `action_attributes()` always writes all
+    eight keys, so no fixture in the suite could construct the absence at all.
+    """
+    declared = action_attributes(
+        approval_mode="auto",
+        min_auto_tier="haiku",
+        reversibility="reversible",
+        effects=(Effect(op="propose_type", namespace="default", kind="entity"),),
+        reachability=["mcp"],
+    )
+    says_none = dict(declared, reachability=[])   # positively declares NO surface
+    never_said = {k: v for k, v in declared.items() if k != "reachability"}
+    assert "reachability" in says_none and "reachability" not in never_said
+
+    seed(registry, "old_verb", kind="action", attributes=says_none)
+    seed(registry, "new_verb", kind="action", attributes=never_said)
+
+    holds, agreement = registry._identity_agreement(
+        "default",
+        registry._require("default", "old_verb"),
+        registry._require("default", "new_verb"),
+    )
+    assert holds is True and agreement is not None and agreement < 1.0, (
+        f"5.3.2-16: declaring a key EMPTY is not the same as never declaring it, and "
+        f"scoring them equal is a clean 1.0 over two families that differ. "
+        f"Got holds={holds!r} agreement={agreement!r}"
+    )
+
+    # **The other half of 5.3.2-16, and it is what makes the key set FIXED rather than
+    # discovered.** A key absent from BOTH sides is a fact the two families share --
+    # neither declared it -- so it counts toward agreement out of the full eight. Deriving
+    # the denominator from whatever happens to be stored makes the SAME divergence score
+    # differently depending on unrelated absent keys, which is a measurement that moves
+    # when nothing about the identity moved.
+    pair = action_attributes(
+        approval_mode="auto",
+        min_auto_tier="haiku",
+        reversibility="reversible",
+        effects=(Effect(op="propose_type", namespace="default", kind="entity"),),
+        reachability=["mcp"],
+    )
+    both_omit = {k: v for k, v in pair.items() if k != "payload_schema"}
+    left_side = dict(both_omit, min_auto_tier="haiku")
+    right_side = dict(both_omit, min_auto_tier="opus")   # exactly ONE key differs
+    seed(registry, "alpha_verb", kind="action", attributes=left_side)
+    seed(registry, "beta_verb", kind="action", attributes=right_side)
+    _, shared_absent = registry._identity_agreement(
+        "default",
+        registry._require("default", "alpha_verb"),
+        registry._require("default", "beta_verb"),
+    )
+    assert shared_absent == pytest.approx(7 / 8), (
+        f"seven of ACTIONS.md 2.2's EIGHT keys agree -- `payload_schema` is absent from "
+        f"both, which is agreement, and only `min_auto_tier` differs. Deriving the key "
+        f"set from the stored rows would score this {6 / 7:.4f} over seven keys instead. "
+        f"Got {shared_absent!r}"
+    )
+
+    out = registry.retire(
+        "old_verb", "superseded", retired_by="user:sd", successor="new_verb"
+    )
+    if isinstance(out, Refusal):
+        pytest.skip(f"the write door refuses this pair on this leg: {out.reason}")
+    answer = registry.resolve_type("old_verb", ResolveContext(), tier="haiku")
+    assert answer.confidence is not None and answer.confidence < 1.0, (
+        "and the read must not hand a machine actor a CLEAN 1.0 over it"
+    )
+    assert answer.type is not None and "identity_stale" in answer.type.warnings

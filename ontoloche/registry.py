@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import json
 import logging
 import re
 import uuid
@@ -1291,75 +1292,352 @@ class Registry:
             return tuple(names), None, why
         return tuple(names), len(names), None
 
-    def _identity_stale(
+    def _identity_agreement(
         self, namespace: str, written: TypeRecord | None, answered: TypeRecord | None
-    ) -> bool:
-        """Is the identity claim this read is about to make still TRUE? **Q56's cheap half.**
+    ) -> tuple[bool, float | None]:
+        """**Q56, BOTH halves.** Is the claim stale, and HOW MUCH of it still holds?
 
         ``written`` is the row for the word the caller asked about (it may be a
         tombstone, or ``None`` when the word names nothing); ``answered`` is the entry
-        the registry is about to hand back at confidence 1.0 through an alias or a
-        successor. ``True`` means the two predicate extents that claim stands on no
-        longer demonstrably agree.
+        the registry is about to hand back through an alias or a successor.
 
         **This is the kill row's SIXTH trip, and the only fix in this project that is
         not another guard.** Trips 1-5 were all one sentence -- *the guard did not look
         properly* -- at an unknowable extent, at an empty one, at all, through a
         different field, at a partial page. The sixth is **the guard looked correctly,
-        and then the fact changed**: every identity guard in this registry compares
-        predicate extents at **write** time, `resolve_type` grants confidence 1.0 at
-        **read** time, and the vocabulary moves in between. Row 4c closed all four doors
-        the trip came through; it did not close the gap, because closing the gap means
-        verifying the claim where it is MADE. **[Observed]** Door 1 needs nothing
-        unusual: two individually legal merges and one new type declaring two existing
-        predicates, and `resolve_type` answers at 1.0 over a pair `merge_types` refuses
-        non-overridably when asked directly.
+        and then the fact changed**: every identity guard in this registry compares at
+        **write** time, this call granted confidence 1.0 at **read** time, and the
+        vocabulary moves in between. Row 4c closed all four doors the trip came through;
+        it did not close the gap, because closing the gap means verifying the claim
+        where it is MADE. **[Observed]** Door 1 needs nothing unusual: two individually
+        legal merges and one new type declaring two existing predicates.
 
         > **Rule U's fourth operand.** Unknowable is not equal. Empty is not equal.
         > Partial is not equal. And **STALE is not equal**.
 
-        **What this row is allowed to do, and what it is not.** `INTERFACE.md` 5.3 calls
-        the redirect at 1.0 a registry **guarantee**, and changing that -- refusing to
-        answer, or lowering the confidence -- decides what this registry declines to
-        serve. That is the founder's half of **Q56** and is deliberately not taken here.
-        The redirect is returned unchanged, at 1.0, carrying `identity_stale`. The
-        expensive half stays open.
+        Row 6e's audit named that mechanism **statement `E`** and found it delivers the
+        harm in **twenty-one of the twenty-three** kill-row trips -- every other family
+        is a story about a guard, and a failed guard is only a trip when something then
+        answers at 1.0.
 
-        **The comparison is between the two WRITTEN words, and that is the whole point.**
-        After ruling **R54** `_extent` can resolve an identity rather than a word -- and
-        asking *that* question here would be circular, because the merge under
-        examination is exactly what joined the two names into one identity, so the two
-        closures would be equal by construction and this method could never return
-        ``True``. What a stale claim means is that the two words no longer denote the
-        same set **of their own accord**, so the guards' own reading is the one to make --
-        :meth:`_written_extent`, which ruling **R64** named in row 6b precisely so this
-        sentence would stop having to be written out. ``_extent``'s ``identity`` is a
-        **required** keyword since that row: no caller can take a reading by accident,
-        and there is no longer a "default" for a later row to flip back.
+        **Row 4d shipped the DETECTION and could not act on it**, because acting changes
+        §5.3's shipped guarantee and *"deciding what this registry declines to serve is
+        not an implementation call."* That was **Q56**, it stood unruled for ten days,
+        and on **2026-09-09 the founder ruled it `read`** ([R99]). This method is the
+        response: it returns the same staleness row 4d detected, **plus the number rule
+        5.3.2-9 puts in `confidence`.**
 
-        Everything else follows the expression the five collapsing guards already share,
-        deliberately and to the letter -- paged to exhaustion, the read's own ``why``
-        folded into ``knowable``, an empty extent no evidence of identical membership
-        (`C10-11`, `C10-09`). **Non-predicate hits pay nothing**: no extent is read, so
-        an ordinary alias on an ordinary entity costs this call zero queries. Nor does a
-        word that names no row of its own -- there is no extent on the left, so no claim
-        about members was ever made and none can have gone stale.
+        Returns ``(stale, agreement)``. ``agreement`` is the number rule **5.3.2-9**
+        puts in `confidence`: ``1.0`` when the claim re-establishes, a fraction when it
+        partly does, and **``None`` when it could not be scored at all** -- Rule U at the
+        confidence field, which `INTERFACE.md` §5.3 already spells *"`None` means 'did
+        not score', NOT zero."*
+
+        **Founder ruling R99 (2026-09-09, his word `read`) is what permits this to
+        exist.** Row 4d could see staleness and could not act on it, because acting
+        changes §5.3's shipped guarantee and *"deciding what this registry declines to
+        serve is not an implementation call."* It is ruled. The detection is unchanged;
+        this is the response.
+
+        **One principle, TWO operands, because an identity claim stands on a different
+        fact per kind** (rules 5.3.2-9 and 5.3.2-10):
+
+        * ``kind="predicate"`` -- the two **written extents**, exactly as row 4d reads
+          them, scored by **Jaccard**: ``|L n R| / |L u R|``. The sets are the ones
+          :meth:`_written_extent` already returns, so **the number costs no new read**.
+        * ``kind="action"`` -- the **governance declaration**, because an action family
+          has no extent at all: §5.10's refusal #2 is skipped for actions by design
+          (`ACTIONS.md` §2.1), which is why row 6d had to give the write doors
+          :meth:`_action_declarations_diverge` instead. Scored as the fraction of
+          ``_GOVERNANCE_KEYS`` that agree. **This is the operand the READ never had, and
+          its absence is statement `E` at `kind="action"` -- the delivery step the
+          governance register's entry A3 is filed for.**
+        * anything else reads nothing, pays nothing and answers ``(False, 1.0)``, which
+          is rule 5.3.2-4's unchanged behaviour and rule 5.3.2-13(b)'s stated residual
+          rather than coverage.
+
+        **Why Jaccard and not containment.** Containment (``|L n R| / |L|``) scores mere
+        growth at ``1.0`` and would hide it. §5.3.2 already refuses containment for the
+        *warning* in those words -- *"weakening it to containment would make the warning
+        miss Door 1"* -- and the same objection disqualifies it for the *score*.
+
+        **A still-agreeing pair is not special-cased.** ``L == R`` gives ``J == 1.0`` and
+        rule 5.3.2-4's unchanged answer falls out of the formula. A rule that has to be
+        written twice is a rule with two chances to disagree with itself, which is the
+        TENTH trip.
+
+        **Rule U governs the unscorable case and it is NOT zero.** An extent that could
+        not be read to exhaustion -- a partial page, or a backend declining
+        ``indexes_membership`` -- yields ``(True, None)``: *the claim did not
+        re-establish, and we cannot say how far off it is.* Scoring that ``0.0`` would
+        be the FIRST trip's operand pointing the other way, and refusing it outright
+        would ban this door on a legal declared-degraded backend (`C10-09`, `C3-13`,
+        `C12-13`) -- which is rule 5.3.2-11's reason for refusing nothing here.
         """
         if written is None or answered is None:
+            return (False, 1.0)
+
+        if written.kind == "predicate" and answered.kind == "predicate":
+            left_names, _, left_why = self._written_extent(
+                namespace, written.name, include_retired=True
+            )
+            right_names, _, right_why = self._written_extent(
+                namespace, answered.name, include_retired=True
+            )
+            knowable = (
+                self.caps.indexes_membership and left_why is None and right_why is None
+            )
+            left, right = set(left_names), set(right_names)
+            # Row 4d's condition, unchanged to the letter -- `bool(left)` is trip 2's
+            # rule that an EMPTY extent is no evidence of identical membership.
+            if knowable and bool(left) and left == right:
+                return (False, 1.0)
+            if not knowable:
+                return (True, None)
+            union = left | right
+            # `union` is empty only when both extents are empty, which `bool(left)`
+            # above has already sent down the stale branch -- so this is Rule U, not a
+            # division guard, and it says so rather than returning a quiet 0.0.
+            return (True, (len(left & right) / len(union)) if union else None)
+
+        if written.kind == "action" and answered.kind == "action":
+            return self._declaration_agreement(written, answered)
+
+        return (False, 1.0)
+
+    #: **`ACTIONS.md` 2.2's EIGHT declared keys, fixed here rather than discovered from
+    #: the rows.** Round 2's generalist lens found the hole: deriving the key set from
+    #: ``set(mine) | set(theirs)`` means a key **ABSENT** from both dicts is never
+    #: compared, and a key absent from ONE was compared against ``None`` -- which
+    #: :meth:`_unordered` and :meth:`_effect_identities` both flatten to the same empty
+    #: set as a positively declared ``[]``. `ACTIONS.md` 2.2 is explicit that the
+    #: distinction is load-bearing: *"an empty list is a positive declaration -- this
+    #: host exposes me on no named surface -- not a forgotten field."* And
+    #: ``family_declaration_problem`` requires only ``reversibility`` and
+    #: ``approval_mode`` to be present, so a legal, schema-valid family may simply not
+    #: carry the other six.
+    _DECLARED_KEYS = (
+        "approval_mode",
+        "effects",
+        "inputs",
+        "min_auto_tier",
+        "payload_schema",
+        "preconditions",
+        "reachability",
+        "reversibility",
+    )
+
+    #: `ACTIONS.md` 2.2's declared keys whose value is a LIST that carries no ordering.
+    #: 2.5 and 3.3 make `effects` a SET, and 1's non-goals say "no ordering" for the
+    #: rest -- so they are compared as sets here. **This is row 6d's round-3 defect not
+    #: being re-created on the read side:** its own A3 fix compared `effects` with `!=`
+    #: and CLOSED A LEGAL OPERATION for two rounds, refusing two families whose
+    #: governance was identical and whose effects were merely written in a different
+    #: order. A read that scored those two apart would repeat it one call along.
+    _UNORDERED_DECLARED_KEYS = ("effects", "inputs", "preconditions", "reachability")
+
+    def _declaration_agreement(self, written, answered) -> tuple[bool, float | None]:
+        """How much of two action families' DECLARATION still agrees. Rule **5.3.2-10**.
+
+        **Why this compares all EIGHT declared keys while the write doors compare four,
+        and why that asymmetry is deliberate rather than this call being stricter by
+        accident.** It is §3.1's distinction again, at a second surface:
+
+        * `merge_types` and `retire(successor=)` must decide **what to FORBID**. That is
+          a policy question -- *which contradictions are grave enough to refuse a
+          collapse* -- and it is exactly **Q99**, minted 2026-09-09 out of this row's own
+          evidence and sitting unruled on the founder's page. `_GOVERNANCE_KEYS`'s four
+          are what row 6d needed for the case in front of it, not a decision anyone made.
+        * This call decides **what to VOUCH FOR**, and refuses nothing (rule 5.3.2-11).
+          *"These two words denote one thing"* is falsified by **any** declared
+          difference, whether or not that difference is grave enough to forbid the merge.
+
+        So comparing all eight here **does not pre-empt Q99** -- it never refuses, so it
+        never answers Q99's question. It would pre-empt it if this call refused, and rule
+        5.3.2-11 is why it does not.
+
+        **An UNDECLARED family scores `None`, not agreement.** Row 6d's line at the write
+        door -- *a family that has not DECLARED is not a family that declared
+        differently* -- is right about **refusing** and says nothing about vouching. The
+        registry has no evidence a bare family and a human-approval-only one are one
+        thing, and treating an absence as agreement is the FIRST trip's operand exactly:
+        **unknowable is not equal.**
+        """
+        mine = getattr(written, "attributes", None) or {}
+        theirs = getattr(answered, "attributes", None) or {}
+        if not mine or not theirs:
+            return (True, None)
+        keys = self._DECLARED_KEYS
+        agreed = 0
+        for key in keys:
+            here_has, there_has = key in mine, key in theirs
+            if here_has != there_has:
+                # **PRESENT on one side and ABSENT on the other is not agreement, and
+                # this is the second BLOCKING round 2 found.** Comparing `mine.get(key)`
+                # against `theirs.get(key)` handed `None` to a comparison that flattens
+                # it to the same empty set as a declared `[]` -- so a family positively
+                # declaring `reachability=[]` scored **identical** to one that never
+                # declared it, and the pair answered a **clean 1.0** with no warning.
+                # That is statement `E` reached through this row's own new operand.
+                # Rule U, again and at a third operand: *unknowable is not equal.*
+                continue
+            if not here_has:
+                # Absent from BOTH. Neither family said anything, so there is nothing to
+                # disagree about -- unlike the case above, where one of them DID speak.
+                agreed += 1
+                continue
+            left, right = mine[key], theirs[key]
+            if key == "effects":
+                same = self._effect_identities(left) == self._effect_identities(right)
+            elif key in self._UNORDERED_DECLARED_KEYS:
+                same = self._unordered(left) == self._unordered(right)
+            else:
+                same = left == right
+            agreed += 1 if same else 0
+        if agreed == len(keys):
+            return (False, 1.0)
+        return (True, agreed / len(keys))
+
+    @staticmethod
+    def _unordered(raw) -> frozenset:
+        """A declared list as a SET, `ACTIONS.md` §1's *"no ordering"* taken literally.
+
+        A member that will not serialise keeps its own repr rather than being coerced
+        into agreement -- Rule U's shape at a comparison, the same cut
+        :meth:`_effect_identities` makes: *we could not read this* is not *this is the
+        same*.
+        """
+        out = []
+        for item in raw or ():
+            try:
+                out.append(json.dumps(item, sort_keys=True, default=repr))
+            except (TypeError, ValueError):  # pragma: no cover - a shape 2.2 does not define
+                out.append(repr(item))
+        return frozenset(out)
+
+    @staticmethod
+    def _compose(score: float | None, agreement: float | None) -> float | None:
+        """Rule **5.3.2-9**'s ``min``, with Rule U's ``None`` absorbing.
+
+        The answer is no more trustworthy than the weaker of *does the word match* and
+        *does the identity still hold*. **``None`` is not zero and it is not ignored**:
+        if either half could not be scored, the composition could not be scored either,
+        because a ``min`` that silently drops an unknown operand is trip 1's own
+        expression -- *unknowable treated as an answer*.
+        """
+        if score is None or agreement is None:
+            return None
+        return min(score, agreement)
+
+    @staticmethod
+    def _clears(scored: float | None, min_confidence: float) -> bool:
+        """Rule **5.3.2-12**. Does this answer clear the caller's OWN bar?
+
+        **A caller that set no bar is untouched**, which is why the ``<= 0.0`` line is
+        first and why v0 callers pay nothing for R99: ``min_confidence`` defaults to
+        ``0.0`` and every answer clears it, ``None`` included.
+
+        **An unscorable identity does NOT clear a bar somebody asked for.** Rule U: *we
+        could not score this* is not *this scored well enough*, and answering `existing`
+        over it would be §5.3's own *"never return the best of a bad set"* at the one
+        path that used to return before reaching the test.
+        """
+        if min_confidence <= 0.0:
+            return True
+        if scored is None:
             return False
-        if written.kind != "predicate" or answered.kind != "predicate":
-            return False
-        left_names, _, left_why = self._written_extent(
-            namespace, written.name, include_retired=True
+        return scored >= min_confidence
+
+    @staticmethod
+    def _agreement_phrase(written, answered, agreement: float | None) -> str:
+        """The half of `reason` that says HOW MUCH of the claim still holds.
+
+        Rule U in the prose too: an unscorable claim says so in words rather than being
+        described with a number nobody computed.
+        """
+        left = getattr(written, "name", None)
+        right = getattr(answered, "name", None)
+        if agreement is None:
+            return (
+                f"how far {left!r} and {right!r} have grown apart could NOT be scored on "
+                f"this backend, so the confidence is None rather than a number "
+                f"(Rule U -- `None` means did not score, not zero)"
+            )
+        return (
+            f"{left!r} and {right!r} now agree on {agreement:.4f} of the fact that "
+            f"identity claim stands on, and the confidence is lowered to it"
         )
-        right_names, _, right_why = self._written_extent(
-            namespace, answered.name, include_retired=True
+
+    def _identity_below_bar(
+        self,
+        candidate: str,
+        answered,
+        scored: float | None,
+        min_confidence: float,
+        *,
+        tier: str,
+        namespace: str,
+        alternatives,
+        searched,
+        complete: bool,
+        why_incomplete: str,
+    ) -> Resolution:
+        """Rule **5.3.2-12**'s answer: ``none``, with the near misses handed over.
+
+        **This is not a refusal and rule 5.3.2-11 means it.** The registry has not
+        decided the caller may not act; the CALLER set a bar and the answer is under it,
+        which is exactly what §5.3 already promises everywhere else -- *"Below
+        `min_confidence`, return `none` with `alternatives` populated. **Never** return
+        the best of a bad set as `existing`."* The redirect path returned before reaching
+        that test until row 6f, which was invisible while it always answered 1.0.
+
+        The survivor is still named, in `alternatives`, so a caller that wants it anyway
+        can take it. Withholding the answer entirely would be the refusal 5.3.2-11 says
+        this call does not make.
+        """
+        name = getattr(answered, "name", None)
+        # **Rule K, and the defect two reviewers found here independently.** The
+        # alias/near-miss branch builds `alternatives` from the scored list, whose FIRST
+        # entry is the winner itself -- so appending the survivor unconditionally listed
+        # one word TWICE, at two different confidences, and `known` counted it twice.
+        # That is `C3-19`'s own sentence (*"a taken word is listed once, or `known`
+        # double-counts it"*) reintroduced by this row, in the one path this row added.
+        # The exact-hit branch never collided, because what IT passes in `alternatives`
+        # is the DEAD word, not the survivor -- which is exactly why one call site was
+        # broken and the other was not, and why a fix at only one of them would be the
+        # register's own *one call site of N* shape.
+        #
+        # The survivor's entry carries the COMPOSED score, not the raw resolver score:
+        # it is the number this call stands behind, and handing a caller two different
+        # confidences for one word is the thing being fixed.
+        alts = list(alternatives)
+        if name is not None:
+            for index, (label, _score) in enumerate(alts):
+                if label == name:
+                    alts[index] = (name, scored)
+                    break
+            else:
+                alts.append((name, scored))
+        return Resolution(
+            outcome="none",
+            reason=(
+                f"{candidate!r} still resolves to {name!r}, but the identity claim that "
+                f"redirect stands on has gone STALE and scores "
+                + ("None (it could not be scored)" if scored is None else f"{scored:.4f}")
+                + f", under the min_confidence {min_confidence} this caller asked for. "
+                f"The registry is not refusing -- it is answering `none` at YOUR bar, and "
+                f"{name!r} is in `alternatives` (INTERFACE.md 5.3, rules 5.3.2-11 and "
+                f"5.3.2-12)"
+            ),
+            tier=tier,
+            scoped_to=namespace,
+            type=None,
+            confidence=scored,
+            alternatives=tuple(alts),
+            searched_namespaces=searched,
+            complete=complete,
+            why_incomplete=why_incomplete,
         )
-        knowable = (
-            self.caps.indexes_membership and left_why is None and right_why is None
-        )
-        left, right = set(left_names), set(right_names)
-        return not (knowable and bool(left) and left == right)
 
     # =========================================================== 5.3 resolve_type
     def resolve_type(
@@ -1500,17 +1778,33 @@ class Registry:
                     # correct and stays -- 5.10 promises the old word still resolves --
                     # but a claim nobody re-checks is cashed HERE, at the 1.0 5.3 calls
                     # a guarantee. See `_identity_stale`.
-                    stale = self._identity_stale(namespace, exact, live)
+                    stale, agreement = self._identity_agreement(namespace, exact, live)
+                    if stale and not self._clears(agreement, min_confidence):
+                        # Rule 5.3.2-12. The caller's OWN bar, not the registry's --
+                        # rule 5.3.2-11 refuses nothing on its own account.
+                        return self._identity_below_bar(
+                            candidate,
+                            live,
+                            agreement,
+                            min_confidence,
+                            tier=tier,
+                            namespace=namespace,
+                            alternatives=((exact.name, None),) + cross_alts,
+                            searched=searched,
+                            complete=cross_complete,
+                            why_incomplete=cross_why,
+                        )
                     return Resolution(
                         outcome="existing",
                         reason="; ".join(
                             [succession]
                             + (
                                 [
-                                    f"the two predicate extents this redirect stands on "
-                                    f"no longer demonstrably agree, so the identity "
-                                    f"claim written when {candidate!r} was joined to "
-                                    f"{successor!r} has gone STALE (INTERFACE.md 5.3, "
+                                    f"the identity claim written when {candidate!r} was "
+                                    f"joined to {successor!r} has gone STALE and this "
+                                    f"call no longer answers it at 1.0 -- "
+                                    f"{self._agreement_phrase(exact, live, agreement)} "
+                                    f"(INTERFACE.md 5.3, rules 5.3.2-9 and 5.3.2-10, "
                                     f"warning `identity_stale`)"
                                 ]
                                 if stale
@@ -1523,7 +1817,7 @@ class Registry:
                         type=self._entry(
                             live, extra_warnings=("identity_stale",) if stale else ()
                         ),
-                        confidence=1.0,
+                        confidence=agreement,
                         alternatives=((exact.name, None),) + cross_alts,
                         searched_namespaces=searched,
                         complete=cross_complete,
@@ -1660,24 +1954,50 @@ class Registry:
                     ),
                     None,
                 )
-            stale = (
+            agreement: float | None = 1.0
+            stale = False
+            if (
                 entry is not None
                 and matched is not None
                 and not same_word(best_name, candidate)
-                and self._identity_stale(namespace, written, entry)
-            )
+            ):
+                stale, agreement = self._identity_agreement(namespace, written, entry)
             # A look that did not finish has not said the identity is sound.
             unfinished = (
                 matched is not None and written is None and look_why is not None
             )
+            # **Rule 5.3.2-9.** The answer is no more trustworthy than the WEAKER of
+            # *does the word match* and *does the identity still hold*, so the two
+            # compose by `min` rather than the resolver's score standing alone.
+            # Named `composed`, not `scored`: `scored` two hundred lines up is the
+            # resolver's near-miss LIST, and reusing the name for a float shadowed it.
+            # Every path returned before the shadow could leak, so it was a trap rather
+            # than a defect -- and this register's own history is that a trap left in
+            # place is a defect a later row walks into.
+            composed = self._compose(best_score, agreement) if stale else best_score
+            if stale and not self._clears(composed, min_confidence):
+                return self._identity_below_bar(
+                    candidate,
+                    entry,
+                    composed,
+                    min_confidence,
+                    tier=tier,
+                    namespace=namespace,
+                    alternatives=tuple(alternatives),
+                    searched=searched,
+                    complete=cross_complete,
+                    why_incomplete=cross_why,
+                )
             reason_bits.insert(0, f"{best_name!r} matches at {best_score}")
             if stale:
                 reason_bits.insert(
                     1,
                     f"{candidate!r} is answered through {best_name!r}'s aliases, and "
-                    f"the two predicate extents that identity claim stands on no longer "
-                    f"demonstrably agree -- it has gone STALE (INTERFACE.md 5.3, "
-                    f"warning `identity_stale`)",
+                    f"that identity claim has gone STALE, so this call no longer "
+                    f"answers it at 1.0 -- "
+                    f"{self._agreement_phrase(written, entry, agreement)} "
+                    f"(INTERFACE.md 5.3, rules 5.3.2-9 and 5.3.2-10, warning "
+                    f"`identity_stale`)",
                 )
             return Resolution(
                 outcome="existing",
@@ -1697,7 +2017,7 @@ class Registry:
                     if entry
                     else None
                 ),
-                confidence=best_score,
+                confidence=composed,
                 alternatives=tuple(alternatives),
                 searched_namespaces=searched,
                 complete=cross_complete,
