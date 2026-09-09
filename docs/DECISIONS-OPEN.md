@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 7 ruled · 5 FYI**
+**2 open · 7 ruled · 6 FYI**
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -148,6 +148,20 @@ Two evidential reasons: round 3's lens drove the transfer doors and **could not 
 ---
 
 ## F. FYI — no action needed
+
+### 15 · Your `read` ruling is BUILT AND SHIPPED — and the row landed itself NOT CLEAN
+
+*No action. The work you authorised this morning is done; this is what it cost and what it did not fix.*
+
+**What shipped.** `resolve_type` no longer promises `1.0` unconditionally. A stale redirect now carries a **measured** confidence, `min_confidence` governs that path for the first time, and verification covers action families by their governance declaration as well as predicates by their extents. Ten new contract ids, and **no new value in either closed vocabulary** — the change adds no new way for the registry to say no. Full record: [`6F-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/6F-RUN.md).
+
+**I verified it myself rather than countersigning the row's report**, because twice today I repeated a claim I had not checked. All four gates exit 0, the record is indexed, the tree is clean and it is genuinely on `origin`. **I re-ran the row's own probe and reproduced its table exactly**: the walk that used to hand a machine actor a **clean 1.0** now answers **0.75** with a staleness warning, and the walk with no declaration answers **None**.
+
+**A3's delivery is removed. A3 is not closed.** That same walk still lets the collapse through at the write door and still records the action against the dead word with the survivor's ledger empty. **The write doors are the next row**, and the stop you armed stays in force until they refuse or warn.
+
+**Why the row landed itself NOT CLEAN, which is the part worth your attention.** Round 1 reported nine findings using a mutation verifier the row **later proved broken** — it mutated two helpers and credited the kill to the wrong one. So nine-then-seven compares a bad number to a good one. What survives is that round 2, measured with a working instrument, found **three blocking defects in code four review lenses had already passed**, two of which falsified the row's own published reasoning by the same error twice.
+
+**The row named its own worst failure as a method rather than a defect:** twice generalising from a single measurement and publishing the conclusion, the second time after it had already recorded the first. It put that at the top of its convergence note on the reasoning that a defect is fixed once, while a method that manufactures defects keeps paying out. **Neither instance was caught by a gate. Both were caught by somebody re-running.**
 
 ### 14 · Your `read` ruling turned out CHEAPER than I told you it would be
 
