@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**1 open · 8 ruled · 6 FYI**
+**2 open · 8 ruled · 6 FYI**
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,32 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 1 item
+## A. Decide when you want to — 2 items
+
+### 16 · `Q101` — when one family declares a key and the other omits it entirely, is that agreement or a contradiction?
+
+*New. Found by row 6g while implementing your `all eight` ruling, and it is the same shape as Q99: the current behaviour is not a decision anyone made.*
+
+**TL;DR.** The comparator that decides whether two action families contradict each other **already refuses on a missing key today — non-overridably — and nobody chose that.** It falls out of the code reading an absent key as the value `None`, which is an implementation detail wearing a policy's clothes.
+
+**Why it cannot just be left alone.** The row measured the consequence from a working implementation rather than reasoning about it, and the behaviour is **inconsistent with itself**:
+
+- `reachability = []` against a family that omits the key → **permits** the collapse
+- `reachability = ["mcp","cli"]` against that same omission → **refuses**, non-overridably
+
+`ACTIONS.md` says an empty list is a **positive declaration**. So the comparator reads an absence as *agreement* in one case and as *contradiction* in the other. **That is not a rule being applied.**
+
+**Why it is yours.** It decides what the registry refuses — the same class as Q99, Q56 and Q50. And your `all eight` ruling widened the surface: what was a quirk on two keys now reaches four more.
+
+**What the row did, and did not do.** It did **not** change the four already-shipped keys, because reversing shipped behaviour is a decision rather than a tidy-up. So the comparator is now **deliberately asymmetric on absence, and that asymmetry is published rather than hidden**, waiting on you.
+
+- **`absence is agreement`** — a family that never declared a key is not a family that declared it differently. Fewer refusals; matches the argument an earlier row made for whole-declaration absence.
+- **`absence is a contradiction`** — declaring nothing where the other declares something is a real difference. More refusals, consistent with `all eight`'s direction.
+- **`recommend`** — I bring you the proposed rule with the evidence for each key.
+
+**Ask: `absence is agreement`, `absence is a contradiction`, or `recommend`.** No default is in force — today's behaviour is inconsistent, so there is nothing coherent to default to.
+
+**Not urgent.** Nothing is blocked: row 6g proceeds and publishes the asymmetry. But one contract id now pins exactly this question, and your ruling will move it.
 
 ### 10 · `oo-pg` is carrying 625 leftover schemas. Drop them, or leave them?
 
