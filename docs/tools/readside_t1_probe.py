@@ -20,7 +20,7 @@ This probe runs both, plus the three checks the pre-registration named as decisi
     `list_types(predicate=)`, `preflight`) report the staleness `resolve_type` detects?
     Section 0.5 predicted NO.
   * **The both-empty cell** -- section 0.2's S0 row claims *"both extents read to
-    exhaustion, equal"* yields *"no warning, 1.0"*. `_identity_stale`'s `bool(left)` term
+    exhaustion, equal"* yields *"no warning, 1.0"*. `_identity_agreement`'s `bool(left)` term
     says otherwise when both extents are empty. Settled here by measurement, because a
     pre-registered partition that is wrong about shipped behaviour has to be caught and
     recorded as an error rather than quietly widened.
@@ -170,7 +170,11 @@ def main() -> int:
         report(reg, "S0' BOTH EXTENTS EMPTY")
 
     # S1 GROWTH -- legal join, then an ordinary new type declares the SURVIVOR. This is
-    # section 5.3.2's permanence note happening: left can never grow, right just did.
+    # section 5.3.2's permanence note happening: the SURVIVOR gains a member.
+    # **The note's old wording said 'left can never grow' and this probe's own S2 case
+    # two blocks below DISPROVES it** -- a type may declare a retired predicate, so the
+    # absorbed word's extent can grow too. 5.3.2 is corrected; this comment repeated the
+    # false clause in the very file INTERFACE.md cites as reproducing the correction.
     reg = fresh()
     bad = legal_join(reg)
     if bad:
@@ -316,15 +320,16 @@ def main() -> int:
     r, warns = resolution(reg, "old_verb")
     record("A3: resolve_type('old_verb') after the retire attempt", fmt(r, warns))
     record(
-        "A3: _identity_stale(old_verb, new_verb)",
+        "A3: _identity_agreement(old_verb, new_verb)",
         repr(
-            reg._identity_stale(
+            reg._identity_agreement(
                 "default",
                 reg._require("default", "old_verb"),
                 reg._require("default", "new_verb"),
             )
         ),
-        "P1 predicted False -- the 4d gate needs BOTH sides kind='predicate'",
+        "P1 predicted (False, 1.0) BEFORE the change -- the 4d gate needed BOTH sides "
+        "kind='predicate'; row 6f's action operand is what moved it",
     )
 
     # ---------------------------------------------------- P3: the consequential doors

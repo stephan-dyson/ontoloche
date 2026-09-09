@@ -668,8 +668,13 @@ def test_c10_14_door_1s_store_read_the_q56_default_at_the_alias_door(
     stale = registry.resolve_type("commentable", ResolveContext(), tier="opus")
     assert stale.outcome == "existing"
     assert stale.type is not None and stale.type.name == "searchable"
-    assert stale.confidence == 1.0, (
-        "row 4d ships the CHEAP half of Q56: the fact is reported, never suppressed"
+    # **SUPERSEDED BY R99, 2026-09-09.** This read `stale.confidence == 1.0`, reasoned
+    # *"row 4d ships the CHEAP half of Q56: the fact is reported, never suppressed."*
+    # Row 6f ships the EXPENSIVE half, so Door 1's own store is the fixture that shows
+    # the delivery step gone: the same walk, and the 1.0 is no longer there.
+    assert stale.confidence is not None and stale.confidence < 1.0, (
+        "Door 1 answered at 1.0 over a pair `merge_types` refuses non-overridably; "
+        "R99 removed that (INTERFACE.md rule 5.3.2-9)"
     )
     assert "identity_stale" in stale.type.warnings, (
         "`commentable` is {note} and `searchable` is {doc, note} -- the pair "
@@ -799,23 +804,43 @@ def test_c10_16_the_stale_warning_survives_every_spelling(adapter, make_registry
     # 1.0 with `identity_stale` silently absent.
     capped = make_registry(DegradedAdapter(adapter, page_cap=2), approval_policy="auto")
     truncated = capped.resolve_type("Commentable", ResolveContext(), tier="opus")
-    if truncated.type is not None and truncated.confidence == 1.0:
+    # The `== 1.0` this keyed on is gone (R99), and the question it was asking is not:
+    # *whatever confidence this answers with, did the unfinished look SAY so?*
+    if truncated.type is not None:
         said = " ".join(truncated.type.warnings)
         assert "identity_stale" in said or "alias_check_incomplete" in said, (
             f"the left-hand scan could not finish, so this 1.0 stands on a look that did "
             f"not say the word names no row: {truncated.type.warnings}"
         )
 
+    # **Amended by R99, row 6f.** The loop used to assert `confidence == 1.0` for every
+    # spelling. It cannot now, and the `min_confidence: 1.0` case is why the amendment
+    # is written out rather than left to the `continue`: under rule 5.3.2-12 that case
+    # legitimately answers `none`, and letting it fall through the old
+    # `if resolution.type is None: continue` would have turned a NEW behaviour into a
+    # SILENTLY SKIPPED assertion -- the *"conditional assertion whose body never ran"*
+    # defect row 4d's third round found by mutation, in the very id it found it in.
     for spelling in ("commentable", "Commentable", "COMMENTABLE", "commentable ", "commentable-"):
         for kwargs in ({}, {"kind": "predicate"}, {"min_confidence": 1.0}):
             resolution = registry.resolve_type(
                 spelling, ResolveContext(), tier="opus", **kwargs
             )
+            if kwargs.get("min_confidence") == 1.0:
+                # Rule 5.3.2-12: the CALLER's bar, and a stale redirect is under it.
+                if resolution.type is not None and resolution.type.name == "searchable":
+                    raise AssertionError(
+                        f"{spelling!r} answered `existing` at min_confidence=1.0 over a "
+                        f"stale identity -- rule 5.3.2-12 says that is `none`"
+                    )
+                continue
             if resolution.type is None or resolution.type.name != "searchable":
                 continue
-            assert resolution.confidence == 1.0
+            assert resolution.confidence is not None and resolution.confidence < 1.0, (
+                f"{spelling!r} reached the redirect and kept the guarantee R99 removed: "
+                f"{resolution.confidence!r} with {kwargs}"
+            )
             assert "identity_stale" in resolution.type.warnings, (
-                f"{spelling!r} reached the same 1.0 redirect as 'commentable' and said "
+                f"{spelling!r} reached the same redirect as 'commentable' and said "
                 f"nothing about the two extents no longer agreeing: {kwargs}"
             )
 
