@@ -379,3 +379,133 @@ section binding is worth more than a filled cell. The commands above are printed
 - **`git add -A` is FORBIDDEN.** Explicit paths, with `git status --porcelain` immediately before staging.
   The supervisor shares this working tree.
 - **"LANDED" means ON ORIGIN.** Nothing is called landed before it is pushed.
+
+---
+
+## §1 — THE SUITE FLOOR, AND THE CENSUS TAKEN BEFORE THE COMPARATOR IS TOUCHED
+
+### §1.0 — The floor's cheap leg, filled
+
+Run at `4960831` before any change, by §0.9's own commands. The **SQLite-only** leg runs first as the cheap
+*is-anything-broken* check, which is the habit the supervisor named as good practice rather than a shortcut:
+
+```
+py -m pytest -q --pyargs ontoloche.contract
+```
+
+| leg | result at `4960831` | wall clock |
+|---|---|---|
+| sync, SQLite only | **522 passed, 721 skipped, 0 failed** | 340.02s |
+
+The two full multi-backend legs are §0.9's own commands with `OO_POSTGRES_DSN` set, run **one at a time**,
+and they fill §10.
+
+### §1.1 — Three fixture defects in my own instrument, found by running it and recorded rather than tidied away
+
+[`writeside_a3_census.py`](../tools/writeside_a3_census.py) is committed **before** any change to
+`registry.py`, so the BEFORE and AFTER columns are the same instrument. Its first cut produced numbers that
+were about the fixture. All three defects are kept in the file's comments, because a census that silently
+acquires the right fixture is a census nobody can check.
+
+| # | what the cell reported | what was actually wrong |
+|---|---|---|
+| 1 | `W1 effects` → `DECL-REFUSED edge_family_unknown` | the contradiction value used `Effect(op="add_edge")`, which must name a `kind="edge"` family. **The cell refused UPSTREAM of the door under test** |
+| 2 | `W1 effects`, second cut → `DECL-REFUSED effect_not_permitted` | `propose_type` with `kind="predicate"` — `PROPOSABLE_KINDS` is an **allowlist** that excludes predicates by name, and `ACTIONS.md` §2.5 argues why |
+| 3 | **every non-`W1` merge cell** → `REFUSED definitions_diverge/ov=True` | the two families had **different definition strings** |
+
+**Defect 3 is the one worth reading twice, because the code being measured warns about it in a comment.**
+`registry.py`'s merge door says of row 6d's own narrowing: *"§6.2 recorded that `merge_types` refuses
+`definitions_diverge` on ordinary calls — true of the lens's fixture, where the two definitions differed.
+**[Observed]** with IDENTICAL definitions the same collapse MERGES … A narrowing that holds for one fixture
+is not a narrowing."* **I built the instrument for measuring that door and made the identical fixture
+mistake inside it.** The two families now share one definition string, and the merge column only became
+readable after that.
+
+### §1.2 — The BEFORE table, every cell printed
+
+**[Observed]**, SQLite leg, `:memory:`, ordinary calls with `force` and every acknowledgement removed except
+the one merge column that names its acknowledgement in its own heading. `DECL-REFUSED` means the pair never
+reached the door — the *declaration* was refused, so the cell says nothing about the collapse.
+
+| cell | `retire(successor=)` | `merge_types` (ordinary) | `merge_types` (ack `no_consumer_evidence` only) | `import_types` |
+|---|---|---|---|---|
+| **W0** identical | PERMITTED | `no_consumer_evidence`/ov=True | **PERMITTED** | alias NOT written (`alias_collision`) |
+| **W1** `approval_mode` | `action_declarations_diverge`/ov=**False** | same | same | not written (`action_declarations_diverge`) |
+| **W1** `min_auto_tier` | `action_declarations_diverge`/ov=**False** | same | same | not written (`action_declarations_diverge`) |
+| **W1** `reversibility` | `action_declarations_diverge`/ov=**False** | same | same | not written (`action_declarations_diverge`) |
+| **W1** `effects` | `action_declarations_diverge`/ov=**False** | same | same | not written (`action_declarations_diverge`) |
+| **W2** `inputs` | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+| **W2** `preconditions` | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+| **W2** `reachability` | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+| **W2** `payload_schema` | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+| **W3** `effects` reversed | PERMITTED | `no_consumer_evidence` | PERMITTED | not written (`alias_collision`) |
+| **W3** `inputs` reversed | PERMITTED | `no_consumer_evidence` | PERMITTED | not written (`alias_collision`) |
+| **W3** `preconditions` reversed | PERMITTED | `no_consumer_evidence` | PERMITTED | not written (`alias_collision`) |
+| **W3** `reachability` reversed | PERMITTED | `no_consumer_evidence` | PERMITTED | not written (`alias_collision`) |
+| **W4** bare | PERMITTED | `no_consumer_evidence` | PERMITTED | not written (`alias_collision`) |
+| **W5** `approval_mode` absent | DECL-REFUSED `attributes_schema_violation` | same | same | same |
+| **W5** `min_auto_tier` absent | **`action_declarations_diverge`/ov=False** | same | same | not written (`action_declarations_diverge`) |
+| **W5** `reversibility` absent | DECL-REFUSED `attributes_schema_violation` | same | same | same |
+| **W5** `effects` absent | **`action_declarations_diverge`/ov=False** | same | same | not written (`action_declarations_diverge`) |
+| **W5** `inputs` absent | DECL-REFUSED `attributes_schema_violation` | same | same | same |
+| **W5** `preconditions` absent | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+| **W5** `reachability` absent | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+| **W5** `payload_schema` absent | **PERMITTED** | `no_consumer_evidence` | **PERMITTED** | not written (`alias_collision`) |
+
+### §1.3 — §0.4b's falsifiers, scored against this table
+
+**PRIMARY falsifier — does NOT fire.** A contradiction on each of `inputs`, `preconditions`, `reachability`
+and `payload_schema` is **PERMITTED** at `retire(successor=)` and, once the consumer guard is acknowledged,
+at `merge_types`. Nothing else refuses it. **The ruling is not already satisfied by code that was already
+there**, and the comparator change is real work. Predicted FALSE, and it is FALSE.
+
+**SECONDARY falsifier — does NOT fire, and the answer is better than the prediction hedged for.**
+`_DECLARED_KEYS` (all eight), `_UNORDERED_DECLARED_KEYS`, `_unordered` and `_effect_identities` are all
+members of **the same class** as `_action_declarations_diverge` — `registry.py` defines exactly one class,
+`Registry`. **The write side can reuse the read side's comparison rather than re-implement it**, so
+`C19-100`'s own closing line, *"one fact, one home"*, is achievable here and is not a claim of symmetry I
+would have had to soften.
+
+**TERTIARY falsifier — does NOT fire. W5 is REACHABLE, on five of eight keys.** `approval_mode`,
+`reversibility` and `inputs` are refused at declaration with `attributes_schema_violation`, so W5 is
+unreachable for those three. It is reachable for `min_auto_tier`, `effects`, `preconditions`, `reachability`
+and `payload_schema`. **The sixth cell was not my invention.**
+
+### §1.4 — What `import_types` does and does not contribute, stated before the change so it cannot be claimed after it
+
+**At `import_types` the alias is NOT written in any W0–W5 cell, before the change.** The reason varies —
+`action_declarations_diverge` where the declarations contradict on a compared key, `alias_collision`
+everywhere else — but the *outcome at the door* is the same: `old_verb` does not become an alias of
+`new_verb`.
+
+**So this door contributes nothing to A3's harm in this shape, and it did not before this row either.** Any
+sentence claiming this row closed the import door on W2 would be claiming credit for `alias_collision`,
+which is the same carry-forward the governance register made for two days and took into a founder ruling.
+**What the change can honestly do here is change the REASON a caller is given** — *this word is taken*
+versus *these two verbs are governed differently* — and that is a real difference to a migration tool that
+retries after resolving a collision, but it is not a refusal this row created.
+
+### §1.5 — The finding this census makes that nothing asked it for
+
+**The write door ALREADY refuses on a per-key ABSENCE, non-overridably, and nobody decided that.**
+`W5 min_auto_tier absent` and `W5 effects absent` return `action_declarations_diverge` with
+`overridable=False` at all three doors, at `4960831`, **today**.
+
+The mechanism is `mine.get(key)` against `theirs.get(key)`: an absent key reads `None`, a declared value
+does not, and the comparison calls that a contradiction. **It is the same shape row 6f's round 2 found as a
+BLOCKING on the read side** — its comment is in the tree — where `.get()` flattened *absent* and *declared
+`None`* into one answer.
+
+**Widening to eight makes this materially worse in one specific place, and the specificity is the point.**
+`ACTIONS.md` §2.2 says of `reachability`: *"an **empty list is a positive declaration** — this host exposes
+me on no named surface — not a forgotten field."* Under a `.get()` comparison a family declaring
+`reachability=[]` and a family that never declared `reachability` at all compare **EQUAL**, because both
+sides read as an empty set. **A positive declaration and a silence, folded into one fact, at the door that
+decides whether the collapse happens.**
+
+**The design consequence, fixed here before the comparator is written.** Extending `.get()` to the four new
+keys would spread an **accidental, unruled behaviour by side effect** onto four more keys, including the one
+key whose spec says absence and emptiness are different facts. §0.3 pre-committed to the least-refusing
+option and to routing the question. **What this row does NOT do is change the four old keys**, because that
+behaviour ships today and reversing it is a decision rather than a tidy-up — so the asymmetry is deliberate,
+it is published here, and the question goes to the supervisor in §6.
