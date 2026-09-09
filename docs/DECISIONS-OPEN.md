@@ -30,6 +30,12 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 **Ask: `all eight`, `name a set`, or `recommend`.** No default is in force, because the current four are not a decision anyone made — they are what row 6d needed for the case in front of it.
 
+**One thing that changed since I wrote this item, and it is material to how you rule.** Row 6f's read-side change **already scores on all eight keys.** It got there the hard way: its first cut reused the write door's own four-key comparison, the probe still returned a clean `1.0`, and it widened only because the measurement contradicted the tidier design.
+
+So the two sides may end up deliberately asymmetric. **If you rule a narrow set** — the current four, say — then two families differing only on `preconditions` are, by your ruling, legitimately one identity, and the write doors will let them join. **The read will still hand the caller a confidence below `1.0`** for that difference, because "may these be joined?" and "do these two words still denote one thing?" are different questions and the read answers the second.
+
+That is defensible and it is not a veto: the read refuses nothing, so a narrow ruling is not overridden — the caller is simply told the declarations differ and decides with its own `min_confidence`. But you should know it is there rather than discover it, and **your ruling gets to overturn it**: say so and the read narrows to match.
+
 The fix itself is a **write-door** change and belongs to the row after 6f. Row 6f is fenced off the write doors and has not touched them.
 
 ### 10 · `oo-pg` is carrying 625 leftover schemas. Drop them, or leave them?
