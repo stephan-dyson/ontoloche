@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 7 ruled · 4 FYI**
+**2 open · 7 ruled · 5 FYI**
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -142,6 +142,22 @@ Two evidential reasons: round 3's lens drove the transfer doors and **could not 
 ---
 
 ## F. FYI — no action needed
+
+### 14 · Your `read` ruling turned out CHEAPER than I told you it would be
+
+*No action. On the page because I gave you a cost estimate and it was too high.*
+
+**The spec is landed** ([`INTERFACE.md` §5.3](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INTERFACE.md), commit `f388cd1`), amended **before** the resolver was touched — I verified that ordering rather than taking the row's word: the spec commit is the only commit against `INTERFACE.md` in this row, and `registry.py` has none at all.
+
+**What I told you it would cost.** R99 §3 warned that callers relying on `1.0` get a new answer shape, and that a refusal path would probably mint a new value in a closed vocabulary.
+
+**What it actually costs.** **No caller is refused, and no vocabulary value is minted.** The row concluded *score, never refuse* — `resolve_type` hands back the survivor with a **measured** confidence instead of a door in the face. Your authorisation to refuse is on the record as **deliberately unused**.
+
+**Why that is a result and not a shortfall.** The row **pre-registered** that outcome before it opened the resolver — it is in §0 of the run record, in the commit whose ordering is provable, and it is the outcome that *cost the row its interesting answer*. It then reported it rather than reaching for the refusal you had made available. I checked the pre-registration commit myself.
+
+**Three other things your ruling settled**, all in spec: a stale redirect's confidence is **`min(resolver score, Jaccard agreement of the two extents)`** — derived from what the call already reads, not a round number someone picked; the verification now covers **`kind="action"` by its own operand**, since an action family has no extent and its identity stands on its governance declaration; and **`min_confidence` now actually governs this path**, which it did not before — a caller passing `min_confidence=2.0` was still handed `existing` at `1.0`.
+
+**Not done yet:** the resolver itself is uncommitted and the adversarial rounds have not run. Nothing here is a claim about shipped behaviour.
 
 ### 13 · The evidence under yesterday's `arm` ruling was partly stale. The ruling stands; you are being told, not re-asked.
 

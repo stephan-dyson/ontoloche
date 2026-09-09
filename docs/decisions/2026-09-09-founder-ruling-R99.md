@@ -57,6 +57,38 @@ The distinction is the whole point of having kept `stop` open rather than declin
 - **Does this reach beyond predicates?** The 4d default is predicates-only. Trips 12 and 13 proved that warning **structurally blind to transferred words**, which is a gap in the cheap half, not something `read` closes by itself.
 - **What does a refusing `resolve_type` do to `preflight`, `list_types(predicate=)` and `_extent`?** R54 already made those resolve the identity. Their behaviour when the identity does not re-establish is unspecified.
 
+## 4b. All four sub-questions are ANSWERED IN SPEC, landed 2026-09-09 at `f388cd1`
+
+Row 6f amended `INTERFACE.md` §5.3 **before touching the resolver** — verified by the supervisor: the spec
+commit is the only commit against `INTERFACE.md` in this row, and `ontoloche/registry.py` has **no** commit
+in the row at all. The answers:
+
+| §4 sub-question | The row's answer, in `§5.3.2` |
+|---|---|
+| Refuse, or answer below 1.0, or both? | **Score. NEVER refuse.** `5.3.2-11` — *"this call does NOT refuse on its own account, and R99's authorisation to refuse is deliberately unused."* |
+| What confidence does a stale redirect carry? | **`min(resolver_score, J)`**, `J` the **Jaccard agreement of the two written extents** (`5.3.2-9`). Derived from quantities the call already reads, never a round number chosen for roundness. |
+| Does this reach past predicates? | **Yes.** `5.3.2-10` — `kind="action"` is verified too, **by its own operand**: an action family has no extent, so its identity claim stands on its governance declaration. One principle, two operands, no invented third. |
+| What is Beacon slice 1 told? | It never receives a refusal it did not ask for. `5.3.2-12` makes **`min_confidence` govern this path**, which **[Observed, row 6f] it did not** — the redirect returned before the check was reached, so a caller passing `min_confidence=2.0` still got `existing` at `1.0`. A consumer that wants to decline on a weakened identity now declines with **its own bar**. |
+
+### The refusal you authorised is not being used, and that is a result, not a shortfall
+
+**This was PRE-REGISTERED before the resolver was opened** — §0 of `6F-RUN.md` at `b257f3b`, line 129,
+committed as the first and only change to that file: *"…the answer to sub-question 1 is 'answer below 1.0,
+never refuse', and **R99's authorisation to refuse goes unused by this row**."* The row fixed that outcome
+as a falsifier **that would cost it the interesting answer**, and then reported it.
+
+**Verified by the supervisor** rather than accepted: the sentence is in the pre-registration commit, whose
+ordering is provable, not in a later one.
+
+**So §3's cost estimate was too high, in the founder's favour.** §3 warned that *"callers who rely on 1.0
+meaning 1.0 get a new answer shape"* and that a refusal path might mint a new closed-vocabulary value. No
+value is minted; no caller is refused. The change is **strictly less disruptive than this ruling
+advertised** — the registry stops vouching where it cannot vouch, and hands the caller the measurement
+instead of a door in the face.
+
+**What is NOT yet done.** The spec is landed; the resolver is uncommitted working-tree changes, and the
+row's adversarial rounds have not run. Nothing above is a claim about shipped behaviour.
+
 ## 5. It converges with the governance register's entry A3, and that is load-bearing
 
 A3 ([the governance register](2026-09-07-governance-register.md), entry 1) is BLOCKING and open. Its harm is delivered like this:
