@@ -1130,6 +1130,28 @@ from `E`'s own family.** That is [§9.8](#98--the-shape-this-row-kept-finding-at
 
 ### §9.11 — CONVERGENCE NOTE: the loop did **NOT** converge, and the row lands **NOT CLEAN**
 
+> ## The single most important thing this row found is a METHOD failure, and it is this row's own
+>
+> **TWICE this row generalised a conclusion from a SINGLE measurement and PUBLISHED it — and the
+> second time happened AFTER the first had already been recorded as a finding.**
+>
+> - [§9.9](#99--a-finding-against-this-rows-own-tooling): one unanchored `str.replace` matched two
+>   helpers; the row read a single kill report and published a mutation table it had not established.
+> - [§9.6](#96--round-2-3-blocking--4-major--seven-against-round-1s-nine) R2-1: one resolver score was
+>   instrumented, `_compose` was not called, and the row concluded the branch was *unreachable by
+>   construction* — then used that conclusion to REMOVE a contract id. It is reached for every score
+>   from 0.9 to 1.0.
+>
+> **It is put first because it is the only finding here that would have kept producing NEW defects if
+> it had gone unnamed.** Every other item on the list is a defect, or a consequence of this one, or of
+> the environment. A defect is fixed once; a method that manufactures defects keeps paying out.
+>
+> **No gate caught either instance. Both were caught by somebody RE-RUNNING rather than re-reading**
+> — a fresh lens with a custom resolver, and a lens that traced a fixture to the helper it actually
+> exercises. That is the argument for the loop in one sentence, and it is also the argument against
+> trusting this row's remaining unverified claims more than the evidence behind them.
+
+
 | round | lenses | BLOCKING | MAJOR | total |
 |---|---|---|---|---|
 | 1 | kill-row · truthfulness · consumer · mutation | 1 | 8 | **9** |
