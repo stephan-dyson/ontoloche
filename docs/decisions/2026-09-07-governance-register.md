@@ -58,8 +58,68 @@ refusal and no warning. Afterwards `resolve_type` answers the dead word with the
 `preflight` answers the same word with the **tombstone's** policy — and a **Haiku-tier machine actor records
 `applied` against a verb the surviving family declares human-approval-only and irreversible.**
 
-**Reachability — the worker's own re-run with `force` removed and ALL acknowledgements removed
-[Observed], which NARROWED the lens's claim and the narrowing is kept:**
+> ## ⚠️ THE TABLE BELOW WAS STALE WHEN THIS ENTRY WAS WRITTEN. Corrected in place 2026-09-09, per standing rule 4.
+>
+> **Row 6f measured it at `HEAD` and routed the discrepancy rather than classifying it; the supervisor then
+> re-ran the probe itself rather than adopting the report** (`docs/tools/readside_a3_probe.py`, in-memory
+> SQLite, no `force`, no acknowledgements, changes nothing).
+>
+> **What happened.** Commit `304967a` — *"A3 CLOSED, its own change per R91: the DECLARATION operand §5.10's
+> refusal #2 never had for an action family — at all THREE collapse doors"* — landed **2026-09-05**. This
+> register was opened **2026-09-07**, two days later, and recorded row 6d's **round-1** observation **in the
+> present tense** as though nothing had been fixed. The `[Observed]` tag was honest about the narrowing it
+> did; it was not re-run against the code that had since changed. **A citation that was accurate when taken
+> is not accurate when carried**, and this entry carried one for two days and through one founder ruling.
+>
+> **Re-run at `HEAD` [Observed by the supervisor]:**
+>
+> | walk | door | result at HEAD |
+> |---|---|---|
+> | **1 — the shape THIS TABLE tabulates** (both families declare, the four compared keys **contradict**) | `retire(successor=)` | **`REFUSED action_declarations_diverge`, `overridable=False`** — the row below claiming `('RETIRED','retired',[])` **DOES NOT REPRODUCE** |
+> | **2** — the absorbed family declares **nothing** | `retire(successor=)` | RETIRED, no refusal — but the terminal `record_invocation` **refuses** for an unrelated schema reason, so the harm does **not** complete |
+> | **3 — four compared keys AGREE, the families differ on an UNCOMPARED key** | `retire(successor=)` | **RETIRED — no refusal, no `force`, no acknowledgement** |
+>
+> **Walk 3 completes A3's own sentence, end to end, at `HEAD`:** `resolve_type('old_verb')` →
+> `existing` / `new_verb` / **`confidence=1.0`**; `record_invocation('old_verb', outcome='applied')` →
+> **`Invocation outcome='applied'`**; `invocations(family='new_verb')` → **`n=0`**, the survivor's ledger
+> **empty** and the record filed under the dead word.
+>
+> ### So this entry stays OPEN, and its MECHANISM has changed
+>
+> A3's *harm* is live and reproduces at `HEAD`. What is no longer true is the *mechanism*: the doors named
+> below **do** refuse on contradictory declarations, because `304967a` fixed exactly that. The harm now
+> arrives through a different door condition — **`_GOVERNANCE_KEYS` (`registry.py:8104`) compares FOUR keys,
+> `("approval_mode", "min_auto_tier", "reversibility", "effects")`, while `ACTIONS.md` §2.2 declares
+> EIGHT.** Uncompared: **`inputs`, `preconditions`, `reachability`, `payload_schema`.** Two families whose
+> four compared keys agree and whose `preconditions` differ collapse with nothing refusing, because the
+> comparator **cannot see the contradiction it is there to catch**.
+>
+> ### The count stays at ONE, deliberately
+>
+> This is not minted as a second entry. **This register counts HARMS, not mechanisms** — its own table at the
+> top says *"authority granted that the declaration withholds"* — and one harm reached by a second route is
+> one harm. Minting `A4` here would be exactly the *"count that grows on a widening definition stops being a
+> signal"* failure [R97](2026-09-07-founder-ruling-R97.md) ruled against, applied to the register R97 itself
+> created.
+>
+> ### R100's firing STANDS, on corrected evidence
+>
+> [R100](2026-09-09-founder-ruling-R100.md) armed this criterion and recorded A3 as firing it. **That ruling
+> is unchanged and the criterion still fires** — walk 3 satisfies every clause with ordinary calls. But
+> **R100's clause table cites two rows that do not reproduce**, and it is corrected there rather than here.
+> The founder ruled `arm` on a stated reachability that was partly stale; the **conclusion** he ruled on is
+> unaffected, which is why he is being told rather than re-asked.
+>
+> ### What is now open, and where it goes
+>
+> Deciding **which of `ACTIONS.md` §2.2's eight declared keys are GOVERNANCE** is not an implementation call
+> — it decides what the registry refuses, the same class as `Q56` and `Q50`. It is minted as **`Q99`** and
+> goes to the founder. The write-door change itself is the row AFTER 6f; row 6f is fenced off the write
+> doors and did not touch them.
+
+**Reachability — row 6d ROUND 1's re-run with `force` removed and ALL acknowledgements removed [Observed
+2026-09-04, SUPERSEDED — see the correction above], which NARROWED the lens's claim and the narrowing is
+kept:**
 
 | door | ordinary-calls result |
 |---|---|

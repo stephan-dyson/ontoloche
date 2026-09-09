@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**1 open · 7 ruled · 3 FYI**
+**2 open · 7 ruled · 4 FYI**
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,25 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 1 item
+## A. Decide when you want to — 2 items
+
+### 12 · `Q99` — the registry compares FOUR of the EIGHT things an action family declares. Which four *should* it compare?
+
+*New, and it came out of a measurement rather than a review.*
+
+**TL;DR.** Row 6f went to verify that A3's harm was real and found the register's account of it was **stale**, then found the harm **still reproduces by a different route**. That route is this: `ACTIONS.md` §2.2 makes an action family declare **eight** things, and the comparator that decides whether two families contradict each other looks at **four** of them — `approval_mode`, `min_auto_tier`, `reversibility`, `effects`. It never looks at **`inputs`, `preconditions`, `reachability`, `payload_schema`.** So two families that agree on the four and disagree on `preconditions` collapse with **nothing refusing**, and the comparator cannot see the contradiction it exists to catch.
+
+**Verified at `HEAD`, by me, not taken from the row's report:** the collapse goes through with no refusal, no `force` and no acknowledgement; `resolve_type` then answers the dead word at **`confidence=1.0`**; a Haiku-tier actor records `applied`; and the survivor's ledger reads **`n=0`** — the record filed under the dead word. That is A3's own sentence, end to end.
+
+**Why it is yours.** Which of the eight keys count as *governance* decides **what the registry refuses**. That is the same class as Q56, which you ruled this morning, and Q50. It is not an implementation call: `preconditions` is plainly about whether an action may run, `reachability` is about where it is exposed, and `payload_schema` governs what an invocation may carry — but calling them all governance widens what the registry declines to serve, and calling none of them governance leaves the hole you can see above.
+
+- **`all eight`** — anything a family declares is part of its identity. Safest, and the most refusals.
+- **`name a set`** — tell me which keys, and the rest stay uncompared by design with that written down.
+- **`recommend`** — I bring you a proposed set with the evidence for each key, as its own item.
+
+**Ask: `all eight`, `name a set`, or `recommend`.** No default is in force, because the current four are not a decision anyone made — they are what row 6d needed for the case in front of it.
+
+The fix itself is a **write-door** change and belongs to the row after 6f. Row 6f is fenced off the write doors and has not touched them.
 
 ### 10 · `oo-pg` is carrying 625 leftover schemas. Drop them, or leave them?
 
@@ -124,6 +142,18 @@ Two evidential reasons: round 3's lens drove the transfer doors and **could not 
 ---
 
 ## F. FYI — no action needed
+
+### 13 · The evidence under yesterday's `arm` ruling was partly stale. The ruling stands; you are being told, not re-asked.
+
+*No action. On the page because a reason found wrong gets corrected where you can see it.*
+
+**What was wrong.** When you ruled `Q97 → arm`, I showed you a table saying A3's collapse doors let the harm through — `retire(successor=)` returning `('RETIRED','retired',[])` and `import_types` returning **warnings EMPTY**. **Neither of those reproduces at `HEAD`.** Commit `304967a`, titled *"A3 CLOSED"*, landed **2026-09-05** and fixed exactly those doors. The governance register was opened **2026-09-07**, two days later, and recorded row 6d's **round-1** observation in the present tense. I wrote your clause table on **2026-09-09** by reading that entry and **did not re-run it.**
+
+**Why the ruling still stands.** A3's harm **does** reproduce at `HEAD`, by the uncompared-key route in item 12 — I ran the probe myself to check rather than taking the row's word. Every clause of the criterion is met on ordinary calls. **`arm` produced the correct outcome**, and the ACTIONS-surface stop stays in force.
+
+**Why you are not being re-asked.** The conclusion you ruled on has not moved. Re-putting a question whose answer is unchanged wastes the one thing this project asks of you. But you ruled on evidence I gave you, part of it was stale, and this project's rule is that a wrong reason is corrected in place with the correction visible — so it is here, and in [R100](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-09-founder-ruling-R100.md) §2b, rather than quietly fixed.
+
+**The governance register still counts ONE.** This is one harm reached by a second route, not a second harm — minting a second entry would be the *"count that grows on a widening definition"* failure your own `separate` ruling guarded against.
 
 ### 11 · `Q50` is still open, still yours, and is parked on purpose — surfaced so it cannot repeat Q56
 

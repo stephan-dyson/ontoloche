@@ -30,6 +30,50 @@ All three clauses are met on **ordinary calls with `force` and every acknowledge
 
 **The criterion fires. It is not a close call and it is not being read generously.**
 
+## 2b. CORRECTION, same day — two rows of the table above do not reproduce at `HEAD`
+
+**The ruling stands. The evidence I gave for it was partly stale, and that is mine.**
+
+Row 6f measured A3 at `HEAD` and **routed the discrepancy to the supervisor rather than classifying it**.
+The supervisor then **re-ran the probe itself** rather than adopting the report
+(`docs/tools/readside_a3_probe.py`, in-memory SQLite, no `force`, no acknowledgements, changes nothing):
+
+| clause row above | what actually happens at `HEAD` |
+|---|---|
+| `retire(successor=)` → `('RETIRED','retired',[])` | **`REFUSED action_declarations_diverge`, `overridable=False`.** Does **not** reproduce. |
+| `import_types` → **warnings EMPTY** | The alias is **not written**; warnings carry `near_duplicate` and `import_refused:alias_collision`. Does **not** reproduce. |
+| the machine actor records `applied` with nothing refusing | **Reproduces** — but by a different route than the table claims. |
+
+**Why.** Commit `304967a` — *"A3 CLOSED … the DECLARATION operand §5.10's refusal #2 never had for an
+action family — at all THREE collapse doors"* — landed **2026-09-05**. The governance register was opened
+**2026-09-07** and recorded row 6d's **round-1** observation **in the present tense**. I wrote §2's clause
+table on **2026-09-09** by reading that entry, and **I did not re-run it**. A citation that was accurate
+when taken is not accurate when carried, and I carried this one into a founder ruling.
+
+**The criterion still fires, on evidence that does reproduce.** Two action families whose four *compared*
+governance keys **agree** and whose **`preconditions` differ** collapse with no refusal, no `force` and no
+acknowledgement; `resolve_type` then answers the dead word `existing` / survivor / **`confidence=1.0`**; a
+Haiku-tier actor records `applied`; and the survivor's ledger reads **`n=0`**, the record filed under the
+dead word. Every clause of §2 is met. **`arm` produced the correct outcome.**
+
+**Why the founder is being TOLD and not RE-ASKED.** The conclusion he ruled on — *does A3 fire this
+criterion* — is unchanged, and re-putting a question whose answer has not moved would waste the one thing
+this project asks of him. But he ruled on a stated reachability, part of which was stale, and this project's
+own discipline is that a reason later found wrong is **corrected in place with the correction visible**
+(the governance register's standing rule 4, and [R97](2026-09-07-founder-ruling-R97.md)'s own precedent of
+correcting its reason rather than editing it away). So the correction is on his page as an FYI, not as a
+new decision.
+
+**What this changed underneath the ruling.** A3's *mechanism* is no longer the one §2 tabulates. The doors
+**do** refuse on contradictory declarations. The harm now arrives because **`_GOVERNANCE_KEYS`
+(`registry.py:8104`) compares FOUR keys while `ACTIONS.md` §2.2 declares EIGHT** — `inputs`,
+`preconditions`, `reachability` and `payload_schema` are never compared, so the comparator cannot see the
+contradiction it exists to catch. Deciding which of the eight are *governance* decides what the registry
+refuses, which is the founder's, and is minted as **`Q99`**.
+
+**The register's count stays at ONE.** This is one harm reached by a second route, not a second harm.
+Minting `A4` would be the *"count that grows on a widening definition"* failure R97 ruled against.
+
 ## 3. What the firing means, operationally
 
 The criterion's own reading is the instruction: **stop**, on the governance surface, because *the record it produces reads as authorised*.
