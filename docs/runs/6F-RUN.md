@@ -465,3 +465,181 @@ governance collapse through on an axis they do not compare.
 `stop` is **RESOLVED by R99**; **no sixteenth decline is recorded.**
 
 ---
+
+## §5 — P2 scored, and the one measurement that decides sub-question 1
+
+### §5.1 — P2: **TRUE**, and S3 is REACHABLE
+
+S3 cannot be reached by *joining* on a declared-degraded backend — refusal #2 folds *unknowable* into
+`not demonstrably_same`, so the join is refused `predicate_merge` non-overridably. It **is** reached by
+**joining on a capable backend and reading through a degraded one**, which is not exotic: it is one
+deployment reading another's store, and `PACKAGE.md` §2.6's production path is exactly that arrangement.
+
+**[Observed]**, `DegradedAdapter(SQLiteAdapter(":memory:"), indexes_membership=False)` over a store joined
+capably:
+
+```
+S3 UNKNOWABLE (joined capable, READ through degraded)
+    existing / pred_b / confidence=1.0 / warnings=['near_duplicate:pred_a', 'identity_stale']
+    T2 mirror on the degraded leg:  refuses/predicate_merge/NON-overridable
+```
+
+So P2's prediction holds — S3 is the hardest cell — and §3's second arm is **not hypothetical**. Under the
+withdrawn T2 map this state refuses, on a backend whose only fault is that it cannot compute an extent.
+
+### §5.2 — The measurement that decides sub-question 1: **both redirect paths ignore `min_confidence`**
+
+**[Observed]** on the S1 fixture, and confirmed by code-read — the `min_confidence` test is at
+`registry.py:1707`, **after** the exact-hit return at `1705`, so the redirect never reaches it:
+
+| path | `min_confidence` | outcome | confidence |
+|---|---|---|---|
+| successor | 0.0 / 0.9 / 1.1 / 2.0 | `existing` **every time** | 1.0 |
+| alias | 0.0 / 1.1 / 2.0 | `existing` **every time** | 1.0 |
+
+A caller asking for `min_confidence=2.0` — an impossible bar — still gets `existing`. **§5.3's own
+doctrine is not being applied on this path:**
+
+> "Behaviour when uncertain — the rule this call exists for. Below `min_confidence`, return `none` with
+> `alternatives` populated. **Never** return the best of a bad set as `existing`."
+
+This was **latent and harmless while the redirect always answered 1.0** — no sane bar sits above 1.0 — and
+it goes **live the moment the expensive half lowers that number**. A lowered confidence that no bar can
+act on is advisory decoration.
+
+### §5.3 — The unifying observation this row can make and no earlier row could
+
+Three properties of the cheap half were harmless *because the answer was always 1.0*, and all three become
+load-bearing the moment the read is allowed to act:
+
+1. **The `min_confidence` bypass** (§5.2) — a lowered score nothing can gate on.
+2. **The raw-name comparison** — `set(left_names) == set(right_names)` on unnormalised member names while
+   the resolver scores `_norm(candidate)`. Statement **D**'s shape inside the staleness check. Its error
+   direction is **over**-reporting, which costs nothing as a warning and costs a correct answer as a
+   downgrade. **Code-read grade, NOT [Observed]** — recorded here at that grade deliberately, and not
+   carried as a finding until it is run.
+3. **The S1 / S2 / S3 collapse** — three different facts reported through one boolean.
+
+> **Making a warning able to act does not merely add a consequence. It promotes every latent property of
+> the thing that produces the warning into a live one.** That is the general cost of R99's expensive half,
+> and it is the sentence this row owes the next one.
+
+## §6 — The four sub-questions R99 §4 left open, ANSWERED WITH EVIDENCE
+
+### §6.1 — Sub-question 1: refuse, or answer below 1.0, or both by case?
+
+**ANSWER: answer below 1.0 — the registry never refuses on its own account — AND the redirect paths are
+made to honour `min_confidence`, so the caller's own bar produces the decline.**
+
+The reasoning, and it is not the one §0 expected:
+
+1. **The registry can always name the correct answer**, in every reachable state. §5.10 promises the old
+   word still resolves and the survivor genuinely is the identity it now belongs to. Under §0.3's
+   governing rule — refuse only when the registry *cannot name a correct answer* — refusing is unavailable
+   for S1, S2 and S3.
+2. **T2, which was the thing that would have said otherwise, is dead** (§3), and it died refusing the
+   ordinary case and refusing on paging.
+3. **Refusal-on-demand is already this document's mechanism, and this path skips it** (§5.2). Honouring
+   `min_confidence` on the redirect is not a new policy — it is applying §5.3's stated rule to the one
+   path that returns before reaching it. A caller that declines to act on a weakened identity sets its own
+   bar and gets `outcome="none"` with `alternatives` populated; a caller that does not care is unaffected.
+
+**This means R99's authorisation to REFUSE goes deliberately UNUSED by this row, and §0.4's primary
+falsifier is honoured rather than argued around.** §0.4 pre-committed: *"That is a real and available
+outcome, it is the boring one, and I pre-commit to reporting it as the finding rather than reaching for
+the refusal the ruling made available."* The falsifier's stated trigger (only overridable mirrors) did not
+occur; its **conclusion** is nonetheless where the evidence lands, by a route §0 did not anticipate. **The
+pre-commitment binds on the conclusion, not on the route**, and it is honoured here.
+
+What the registry gains over the status quo is real and worth naming plainly: the decision moves from *the
+registry decides what everyone may act on* to *the registry says how much of the claim still holds, and
+each caller sets its own bar.* That is a smaller change than a refusal and a larger one than a warning.
+
+### §6.2 — Sub-question 2: what confidence does a stale-but-answerable redirect carry?
+
+**ANSWER: `min(resolver_score, J)` where `J` is the Jaccard agreement of the two written extents —
+`|L ∩ R| / |L ∪ R|` — and `confidence: None` when the extents cannot be known.**
+
+Checked against §0.3's three conditions, all of which were fixed before the resolver was opened:
+
+1. **Derived, not chosen.** `L` and `R` are *already read* by `_identity_stale`. No new read is added; the
+   sets it already computes are measured instead of merely compared. Worked, on this row's own fixtures:
+
+   | state | L | R | J |
+   |---|---|---|---|
+   | S0 AGREE | `{shared}` | `{shared}` | **1.0** — so S0 is unchanged, and that falls out rather than being special-cased |
+   | S1 GROWTH | `{shared}` | `{grower, shared}` | 1/2 = **0.5** |
+   | S2 DIVERGENCE | `{late_declarer, shared}` | `{shared}` | 1/3 ≈ **0.333** |
+   | S3 UNKNOWABLE | not knowable | not knowable | **`None`** |
+
+2. **Pinned.** Replacing the derivation with a constant must fail an id. The new ids assert the *ordering*
+   S2 < S1 < S0 and the exact values above, so a constant fails whichever value it picks.
+3. **Not round for roundness.** 0.5 and 0.333 are what these fixtures produce; a different store produces
+   different numbers. Nothing here was chosen for looking reasonable.
+
+**Why Jaccard and not containment.** Containment (`|L ∩ R| / |L|`) scores S1 at **1.0**, hiding growth
+entirely — and §5.3.2's own note already rules containment out for the warning, because *"weakening it to
+containment would make the warning miss Door 1"*. The same argument disqualifies it for the score.
+
+**The cost, stated rather than hidden.** `confidence` means *how sure the registry is that this is the
+right type*, and `J` measures *how much of the identity claim still holds*. They are related and they are
+not the same quantity. `min()` is what keeps the composition honest — the answer is no more trustworthy
+than the weaker of *does the word match* and *does the identity still hold* — but the field is carrying a
+slightly different fact than it did, and a reader of §5.3 must be told so. It is told, in the amendment.
+
+**ROUTED, NOT ASSUMED: is `confidence: None` inside R99's grant?** R99 authorises answering *"below 1.0"*
+and *"refusing"*. **`None` is literally neither.** It is Rule U's own answer — §5.3 says *"`None` means
+'did not score', NOT zero"* — and R99 §4 asks this row for a confidence *"not invented to a round number
+without a reason on the record"*, which invites exactly this. But S3 is the one cell where the honest
+answer may sit outside the words of the ruling, and **that is not mine to settle.** Routed to the
+supervisor with the alternative named: if `None` is out of grant, the fallback is that S3 keeps a computed
+score of `0.0`, which Rule U forbids everywhere else in this document, or refuses, which §3 showed bans
+the door on a legal backend. **I recommend `None` and I do not adopt it unilaterally.**
+
+### §6.3 — Sub-question 3: does this reach past predicates?
+
+**ANSWER: yes, it must — and not by widening the extent comparison, which would be meaningless.**
+
+§4.1 established the structure. An action family has **no extent** — refusal #2 is skipped for actions by
+design, and `6D-RUN.md`'s twin table records trips 1, 2 and 5 at `kind="action"` as NOT CONSTRUCTIBLE for
+that reason. What an action family's identity claim stands on is its **governance declaration**.
+
+So the change is **one principle, two operands**:
+
+> The read verifies, per kind, **the same fact the write door verifies for that kind** — extents for
+> `kind="predicate"` (`_written_extent`, row 4d), governance declarations for `kind="action"`
+> (`_action_declarations_diverge`, row 6d).
+
+**And the row inherits the cheap half's blindness on a third axis, which it says plainly rather than
+describing as narrowed.** R99 §4 names trips 12 and 13 — **transferred words** — as a gap the cheap half
+is *"structurally blind"* to. The read-side check is gated on an exact **alias or successor** hit
+(5.3.2-1, 5.3.2-5), and a transferred word reaches the survivor by neither. **The change inherits that
+blindness.** It is not closed here, it is not narrowed here, and no sentence in the amendment may read as
+though it were. Recorded as a **residual** carried forward, in those words.
+
+### §6.4 — Sub-question 4: what happens to Beacon slice 1?
+
+Stated in the relay's own terms, and it is the second branch.
+
+Beacon slice 1 was told on 2026-08-30 that it *"can trust a 1.0 redirect, or is told not to."* **It is now
+told not to, and the consumer-facing consequence is concrete:**
+
+1. **A `1.0` on an `existing` outcome is no longer unconditional.** It still means what it always meant —
+   *the registry vouches for this* — but a redirect through an alias or a successor whose identity has
+   drifted now answers **below** it. A consumer that branches on `confidence == 1.0` will start taking its
+   other branch on stores where a merged predicate has since gained a member. That is not an error
+   condition; it is ordinary curation becoming visible.
+2. **A consumer that must not act on a weakened identity now has a supported way to say so**, which it did
+   not have before: pass `min_confidence`. Below the bar the answer is `outcome="none"` with
+   `alternatives` populated, which is §5.3's shipped shape for *cannot tell*. **This is new on the
+   redirect path** (§5.2) and it is the half of the change slice 1 should actually build against.
+3. **`identity_stale` keeps its meaning and is not sufficient on its own.** It says *this identity has
+   grown apart from the equality that justified it*, not *act now*. The number is the actionable half.
+4. **On a declared-degraded backend the answer may carry `confidence: None`** (subject to §6.2's routed
+   question). A consumer doing arithmetic on `confidence` without a `None` check will fault. **That is a
+   breaking change for such a consumer and it is stated as one rather than softened.**
+
+**The supervisor relays this. This row does not decide what slice 1 does about it**, and has not softened
+it first.
+
+---

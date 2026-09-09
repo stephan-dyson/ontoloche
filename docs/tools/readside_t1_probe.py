@@ -40,6 +40,7 @@ sys.path.insert(0, str(REPO))
 from ontoloche import Registry  # noqa: E402
 from ontoloche.actions import Effect, action_attributes  # noqa: E402
 from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
+from ontoloche.contract.doubles import DegradedAdapter  # noqa: E402
 from ontoloche.types import Evidence, Refusal, TypeEntry  # noqa: E402
 
 EVIDENCE = [Evidence(kind="data", summary="row 6f T1 reachability fixture")]
@@ -209,14 +210,45 @@ def main() -> int:
         record("S2 move A: declare the ABSORBED word after the join", got)
         report(reg, "S2 DIVERGENCE (after attempting to grow the left)")
 
-    # S3 UNKNOWABLE -- this leg's capability, recorded rather than assumed.
+    # S3 UNKNOWABLE -- a backend that DECLARES it cannot compute an extent. This is UC1
+    # Tenshen's own declared shape and the FIRST trip's backend, and it is the state
+    # section 0.5's P2 predicted would be hardest to justify a policy for.
     print()
     reg = fresh()
     record(
-        "S3 UNKNOWABLE -- caps.indexes_membership on the SQLite leg",
+        "S3 -- caps.indexes_membership on the ordinary SQLite leg",
         repr(reg.caps.indexes_membership),
-        "S3 needs a backend declaring this False (UC1 Tenshen's own shape)",
+        "so S3 is not reachable here; it needs the declared-degraded leg below",
     )
+
+    degraded = Registry(DegradedAdapter(SQLiteAdapter(":memory:"), indexes_membership=False))
+    record("S3 -- caps.indexes_membership on the DEGRADED leg", repr(degraded.caps.indexes_membership))
+    bad = legal_join(degraded)
+    if bad:
+        record(
+            "S3 UNKNOWABLE -- can the join even happen here?",
+            bad,
+            "refusal #2 folds `unknowable` into `not demonstrably_same`, so it refuses",
+        )
+        # The join is refused, so S3 cannot be reached by JOINING on this backend. But a
+        # store can be joined on a capable backend and then READ through a degraded one --
+        # which is not exotic: it is one deployment reading another's store, and it is the
+        # only way this state arises. Constructed by joining first, then degrading.
+        base = SQLiteAdapter(":memory:")
+        capable = Registry(base)
+        bad2 = legal_join(capable)
+        if bad2:
+            record("S3 via join-then-degrade", "UNREACHABLE", bad2)
+        else:
+            seed(capable, "grower", predicates=["pred_b"])
+            later = Registry(DegradedAdapter(base, indexes_membership=False))
+            r, warns = resolution(later, "pred_a")
+            record("S3 UNKNOWABLE (joined capable, READ through degraded)", fmt(r, warns))
+            record(
+                "    T2 mirror on the degraded leg",
+                door_answer(later, "pred_a", "pred_b"),
+                "P2's question: this arm is what would refuse on PAGING, not on identity",
+            )
 
     # ------------------------------------------------------------------ P1: A3's shape
     print("\nP1 -- A3's shape: two kind='action' families whose governance contradicts\n")
