@@ -241,3 +241,227 @@ resolver was open.** The ordering that makes this section binding is worth more 
 commands that fill it are printed above and are not revisable.
 
 ---
+
+## §1 — The suite floor, filled
+
+Run at `396bf02` before any change, by §0.9's own commands, `oo-pg` up on **55432**.
+
+| leg | result at `396bf02` | wall clock |
+|---|---|---|
+| sync (`ontoloche.contract`) | **912 passed, 301 skipped**, exit 0 | 894.19s (14m54s) |
+| async (`ontoloche.aio.contract`) | **949 passed, 301 skipped**, exit 0 | 458.83s (7m38s) |
+
+This row never drops below it.
+
+## §2 — T1 and T2, as measured
+
+Probe: [`readside_t1_probe.py`](../tools/readside_t1_probe.py). Every row below is **[Observed]** against
+`ontoloche.Registry` on the SQLite leg, with **ordinary calls only** — no `force`, no acknowledgements,
+per §0.3's borrowing of the governance register's standing rule 3.
+
+### §2.1 — The correction this probe made to its own first cut
+
+Recorded rather than edited over, because a probe that silently fixes its own fixture is a probe whose
+earlier output nobody can audit.
+
+The first fixtures seeded members on **one** side and then retired `pred_a` toward `pred_b`. Every one
+came back `RETIRE REFUSED predicate_merge overridable=False`. **Those fixtures never built a redirect at
+all**, so they could not have shown anything about the read. Refusal #2 requires the two extents to be
+non-empty and identical **at the moment of the join** — so the states this row is about are what happens
+to a *legal* join **afterwards**. Every fixture now joins on an agreeing pair first (`shared` declares
+both predicates) and then moves the world with ordinary calls.
+
+### §2.2 — The table
+
+| state | reachable? | what the shipped read answers | T2 mirror: `merge_types(pred_a → pred_b)` asked now |
+|---|---|---|---|
+| **S0 AGREE** | yes | `existing` / `pred_b` / **1.0**, no `identity_stale` | `retired_operand` — **OVERRIDABLE** |
+| **S0' BOTH EMPTY** | **NO** — the join itself is refused `predicate_merge` **non-overridably** | — | — |
+| **S1 GROWTH** | yes | `existing` / `pred_b` / **1.0** + `identity_stale` | `predicate_merge` — **NON-overridable** |
+| **S2 DIVERGENCE** | **yes** | `existing` / `pred_b` / **1.0** + `identity_stale` | `predicate_merge` — **NON-overridable** |
+| **S3 UNKNOWABLE** | needs a backend declaring `indexes_membership=False`; the SQLite leg reports `True` | — | — |
+
+**§0.2's S0' cell is answered, and my pre-registration was wrong about which side answers it.** I wrote
+the `bool(left)` term into §0.2 expecting the *read* to report two empty extents as stale. It never gets
+the chance: the **write** door refuses to create that join at all, non-overridably, which is trip 2's own
+rule (`C10-09`) doing its job one call earlier. The term in `_identity_stale` is defensive and, by
+ordinary calls on this leg, unreachable. Recorded as a correction to §0.2, not as a finding against the
+code.
+
+### §2.3 — §0.4's SECONDARY falsifier does NOT fire, and finding out cost the spec a sentence
+
+S2 is **reachable**. I expected it not to be, on `INTERFACE.md` §5.3.2's own reasoning:
+
+> "The absorbed word is retired, so its own written extent can never grow again; the survivor's can."
+
+**That sentence is false, and this row found it by measurement.** After a legal join,
+`propose_type("late_declarer", …, predicates=["pred_a"])` — naming the **retired** predicate — is accepted
+and approved by ordinary calls, and the left extent moves from `['shared']` to
+`['late_declarer', 'shared']` while the right stays `['shared']`. So the absorbed word's extent **can**
+grow, and S2 — the two words demonstrably denoting different sets, in the direction the merge's
+justification forbids — is an ordinary-calls state.
+
+The permanence note's whole argument rests on that sentence. Amending §5.3.2 is inside this row's scope
+and is done in the spec commit.
+
+## §3 — T2 is FALSIFIED as a policy map, by the test §0.3 fixed before the resolver was opened
+
+**This is the row's central result and it costs me my own load-bearing discriminator.**
+
+§0.3 fixed T2: derive the read's policy from what `merge_types` answers about the same pair, asked now.
+Applied honestly to the measured table, T2 says **REFUSE** for S1 and S2, because both mirror a
+**non-overridable** `predicate_merge`. It fails in **both** directions:
+
+1. **It refuses the ordinary case.** S1 GROWTH is a legal merge followed by the first new type declaring
+   the survivor. §5.3.2's permanence note says that state is **permanent by construction** and arrives on
+   the first ordinary curation pass after *any* merge. T2 would therefore make `resolve_type` refuse the
+   dead word **forever, for every merged word in the registry** — deleting §5.10's *"the old word still
+   resolves"* promise wholesale. That is not a guarantee change the founder authorised; it is the
+   guarantee's removal.
+
+2. **It refuses on paging rather than on broken identity.** `registry.py:4610` returns
+   `"overridable": False` for **every** non-`demonstrably_same` case, the **unknowable** one included. So
+   T2 wires S3 straight to REFUSE, and on a **declared-degraded** backend — UC1 Tenshen's own shape, and
+   the FIRST trip's backend — every alias or successor redirect between two predicates would refuse.
+   Refusal #1's own comment three lines above says refusing there *"would ban these doors on that
+   backend"*, citing `C10-09`, `C3-13` and `C12-13`.
+   *(Attack raised by the supervisor before the probe existed and routed to me to verify or kill.
+   **VERIFIED**, and the S1 arm above is a second instance the attack did not name.)*
+
+### §3.1 — Why T2 was wrong, stated so the replacement is not the same mistake
+
+The two calls ask **different questions**, and T2 assumed one answer served both.
+
+> `merge_types` asks **"may this identity be CREATED?"** and answers strictly, because creating a false
+> identity is irreversible. `resolve_type` asks **"is this identity, already legally created, still
+> trustworthy?"** — and *a pair that would not be joined today is not the same fact as a join that should
+> not be honoured.*
+
+### §3.2 — The amendment, made visibly and not silently
+
+§0.2 and §0.3 said the partition and the criteria are *"not revisable after analysis begins"*. That rule
+binds, so T2 is **not edited in §0** — it stands there as written and is **superseded here**, in its own
+committed section, exactly as row 6e's §0.3 required of a criterion found unworkable mid-analysis.
+
+**What dies:** T2 as a *policy map*. The refuse / score / 1.0 mapping in §0.3's table is withdrawn.
+
+**What survives, and it is not a convenience salvage:** T2 as a **detector**. The mirror discriminates
+cleanly and reproducibly — a sound identity answers `retired_operand`/overridable, a drifted one answers
+`predicate_merge`/NON-overridable. That is a real signal and it is kept.
+
+**What governs instead:** §0.3's **primary** rule, which was always the governing sentence and is
+untouched by this amendment —
+
+> A state REFUSES when the registry cannot name a correct answer to the question asked. It answers BELOW
+> 1.0 when it can name one and cannot vouch for it. It answers at 1.0 only when it can vouch for it.
+
+Applied to the measured table: S0 → **1.0**. S1, S2, S3 → the registry **can** name the correct answer
+(the survivor, which §5.10 promises still resolves) and **cannot** vouch for the equality that justified
+the redirect → **below 1.0**. S0' → unreachable, and §0.3's own rule forbids inventing a policy for it.
+
+**§0.4's PRIMARY falsifier does not fire either, but not for the reason it was written.** It asked whether
+every reachable state mirrors only an *overridable* refusal, which would leave R99's authorisation to
+refuse unused. The mirrors are non-overridable — and the mapping that would have turned that into a
+refusal is the thing this section just killed. **Whether `refuse` is ever the right answer is therefore
+still open at this point in the row**, and is answered against A3's shape in §4 rather than against the
+predicate states here.
+
+## §4 — P1, P2, P3 scored, and what is routed to the supervisor
+
+### §4.1 — P1: **TRUE.** Confirmed, and it is a blocking dependency as predicted
+
+`_identity_stale("default", old_verb, new_verb)` on two `kind="action"` families returns **`False`**. The
+gate is `registry.py:1351` — `if written.kind != "predicate" or answered.kind != "predicate": return
+False`. The shipped detection is structurally blind to A3's shape, so a response built on top of it never
+fires on the shape this row's brief requires it to remove.
+
+**And the widening is not the obvious one.** From [`6D-RUN.md`](6D-RUN.md)'s twin table, trips 1, 2 and 5
+at `kind="action"` are all recorded **NOT CONSTRUCTIBLE**, because refusal #2 is skipped for actions **by
+design** ([`ACTIONS.md`](../specs/ACTIONS.md) §2.1) — an action family has no extent to read. What an
+action family's identity claim stands on is its **governance declaration**, and the registry already
+computes exactly that at the write doors: `_action_declarations_diverge` (`registry.py:8106`) over
+`_GOVERNANCE_KEYS = ("approval_mode", "min_auto_tier", "reversibility", "effects")`.
+
+So the structural finding, which is bigger than the prediction that led to it:
+
+> **Row 4d built the READ-side check for the predicate operand. Row 6d built the WRITE-side check for the
+> action operand. Nobody built the read-side check for the action operand — and that gap IS statement `E`
+> at `kind="action"`.**
+
+The change this row makes is therefore one principle with two operands: **the read verifies, per kind, the
+same fact the write door verifies for that kind.** It invents no third axis.
+
+### §4.2 — P3: **TRUE.** The four consequential doors report nothing
+
+`grep -n "_identity_stale" ontoloche/registry.py` returns **two** call sites, both inside `resolve_type`
+(1503, 1667). `_extent`, `predicates()`, `list_types(predicate=)` and `preflight` never call it.
+**[Observed]** on the S1 fixture, where `resolve_type` carries `identity_stale`:
+
+| door | what it answers on a store whose identity has gone stale |
+|---|---|
+| `_extent('pred_b', identity=True)` | `members=['grower','shared'] size=2 why=None` — a clean, complete answer |
+| `predicates(of='shared')` | `known=1 warnings=[]` |
+| `list_types(predicate='pred_b')` | `n=2 complete=False why_incomplete='filters suppressed rows: predicate, include_retired=False'` — incomplete for an unrelated reason, saying nothing about the identity |
+
+The asymmetry the brief names is real, and it is this row's to specify.
+
+### §4.3 — P2: **not yet scored.** S3 needs the declared-degraded leg
+
+P2 predicted S3 would be the hardest policy to justify. §3's second arm already shows why, but S3 has
+**not** been constructed — the SQLite leg reports `indexes_membership=True`. Scoring P2 requires the
+`sqlite_minimal` leg and is outstanding. Recorded as outstanding rather than inferred.
+
+### §4.4 — A3 reproduces at HEAD, and the register's own table does not
+
+Probe: [`readside_a3_probe.py`](../tools/readside_a3_probe.py). Three walks, **all three printed**,
+including the one that refuses — a probe that runs only the walk it expects to succeed is not evidence.
+
+Row 6d's commit **`304967a`**, titled *"A3 CLOSED"*, dated **2026-09-05**, **is an ancestor of HEAD**.
+
+**WALK 1 — A3's shape as [the governance register](../decisions/2026-09-07-governance-register.md)
+tabulates it** (both families declare; the four governance keys contradict):
+
+| door | ordinary-calls result **at HEAD** | what the register states, in the present tense |
+|---|---|---|
+| `retire(successor=)` | **REFUSED `action_declarations_diverge`, non-overridable** | `('RETIRED','retired',[])` |
+| `merge_types` | **REFUSED `action_declarations_diverge`, non-overridable** | `REFUSED definitions_diverge`, overridable |
+| `import_types` | alias **not written**; `warnings=['near_duplicate:old_verb','import_refused:alias_collision']` | **warnings EMPTY** |
+
+**WALK 3 — and A3 IS still reachable, on an axis nobody is comparing.** `_GOVERNANCE_KEYS` holds **four**
+of `ACTIONS.md` §2.2's **eight** keys. **`preconditions` is not one of them.** Two families whose four
+governance keys **agree** but whose preconditions differ collapse with no refusal, and the full harm
+reproduces **[Observed]**:
+
+```
+collapse via retire(successor=)                   RETIRED -- no refusal, no force, no acknowledgement
+resolve_type('old_verb')                          existing / new_verb / confidence=1.0    <- a CLEAN 1.0
+record_invocation('old_verb', outcome='applied')  Invocation outcome='applied'
+invocations(family='new_verb')                    n=0    <- the survivor's ledger is EMPTY
+```
+
+That is A3's own sentence, at HEAD, end to end. A second reachable hole: `304967a` returns `None` when
+either side declares nothing (*"a family that has not DECLARED is not a family that declared
+differently"*), and that walk also yields a clean 1.0, though its terminal `record_invocation` refuses for
+an unrelated schema reason.
+
+**§0.6's pass condition is therefore testable and currently NOT met** — WALK 3 is the fixture this row's
+change has to break.
+
+### §4.5 — Routed to the supervisor. NOT self-classified, and A3 is NOT closed
+
+1. **The register's A3 table does not reproduce at HEAD on two of three doors.** Correcting a register
+   entry is not this worker's. Routed.
+2. **[R100](../decisions/2026-09-09-founder-ruling-R100.md) fired the governance stop criterion on A3
+   today.** This row's evidence does **not** say that firing was wrong — **A3's harm does reproduce**. It
+   says the *stated reachability* is wrong in one direction and incomplete in another. That reads
+   founder-adjacent; routed rather than judged.
+3. **The uncompared-key gap is a WRITE-door defect** and this row is fenced off the write doors. Not
+   touched, not fixed, routed to the next row.
+
+**A3 does not close here and nothing above may be read as closing it.** Its write doors still let a
+governance collapse through on an axis they do not compare.
+
+**Kill-row count: TWENTY-THREE.** Nothing in this section is self-classified as a trip. The kill row's
+`stop` is **RESOLVED by R99**; **no sixteenth decline is recorded.**
+
+---
