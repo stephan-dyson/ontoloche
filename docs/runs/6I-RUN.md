@@ -793,6 +793,22 @@ test_c9_retire.py:1751           0 ids   (silent on every leg, before and after)
 **This is this row's run. The supervisor runs them again before closing the row, and that run is the one
 that counts** — "landed" means verified on `origin` by `git ls-remote`, never a row's own word for it.
 
+**Three separate adversarial lenses also ran the five gates independently across rounds 3 and 4 and got
+exit 0 each time.** That is re-execution by parties with no stake in the answer, not this row's word
+repeated.
+
+### §4.4 — THE VERIFICATION BOUNDARY, stated before landing rather than after
+
+**So that "verified" does not blur, and so nobody later reads more into a sign-off than it carries:**
+
+- **The five gates are re-executed by the supervisor on the landed tree.** That is re-execution, not trust.
+- **The suite legs — 528 / 943 / 979 — are THIS ROW'S numbers and are labelled as this row's**, the same as
+  rows 6g and 6h. The supervisor does not re-run them to countersign them.
+- **The raw `-rs` logs match every figure this record cites from them, checked by two independent lenses.
+  Their AUTHENTICITY rests on trust rather than on re-execution**, because the reviewers were barred from
+  running the suites. **A lens named that limit rather than glossing it, and this record adopts its
+  framing: a limit a reviewer names is worth more than a claim it did not check.**
+
 ### §4.3 — CRITERION 6, both halves, because the first half alone is not the check
 
 **Half one — the diff:**
@@ -1090,12 +1106,20 @@ gate nobody checked.
 
 **A clean verdict on text a lens did not read is not a clean verdict on the artefact.** So:
 
-| round | panel | reviewed | verdicts | findings |
-|---|---|---|---|---|
-| 1 | 4 lenses | `ba71288` | 3 `SHIP IT`, 1 `NOT YET` | `F1`-`F5` — 4 MAJOR |
-| 2 | 3 lenses | `c483f9d` | 2 `SHIP IT`, 1 `NOT YET` | `F6`-`F11` — 4 MAJOR |
-| 3 | 3 lenses | `c81daaa` | 2 `SHIP IT`, 1 `NOT YET` | `F12`-`F13` — 1 MAJOR |
-| 4 | 3 lenses | `0ae2526` — the `F12` write-up and §7 | 2 `SHIP IT`, 1 `NOT YET` | `F14`-`F15` — 1 MAJOR |
+| round | panel | reviewed | verdicts | raw lens findings | consolidated |
+|---|---|---|---|---|---|
+| 1 | 4 lenses | `ba71288` | 3 `SHIP IT`, 1 `NOT YET` | 4 MAJOR, 7 MINOR | `F1`-`F5` |
+| 2 | 3 lenses | `c483f9d` | 2 `SHIP IT`, 1 `NOT YET` | 4 MAJOR, 5 MINOR | `F6`-`F11` |
+| 3 | 3 lenses | `c81daaa` | 2 `SHIP IT`, 1 `NOT YET` | 1 MAJOR, 6 MINOR | `F12`-`F13` |
+| 4 | 3 lenses | `0ae2526` — the `F12` write-up and §7 | 2 `SHIP IT`, 1 `NOT YET` | 1 MAJOR, 5 MINOR | `F14`-`F15` |
+| | **13 lens-passes** | | **9 `SHIP IT`, 4 `NOT YET`** | **10 MAJOR, 23 MINOR** | **15 numbered** |
+
+**`F`-NUMBERS ARE THIS ROW'S CONSOLIDATION, NOT A ONE-TO-ONE MAP OF LENS FINDINGS, and an earlier version
+of this table did not say so.** It listed only the consolidated range in a column headed *findings*, which
+reads as though round 1 produced five things when four lenses raised eleven. **Several raw MINORs were
+folded into a neighbouring `F` or fixed without a number** — round 3's `--stat` labelling and eight-commit
+corrections are both in that class. **Found by this row's own focused re-pass over this table**, which is
+what the re-pass was for.
 
 **Between rounds 3 and 4 this row fixed MINORs — the `--stat` labelling and the eight-commit distance — and
 disclosed that rather than protecting a clean count.** The rule the supervisor ruled from it, so this
@@ -1108,6 +1132,25 @@ terminates instead of regressing:
   meaningful rather than decorative.
 
 **Round 3 produced a MAJOR (`F12`), so round 4 was a full round.**
+
+**THE TERMINATING PRINCIPLE, ruled after `F14` and recorded so the next row inherits it rather than
+rediscovers it:**
+
+> **A fix whose content is the RECORD OF THE REVIEW is CHECKED AGAINST THE ROUND OUTPUTS, not reviewed as a
+> claim. Verification, not a round.**
+
+**The rule that a MAJOR fix needs a further full round exists because FIXES CARRY DEFECTS** — three
+consecutive rows have had a round's own fix carry the next finding, and in row 6h's case into the instrument
+itself. **That risk attaches to a fix making a NEW CLAIM ABOUT THE SYSTEM.** `F14`'s fix makes none: its
+entire content is the table above, a record of what each round returned.
+
+**And the regress is what decides it.** A full round 5 would have to record itself in this table. Any error
+in *that* recording is another `F14`-class MAJOR, requiring round 6, which records itself, and so on. **A
+rule requiring each round to be reviewed by a further round has no fixed point.** `F14` is exactly the
+finding that exposes this, which is why it is the one that must not trigger the rule.
+
+**So `F14` was closed by a FOCUSED RE-PASS**: every cell of the table above checked against what that round
+actually returned, and §7's `F15` sub-bullet checked against what `F15` actually established. Not a round.
 
 **`F14` MAJOR — this table asserted round 4 in the completed register before round 4 had run.** The
 sentence above originally read *"round 4 is a full round and it sees the `F12` write-up"* while the row for
@@ -1133,30 +1176,37 @@ what it is: first and foremost a HOLE IN A LANDED GATE, with the extension secon
 inside a long document.** Nothing here goes in the governance register — that is the founder's and stays at
 ONE.
 
-**1. The checker fix, and it is now TWO holes rather than one.**
+**1. THE CHECKER FIX. Not a list of holes — an AXIS, because a list of three will not catch the fourth.**
 
-- **`F4`** — `_capability_proof` accepts a capability assertion of the **wrong flag or inverted boolean
-  sense**. `assert registry.caps.stores_events is True` — trivially true on every real backend — classifies
-  as `S5`.
-- **`F12`** — and it accepts a guard that was **never narrowed at all**, which is wider and worse.
-- **`F15`** — and it accepts an assertion that **cannot fail**, which is worse than both.
-  `_capability_proof` walks the assert's **entire test expression** for any `Attribute` named
-  `caps`/`capabilities`, with no regard for whether that sub-expression is ever evaluated. Verified against
-  the live classifier: a bare `isinstance(gone, Refusal)` guard with
-  `assert True or registry.caps.stores_events` in its branch classifies **`S5-PROVEN-ENVIRONMENTAL`** — and
-  the gate emits, in its own `why` text, *"so a capable backend that behaved wrongly would FAIL here rather
-  than skip"* **about an assertion that can never fail.** The gate does not merely mis-classify; it prints a
-  false justification for the classification.
-  **`F15` is NOT caught by the fix direction stated above**, which is a guard-side correlation requirement
-  and says nothing about whether the assertion's own expression is short-circuit-defeatable. **The eventual
-  checker fix needs all three cases in its calibration set: wrong flag, unnarrowed guard, and vacuous
-  assert.** None of this row's four repairs uses a vacuous assert — each asserts a real, correctly-signed
-  `caps.stores_events is False`, checked individually by the lens that found this.
-- **The fix must require the guard chain to carry a reason comparison correlated with the asserted
-  capability, not merely that some capability attribute is asserted nearby.** A fix scoped to `F4` alone
-  leaves `F12` open.
-- **This row minted four more byte-identical copies of the shape**, which is what a later contributor
-  copies.
+**The `S5` promotion rests on a proof with THREE INDEPENDENT PARTS, and `_capability_proof` currently
+validates only one of them:**
+
+| part | the question it must answer | broken by |
+|---|---|---|
+| **what is asserted** | is it the capability that explains **this** refusal? | **`F4`** — wrong flag, or inverted sense (`... is True`) |
+| **when it is reached** | does the guard narrow to the reason that capability explains? | **`F12`** — guard never inspected at all |
+| **whether it can fail** | is the assertion's own expression defeatable? | **`F15`** — `assert True or X` |
+
+**Derive the calibration set from the axis, not from the three names.** A set built from three remembered
+cases will not catch the fourth case nobody has thought of; a set built from the axis will. **And the `why`
+TEXT must be calibrated against the same three**, because `F15` shows it can be false independently of the
+verdict.
+
+**`F15` is the one that should decide how seriously the `why` text is taken.** The gate does not merely
+print a false justification — **it QUOTES the vacuous assertion verbatim and then states a consequence that
+is false of the very expression it just quoted:**
+
+```
+why: guard reads gone -- the result under test -- but the block asserts
+     `True or registry.caps.stores_events` BEFORE it skips, so a capable
+     backend that behaved wrongly would FAIL here rather than skip
+```
+
+`assert True or X` cannot fail. **So the gate prints the disproof and draws the opposite conclusion from
+it.** A human reading that line has everything needed to see the error sitting in front of them, **and the
+sentence tells them not to look.**
+
+**This row minted four more byte-identical copies of the shape**, which is what a later contributor copies.
 
 **2. The item 3 extension**, scoped in §1. Its first item is the cheap local option: let a parameter proven
 safe **within its own function** participate in the observation-root logic, which promotes
