@@ -1095,7 +1095,7 @@ gate nobody checked.
 | 1 | 4 lenses | `ba71288` | 3 `SHIP IT`, 1 `NOT YET` | `F1`-`F5` — 4 MAJOR |
 | 2 | 3 lenses | `c483f9d` | 2 `SHIP IT`, 1 `NOT YET` | `F6`-`F11` — 4 MAJOR |
 | 3 | 3 lenses | `c81daaa` | 2 `SHIP IT`, 1 `NOT YET` | `F12`-`F13` — 1 MAJOR |
-| 4 | — | **the final text, including `F12`'s write-up and §7** | — | — |
+| 4 | 3 lenses | `0ae2526` — the `F12` write-up and §7 | 2 `SHIP IT`, 1 `NOT YET` | `F14`-`F15` — 1 MAJOR |
 
 **Between rounds 3 and 4 this row fixed MINORs — the `--stat` labelling and the eight-commit distance — and
 disclosed that rather than protecting a clean count.** The rule the supervisor ruled from it, so this
@@ -1107,7 +1107,15 @@ terminates instead of regressing:
 - **The record says which rounds saw which text**, which is this table, and is what makes the streak
   meaningful rather than decorative.
 
-**Round 3 produced a MAJOR (`F12`), so round 4 is a full round and it sees the `F12` write-up.**
+**Round 3 produced a MAJOR (`F12`), so round 4 was a full round.**
+
+**`F14` MAJOR — this table asserted round 4 in the completed register before round 4 had run.** The
+sentence above originally read *"round 4 is a full round and it sees the `F12` write-up"* while the row for
+round 4 in this very table read `—`. **A reader would have taken the requirement as met when the ledger two
+lines below said it was outstanding.** That is the eighth instance of this row's own error class, committed
+in the section written to make the streak honest, and it was caught by a lens rather than by me. **The row
+is filled in above with what round 4 actually returned, and the premature sentence is left legible here
+rather than deleted.**
 
 ---
 
@@ -1131,6 +1139,19 @@ ONE.
   sense**. `assert registry.caps.stores_events is True` — trivially true on every real backend — classifies
   as `S5`.
 - **`F12`** — and it accepts a guard that was **never narrowed at all**, which is wider and worse.
+- **`F15`** — and it accepts an assertion that **cannot fail**, which is worse than both.
+  `_capability_proof` walks the assert's **entire test expression** for any `Attribute` named
+  `caps`/`capabilities`, with no regard for whether that sub-expression is ever evaluated. Verified against
+  the live classifier: a bare `isinstance(gone, Refusal)` guard with
+  `assert True or registry.caps.stores_events` in its branch classifies **`S5-PROVEN-ENVIRONMENTAL`** — and
+  the gate emits, in its own `why` text, *"so a capable backend that behaved wrongly would FAIL here rather
+  than skip"* **about an assertion that can never fail.** The gate does not merely mis-classify; it prints a
+  false justification for the classification.
+  **`F15` is NOT caught by the fix direction stated above**, which is a guard-side correlation requirement
+  and says nothing about whether the assertion's own expression is short-circuit-defeatable. **The eventual
+  checker fix needs all three cases in its calibration set: wrong flag, unnarrowed guard, and vacuous
+  assert.** None of this row's four repairs uses a vacuous assert — each asserts a real, correctly-signed
+  `caps.stores_events is False`, checked individually by the lens that found this.
 - **The fix must require the guard chain to carry a reason comparison correlated with the asserted
   capability, not merely that some capability attribute is asserted nearby.** A fix scoped to `F4` alone
   leaves `F12` open.
