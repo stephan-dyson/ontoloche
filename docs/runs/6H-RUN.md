@@ -723,7 +723,7 @@ grep -n '_tombstone_holding' ontoloche/contract/test_c4_propose_type.py
 
 | # | site | guard | what its assertions are about |
 |---|---|---|---|
-| 1 | `test_c10_merge_types.py::test_c10_22…#0` | `isinstance(out, Refusal)` | `out.warnings` must name **the collision scan specifically** — the **inline comment at `:1207-1210`** records that asserting the bare value let a mutation survive |
+| 1 | `test_c10_merge_types.py::test_c10_22…#0` | `isinstance(out, Refusal)` | `out.warnings` must name **the collision scan specifically** — the **inline comment at `:1207-1211`** records that asserting the bare value let a mutation survive |
 | 2 | `test_c10_merge_types.py::test_c10_24…#0` | `isinstance(merged, Refusal)` | `merged.warnings` must carry `identity_guard_skipped:different_consumer_sets:` |
 | 3 | `test_c12_foundry_import.py::test_c12_21…#0` | `isinstance(gone, Refusal)` | `gone.aliases` must still hold `zzz_moved` — asserted **one line after the skip that hides it** |
 | 4 | `test_c12_foundry_import.py::test_c12_24…#0` | `any(w.startswith('import_refused:') for w in warnings)` | the same `warnings` must carry `identity_guard_skipped:…` |
