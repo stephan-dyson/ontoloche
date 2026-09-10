@@ -328,6 +328,31 @@ def _capability_derived(func: ast.AST) -> set[str]:
     return out
 
 
+def _capability_bound_from_observation(func, observations: set[str]) -> set[str]:
+    """Names bound from a capability read whose OWNER is the result under test.
+
+    `caps = gone.caps` binds a name that `_capability_derived` calls a capability
+    source -- and it IS one, syntactically. But the object it was read off is the
+    result the test is judging, so an assertion on it is not a fact about the
+    environment. Round 2 taught `_capability_expr` to accept a bound capability
+    name (`caps = adapter.capabilities()`), and that branch carried NO observation
+    check while the branch above it had one. **So the calibration case pinned to
+    stop `gone.caps.stores_events` was defeated by binding the alias one line
+    earlier, and by the tuple spelling that same case's own source uses.** Round 3
+    found it. It is the sixth instance of a fix carrying the next defect.
+    """
+    out: set[str] = set()
+    for node in ast.walk(func):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            continue
+        value = getattr(node, "value", None)
+        if value is None:
+            continue
+        if _capability_reads(value) & observations:
+            out.update(_assign_targets(node))
+    return out
+
+
 def _observes(value: ast.AST) -> bool:
     """Does this expression CALL the system, as opposed to deriving from a value?"""
     for n in ast.walk(value):
@@ -829,7 +854,7 @@ def _guard_narrows(pairs, observations: set[str]) -> str:
 
 
 def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
-                      all_observations: set[str], cap_derived):
+                      all_observations: set[str], cap_all, cap_env):
     """``(proof source, how it narrows)`` when S5 holds; ``("", why not)`` when not.
 
     Two narrowings a fresh lens made necessary in row 6h and both still stand: the
@@ -885,8 +910,8 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
         # made those two read the same.
         held = ""
         for stmt in before:
-            if isinstance(stmt, ast.Assert) and _mentions_capability(stmt.test, cap_derived):
-                if _falsifying(stmt.test, cap_derived, all_observations):
+            if isinstance(stmt, ast.Assert) and _mentions_capability(stmt.test, cap_all):
+                if _falsifying(stmt.test, cap_env, all_observations):
                     held = ast.unparse(stmt.test)
                     break
         base = (
@@ -910,10 +935,10 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
     for stmt in before:
         if not isinstance(stmt, ast.Assert):
             continue
-        if not _mentions_capability(stmt.test, cap_derived):
+        if not _mentions_capability(stmt.test, cap_all):
             continue
         found = ast.unparse(stmt.test)
-        if _falsifying(stmt.test, cap_derived, all_observations):
+        if _falsifying(stmt.test, cap_env, all_observations):
             return found, narrowing
     if found:
         # NOT "cannot fail". A lens fed three expressions that DO fail on a capable
@@ -1051,8 +1076,12 @@ def classify_source(src: str, rel: str) -> list[Site]:
         if read_obs:
             shared = guard_roots & assert_roots
             if shared:
+                cap_env = cap_derived - _capability_bound_from_observation(
+                    func, observations
+                )
                 proof, detail = _capability_proof(
-                    pairs, inner_if, node, read_obs, observations, cap_derived
+                    pairs, inner_if, node, read_obs, observations,
+                    cap_derived, cap_env,
                 )
                 if proof:
                     # The `why` says WHAT WAS CHECKED and what was not. F15: the old
@@ -1596,6 +1625,51 @@ def test_alias_launder(registry):
     why, detail = gone.reason, gone.detail
     if why == "cannot_record_override":
         assert gone.caps.stores_events is False, detail
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R3 -- BINDING the alias first must not launder it either. `caps = gone.caps` "
+        "is the R2 case with one line in front of it, and it defeated R2's pin",
+        UNDER_TEST,
+        '''
+import pytest
+def test_alias_bound_first(registry):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    caps = gone.caps
+    if gone.reason == "cannot_record_override":
+        assert caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R3 -- the TUPLE spelling of the same thing, which is the spelling R2's own "
+        "case source uses one line above",
+        UNDER_TEST,
+        '''
+import pytest
+def test_alias_bound_tuple(registry):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    flags, extra = gone.caps, gone.detail
+    if gone.reason == "cannot_record_override":
+        assert flags.stores_events is False, extra
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R3 -- and a name bound from a REAL capability call must still be accepted, so "
+        "the fix above is not a blanket refusal of bound capability names",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_bound_env_caps(adapter, registry):
+    caps = adapter.capabilities()
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert caps.stores_events is False, gone
         pytest.skip("NOT REACHABLE")
     assert not isinstance(gone, Refusal), gone
 ''',

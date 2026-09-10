@@ -252,7 +252,7 @@ was opened in this step and no repair was made — that is step 3, and the brief
 
 ### §1.1 — What the fix is: THREE PARTS, TWO PREDICATES, one shape rule each
 
-**Parts 1 and 3 collapsed into ONE recursive predicate, and that is a finding rather than a tidying.**
+**Parts 1 and 3 collapsed into ONE recursive predicate, and it is worth stating why rather than presenting it as a result.** **(`J58`: this read "that is a finding rather than a tidying". This record reserves "finding" for what a lens or a measurement produced, and this is the row describing its own refactor.)**
 `_falsifying(expr)` asks *does this expression FAIL on a backend that HAS the capability*, and that is the
 question both parts ask. `assert caps.f is True` cannot fail on a capable backend (`F4`); neither can
 `assert True or caps.f` (`F15`). **The same walk refuses both, and it refuses the rewordings nobody has
@@ -290,7 +290,9 @@ NOT exempt.** A negated truthiness test admits a family exactly as a positive on
 right there to compare against — **the requirement CAN be met, so it is not waived.** The exemption is for
 the type test alone, because the type test is what makes the reason attribute unavailable.
 
-**One logical site, two files.** The same guard is at `ontoloche/aio/contract/test_c10_merge_types.py:1491`,
+**One logical site, two files.** The same guard is at `ontoloche/aio/contract/test_c10_merge_types.py:1491`
+**(`J55`: that is its line at `16becf6`; this row's own `+26` to that file moved it to **1513** at HEAD,
+and §2.1 makes re-location a discipline while `J12` writes a convention note about exactly this)**,
 and **[Observed — the file's first three lines]** that file carries the `GENERATED FILE -- do not edit`
 banner, so the census skips it and counts the site **once**. Nobody should count it twice.
 
@@ -348,7 +350,7 @@ it as the prediction most likely to be wrong.
 #### §1.4.1 — `P1` RE-SCORED. **BOTH SCORINGS STAND, AND THE SECOND ONE IS A MISS.**
 
 **Everything above is the scoring against `9b00bcc`, the first cut of the fix. It was correct against that
-state.** Round 1 then found six MAJORs in that classifier and it was rebuilt; round 2 found three more and
+state.** Round 1 then found six MAJORs in that classifier and it was rebuilt; round 2 found seven more **(`J49`: this said THREE, which is one lens's raw count where the round's consolidated count belonged. §3.7 and §4.1 both say seven, and §4.1's headline of thirteen is 6 + 7)** and
 it was rebuilt again. **§0.5's falsifier — *"any site printing a different category after the fix than the
 landed census recorded for it"* — FIRES against the classifier that actually landed.**
 
@@ -395,6 +397,13 @@ ontoloche/contract/test_c10_merge_types.py::test_c10_27_...#0
 the argument for it covers and no more. Site 10 — `test_c12_27`, also an inverse guard — is unmoved by it,
 because its `startswith` prefix narrows on a constant anyway and it never needed the exemption.
 
+> **`J50`, CORRECTED IN PLACE.** That clause is the reading §3.5.1 records as **REFUSED**. `test_c12_27`'s
+> guard is a COMPLEMENTED marker test and it narrows on nothing — which is why the site sits in the
+> baseline as `Q1`. **[Observed at HEAD]** it is `S2-RESULT-UNDER-TEST` with the `why` *"the guard tests the
+> observation without naming WHICH outcome the capability explains"*. **The sentence was true under the
+> first cut and was left standing in a measurement section after the axis that refutes it landed.**
+> Corrected: site 10 is unmoved by the exemption because it is `S2` either way.
+
 ### §1.6 — WHAT THE FIX ACTUALLY DOES, since §0.7 said the census would not show it
 
 > **`J24`, CORRECTED IN PLACE, AND IT WENT STALE TWICE.** This read **"NINE of the fourteen new calibration
@@ -440,7 +449,13 @@ through `classify_source()` on both modules, compared category by category]**
 > cut never read, and the `startswith` case would have passed with the negation removed and the `startswith`
 > on an unrelated object. **Both are re-pinned in §3**, one of them by moving a live site out of `S5`.
 
-**All 31 calibration cases pass, the 17 that pre-date this row included.** `--selftest` re-executes the
+> **`J46`, CORRECTED IN PLACE.** This read **"All 31 calibration cases pass"**. **[Observed —
+> `--selftest` at HEAD]** it is **40**. It was 31 at `9b00bcc`, 37 after round 2's six, and 40 after round
+> 3's three. **And 17 + 14 = 31, so the wrong split summed correctly — twenty lines below `J24`, which
+> corrects this record for that exact shape and cites `J7` for it.** Found by two round-3 lenses
+> independently.
+
+**All 40 calibration cases pass at HEAD, the 17 that pre-date this row included.** `--selftest` re-executes the
 whole set on every gate invocation, so this is a re-execution anyone can run rather than a claim.
 
 ### §1.7 — THE CONTRADICTION FROM §0.7 IS NOW MEASURED, AND IT STANDS
@@ -563,7 +578,8 @@ because the check is cheap and the alternative is the defect the brief names.
 `test_c12_foundry_import.py:1080` and three in `test_c5_approve_reject.py`.
 
 > **`J8`, CORRECTED IN PLACE. This originally read *"Two of those are item 4's baselined sites and the rest
-> are item 5's unaudited population."* It is ONE, not two.** **[Observed — `docs/tools/skip_census_baseline.json`
+> are item 5's unaudited population."* It is ONE, not two.** **(`J60`: measured at `a9bb767`, when the
+> baseline held FOUR. It holds FIVE at HEAD — §3.5.1 — and the four names below are all still baselined.)** **[Observed — `docs/tools/skip_census_baseline.json`
 > against the census]** the baseline's four are `test_c10_22`, `test_c12_21`, `test_c12_24` and `test_c3_27`,
 > and only **`test_c12_21`** (`test_c12_foundry_import.py:1080`) is among the five. The baselined `c10` site
 > is `test_c10_22` at line 1206, not `test_c10_21` at 1135. **So: one baselined, four in item 5's unaudited
@@ -620,6 +636,11 @@ one.** A refusal the capability does not explain cannot occur at these three cal
 it gates. The comments this row adds cite `3969`, the guard, which is the line that explains the refusal.
 
 ### §2.3 — `P3` PREDICTED **3**, ALL `S1` -> `S5`. MEASURED **3**, ALL `S1` -> `S5`. HIT.
+
+**Measured at `43d0dac`, against the classifier of `9b00bcc`.** **(`J59`: this section carried no commit
+stamp while §1.4 got one, §2.7 got `J22` and §3.6 got `J21`. Its cells are `60/44/4/1/16/14`; at HEAD they
+are `61/44/5/1/15/13`, reconciled in §1.4.1 and §3.5. The repair-induced delta really was 3, all `S1` ->
+`S5`, and those three are still `S5` at HEAD — `P3` re-scored in §1.4.1.)**
 
 ```
                        before   after
@@ -870,7 +891,17 @@ in `test_c12_24`.
 > HEAD.** `d33ccce` landed §3.6's interim in the same commit that carried this section, and the interim
 > compares `found` and `declared` as MULTISETS. **[Observed — a lens turned
 > `test_c12_foundry_import.py:1236` into an `S2` site: the set test reports `[]`, HEAD reports it.]**
-> **So this section asserted a reachable hole that its own §3.6 had already closed, in the same commit.**
+> **`J53`: THE SENTENCE ABOVE WAS ITSELF WRONG AND IS CORRECTED HERE.** `J25` originally said the interim
+> landed *"in the same commit that carried this section"* and concluded that §3.3 asserted a hole its own
+> §3.6 had closed **in the same commit**. **[Observed — `git show ace7081:docs/runs/6J-RUN.md` carries the
+> superseded sentence; `ace7081`'s `run_gate` still holds `new = [i for i in found if i not in
+> set(declared)]`, and `Counter(found)` first appears at `d33ccce`]** §3.3 landed at **`ace7081`** and the
+> interim at **`d33ccce`, the NEXT commit.** So the sentence was **true when written and went false one
+> commit later** — still §4.3's pattern, and not the more damning version this correction claimed about
+> itself.
+>
+> **A CORRECTION THAT IS ITSELF WRONG IS THE WORST OUTCOME THIS RECORD CAN PRODUCE**, and round 3's lens was
+> briefed to hunt exactly that. It found two — this and `J54`.
 >
 > **What remains true, and it is why the routing stands:** the ident is still not an identity, 139 sites
 > still collapse to 93, and **a SWAP inside one function — one flagged site removed and a different one
@@ -932,7 +963,11 @@ parameter an observation root and the guard reads an observation the assertions 
 definition. **So the cheap local option buys one promotion and costs three new baseline entries in the
 three helper functions row 6i repaired last night.**
 
-> **`J29`, CORRECTED IN PLACE.** This said the three land **"at the three SITES row 6i just repaired"**, and
+> **`J29`, CORRECTED IN PLACE.** **[`J54`: the quotation in this block was itself wrong. The superseded
+> text reads *"at the three sites row 6i repaired last night"* — "just" was never there and "last night"
+> was dropped. Verified against `git show ace7081:docs/runs/6J-RUN.md`. In a record whose standing practice
+> is verbatim quotation, a correction block that misquotes the sentence it supersedes is the same defect
+> class as `J26`.]** The superseded sentence said the three land **at the three SITES row 6i repaired**, and
 > the supervisor repeated the phrasing back in `answers-5` §3, so the imprecision propagated into a ruling.
 > **[Observed]** the movers are `test_c12_foundry_import.py:1111`, `test_c4_propose_type.py:464` and
 > `test_c9_retire.py:1734` — the `word not in (written[0].aliases or ())` skip. **Row 6i's repairs are the
@@ -1027,7 +1062,8 @@ five entries read alike. **The refusal text now names the kind in both direction
 
 | entry | kind |
 |---|---|
-| `test_c10_22`, `test_c12_21`, `test_c12_24`, `test_c3_27` | *no assertion in the skip's own branch reads a capability at all, so there is no proof here to check* |
+| `test_c10_22`, `test_c12_21`, `test_c3_27` | *no assertion in the skip's own branch reads a capability at all, so there is no proof here to check* |
+| `test_c12_24` | *no assertion in the skip's own branch reads a capability before it skips* — **the same KIND by a different code path, since round 2 taught the checker to read its positive `any(startswith)` guard. (`J61`: this record had it sharing the first row's exact wording, which it does not.)** |
 | **`test_c12_27`** | ***the block DOES assert `registry.caps.stores_aliases is False`, which fails on a backend holding the capability — so the proof may well be sound and THIS GATE CANNOT VERIFY IT. A limit of the instrument, not an established defect in the suite*** |
 
 ### §3.5.2 — The extension is its own row. A RULING now, not an inclination.
@@ -1094,7 +1130,7 @@ which is why the routing stands rather than being quietly cancelled by the inter
 
 **And the interim answers §3.3's own test — *after a fix, can the instrument still distinguish the cases it
 could distinguish before?*** It can distinguish strictly more: every case the set test caught, plus the
-colliding addition. **It distinguishes strictly fewer than nothing it previously could.** That is the
+colliding addition. **There is nothing it could distinguish before that it cannot distinguish now.** **(`J57`: this sentence was garbled where it carries §3.3's test.)** That is the
 question neither row 6h's fix nor `F12`'s asked of itself.
 
 **A standing change to how this row talks to the supervisor, and it is his ruling:** questions go in a
@@ -1160,6 +1196,59 @@ measuring the census after the fix rather than by reading it, and narrowed to th
 
 **Six calibration cases pin all of it, in both directions.** 37 of 37 pass.
 
+### §3.8 — ROUND 3: THREE FRESH LENSES, THREE `NOT YET`, AND TWO CORRECTIONS THAT WERE THEMSELVES WRONG
+
+**Reviewed `5ac5ec0`.** Briefed by name against the three measurement traps — the `REPO_ROOT` copy trap, the
+`SCAN_DIRS` default-binding trap, and the `ident` collision — and required to state the site count of every
+census. **All three ran 139, every time.**
+
+| lens | subject | verdict | raw findings |
+|---|---|---|---|
+| H | the rebuilt classifier | `NOT YET` | 7 MAJOR, 8 MINOR |
+| I | every number and citation | `NOT YET` | 5 MAJOR, 6 MINOR — **and NO code defect** |
+| J | the document as a series | `NOT YET` | 7 MAJOR, 7 MINOR |
+
+**THE SCOPING MEASUREMENT THAT DECIDES WHAT THIS ROW DOES WITH LENS H, and it is the reason the answer is
+not "fix everything".** Each of lens H's nine exploit sources was run against the classifier at `16becf6`
+and at HEAD. **[Observed]**
+
+| shape | `16becf6` | HEAD | whose defect |
+|---|---|---|---|
+| `caps = gone.caps` then `assert caps.stores_events is False` | `S2` | **`S5`** | **THIS ROW — round 2** |
+| `flags, extra = gone.caps, gone.detail`, same assertion | `S2` | **`S5`** | **THIS ROW — round 2** |
+| the guard narrows a DIFFERENT observation than it gates | `S5` | `S5` | pre-existing |
+| the branch-pin names a DIFFERENT observation | `S5` | `S5` | pre-existing |
+| **the PINNED `C10-16` case plus one assignment line** | `S0` | `S0` | pre-existing |
+| a capability read OFF the result erases the result | `S0` | `S0` | pre-existing |
+| **reusing the result's NAME three lines later erases it** | `S0` | `S0` | pre-existing |
+| a skip in a loop BODY over the result | `S3` | `S3` | pre-existing |
+| `test_c12_27`'s guard rewritten as a `for` loop | `S0` | `S0` | pre-existing |
+
+**`J38` — THE TWO THAT ARE THIS ROW'S, AND THEY ARE THE SIXTH INSTANCE OF THE STREAK.** Round 2's `J32`
+taught `_capability_expr` to accept `caps = adapter.capabilities()`. **The branch that fix added carried no
+`observations` check, while the branch directly above it had one** — so the calibration case pinned in round
+2 to stop `gone.caps.stores_events` was defeated by binding the alias one line earlier, **and by the tuple
+spelling that same pinned case's own source uses.** Fixed, and pinned in both directions plus an accept case
+so the fix is not a blanket refusal of bound capability names. **40 of 40 cases pass.**
+
+**The other seven are PRE-EXISTING and live in the OBSERVATION-ROOT machinery — `_driving_receivers`, the
+`- cap_read - cap_derived` subtraction, and `_guard_chain`'s loop handling — not in the `F12`/`F4`/`F15`
+axis this row was authorised to fix.** They are `Q4` in the questions file and §5 carries them with their
+sources. **Two are severe and are not softened here: the pinned `C10-16` case is defeated by ONE added
+line, landing in `S0-ENVIRONMENT` with the printed sentence "guard reads no observation", which is flatly
+false; and reusing the result's NAME later in the same function does the same.**
+
+**LENS I FOUND NO CODE DEFECT AND FIVE RECORD MAJORS, AND TWO OF THEM ARE CORRECTIONS THAT WERE THEMSELVES
+WRONG** — `J53` and `J54`. **That is the outcome its brief named as the worst this record can produce, and
+it was briefed to hunt it.** `J46` through `J57` are the rest.
+
+**AND THE FINDING THAT BLOCKED THE SHIP WAS SOMETHING THE RECORD DID NOT SAY.** `grep -i "round 3"` over
+all 1305 lines returned nothing: §4.1's table stopped at round 2 and closed with a totals row that read as
+the complete register, while `13de039` — the 183-line classifier rewrite that closed round 2's seven
+MAJORs — **had been seen by no lens.** **`F14` asserted a round before it ran; this said nothing at all, and
+a reader took the review as finished. Same defect class, opposite direction.** §4.1 now carries round 3 and
+the requirement for round 4.
+
 ---
 
 ## §4 — WHAT THE ROUNDS SAY ABOUT THE ROUNDS
@@ -1170,7 +1259,14 @@ measuring the census after the fix rather than by reading it, and narrowed to th
 |---|---|---|---|---|---|
 | 1 | 4 lenses | `a9bb767` | 1 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 22 MINOR | `J1`-`J18` |
 | 2 | 3 lenses | `d33ccce` | 0 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 20 MINOR | `J20`-`J37` |
-| | **7 lens-passes** | | **1 `SHIP IT`, 6 `NOT YET`** | | **`J1`-`J37`, plus `J19`** |
+| 3 | 3 lenses | `5ac5ec0` | 0 `SHIP IT`, 3 `NOT YET` | 19 MAJOR, 21 MINOR | `J38`-`J57` |
+| **4** | **OWED, NOT RUN** | **the final text** | **—** | **—** | **—** |
+| | **10 lens-passes so far** | | **1 `SHIP IT`, 9 `NOT YET`** | | **`J1`-`J57`, plus `J19`** |
+
+**ROUND 4 IS REQUIRED AND HAS NOT RUN.** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
+be followed by a full round that sees it"*, and *"the last round must see the final text"*. **Round 3
+produced nineteen MAJORs, so round 4 is owed and this table says so rather than closing on a totals row.**
+Nothing goes in after the last round, and round 3 was not it.
 
 **`J19` carries no round.** It is the ident defect, and **no lens found it** — §3.0.
 
@@ -1203,12 +1299,28 @@ this project got better between rounds, and that is why round 2 found more.**
 | 3 | this row's `J1` fix — branch polarity | the else-branch exemption | the owner check saw only the guard's names | round 2, as `J31` |
 | 4 | this row's `J36` fix — loops | a `for … else` in the ungated cell | put whole loop bodies in `S4` | this row, measuring |
 
-**FIVE ROWS, AND TWICE INTO THIS ONE INSTRUMENT.** Row 6h's fix carried row 6i's finding; row 6i's routed
-finding became this row; this row's `J1` fix carried round 2's `J31`; this row's `J36` fix carried its own
-regression within the hour.
+**SIX INSTANCES ACROSS FOUR ROWS, AND THREE OF THEM ARE THIS ROW'S OWN.** Row 6h's fix carried row 6i's
+finding; row 6i's routed finding became this row; this row's `J1` fix carried round 2's `J31`; this row's
+`J36` fix carried its own regression within the hour; **and this row's `J32` fix carried round 3's `J38`,
+which defeated the very calibration case `J31` was pinned with.**
 
-**THE TEST THAT WOULD HAVE CAUGHT ALL FOUR, and no row has asked it: *after a fix, can the instrument still
-distinguish the cases it could distinguish before?*** Instances 2 and 4 fail it outright. Instances 1 and 3
+> **`J47`, CORRECTED IN PLACE, AND THE ERROR IS `J26`'s IN THE SECTION THAT COUNTS `J26`.** This heading
+> read **"FIVE ROWS, AND TWICE INTO THIS ONE INSTRUMENT."** The number came from `answers-6` §4 and **this
+> row carried it into a section heading without checking it** — in the row whose most serious finding is
+> that the supervisor's words must be quoted and checked rather than carried.
+>
+> **[Observed]** `6I-RUN.md:1086` says *"the third consecutive row"* and `:1143` says *"three consecutive
+> rows"*, which makes 6j the **fourth**. §3.3 of this record says *"the fourth consecutive row"*. The table
+> above lists instances in rows **6h** and **6j** only. **There is no fifth row in any source.**
+>
+> **And `answers-6` §3 asked for exactly this correction in advance:** *"If I ever paraphrase your
+> measurement back at you, treat it as a defect and say so."* **Said.** Two round-3 lenses found it
+> independently.
+
+**THE TEST THAT WOULD HAVE CAUGHT ALL SIX: *after a fix, can the instrument still distinguish the cases it
+could distinguish before?*** **NO ROW ASKED IT AT THE TIME, AND THIS ROW IS THE FIRST TO ASK IT OF ITS OWN
+FIX — §3.6.** **(`J48`: this read "and no row has asked it", which contradicts §3.3's *"This row asks it of
+its own fix in §3.6"* and §3.6's answer to it, three hundred lines earlier in the same document.)** Instances 2 and 4 fail it outright. Instances 1 and 3
 fail a variant of it — *did the fix's own reach shrink where nobody was looking?*
 
 ### §4.3 — A PREDICTION SCORED BEFORE THE ARTEFACT SETTLED, FOUR TIMES
@@ -1217,10 +1329,10 @@ fail a variant of it — *did the fix's own reach shrink where nobody was lookin
 
 | claim | scored at | went false at | corrected as |
 |---|---|---|---|
-| `P1` — "the census moved 0" | `9b00bcc` | `ace7081` and again at HEAD | `J20` / §1.4.1 |
+| `P1` — "the census moved 0" | `9b00bcc` | `ace7081`, and again at `13de039` | `J20` / §1.4.1 |
 | §3.6's condition 1 — "`why` changed: 0" | mid-`d33ccce` | later in `d33ccce` | `J21` |
 | §1.6's "NINE of the fourteen" | `9b00bcc` | `ace7081`, then round 2 | `J24` |
-| §3.3's "one guard-edit and it is invisible" | when written | the same commit that carried it | `J25` |
+| §3.3's "one guard-edit and it is invisible" | `ace7081` | `d33ccce`, the next commit | `J25` / `J53` |
 
 **IT IS SYSTEMIC AND IT IS NOT CARELESSNESS. It is a structural property of a row that fixes its own
 instrument between measurements:** every number about the classifier is a measurement OF an artefact this
@@ -1228,7 +1340,7 @@ row keeps changing, and a round that produces MAJORs guarantees the artefact cha
 
 **THE RULE THIS ROW DRAWS FROM IT, offered to the supervisor rather than minted:** *a measurement of the
 instrument is stamped with the commit it was taken at, and every such measurement is RE-TAKEN after the last
-round.* **§6 is that re-take.** `P2` and `P3` survived it; `P1` did not.
+round.* **§1.4.1 is that re-take** — **`J52`: this pointed at "§6", which does not exist. This document runs §0 to §5. The number was carried from `answers-7` §3's *"Say so in §6 if it applies"*, which is `6I-RUN.md`'s numbering, and imported without remapping.** `P2` and `P3` survived the re-take; `P1` did not.
 
 ### §4.4 — Standing practice the supervisor ruled from this row
 
@@ -1239,7 +1351,11 @@ restatement, and it is the most serious finding in the row: a paraphrase that di
 indistinguishable from a misreading, **and the record then shows compliance with a ruling the supervisor
 never made.** Rulings are now quoted verbatim in this record with disagreement placed beside the quote.
 
-> **Questions to the supervisor go in a FILE, not only in the pane.**
+> *"**STANDING FROM NOW ON: questions to me go in a FILE, not only in the pane**"*
+>
+> **`J56`: that line stood here as a PARAPHRASE in quote position, three lines below the sentence
+> announcing verbatim quotation. Every other quoted ruling in this record was checked character by
+> character by a round-3 lens and came back exact; this one was not a quote at all.**
 
 **[Observed — his `tmux capture-pane -p -S -`]** the pane holds **nineteen** non-blank lines, so a question
 not acted on within one supervision cycle is unrecoverable. **He sends prose by file for the same reason and
@@ -1303,3 +1419,59 @@ worse than an unaudited one, so:
 - **Two calibration cases do not isolate the property their label names** — the numeric case still refuses
   with its numeric clause deleted, and `test_c10_25`'s label says the guard carries it when the docstring
   says the branch assertion does.
+
+**7. `Q4` — SEVEN PRE-EXISTING DEFECTS IN THE OBSERVATION-ROOT MACHINERY, WITH THEIR SOURCES.** Round 3's
+classifier lens found them; **[Observed]** all seven classify identically at `16becf6` and at HEAD, so none
+is this row's. They are `_driving_receivers`, the `- cap_read - cap_derived` subtraction in
+`classify_source`, and `_guard_chain`'s loop handling — **row 6h's subsystem, not the `F12`/`F4`/`F15`
+axis.** Carried here with executable evidence rather than prose, which is what `6I-RUN.md` §7 did for this
+row.
+
+**7a. THE PINNED `C10-16` CASE IS DEFEATED BY ONE ADDED LINE, AND IT LANDS IN THE MOST UNGATED CELL.**
+
+```python
+merged = registry.merge_types("commentable", "searchable", "same", merged_by="user:sd")
+detail = merged.detail.get("overridable")     # <- the whole exploit
+if isinstance(merged, Refusal):
+    pytest.skip("this backend refused the merge")
+assert not isinstance(merged, Refusal), merged
+```
+
+**`S0-ENVIRONMENT`, why: *"guard reads no observation"* — flatly false.** `_driving_receivers` reads the
+result as configuration because a method was called on it and the value assigned. **This is `LENS B1`
+again: B1 pinned the ASSERTION spelling and the ASSIGNMENT spelling was never pinned, and it is the one the
+narrowed rule actually keys on.**
+
+**7b. Reusing the result's NAME later in the function erases it.** `out = adapter.capabilities()` three
+lines after the skip drops the site `S2` -> `S0`; removing only that line restores `S2`. `cap_derived` is
+computed over the whole function and subtracted from the guard's names.
+
+**7c. A capability read OFF the result erases the result** — `if out.caps.stores_events and isinstance(out,
+Refusal):` -> `S0`.
+
+**7d and 7e. The guard may narrow a DIFFERENT observation than the one it gates.** `if isinstance(out,
+Refusal) and other.reason == "empty":` -> `S5`, printing *"narrows on a literal outcome"*, which is false of
+`out`. The branch-pin path has the same hole and prints *"which FAILS on every other outcome"* about an
+outcome that stays open.
+
+**7f and 7g. Loop-carried observations are invisible.** A skip in a `for w in out.warnings:` body ->
+`S3-UNCONDITIONAL`, *"no enclosing conditional"*; the same loop with an inner `if` -> `S0`. `_positive_naming`
+was taught that a comprehension target carries its observation; `classify_source`'s `read_obs` was not.
+
+**8. TWO TOOLING DEFECTS THAT RIDE WITH `J19`.** `--write-baseline` can emit a file the gate immediately
+rejects, when two flagged skips in one function share an ident — it writes duplicates and `run_gate` fails
+them as DUPLICATE, with no invocation that clears it. And **deleting the `asserts` key from a baseline entry
+silently disables the de-assertion ratchet**, which the code's own docstring calls *"the sharpest thing said
+about this gate"*.
+
+**9. OPEN WITH THE SUPERVISOR, NOT WITH THE NEXT ROW.** `Q4` is unruled. **§4.3's proposed rule — *a
+measurement of the instrument is stamped with the commit it was taken at, and every such measurement is
+re-taken after the last round* — is an OFFER and has no ruling.** This row minted nothing.
+
+**10. LANDING TASKS THIS ROW HAS NOT DONE.** `docs/README.md` carries no row for 6j — **[Observed —
+`git log -S`]** row 6i added its README row mid-row at `ba71288`, so by that precedent it is overdue rather
+than deferred. `STATUS.md` is correctly a landing task, and under the standing rule its update regenerates
+its local HTML mirror. **And the supervisor is told before this row pushes.**
+
+**11. ROUND 4 IS OWED.** §4.1 records it. Round 3 produced nineteen MAJORs; nothing goes in after the last
+round, and round 3 was not it.
