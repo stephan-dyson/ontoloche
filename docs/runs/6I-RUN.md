@@ -718,9 +718,24 @@ git diff --stat origin/main -- ontoloche/aio/contract  ->  4 files, 95 insertion
 *"wrote 4 of 25 files"* is NOT this check and is not offered as one — it is the generator's own account of
 what it did. The check that the mirror AGREES is `test_generated_matches_source.py` on the async leg.
 
-The per-file split is itself a check: `test_c4_propose_type.py` gains **24** lines against **27** for its
-two twins, and the 3-line difference is exactly the fixture assertion the c4 copy already had and the other
-two did not. **If that number had come out equal, item 4 would not have done anything.**
+The per-file split is itself a check. **In `git diff --numstat` INSERTIONS** — the honest unit, since
+`--stat`'s figures are insertions plus deletions:
+
+```
+23  2  test_c10_merge_types.py
+25  2  test_c12_foundry_import.py
+22  2  test_c4_propose_type.py      <- the copy that already had the fixture assertion
+25  2  test_c9_retire.py
+```
+
+**`test_c4_propose_type.py` gains 22 insertions against 25 for its two twins**, and the 3-line difference is
+exactly the fixture assertion the c4 copy already had and the other two did not. **If that number had come
+out equal, item 4 would not have done anything.**
+
+**An earlier draft quoted 24 against 27 and called them lines "gained".** Those are `--stat`'s
+changed-line totals, which include the 2 deletions each file carries. The 3-line conclusion survives either
+unit; the label did not.
+
 
 ---
 
@@ -736,7 +751,7 @@ concurrently with one leg, which inflates that leg's wall clock and cannot chang
 | async, three backends | **979 / 316 / 0** (385.71s, taken by THIS row at `0fcac56`) | **979 passed, 316 skipped, 0 failed** (372.06s) | **0** |
 
 **The `+1` on the SQLite-only leg is row 6h's gate-runner, not this row's.** That leg's floor is
-`e548541`, five commits back, because 6h did not re-run it — §3.5 of `6H-RUN.md` says so and this row does
+`e548541`, **eight** commits back (`git log e548541..d3f9a79 --oneline | wc -l` -> 8; an earlier draft said five), because 6h did not re-run it — §3.5 of `6H-RUN.md` says so and this row does
 not pretend otherwise. Between `e548541` and `d3f9a79` the only code change is 6h's own, which added the
 runner; `git diff --stat 7f13800..d3f9a79` is docs-only. **So 527 to 528 is fully accounted for and this
 row contributed none of it.**
@@ -990,3 +1005,157 @@ promised and never closed, a category label doing a governance job, a carrier le
 **That is the row's own subject, turned on the row.** §5.3 records `C19-100` waiting in three plausible next
 steps; §6 records the citation defect in five more, three of them mine. **The instrument this row built for
 skip sites had no equivalent for its own prose, and the loop was it.**
+
+### §6.5 — ROUND 3, AND `F12`: THE GATE DOES NOT DEFEND WHAT THIS ROW REPAIRED
+
+**Round 3 verdicts: two `SHIP IT`, one `NOT YET`.** Two lenses recomputed every figure in this record from
+scratch — the census cells, the 23-vs-25 reconciliation, the `S4` 6/8/2 split, the `retire`/`merge_types`
+refusal-gating claims, every diff-stat and skip-log citation, the `R104:77` quote — and found **no
+arithmetic or citation error**. The third lens went after the one thing the brief for it asked hardest, and
+found something neither earlier round did.
+
+**`F12` MAJOR — `S5` promotion never requires the guard to be NARROWED. Reproduced twice, both by the lens
+and independently here.**
+
+`_capability_proof` (`docs/tools/check_skip_census.py:516`) checks only that **some** assertion touching
+`caps` / `capabilities` sits in the skip's own branch before the skip. **It never checks that the guard
+narrows to the reason that capability explains.** Two experiments against the live `classify_source`:
+
+| source | classification |
+|---|---|
+| this row's repaired `_tombstone_holding`, as shipped | `S5-PROVEN-ENVIRONMENTAL` |
+| **the same site with ONLY `and gone.reason == "cannot_record_override"` removed** | **`S5-PROVEN-ENVIRONMENTAL`** |
+
+**So the ratchet cannot detect the removal of the narrowing from any of this row's four repairs.** Strip the
+clause that makes them correct and the gate still calls them proven. A future row copying the shape without
+the narrowing gets the same blessing.
+
+**And the sharper version, which is about the brief rather than about the future.** The site at `d3f9a79`,
+patched with the brief's authorised repair **verbatim** — the single line `assert registry.caps.stores_events
+is False, gone` inserted under the **existing bare** `if isinstance(gone, Refusal):`:
+
+| source | classification |
+|---|---|
+| `_tombstone_holding` at `d3f9a79`, untouched | `S2-RESULT-UNDER-TEST` — **gated** |
+| **the brief's authorised one-line repair, verbatim** | **`S5-PROVEN-ENVIRONMENTAL` — UNGATED** |
+
+**The authorised repair would have moved the site out of the gated cell while leaving the
+swallow-every-refusal-reason defect entirely in place, and the ratchet would have recorded it as REPAIRED
+and let the baseline drop.**
+
+**That is what H1 was actually about, and §0.2 did not know it.** §0.2 argued the bare form would assert a
+capability for every refusal reason and could fail a conformant backend. True, and the smaller half.
+**The larger half is that the gate would have blessed it** — the fifth gate, built by row 6h precisely to
+stop result-conditioned skips, issuing a clean bill to the exact shape it exists to catch, on the strength
+of one line the supervisor authorised in good faith. **`F12` is strictly wider than `F4`**: a checker fix
+scoped only to flag-correctness and boolean sense, as `F4`'s routing described, **would not catch this.**
+
+**THE PRECISE SHAPE, because "the gate is wrong" would overstate it.** `F12` is a
+**REGRESSION-DETECTION hole, not a current-state error.** The four sites this row repaired **do** carry the
+narrowing, and **today's baseline is correct for today's tree.** What the gate cannot do is notice
+**tomorrow** if someone strips the `and x.reason == "..."` clause — experiment 1 is the proof. **So the gate
+can be silently disarmed, one site at a time, and the baseline will not move.** That is both more accurate
+and more alarming than "the gate is wrong", because a baseline that does not move reads as evidence that the
+shape is gone.
+
+**PROVENANCE, which neither this row nor the supervisor had until it was looked for.**
+**[Observed — `git log -S"_capability_proof" -- docs/tools/check_skip_census.py`]** the function entered the
+tree at **`024d599`**, and that commit's own subject line is:
+
+> *The round found five BLOCKING and TWO OF THEM WERE IN THE FIXES I HAD JUST MADE*
+
+**`_capability_proof` IS row 6h's adversarial-round fix.** Its docstring records *"Two narrowings a fresh
+lens made necessary"* — the branch must be the skip's own, and the assertion must read a capability rather
+than be any assertion at all. **A lens tightened that function twice and neither tightening was *look at the
+guard*.** **That is the third consecutive row in which an adversarial round's own fix carried the next
+defect — and here it carried it into the instrument.**
+
+**Row 6i neither introduced nor widened it, and that is checkable rather than asserted:**
+
+```
+git diff --stat d3f9a79..HEAD -- docs/tools/   ->   skip_census_baseline.json | 12 +-----------
+                                                    1 file changed, 1 insertion(+), 11 deletions(-)
+```
+
+**Not fixed here, for §1.2's reason and no other: it changes the classifier, and the classifier is the
+instrument every number in this row rests on.** Routed with `F4`, and the routing is widened in §7.
+
+**`F13` MINOR — `check_capability_matrix.py` was not re-verified by every round-3 lens.** It drives a
+capability matrix internally and outran two reviewers' read-only budgets. **This row ran it to completion
+three times, exit 0 each time**, and one round-3 lens confirmed it independently on a longer budget. Named
+because *"the five gates pass"* is in this row's definition of done and a gate nobody watched finish is a
+gate nobody checked.
+
+### §6.6 — WHICH ROUND SAW WHICH TEXT, and the discipline that makes the streak mean something
+
+**A clean verdict on text a lens did not read is not a clean verdict on the artefact.** So:
+
+| round | panel | reviewed | verdicts | findings |
+|---|---|---|---|---|
+| 1 | 4 lenses | `ba71288` | 3 `SHIP IT`, 1 `NOT YET` | `F1`-`F5` — 4 MAJOR |
+| 2 | 3 lenses | `c483f9d` | 2 `SHIP IT`, 1 `NOT YET` | `F6`-`F11` — 4 MAJOR |
+| 3 | 3 lenses | `c81daaa` | 2 `SHIP IT`, 1 `NOT YET` | `F12`-`F13` — 1 MAJOR |
+| 4 | — | **the final text, including `F12`'s write-up and §7** | — | — |
+
+**Between rounds 3 and 4 this row fixed MINORs — the `--stat` labelling and the eight-commit distance — and
+disclosed that rather than protecting a clean count.** The rule the supervisor ruled from it, so this
+terminates instead of regressing:
+
+- **The last round must see the final text.**
+- **A round producing only MINOR fixes needs a re-pass over the changed sections, not a full fresh round. A
+  round producing a MAJOR or BLOCKING fix must be followed by a full round that sees it.**
+- **The record says which rounds saw which text**, which is this table, and is what makes the streak
+  meaningful rather than decorative.
+
+**Round 3 produced a MAJOR (`F12`), so round 4 is a full round and it sees the `F12` write-up.**
+
+---
+
+## §7 — WHAT THE FOLLOW-ON ROW INHERITS
+
+> **THE OPERATIVE SENTENCE, first because a future row will otherwise re-derive it from the symptom:**
+> **the checker fix must require the GUARD CHAIN to carry a reason comparison correlated with the asserted
+> capability, not merely that some capability attribute is asserted nearby.** A fix scoped to flag-correctness
+> and boolean sense — which is how `F4`'s routing originally described it — **would not catch `F12`.**
+
+**This follow-on was queued as an EXTENSION**, closing a category the gate never covered. **`F12` changes
+what it is: first and foremost a HOLE IN A LANDED GATE, with the extension secondary.**
+
+**Collected here because everything below is real, live, and would otherwise exist only as a paragraph
+inside a long document.** Nothing here goes in the governance register — that is the founder's and stays at
+ONE.
+
+**1. The checker fix, and it is now TWO holes rather than one.**
+
+- **`F4`** — `_capability_proof` accepts a capability assertion of the **wrong flag or inverted boolean
+  sense**. `assert registry.caps.stores_events is True` — trivially true on every real backend — classifies
+  as `S5`.
+- **`F12`** — and it accepts a guard that was **never narrowed at all**, which is wider and worse.
+- **The fix must require the guard chain to carry a reason comparison correlated with the asserted
+  capability, not merely that some capability attribute is asserted nearby.** A fix scoped to `F4` alone
+  leaves `F12` open.
+- **This row minted four more byte-identical copies of the shape**, which is what a later contributor
+  copies.
+
+**2. The item 3 extension**, scoped in §1. Its first item is the cheap local option: let a parameter proven
+safe **within its own function** participate in the observation-root logic, which promotes
+`_skip_if_cannot_record` to `S5` with no call-boundary crossing. **And note `_run_the_race` lives in a
+HAND-WRITTEN `aio` file, so the `S4` cell spans both trees and the six sites are not all mirrorable.**
+
+**3. Three live sites of this row's own hazard**, observed firing `cannot_record_override`, left unrepaired
+because the brief did not name them:
+
+```
+ontoloche/contract/test_c10_merge_types.py:1281    test_c10_23_the_escape_is_evaluated_over_the_whole_holder_set
+ontoloche/contract/test_c12_foundry_import.py:1317 test_c12_26_the_import_name_door_holds_the_byte_identical_tombstone
+ontoloche/contract/test_c3_resolve_type.py:695     test_c3_17_a_tombstone_elsewhere_is_found_by_the_words_it_answers_to
+```
+
+**4. Item 2's four baselined sites**, unobserved on three legs. Unchanged: they stay until something
+evidences them.
+
+**5. Twenty more guard occurrences across sixteen test functions**, same bare shape, unaudited by this row
+and not claimed to be.
+
+**6. Two corrections held by the supervisor**, to `6H-RUN.md` §3.2's firing cell and to `R104`'s `3969`
+citation — **and `R104:77` is the THIRD carrier of that citation defect, named in §6.2.1.**
