@@ -212,3 +212,156 @@ move; if it does, that is a `P1` miss and it is reported before anything is writ
 **The five gates are run at the end, and the supervisor runs them again before closing the row.** Suite legs
 are run once the step-3 repairs touch test files, which they will. **Never `git add -A`. `rm` takes a literal
 absolute path. The supervisor is told before this row pushes.**
+
+---
+
+## §1 — THE CHECKER FIX, AND BOTH INTEGERS HIT
+
+**Applied to `docs/tools/check_skip_census.py` only. 434 insertions, 18 deletions, one file.** No test file
+was opened in this step and no repair was made — that is step 3, and the brief's §1 ruling is why.
+
+### §1.1 — What the fix is: THREE PARTS, TWO PREDICATES, one shape rule each
+
+**Parts 1 and 3 collapsed into ONE recursive predicate, and that is a finding rather than a tidying.**
+`_falsifying(expr)` asks *does this expression FAIL on a backend that HAS the capability*, and that is the
+question both parts ask. `assert caps.f is True` cannot fail on a capable backend (`F4`); neither can
+`assert True or caps.f` (`F15`). **The same walk refuses both, and it refuses the rewordings nobody has
+written yet** — `or` is falsifying only when BOTH operands are, because one non-falsifying operand carries
+the whole expression. That is why the last calibration case below, which is `F15` not spelled `True or`,
+needed no new code.
+
+**Part 2 is `_guard_narrows`**, and it is the part `_capability_proof` never had: the guard is now read. A
+guard narrows either by **naming a specific outcome** — a string literal in a comparison over the
+observation, or a `startswith` / `endswith` prefix — or by **establishing the value is not of the refused
+type at all**, which is §0.4's exemption.
+
+**Two deliberate refusals inside part 2, both fail-closed and both pinned:**
+
+- **A NUMERIC constant does not buy a narrowing.** `len(x.warnings) > 0` is a threshold, not a reason, and
+  admitting it would sell the exemption for a `0`.
+- **An ENUM-valued reason is refused too.** That is a conversation rather than a silent promotion, which is
+  the direction §0.2's principle points.
+
+### §1.2 — THE EXEMPTION IS A SHAPE RULE, and it is calibrated in BOTH DIRECTIONS
+
+**The supervisor's answers-2 §2 is a ruling and this is what it required.** A named-site exemption
+hard-codes today's tree into the instrument and stops applying the moment anyone renames the test, so the
+rule is expressed as what it actually is: **`not isinstance(x, T)` over an observation — the value is not a
+`T`, so `T`'s discriminating fields are not there to compare.**
+
+**And the ruling's sharper half: an exemption is a NEW WAY THROUGH THE GATE.** *"Invert your guard and the
+reason requirement disappears"* must not become true by accident. **So all three directions are written
+down on purpose** — an inverse guard **with** a capability proof stays `S5`, an inverse guard **without**
+one is still flagged, and an inverse guard with a **vacuous** proof is still flagged, because `F15` applies
+inside the exemption too.
+
+**A fourth case fixes the exemption's boundary, and it is the one that keeps the rule honest: `not x.ok` is
+NOT exempt.** A negated truthiness test admits a family exactly as a positive one does, and `x.reason` is
+right there to compare against — **the requirement CAN be met, so it is not waived.** The exemption is for
+the type test alone, because the type test is what makes the reason attribute unavailable.
+
+**One logical site, two files.** The same guard is at `ontoloche/aio/contract/test_c10_merge_types.py:1491`,
+and **[Observed — the file's first three lines]** that file carries the `GENERATED FILE -- do not edit`
+banner, so the census skips it and counts the site **once**. Nobody should count it twice.
+
+### §1.3 — The `why` text, which was part of the fix and not a caption on it
+
+**Before**, on a site whose proof was `assert True or registry.caps.stores_events`:
+
+```
+why: guard reads gone -- the result under test -- but the block asserts
+     `True or registry.caps.stores_events` BEFORE it skips, so a capable
+     backend that behaved wrongly would FAIL here rather than skip
+```
+
+**It quoted the disproof and drew the opposite conclusion from it.** After, every `S5` line says what was
+checked and what was not:
+
+```
+why: guard reads gone -- the result under test -- but it narrows on a literal
+     outcome, and the block asserts `registry.caps.stores_events is False`
+     before it skips, an expression that FAILS on a backend holding the
+     capability. CHECKED: the narrowing, the falsifying sense, and that the
+     assertion is defeatable. NOT CHECKED, because no AST can know it: that
+     this capability is the one that explains this outcome
+```
+
+**The last clause is the one that matters.** The semantic link — that `stores_events=False` is what produces
+`cannot_record_override` — is not decidable from an AST, and the gate now says so instead of implying it
+proved it.
+
+**And an `S2` line now says WHY the promotion was refused**, which the old text never did. All four
+baselined sites carry one: two are refused by part 2, and two because no assertion in the skip's own branch
+reads a capability at all.
+
+### §1.4 — `P1` PREDICTED **0**. THE CENSUS MOVED **0**. HIT.
+
+```
+S0-ENVIRONMENT             60        S3-UNCONDITIONAL            1
+S1-SETUP-RESULT            47        S4-UNDECIDABLE             16
+S2-RESULT-UNDER-TEST        4        S5-PROVEN-ENVIRONMENTAL    11
+```
+
+**Every cell is identical to the landed census**, and the `S5` population is the eleven sites §0.3 named,
+with the guards §0.3 recorded. **None of row 6i's four landed repairs reclassified, so the brief's STOP
+condition did not fire.** The gate exits **0** on the plain invocation, the baseline stays at **4**, and
+nothing was written.
+
+**§0.3's derivation was a `grep` and eleven hand-reads and it was right** — worth saying because §0.5 named
+it as the prediction most likely to be wrong.
+
+### §1.5 — `P2` PREDICTED **1**, AND NAMED THE SITE. MEASURED **1**, AT THAT SITE. HIT.
+
+Measured by censusing the live tree twice with the same fixed classifier, the second time with
+`_establishes_not_that_type` forced to `False`. **[Observed]**
+
+```
+ontoloche/contract/test_c10_merge_types.py::test_c10_27_...#0
+    with the exemption: S5-PROVEN-ENVIRONMENTAL
+    without it:         S2-RESULT-UNDER-TEST
+```
+
+**Exactly one site, and it is `test_c10_27` as §0.6 named it.** So the exemption is doing precisely the work
+the argument for it covers and no more. Site 10 — `test_c12_27`, also an inverse guard — is unmoved by it,
+because its `startswith` prefix narrows on a constant anyway and it never needed the exemption.
+
+### §1.6 — WHAT THE FIX ACTUALLY DOES, since §0.7 said the census would not show it
+
+**NINE of the fourteen new calibration cases are classified WRONG by the classifier at `16becf6` and right
+by this one.** Measured by loading both modules — `git show 16becf6:docs/tools/check_skip_census.py` into
+memory beside the working one — and classifying each case with both. **[Observed]**
+
+| the case | at `16becf6` | now |
+|---|---|---|
+| `F12` experiment 1 — a repair with ONLY the reason clause removed | `S5` | **`S2`** |
+| `F12` experiment 2 — the supervisor's authorised one-liner, verbatim | `S5` | **`S2`** |
+| a numeric constant bought a narrowing | `S5` | **`S2`** |
+| the exemption abused with a vacuous proof | `S5` | **`S2`** |
+| the exemption's boundary, `not x.ok` | `S5` | **`S2`** |
+| `F4` — the inverted sense, `is True` | `S5` | **`S2`** |
+| `F4` — a bare truthy capability read | `S5` | **`S2`** |
+| `F15` — `assert True or X` verbatim | `S5` | **`S2`** |
+| `F15` — the same vacuity, not spelled `True or` | `S5` | **`S2`** |
+
+**Every one of the nine was an UNGATED promotion, and every one is now gated.** The remaining five are the
+accept direction — the narrowed repair, `reason !=`, the `startswith` prefix, the legitimate exemption, and
+an inverse guard with no proof — and all five classify the same in both, which is what an accept case is
+for.
+
+**All 31 calibration cases pass, the 17 that pre-date this row included.** `--selftest` re-executes the
+whole set on every gate invocation, so this is a re-execution anyone can run rather than a claim.
+
+### §1.7 — THE CONTRADICTION FROM §0.7 IS NOW MEASURED, AND IT STANDS
+
+**The brief's §4 repeats, in bold, that *"the census must be re-run and the cell counts must move."*** The
+census was re-run. **The cell counts did not move, and §0.5 predicted that before the fix existed.**
+
+**`F12` is a REGRESSION-DETECTION hole and `6I-RUN.md` §6.5 says so in those words.** Today's baseline was
+correct for today's tree. **A moved cell would have meant row 6i landed a defective repair — the brief's own
+STOP condition — so the two halves of the instruction cannot both be satisfied by a healthy tree.**
+
+**The demonstration is §1.6: nine cases the old instrument got wrong.** That is stronger evidence than a
+moved cell, because a moved cell would have to be explained away first.
+
+**This is raised as a shape, not bent to fit.** If the supervisor wants a moved cell it can only come from
+repairing something the fix now flags — and the fix flags nothing new on this tree.
