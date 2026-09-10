@@ -688,6 +688,20 @@ different things.
 
 **Run one at a time, never in parallel**, by `6I-RUN.md` §0.7's own commands. **Zero drift on every cell.**
 
+**THESE LEGS WERE RUN AT `43d0dac` AND ARE STAMPED THERE. THEY ARE NOT RE-RUN AT THE LANDED TREE, AND THIS
+IS THE ARGUMENT THAT THEY STILL HOLD — a mechanical one rather than a judgement.** **[Observed —
+`git diff a9bb767 HEAD --name-only`]** every commit from `a9bb767` to the landed tree touches exactly three
+paths: `docs/runs/6J-RUN.md`, `docs/tools/check_skip_census.py`, and `docs/tools/skip_census_baseline.json`.
+**ZERO files under `ontoloche/` and ZERO non-`docs/` files have changed since the legs ran.** The suite
+cannot have moved, because nothing the suite executes has.
+
+**AND THE THREE-LEG SUITE WAS UNDER A SUPERVISOR HOLD at the time of landing, on two conditions he measured
+himself rather than relaying: the beacon land-lock was held by a live process with a 1.2-minute-old
+heartbeat, and free RAM was 10.7 GB against a 12 GB bar.** **The hold cost this row nothing** — `Q6`'s named
+check is the census, which was never held, and the census is unmoved. **Recorded as a scheduling note
+because a reader comparing timestamps would otherwise wonder why the last measurement predates the last
+commit by fourteen of them.**
+
 **The skip count NOT moving is the check, not the absence of one.** The narrowing makes a refusal that is
 not `cannot_record_override` FAIL where it used to skip. **If any id at these three sites had been skipping
 on some other reason, it would now be a FAILURE, and there are none.** That is the construction proof of
