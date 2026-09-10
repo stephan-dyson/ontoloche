@@ -414,3 +414,141 @@ and is then promoted by a proof the fixed checker validates on all three parts.
 **Falsifier:** any count other than 3, any site landing anywhere but `S5`, or any movement in `S0`, `S2`,
 `S3` or `S4`. **A site landing in `S2` would mean the repair produced exactly the shape it was made to
 remove**, and it would be reported before anything else.
+
+### §2.1 — The three sites, RE-LOCATED rather than trusted to a line number
+
+The brief's line numbers predate row 6i's own edits and the supervisor had already been caught citing a
+stale one, so all three were found by **test name** and then read at the point of use:
+
+| site | test | the line as it stood |
+|---|---|---|
+| `ontoloche/contract/test_c3_resolve_type.py:695` | `test_c3_17_a_tombstone_elsewhere_is_found_by_the_words_it_answers_to` | `pytest.skip(f"this backend cannot retire the holder ({gone.reason})")` |
+| `ontoloche/contract/test_c12_foundry_import.py:1317` | `test_c12_26_the_import_name_door_holds_the_byte_identical_tombstone` | the same line |
+| `ontoloche/contract/test_c10_merge_types.py:1281` | `test_c10_23_the_escape_is_evaluated_over_the_whole_holder_set` | the same line, inside the per-order loop |
+
+**All three numbers turned out to be current.** They are recorded as verified rather than as assumed,
+because the check is cheap and the alternative is the defect the brief names.
+
+**Five other sites carry the identical message and NONE of them was touched** — `test_c10_merge_types.py:1135`,
+`test_c12_foundry_import.py:1080` and three in `test_c5_approve_reject.py`. Two of those are item 4's
+baselined sites and the rest are item 5's unaudited population. **[Observed — `grep -c "cannot retire the
+holder"` over all three `-rs` logs returns `0` on each]** none of the five fires on any leg, which is the
+same reason item 4's four stay put.
+
+### §2.2 — THE SAFETY IS PROVABLE BY CONSTRUCTION, and this row re-derived it rather than inheriting it
+
+`6I-RUN.md` §3.3 made this argument for its own three `retire` sites. **These three are the same door, so
+the argument transfers — but a transferred argument is exactly the thing this row's terms say to
+re-measure.** Re-extracted from `ontoloche/registry.py` by walking every `return Refusal(...)` in `retire`
+with its enclosing guard chain. **[Observed — `retire` spans `registry.py:3414-4186` and holds twelve]**
+
+| refusals | gated behind | reachable at these three sites? |
+|---|---|---|
+| 9 of 12 | `successor is not None` | **no** — none of the three passes a `successor` |
+| `live_consumers` (`3982`) | `report.gates_on and (not force)` | **no** — all three pass `force=True` |
+| `no_consumer_evidence` (`4010`) | `not report.gates_on and ... and (not force)` | **no** — same |
+| **`cannot_record_override` (`3970`)** | `force and (not self.caps.stores_events)` | **THE ONLY ONE LEFT** |
+
+**So the fall-through this repair adds has no possible victim, on any backend, not merely no observed
+one.** A refusal the capability does not explain cannot occur at these three calls, and if one ever could,
+`assert not isinstance(gone, Refusal)` is what would say so.
+
+**A citation note, since `R104`'s `3969` has already been corrected once for pointing at the wrong door:**
+`3969` is the **guard** `if force and not self.caps.stores_events` and `3970` is the `return Refusal(...)`
+it gates. The comments this row adds cite `3969`, the guard, which is the line that explains the refusal.
+
+### §2.3 — `P3` PREDICTED **3**, ALL `S1` -> `S5`. MEASURED **3**, ALL `S1` -> `S5`. HIT.
+
+```
+                       before   after
+S0-ENVIRONMENT            60      60
+S1-SETUP-RESULT           47      44
+S2-RESULT-UNDER-TEST       4       4
+S3-UNCONDITIONAL           1       1
+S4-UNDECIDABLE            16      16
+S5-PROVEN-ENVIRONMENTAL   11      14      total 139, unchanged
+```
+
+The three that moved are the three that were repaired, at their new lines —
+`test_c3_resolve_type.py:708`, `test_c12_foundry_import.py:1330`,
+`test_c10_merge_types.py:1297` — each with the guard
+`isinstance(gone, Refusal) and gone.reason == 'cannot_record_override'` and each promoted by a proof the
+fixed checker validated on all three parts. **`S0`, `S2`, `S3` and `S4` did not move, and the baseline did
+not need to: these three were never in it**, which is what `S1` rather than `S2` meant.
+
+**This is the ORDINARY kind of movement the supervisor named** — sites flagged, then repaired, under a gate
+that now reads the guard. It is not the movement the withdrawn rule asked for in §1.7, and the two are
+different things.
+
+### §2.4 — The suite at the final state
+
+| leg | floor (row 6i's final) | this row | delta |
+|---|---|---|---|
+| sync, SQLite only | 528 / 731 / 0 | **528 passed, 731 skipped, 0 failed** (299.20s) | **0** |
+| sync, three backends | 943 / 316 / 0 | **943 passed, 316 skipped, 0 failed** (651.59s) | **0** |
+| async, three backends | 979 / 316 / 0 | **979 passed, 316 skipped, 0 failed** (365.99s) | **0** |
+
+**Run one at a time, never in parallel**, by `6I-RUN.md` §0.7's own commands. **Zero drift on every cell.**
+
+**The skip count NOT moving is the check, not the absence of one.** The narrowing makes a refusal that is
+not `cannot_record_override` FAIL where it used to skip. **If any id at these three sites had been skipping
+on some other reason, it would now be a FAILURE, and there are none.** That is the construction proof of
+§2.2 confirmed on live code, on three legs, rather than argued.
+
+### §2.5 — THE REPAIR IS EXERCISED, WHICH IS WHY IT WAS WORTH MAKING
+
+**All three sites fire, on all three legs, one id each.** **[Observed — the `-rs` blocks]**
+
+```
+test_c3_resolve_type.py:708      1 id   ... before there is a tombstone for the other namespace to find
+test_c12_foundry_import.py:1330  1 id   ... before there is a byte-identical tombstone for the name door to hold
+test_c10_merge_types.py:1297     1 id   ... before there is a tombstone for the escape to be evaluated against
+```
+
+**And the old message is gone from every log**: `grep -c "cannot retire the holder"` returns `0` on all
+three. Nine `NOT REACHABLE: stores_events=False refuses the forced retire` firings per leg now, where six
+of the nine belong to row 6i's repairs and three are this row's.
+
+**This is the difference between these three and item 4's four.** These were observed firing before the
+brief was written and are observed firing after the repair. Item 4's four have been unobserved on three
+legs across two rows, and **naming a capability for a refusal never seen fire is `C19-100` closing a legal
+operation** — so they stay.
+
+### §2.6 — The mirror, verified the reliable way
+
+```
+git diff --stat 16becf6 -- ontoloche/contract      ->  3 files, 66 insertions(+), 6 deletions(-)
+git diff --stat 16becf6 -- ontoloche/aio/contract  ->  3 files, 66 insertions(+), 6 deletions(-)
+```
+
+`tools/unasync.py` was run **once, as a generator**, and reported `wrote 3 of 25 files`. **It was never run
+to verify anything.** The verification is two independent things:
+
+1. **The normalised diff.** Each file's sync diff and aio diff are **byte-identical after normalising away
+   `async def` and `await`** — checked per file, all three identical.
+2. **`test_generated_matches_source.py` RAN on the async leg**, which loads `unasync.py` and regenerates
+   the whole tree in memory to compare. **It is absent from that leg's `-rs` skip block**, which is how
+   this row knows it ran rather than skipped — the test skips itself from an installed wheel where `tools/`
+   is not shipped, and a skipped anti-drift check reads exactly like a passing one in a totals line.
+
+### §2.7 — The five gates
+
+| gate | result |
+|---|---|
+| `check_links.py` | **exit 0** |
+| `check_spec_drift.py` | **exit 0** |
+| `check_merge_guard.py` | **exit 0** |
+| `check_capability_matrix.py` | **exit 0**, run to completion with the Postgres DSN |
+| `check_skip_census.py` | **exit 0** — 4 result-conditioned skips, baseline 4, the ratchet holds |
+
+**The set stays FIVE.** The checker fix repaired an existing gate rather than adding one, which is the
+supervisor's answer 1, and this row proposed no separate executable.
+
+**This is this row's run. The supervisor runs them again before closing the row, and that run is the one
+that counts** — "landed" means verified on `origin` by `git ls-remote`, never a row's own word for it.
+
+**THE VERIFICATION BOUNDARY, stated before landing rather than after.** The five gates are re-executed by
+the supervisor. **The suite legs — 528 / 943 / 979 — are THIS ROW'S numbers and are labelled as this row's**,
+the same as rows 6g, 6h and 6i; the supervisor does not re-run them. The `-rs` logs match every figure cited
+from them here, and their **authenticity rests on trust rather than on re-execution**, because reviewers are
+barred from running the suites.
