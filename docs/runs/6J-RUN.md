@@ -366,6 +366,33 @@ moved cell, because a moved cell would have to be explained away first.
 **This is raised as a shape, not bent to fit.** If the supervisor wants a moved cell it can only come from
 repairing something the fix now flags — and the fix flags nothing new on this tree.
 
+#### §1.7.1 — RESOLVED: the rule is WITHDRAWN, and the unchanged tree is a FINDING rather than an absence
+
+**The supervisor withdrew it and verified the fact underneath it independently.**
+**[Observed — the supervisor's own run of `--census` at `9b00bcc`, tree byte-identical before and after]**
+the six cells came back `60 / 47 / 4 / 1 / 16 / 11`, identical to row 6i's post-repair census, and
+`check_skip_census` exited 0.
+
+- **WITHDRAWN:** *"the census cell counts must move."*
+- **REPLACED BY:** the fix must be demonstrated to change behaviour **on inputs that exercise it** — cases
+  the old checker got wrong and the new one gets right, re-executable by anyone. That is §1.6.
+
+**The supervisor named its own error class, and it is one worth carrying: a rule that specifies an
+OBSERVATION instead of the PROPERTY it actually wants.** *"The counts must move"* is a proxy for *"the fix
+does something"*, and **a proxy that can conflict with another rule is a defect in the rule, not in the
+tree.** Its satisfaction condition was a defect — either row 6i had landed a bad repair, or the suite's own
+long-standing pattern was wrong.
+
+**AND THE RESULT IS STRONGER THAN A MOVED CELL WOULD HAVE BEEN, which is the part not to soften into "no
+change".** **All ELEVEN `S5` sites survive the full three-part axis** — row 6i's four repairs and the
+suite's seven pre-existing ones, every one carrying a narrowed guard or the legitimate inverse shape, the
+correct flag in the falsifying sense, and a defeasible assertion.
+
+**A moved cell would have told us one site was wrong. An unmoved census under a strictly stronger checker
+tells us all eleven were right for reasons the old checker never checked.** The old gate validated one part
+of three and got the right answer anyway. **It now gets the right answer for the right reason, and the
+difference is invisible in the counts and enormous in what it will catch tomorrow.**
+
 ---
 
 ## §2 — THE THREE LIVE SITES
