@@ -28,9 +28,15 @@ so repairing it is a fix to an existing gate. The set stays **FIVE**. It becomes
 ends up proposing a genuinely separate executable, and **the supervisor is told before such a thing is
 built, not after.** This row does not expect to need one and §0.2 is written to avoid it.
 
-**Answer 2 — the item 3 cheap local option is argued AFTER the fix, not now**, because until the fix exists
-its size is an estimate and afterwards it is a measurement. It is not a blocker and it is not carried as
-one.
+**Answer 2 — the cheap local option is argued AFTER the fix, not now**, because until the fix exists its
+size is an estimate and afterwards it is a measurement. It is not a blocker and it is not carried as one.
+**Discharged in §3.4.**
+
+> **`J16`, CORRECTED IN PLACE.** This sentence originally called it *"the item 3 cheap local option"* while
+> §0.9, the brief and answers-1 all call the same thing **item 2**. Both designators trace: `6I-RUN.md` §7's
+> own numbered list has *"**2.** The item 3 extension, scoped in §1"*, because §7's item 2 IS row 6i's §1
+> scoping of the brief's item 3. **The row used both three pages apart and never said they were the same
+> thing.** Everything in this record now says **item 2**, matching the brief.
 
 ### §0.2 — THE AXIS, MADE DECIDABLE, and the principle that resolves every ambiguity in it
 
@@ -77,6 +83,14 @@ each hit's branch opened by hand]** there are **TWELVE** such assertions sitting
 | 9 | `test_c10_merge_types.py:1417` `test_c10_25` | `out.reason != "alias_collision"` | `indexes_membership is False`, **and a second assertion `out.reason == "predicate_merge"`** | constant, both senses |
 | 10 | `test_c12_foundry_import.py:1379` `test_c12_27` | `not any(w.startswith("import_refused:") for w in warnings)` | `stores_aliases is False` | constant, under a negation |
 | 11 | `test_c10_merge_types.py:1516` `test_c10_27` | `not isinstance(refused, Refusal)` | `stores_aliases is False` | **NOTHING — the one site with no constant anywhere in its guard** |
+
+> **`J12` — THE LINE-NUMBER CONVENTION, stated because this table does not share it with the rest of
+> the record.** Every line above is the **capability-assertion** line, which is where the `grep` that
+> found it hit. The census, §1.5, §2.1 and §2.3 all cite the **`pytest.skip(`** line, three or four
+> lines below — 478 against 481, 1516 against 1520, and so on for all eleven — and §1.2 cites a
+> **guard** line. Nothing here is false and none of it was consistent. **In a record that stops in
+> §2.2 to write a citation note about `3969` against `3970`, this one was owed the same sentence, and
+> two lenses said so.**
 
 **The twelfth is `test_c19_actions.py:4905`, `_skip_if_cannot_record`, and it is `S4-UNDECIDABLE` for a
 different reason** — its `out` is a helper's parameter, never assigned in the function, so it never reaches
@@ -172,10 +186,13 @@ built **one case per part per direction** — the shape that must be refused, an
 accepted — with the accept cases drawn from the live population so the set cannot drift from the suite:
 
 1. **Part 2, must refuse:** a repaired site with **only** the `and x.reason == "..."` clause removed. This is
-   `F12` experiment 1, and it currently classifies `S5`.
+   `F12` experiment 1. **[`J17` — row 6i's measurement, `6I-RUN.md` §6.5, not this row's:** it
+   classified `S5` there. §0 is a reading section and this originally said *"it currently
+   classifies `S5`"*, which claims a live property of an instrument nothing had yet been run
+   against.**]**
 2. **Part 2, must refuse:** the `d3f9a79` site patched with the brief's authorised one-liner verbatim. This
-   is `F12` experiment 2, `S2 -> S5` today, and it is the case that makes the hole about the brief rather
-   than about the future.
+   is `F12` experiment 2 — **`S2 -> S5` in `6I-RUN.md` §6.5's own run, again not this row's** — and it
+   is the case that makes the hole about the brief rather than about the future.
 3. **Part 2, must accept:** the negation shape of §0.4, which must stay `S5`.
 4. **Part 1, must refuse:** `assert registry.caps.stores_events is True` — `F4`'s inverted sense.
 5. **Part 1, must refuse:** a bare truthy capability read as the whole proof.
@@ -313,7 +330,9 @@ it as the prediction most likely to be wrong.
 ### §1.5 — `P2` PREDICTED **1**, AND NAMED THE SITE. MEASURED **1**, AT THAT SITE. HIT.
 
 Measured by censusing the live tree twice with the same fixed classifier, the second time with
-`_establishes_not_that_type` forced to `False`. **[Observed]**
+`_establishes_not_that_type` forced to `False`. **[Observed — both censuses in one process, the
+classifier loaded from its path by `importlib`, keyed by `(file, func, line)` and NOT by `ident`;
+see `J19`]**
 
 ```
 ontoloche/contract/test_c10_merge_types.py::test_c10_27_...#0
@@ -329,7 +348,8 @@ because its `startswith` prefix narrows on a constant anyway and it never needed
 
 **NINE of the fourteen new calibration cases are classified WRONG by the classifier at `16becf6` and right
 by this one.** Measured by loading both modules — `git show 16becf6:docs/tools/check_skip_census.py` into
-memory beside the working one — and classifying each case with both. **[Observed]**
+memory beside the working one — and classifying each case with both. **[Observed — each case string
+through `classify_source()` on both modules, compared category by category]**
 
 | the case | at `16becf6` | now |
 |---|---|---|
@@ -343,17 +363,34 @@ memory beside the working one — and classifying each case with both. **[Observ
 | `F15` — `assert True or X` verbatim | `S5` | **`S2`** |
 | `F15` — the same vacuity, not spelled `True or` | `S5` | **`S2`** |
 
-**Every one of the nine was an UNGATED promotion, and every one is now gated.** The remaining five are the
-accept direction — the narrowed repair, `reason !=`, the `startswith` prefix, the legitimate exemption, and
-an inverse guard with no proof — and all five classify the same in both, which is what an accept case is
-for.
+**Every one of the nine was an UNGATED promotion, and every one is now gated.**
+
+> **`J11`, CORRECTED IN PLACE.** This read: *"The remaining five are the accept direction — the narrowed
+> repair, `reason !=`, the `startswith` prefix, the legitimate exemption, and an inverse guard with no proof
+> — and all five classify the same in both, which is what an accept case is for."* **The fifth is a REFUSE
+> case.** *"An inverse guard with NO capability proof is still FLAGGED"* expects `S2`, and the old classifier
+> already got it right. **Four accept cases and one refuse case the old classifier already refused** — found
+> by two lenses independently.
+
+> **`J11.1`, and it is not a wording fix: two of those four "accept" cases were accepted for the WRONG
+> REASON, and round 1 proved it.** The `reason !=` case passes only because of a second assertion the first
+> cut never read, and the `startswith` case would have passed with the negation removed and the `startswith`
+> on an unrelated object. **Both are re-pinned in §3**, one of them by moving a live site out of `S5`.
 
 **All 31 calibration cases pass, the 17 that pre-date this row included.** `--selftest` re-executes the
 whole set on every gate invocation, so this is a re-execution anyone can run rather than a claim.
 
 ### §1.7 — THE CONTRADICTION FROM §0.7 IS NOW MEASURED, AND IT STANDS
 
-**The brief's §4 repeats, in bold, that *"the census must be re-run and the cell counts must move."*** The
+**`J10`, CORRECTED IN PLACE: this sentence cited the wrong document.** It read *"The brief's §4 repeats, in
+bold…"*. **[Observed — `grep -n "cell counts must move"` over the briefs directory]** the sentence is at
+line 61 of **`2026-09-10-oo-6j-supervisor-answers-2.md`**, in that file's §4. The follow-on brief's §4 is
+*"Not to be routed anywhere it does not belong"* and says nothing about the census. **This record's own
+header separates "the brief" from the answers files, and §1.2 uses the separation correctly — so this is the
+`R104` citation-defect class, committed against the brief that names it.** Only the second half of the
+quoted clause is bold in the source, so *"in bold"* over the whole quote overstated it too.
+
+**ANSWERS-2's §4 repeats that *"the census must be re-run and **the cell counts must move.**"*** The
 census was re-run. **The cell counts did not move, and §0.5 predicted that before the fix existed.**
 
 **`F12` is a REGRESSION-DETECTION hole and `6I-RUN.md` §6.5 says so in those words.** Today's baseline was
@@ -400,7 +437,14 @@ difference is invisible in the counts and enormous in what it will catch tomorro
 ### §2.0 — `P3`, ONE INTEGER: **3**, committed before the census that scores it
 
 **The repairs are written and the mirror is regenerated. The census has NOT been run since.** This
-sub-section is committed alone so `git log` carries the order, exactly as §0 was.
+sub-section is committed **before the census that scores it**, so `git log` carries the order.
+
+> **`J13`, CORRECTED IN PLACE. This originally read *"committed alone … exactly as §0 was", and it was
+> not.*** **[Observed — `git show --stat`]** `265aafc` touched **one** file. `43d0dac` touched **seven** —
+> this record plus all six repaired test files. **The prose was alone in the commit; the commit was not
+> alone.** The word "alone" is load-bearing in §0 precisely because it is provable there, and borrowing it
+> here spent that credit on something that does not have it. The commit message itself was more careful and
+> said only "before the census is run".
 
 **`P3` predicts that THREE sites change category, all of them `S1-SETUP-RESULT` -> `S5-PROVEN-ENVIRONMENTAL`,
 leaving `S1` at 44 and `S5` at 14 with the 139 total unchanged.**
@@ -430,10 +474,33 @@ stale one, so all three were found by **test name** and then read at the point o
 because the check is cheap and the alternative is the defect the brief names.
 
 **Five other sites carry the identical message and NONE of them was touched** — `test_c10_merge_types.py:1135`,
-`test_c12_foundry_import.py:1080` and three in `test_c5_approve_reject.py`. Two of those are item 4's
-baselined sites and the rest are item 5's unaudited population. **[Observed — `grep -c "cannot retire the
-holder"` over all three `-rs` logs returns `0` on each]** none of the five fires on any leg, which is the
-same reason item 4's four stay put.
+`test_c12_foundry_import.py:1080` and three in `test_c5_approve_reject.py`.
+
+> **`J8`, CORRECTED IN PLACE. This originally read *"Two of those are item 4's baselined sites and the rest
+> are item 5's unaudited population."* It is ONE, not two.** **[Observed — `docs/tools/skip_census_baseline.json`
+> against the census]** the baseline's four are `test_c10_22`, `test_c12_21`, `test_c12_24` and `test_c3_27`,
+> and only **`test_c12_21`** (`test_c12_foundry_import.py:1080`) is among the five. The baselined `c10` site
+> is `test_c10_22` at line 1206, not `test_c10_21` at 1135. **So: one baselined, four in item 5's unaudited
+> population.**
+
+> **`J14`, CORRECTED IN PLACE. The justification that stood here was the standard §2.2 rejects one paragraph
+> later.** It read: *"none of the five fires on any leg, which is the same reason item 4's four stay put."*
+> **§2.2 claims of the three repaired sites "no possible victim, on any backend, not merely no observed
+> one" — and then the five were excused on observed-only grounds.** A lens put the two sentences side by
+> side.
+>
+> **And the five are not one population.** **[Observed — the `@pytest.mark.requires_capability` decorators]**
+> `test_c12_21` and `test_c5_13` both declare `stores_events`, so the whole test is skipped on any backend
+> lacking it and **their bare skip is structurally DEAD — provably unreachable, on any backend.**
+> `test_c10_21` declares only `indexes_membership`, and `test_c5_14` and `test_c5_15` declare nothing. **On a
+> backend that is legal under `PACKAGE.md` §3.2 — `indexes_membership=True`, `stores_proposals=True`,
+> `stores_events=False` — those three reach the retire and hit the bare skip. They are LATENT, not dead.**
+>
+> **They stay anyway, and the honest reason is scope, not safety:** they are §7 item 5's population and the
+> brief says *"do not repair them silently"*. **[Observed — `grep -c "cannot retire the holder"` over all
+> three `-rs` logs returns `0` on each]** none of the five fires on today's matrix, which is a fact about
+> today's backends and **not** the argument §2.2 makes. **Recorded as three latent sites this row is not
+> authorised to touch, rather than as five sites that do not matter.**
 
 ### §2.2 — THE SAFETY IS PROVABLE BY CONSTRUCTION, and this row re-derived it rather than inheriting it
 
@@ -452,6 +519,15 @@ with its enclosing guard chain. **[Observed — `retire` spans `registry.py:3414
 **So the fall-through this repair adds has no possible victim, on any backend, not merely no observed
 one.** A refusal the capability does not explain cannot occur at these three calls, and if one ever could,
 `assert not isinstance(gone, Refusal)` is what would say so.
+
+> **`J15` — AND THAT MAKES THE FALL-THROUGH UNREACHABLE BY THIS ROW'S OWN PROOF.** If
+> `cannot_record_override` is the only refusal these three calls can reach, and the branch above
+> consumes it, then `assert not isinstance(gone, Refusal)` **cannot fire today.** A lens named it and
+> the naming is right: the register elsewhere treats a guard that can never fire as a defect class, so
+> calling this one a guard borrows a word it has not earned. **It is a NET against a future
+> `registry.py` change** — the day someone adds a thirteenth refusal reachable under `force=True` with
+> no successor, this line is what turns a silent skip into a failure. **Recorded as a net, at the cost
+> of the stronger-sounding word.**
 
 **A citation note, since `R104`'s `3969` has already been corrected once for pointing at the wrong door:**
 `3969` is the **guard** `if force and not self.caps.stores_events` and `3970` is the `return Refusal(...)`
@@ -506,8 +582,29 @@ test_c10_merge_types.py:1297     1 id   ... before there is a tombstone for the 
 ```
 
 **And the old message is gone from every log**: `grep -c "cannot retire the holder"` returns `0` on all
-three. Nine `NOT REACHABLE: stores_events=False refuses the forced retire` firings per leg now, where six
-of the nine belong to row 6i's repairs and three are this row's.
+three.
+
+> **`J7`, CORRECTED IN PLACE. This paragraph originally read: *"Nine `NOT REACHABLE: stores_events=False
+> refuses the forced retire` firings per leg now, where six of the nine belong to row 6i's repairs and
+> three are this row's."* BOTH HALVES ARE WRONG.**
+>
+> **The number is SIX, not nine.** The `9` came from `grep -c`, which counts the five `SKIPPED` lines **and**
+> four lines of the conformance summary block — **the same events, in two report blocks, counted twice.**
+> **[Observed — `grep "^SKIPPED" leg2_sync3.log | grep "refuses the forced retire"`]** the `SKIPPED` entries
+> are `c10:1297` (1 id), `c12:1128` (2 ids), `c12:1330` (1 id), `c3:708` (1 id), `c4:481` (1 id) = **6 ids**.
+>
+> **The split is THREE and THREE, not six and three.** This row's three fire one id each. Row 6i's
+> contribution under this message is `c12:1128`'s 2 plus `c4:481`'s 1 = **3** — and `6I-RUN.md` §4.1 records
+> exactly that, `2 / 1 / 0`. Row 6i's fourth repair, `test_c10_merge_types.py:1374`, fires under a
+> **different** message ("refuses the acknowledgement"), and its `test_c9_retire.py` copy fires on no leg.
+>
+> **THE SHAPE IS THE POINT: `6 + 3 = 9`, so the wrong split summed correctly.** `6I-RUN.md` §6.6 names that
+> as the error that survives review, this record quotes that warning two sections earlier, and then commits
+> it. **Found by two independent lenses; one of them also checked it against `6I-RUN.md` §4.1's landed table
+> and found this row contradicting a record it had itself cited.**
+
+**Corrected: SIX firings per leg — three row 6i's (`c12:1128` at 2 ids, `c4:481` at 1) and three this row's
+(`c3:708`, `c12:1330`, `c10:1297`, one id each).**
 
 **This is the difference between these three and item 4's four.** These were observed firing before the
 brief was written and are observed firing after the repair. Item 4's four have been unobserved on three
@@ -552,3 +649,163 @@ the supervisor. **The suite legs — 528 / 943 / 979 — are THIS ROW'S numbers 
 the same as rows 6g, 6h and 6i; the supervisor does not re-run them. The `-rs` logs match every figure cited
 from them here, and their **authenticity rests on trust rather than on re-execution**, because reviewers are
 barred from running the suites.
+
+---
+
+## §3 — THE ADVERSARIAL ROUND
+
+### §3.1 — Round 1, and the ratio is the interesting number
+
+**Four fresh lenses, one artefact, four separate briefs: the classifier, the numbers, the repair, the
+record.** Verdicts: **three `NOT YET`, one `SHIP IT`.** Eighteen consolidated findings, `J1`-`J18`.
+
+| | MAJOR | MINOR |
+|---|---|---|
+| **the CLASSIFIER — code** | **6** (`J1`-`J6`) | 0 |
+| the RECORD — prose and numbers | 3 (`J7`-`J9`) | 9 (`J10`-`J18`) |
+
+**THAT SPLIT IS THE RESULT, not the total.** `6I-RUN.md` §6.6 records fifteen findings across four rounds
+and thirteen lens-passes, and **NOT ONE WAS A CODE DEFECT** — every one was a claim in a record that outran
+its evidence. **This round found six defects in the CODE, in a single pass, and every one of them was in
+the fix written to close the last row's routed finding.** The first round in three rows to break that
+pattern.
+
+**Every finding was reproduced HERE before being accepted.** A lens's report is a hypothesis; eleven
+exploit sources were fed to the live `classify_source()` and the categories pasted into the working notes
+before a line was changed. **One lens's follow-up was WRONG and is recorded as wrong:** it reported that
+the three `-rs` logs no longer existed on disk and that §2.5 therefore rested on nothing checkable. **They
+exist, at the paths another lens had just run commands against.** The finding underneath it (`J7`) is real
+and stands; the escalation was false and did not go in.
+
+### §3.2 — The six classifier MAJORs. Every one of them is `F12`'s own shape.
+
+**[Observed — each exploit through `classify_source()` on the classifier at `9b00bcc`, then again after the
+rebuild]**
+
+| | the shape that defeated it | at `9b00bcc` | rebuilt |
+|---|---|---|---|
+| **`J1`** | `if not isinstance(gone, Refusal): … else: <proof>; skip()` | `S5` | **`S2`** |
+| **`J2`** | `not isinstance(gone, Success)`, and `not isinstance(gone, str)` | `S5` | **`S2`** |
+| **`J3`** | `isinstance(gone, Refusal) and not adapter.dsn.startswith("postgres://")` | `S5` | **`S2`** |
+| **`J4`** | `reason != "x"`, `reason not in (…)`, `"key" in detail`, `reason != ""` | `S5` | **`S2`** |
+| **`J5`** | `(caps.f and False) is False`, `(caps.f and gone.ok) is False`, `explains(caps, gone) is False` | `S5` | **`S2`** |
+| **`J6`** | the `S2` refusal text says "CANNOT FAIL" of `caps.f == 0`, which does fail | — | **corrected** |
+
+**`J1` IS THE SHARPEST AND IT IS EXACTLY WHAT THIS ROW EXISTS TO PREVENT.** `_guard_chain` recorded which
+tests enclose a skip and **threw away whether the skip was reached through the `if` or the `else`.** So the
+exemption earned by `not isinstance(gone, Refusal)` was handed to the else-branch — **the one branch where
+the value IS a refusal and its reason DOES exist.** The `why` then printed *"establishes the value is NOT a
+refusal, so there is no reason to compare"* about that branch. **That is `F12` verbatim, inside the fix for
+`F12`, complete with a false `why` — which is `F15` — in a row that closed both.**
+
+**`J2` is the same class one level down.** The exemption checked that the call was `isinstance` and never
+looked at the TYPE. Negating the SUCCESS type names the refusal family exactly.
+
+**`J4` did more than admit exploits: it accepted a LIVE SITE FOR THE WRONG REASON.** `test_c10_25`'s guard
+is `out.reason != "alias_collision"`, a complement that names nothing. The site is genuinely correct — but
+because of `assert out.reason == "predicate_merge"` sitting above the skip, **which the first cut never
+read.** The rebuild reads it: a naming may come from the guard **or** from an assertion in the skip's own
+branch, and that is how the site is actually safe.
+
+**`J5` is `F15` surviving in a spelling the walk did not visit.** `_falsifying` asked whether a capability
+appeared *anywhere inside* the compared side, so `(registry.caps.stores_events and False) is False` —
+constantly true — passed. **The commit that introduced it said the pin was "on the property rather than on
+the wording" and it was on neither.** The rebuild requires the compared side to **be** a capability read.
+
+**`J6` is `F15` pointed the other way.** Three expressions that DO fail on a capable backend were refused
+with a sentence that was false of the expression it had just quoted. Refusing them is fail-closed and
+right; **printing a false reason is the defect this row was opened to remove.** The text now says what the
+gate READS, which is a claim about the gate rather than about the expression.
+
+### §3.3 — `J19`: THE SITE IDENT IS NOT AN IDENTITY, AND THE RATCHET CAN BE DEFEATED
+
+**Not one of round 1's eighteen. No lens found it.** It surfaced because a measurement script written HERE
+keyed a dict by `Site.ident` and silently lost 46 of 139 sites — **the instrument error was this row's, and
+chasing it is what exposed the gate's.**
+
+**[Observed — a synthetic source through `classify_source`, then the gate's own `new` computation]**
+
+```
+A. baselined: ONE result-conditioned skip
+    S2  line 6   ident t.py::test_one_flagged#0
+
+B. a commit ADDS a second one to the SAME function
+    S2  line 6   ident t.py::test_one_flagged#0   guard: isinstance(gone, Refusal)
+    S2  line 10  ident t.py::test_one_flagged#0   guard: isinstance(out, Refusal)
+
+    the gate's own `new` computation -> []
+    reported: 0        actually present: 2
+```
+
+**`Site.ident` is `file::func#ordinal`, and ordinals are assigned per *(function, GUARD TEXT)*.** Two skips
+in one function with different guards both carry `#0`, so
+`new = [i for i in found if i not in set(declared)]` absorbs the second. **The ratchet does not turn.**
+
+**On the live tree: 139 sites collapse to 93 distinct idents, 36 idents carry more than one site, and FOUR
+non-`S2` sites already share an ident with a baselined `S2` site** — `test_c10_22`, `test_c12_21`, and two
+in `test_c12_24`. **One guard-edit at any of those four and a new result-conditioned skip is invisible.**
+
+**PROVENANCE, AND IT IS THE STREAK AGAIN.** The per-guard ordinal is **row 6h's own adversarial-round fix**,
+and the code says so in its own comment: a plain per-function counter renumbered a flagged site whenever an
+ordinary skip was added above it, and *"a gate that fails for unrelated reasons is a gate somebody
+weakens"*. **That remedy traded a false failure for an identity that is not an identity.** It is the fourth
+consecutive row in which an adversarial round's own fix carried the next defect, and **the second time into
+this instrument** — `F12` was the first.
+
+**AND IT IS WORSE THAN `F12` IN ONE RESPECT, WHICH IS WHY IT IS NOT BEING QUIETLY ROUTED.** `F12` needed
+someone to strip a clause from a working repair. **This needs nothing but an ordinary contributor adding an
+ordinary skip to one of four named functions.**
+
+**NOT FIXED IN THIS ROW WITHOUT A RULING, and the reasoning is in
+`2026-09-10-oo-6j-questions.md` `Q2`.** The fix puts the guard into the ident, which **rewrites every entry
+in the baseline file** — a wholesale baseline change landing in the same commit as a classifier change, which
+makes the two impossible to review apart. That is the narrower version of exactly why row 6i routed `F12`.
+
+**A LENS'S OWN NUMBER FELL INTO THIS HOLE AND THE LENS DID NOT NOTICE.** Lens A reported a cell-by-cell
+census comparison as `S0 47 / S1 18 / S2 4 / S3 1 / S4 9 / S5 14` — **a 93-site tree** — and drew a correct
+conclusion from a partial measurement. **The conclusion happened to hold. The measurement did not, and
+nothing in the lens's own report would have told it.** That is recorded because a reviewer's number is not
+more trustworthy than a row's, and this record cites none of it.
+
+### §3.4 — §7 ITEM 2 IS DISCHARGED, AND THE CHEAP LOCAL OPTION IS NOT CHEAP
+
+**The debt: answers-1 §2 — *"When the fix is in and the census re-run, tell me what the local option
+actually costs and I will rule."*** The fix is in and the census re-run. **`J9` is that this record reached
+§2.7 without coming back to it**, and a promise made to the supervisor and left open is the prior row's
+`F5`/`F6` shape.
+
+**[Observed — the option simulated by making a helper's parameters their own observation roots, then
+re-censusing with a `(file, func, line)` key rather than the colliding `ident`]** **EIGHT sites move, and
+three go the wrong way:**
+
+| movement | count | what it is |
+|---|---|---|
+| `_skip_if_cannot_record` `S4` -> `S5` | 1 | the intended win, and it does work |
+| four `conftest.py` sites `S4` -> `S1` | 4 | harmless reclassification |
+| **three `_tombstone_holding` copies `S1` -> `S2`** | **3** | **NEW flagged sites, on row 6i's own repairs** |
+
+**The three helpers guard on `word`, a parameter, and assert `word in (gone.aliases or ())`.** Make the
+parameter an observation root and the guard reads an observation the assertions reach, which is `S2` by
+definition. **So the cheap local option buys one promotion and costs three new baseline entries at the
+three sites row 6i repaired last night.**
+
+**Recommendation: it stays its own row**, which is `6I-RUN.md` §1's own verdict and `R104`'s scoping.
+**This is the measured argument the supervisor asked for rather than the conclusion he was offered before.**
+
+### §3.5 — What is open, and where it is written down
+
+**Two items are with the supervisor in
+`C:\Users\steph\.claude\fleet-supervisor\briefs\2026-09-10-oo-6j-questions.md`**, each with the options,
+this row's recommendation, and what it blocks:
+
+- **`Q1`** — `test_c12_27` reclassifies `S5` -> `S2` under the corrected axis, so the ratchet baseline must
+  go from **4 to 5**. `--write-baseline` has NOT been run and the fifth gate exits **1** until this is
+  ruled. Recommendation: raise it, and leave the site alone.
+- **`Q2`** — `J19`, above. Recommendation: route it, with the live-exploitability caveat named rather than
+  buried.
+
+**A standing change to how this row talks to the supervisor, and it is his ruling:** questions go in a
+**file** from now on, not only into the pane. **[Observed — his `tmux capture-pane -p -S -`]** the pane
+holds **nineteen** non-blank lines, so a question not acted on within one supervision cycle is
+unrecoverable. **He sends prose by file for the same reason and had not noticed the return channel carried
+the same defect.**
