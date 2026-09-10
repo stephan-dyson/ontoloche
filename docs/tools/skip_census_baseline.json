@@ -1,12 +1,36 @@
 {
-  "_comment": "RATCHET BASELINE for check_skip_census.py. Lowering this list is a normal commit anyone may make: fix the site, drop its entry. RAISING it -- adding an entry -- requires the ontoloche supervisor's ruling. The gate fails if `count` disagrees with `sites`, so the number cannot move without the site moving with it.",
+  "_comment": "RATCHET BASELINE for check_skip_census.py. A site may only leave this list by being REPAIRED. `asserts` is the enclosing function's assertion count, carried so that DELETING the assertion -- the cheapest way to make this gate green, and strictly worse for the suite -- is refused rather than rewarded. RAISING the list requires the ontoloche supervisor's ruling. The gate fails if `count` disagrees with `sites`.",
   "count": 6,
   "sites": [
-    "ontoloche/contract/test_c10_merge_types.py::test_c10_22_a_truncated_collision_scan_is_reported_not_silent#1",
-    "ontoloche/contract/test_c10_merge_types.py::test_c10_24_merge_states_a_skipped_identity_guard_too#1",
-    "ontoloche/contract/test_c12_foundry_import.py::test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types#1",
-    "ontoloche/contract/test_c12_foundry_import.py::test_c12_24_a_skipped_identity_guard_says_so#2",
-    "ontoloche/contract/test_c3_resolve_type.py::test_c3_27_the_confidence_is_the_MIN_of_both_halves#0",
-    "ontoloche/contract/test_c4_propose_type.py::_tombstone_holding#1"
+    {
+      "site": "ontoloche/contract/test_c10_merge_types.py::test_c10_22_a_truncated_collision_scan_is_reported_not_silent#0",
+      "asserts": 2,
+      "guard": "isinstance(out, Refusal)"
+    },
+    {
+      "site": "ontoloche/contract/test_c10_merge_types.py::test_c10_24_merge_states_a_skipped_identity_guard_too#0",
+      "asserts": 1,
+      "guard": "isinstance(merged, Refusal)"
+    },
+    {
+      "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types#0",
+      "asserts": 6,
+      "guard": "isinstance(gone, Refusal)"
+    },
+    {
+      "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_24_a_skipped_identity_guard_says_so#0",
+      "asserts": 2,
+      "guard": "any((w.startswith('import_refused:') for w in warnings))"
+    },
+    {
+      "site": "ontoloche/contract/test_c3_resolve_type.py::test_c3_27_the_confidence_is_the_MIN_of_both_halves#0",
+      "asserts": 4,
+      "guard": "answer.type is None or answer.type.name != 'searchable'"
+    },
+    {
+      "site": "ontoloche/contract/test_c4_propose_type.py::_tombstone_holding#0",
+      "asserts": 1,
+      "guard": "isinstance(gone, Refusal)"
+    }
   ]
 }

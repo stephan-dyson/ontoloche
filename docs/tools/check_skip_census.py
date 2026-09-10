@@ -21,10 +21,12 @@ pre-existing site forces exactly one outcome: someone weakens it until it passes
 So the gate carries a BASELINE of currently-flagged sites as data, and:
 
 * it FAILS when a flagged site appears that the baseline does not hold;
-* it FAILS when the baseline holds a site that is no longer flagged (fix the
-  test, lower the baseline in the same commit -- a normal commit anyone may make);
-* it FAILS when the baseline's own ``count`` disagrees with its own ``sites``,
-  so nobody can raise the number without the diff showing the site.
+* it FAILS when the baseline holds a site the checker no longer flags;
+* it FAILS when the baseline's own ``count`` disagrees with its own ``sites``;
+* and lowering the baseline is REFUSED when the site stopped being flagged because
+  an assertion was DELETED rather than because the skip was repaired -- see
+  ``_leaving_verdict``, which exists because a fresh lens found that removing
+  coverage was the cheapest way to make this gate green.
 
 Raising the baseline requires the supervisor's ruling. Lowering it does not.
 
@@ -37,58 +39,68 @@ Pre-registered in ``docs/runs/6H-RUN.md`` §0.3 as **D1**:
     function. It is S1 when the guard reads a call result no assert ever reads.
     It is S0 when the guard reads no call result at all.
 
-**D1 was amended TWICE, both times before the census was counted, and both
-amendments are recorded in §1.2 of the run record rather than made silently.**
+**D1 is implemented over OBSERVATION ROOTS rather than over names**, which is the
+one change that makes it survive contact with real tests. A name assigned from a
+call to the system under test IS an observation and is its own root. A name
+derived from another WITHOUT a fresh call -- ``warnings = rows[0].warnings or ()``,
+``refused = isinstance(out, Refusal)``, ``why, detail = out.reason, out.detail`` --
+inherits the root of what it was derived from. Calls to builtins are derivations,
+not observations. So a guard and an assertion that reach the same observation by
+different names are still reading the same thing, and one hop of indirection no
+longer defeats the comparison.
 
-*First:* as pre-registered it flagged the RECEIVER as well as the RESULT.
-``registry = make_registry(adapter)`` makes ``registry`` a call result, so
-``if not registry.caps.indexes_membership: skip()`` -- the canonical *legitimate*
-environment skip -- would have been flagged in any test whose assertions mention
-``registry``. The fix is a sharpening rather than a weakening:
+**The RECEIVER rule, and the false step it corrects.** ``registry =
+make_registry(adapter)`` is an assignment from a call, so a naive reading makes
+``registry`` an observation and flags the canonical *legitimate* guard ``if not
+registry.caps.indexes_membership``. The object a test drives the system THROUGH is
+configuration, not a result -- but "any name you call a method on" was too wide,
+and a fresh lens proved it: one extra ``assert unscored.outcome.startswith(...)``
+turned the gate's own pinned ``C3-26`` case from S2 into S0. **Adding an assertion
+un-flagged the defect.** So a receiver is now specifically a name whose method call
+PRODUCES AN ASSIGNED VALUE -- the driving object -- and an incidental ``.strip()``
+inside an assertion no longer launders a result into configuration.
 
-    A name used as a CALL RECEIVER (``name.method(...)``) anywhere in the function
-    is a receiver, not a result. Guards read results; the object that produces
-    results is configuration.
+THE CATEGORIES, and the fourth one the brief's model did not have
+----------------------------------------------------------------
+::
 
-*Second:* a value one step downstream of a call is still that call's result, so
-``warnings = rows[0].warnings or ()`` carries ``rows``'s result-ness. The closure
-stops at the next call, because a call produces a new value rather than a view of
-the old one.
+    S0  ENVIRONMENT       guard reads no observation             legitimate
+    S1  SETUP RESULT      reads an observation no assert reaches probably legitimate; NOT ruled here
+    S2  RESULT UNDER TEST reads an observation an assert reaches never legitimate   <-- GATED
+    S3  UNCONDITIONAL     no enclosing conditional at all        reported, not gated
+    S4  UNDECIDABLE       this checker cannot see enough to say  reported, never gated
+    S5  PROVEN            reads the result under test, then ASSERTS THE CAPABILITY
+                          that explains it before skipping
 
-**AND THE MODEL ITSELF DID NOT SURVIVE THE CENSUS.** The brief's three categories
-are four. This suite invented the fourth on purpose and documented it in its own
-words -- *"Gated on the CAPABILITY rather than on the outcome, so a store that CAN
-hold the alias and merged anyway is a finding and not a skip"* -- and there are
-SEVEN of them. A skip that reads the result under test and then ASSERTS, before
-skipping, that a capability explains that result has converted a result-condition
-into an environment-condition and shown its work. It is not the ``C3-26`` shape:
-break the implementation on a capable backend and the assertion fails, so the id
-FAILS rather than skips.
+**S5 is the suite's own invention, not this checker's.** It is documented inside
+the tests in their own words -- *"Gated on the CAPABILITY rather than on the
+outcome, so a store that CAN hold the alias and merged anyway is a finding and not
+a skip"* -- and there are seven. Break the implementation on a capable backend and
+the assertion fails, so the id FAILS rather than skips. That is precisely the
+repair of ``C3-26``'s defect, applied by the suite before this row existed, and a
+gate that flagged it would delete the correct pattern along with the wrong one.
 
-    S0  ENVIRONMENT       guard reads no call result            legitimate
-    S1  SETUP RESULT      guard reads a result no assert reads  probably legitimate; NOT ruled here
-    S2  RESULT UNDER TEST guard reads a result an assert reads  never legitimate  <-- GATED
-    S3  UNCONDITIONAL     no guard at all                       reported, not gated
-    S4  UNDECIDABLE       the guard CALLS inline, binding no name, so nothing can be
-                          compared against the assertions. Never gated: an unbound
-                          value cannot be the value an assertion reads
-    S5  PROVEN            reads the result under test, then asserts the capability
-                          that explains it before skipping -- the suite's own
-                          "NOT REACHABLE, never a pass" pattern
+**S4 is an honest refusal to answer, and it is never gated**, because gating a cell
+the checker cannot see into is how a gate acquires false positives nobody can
+audit. It holds: guards that call inline and bind no name; guards on a HELPER's
+parameter, where the value arrives from a caller this checker does not follow; and
+guards that are not ``if`` statements at all.
 
-Only S2 is gated. Gating S1 or S5 would rule on categories row 6h is explicitly
+Only S2 is gated. Gating S1, S4 or S5 would rule on questions row 6h is explicitly
 not authorised to rule on.
 
 USAGE
 -----
+::
+
     py docs/tools/check_skip_census.py                   # the gate. exit 0 or 1
     py docs/tools/check_skip_census.py --census          # full breakdown, exit 0
     py docs/tools/check_skip_census.py --selftest        # classifier calibration only
-    py docs/tools/check_skip_census.py --write-baseline  # lower (or seed) the baseline
+    py docs/tools/check_skip_census.py --write-baseline  # LOWER (or seed) the baseline
 
 The gate runs ``--selftest`` on every invocation and fails if the classifier
-regressed, because a gate whose own classifier is untested is the exact defect
-this row exists to name.
+regressed, because a gate whose own classifier is untested is the exact defect this
+row exists to name.
 """
 
 from __future__ import annotations
@@ -101,18 +113,35 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_DIR = REPO_ROOT / "ontoloche" / "contract"
+# The async tree is MOSTLY generated from the sync one by tools/unasync.py, but
+# NOT entirely: `conftest.py` and `test_c0_backend_local.py` are hand-written
+# there and carry skips of their own (unasync.py's HAND_WRITTEN_ASYNC names the
+# second, and the first has no generated banner). A gate that scanned only the
+# sync tree left those two files permanently unwatched, which a fresh lens found
+# and demonstrated. So both trees are scanned and generated files are skipped by
+# their own banner -- gating a derivative would only double-count the source.
+AIO_CONTRACT_DIR = REPO_ROOT / "ontoloche" / "aio" / "contract"
+SCAN_DIRS = (CONTRACT_DIR, AIO_CONTRACT_DIR)
+GENERATED_BANNER = "GENERATED FILE -- do not edit"
 BASELINE_PATH = Path(__file__).resolve().parent / "skip_census_baseline.json"
 
-# Builtins and test-helper predicates that may appear inside a guard without
-# meaning "this guard calls the system under test". `isinstance(gone, Refusal)`
-# is the supervisor's own SETUP RESULT example and must not land in S4.
-GUARD_SAFE_CALLS = frozenset(
+# Calls that DERIVE a value rather than OBSERVE the system. A name assigned from
+# `isinstance(out, Refusal)` still holds a fact about `out`; a name assigned from
+# `registry.merge_types(...)` holds a new observation of its own.
+PURE_CALLS = frozenset(
     {
         "isinstance", "len", "set", "list", "tuple", "dict", "any", "all",
         "sorted", "str", "int", "float", "bool", "getattr", "hasattr", "abs",
         "max", "min", "sum", "type", "repr", "frozenset", "next", "iter",
+        "enumerate", "zip", "reversed", "round", "id", "format", "divmod",
     }
 )
+
+# Attribute names that make an assertion a CAPABILITY proof rather than any old
+# assertion. S5 turns on this: the suite's proven-environmental skips all assert
+# `x.caps.<flag>` or `x.capabilities().<flag>`, and without this the pattern is
+# launderable by asserting something trivially true before skipping.
+CAPABILITY_MARKERS = frozenset({"caps", "capabilities"})
 
 ENV = "S0-ENVIRONMENT"
 SETUP = "S1-SETUP-RESULT"
@@ -125,7 +154,7 @@ CATEGORIES = (ENV, SETUP, UNDER_TEST, UNCONDITIONAL, UNDECIDABLE, PROVEN_ENV)
 
 
 class Site:
-    """One bare ``pytest.skip(...)`` call site, and what this gate decided about it.
+    """One skip call site, and what this gate decided about it.
 
     Identity is ``(file, function, ordinal)`` and deliberately NOT the line number:
     line numbers churn on every edit above them, so a line-keyed baseline would
@@ -133,9 +162,11 @@ class Site:
     is a gate somebody weakens.
     """
 
-    __slots__ = ("file", "func", "ordinal", "line", "category", "guard", "why")
+    __slots__ = (
+        "file", "func", "ordinal", "line", "category", "guard", "why", "asserts",
+    )
 
-    def __init__(self, file, func, ordinal, line, category, guard, why):
+    def __init__(self, file, func, ordinal, line, category, guard, why, asserts=0):
         self.file = file
         self.func = func
         self.ordinal = ordinal
@@ -143,6 +174,10 @@ class Site:
         self.category = category
         self.guard = guard
         self.why = why
+        # How many assertions the enclosing function holds. Carried into the
+        # baseline because the cheapest way to make this gate green is to DELETE
+        # the assertion that made a site illegitimate. See _leaving_verdict.
+        self.asserts = asserts
 
     @property
     def ident(self) -> str:
@@ -152,219 +187,361 @@ class Site:
         return f"<Site {self.ident} {self.category}>"
 
 
-def _names_read(node) -> set[str]:
-    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+# --------------------------------------------------------------------------
+# finding the skips
+# --------------------------------------------------------------------------
+
+def _pytest_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """``(module aliases for pytest, bare names bound to pytest.skip)``.
+
+    Both `import pytest as p` and `from pytest import skip as bail` hide a skip
+    from a checker that hardcodes the spelling, and a fresh lens found both.
+    """
+    modules = {"pytest"}
+    bare: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name == "pytest":
+                    modules.add(a.asname or a.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "pytest":
+            for a in node.names:
+                if a.name in ("skip", "xfail"):
+                    bare.add(a.asname or a.name)
+    for node in ast.walk(tree):
+        # module-level `_bail = pytest.skip`
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Attribute):
+            if node.value.attr in ("skip", "xfail"):
+                base = node.value.value
+                if isinstance(base, ast.Name) and base.id in modules:
+                    for t in node.targets:
+                        if isinstance(t, ast.Name):
+                            bare.add(t.id)
+    return modules, bare
 
 
-def _assign_targets(node) -> list[str]:
-    targets = []
-    if isinstance(node, ast.Assign):
-        raw = node.targets
-    elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
-        raw = [node.target]
-    elif isinstance(node, ast.NamedExpr):
-        raw = [node.target]
-    else:
-        return targets
-    for t in raw:
-        for sub in ast.walk(t):
-            if isinstance(sub, ast.Name):
-                targets.append(sub.id)
-    return targets
-
-
-def _is_skip_call(node, skip_aliases: set[str]) -> bool:
+def _is_skip_call(node, modules: set[str], bare: set[str]) -> bool:
+    """``pytest.skip(...)``, ``p.xfail(...)``, an alias, or
+    ``raise pytest.skip.Exception(...)``."""
     if not isinstance(node, ast.Call):
         return False
     f = node.func
-    if isinstance(f, ast.Attribute) and f.attr == "skip":
-        return isinstance(f.value, ast.Name) and f.value.id in {"pytest", "pt"}
-    if isinstance(f, ast.Name) and f.id in skip_aliases:
+    if isinstance(f, ast.Name):
+        return f.id in bare
+    if isinstance(f, ast.Attribute):
+        if f.attr in ("skip", "xfail"):
+            return isinstance(f.value, ast.Name) and f.value.id in modules
+        # raise pytest.skip.Exception(...)
+        if f.attr == "Exception" and isinstance(f.value, ast.Attribute):
+            inner = f.value
+            if inner.attr in ("skip", "xfail"):
+                return isinstance(inner.value, ast.Name) and inner.value.id in modules
+    return False
+
+
+# --------------------------------------------------------------------------
+# observation roots -- the heart of D1
+# --------------------------------------------------------------------------
+
+def _names_read(node) -> set[str]:
+    return {
+        n.id
+        for n in ast.walk(node)
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+    }
+
+
+def _assign_targets(node) -> list[str]:
+    """The NAMES this assignment binds.
+
+    An ATTRIBUTE target is deliberately not one of them. ``adapter._migration_sql =
+    lambda: broken`` binds nothing called ``adapter`` -- it pokes a field on an
+    object the test was handed -- and treating it as a binding sent observation
+    roots BACKWARDS onto the fixture, which then flowed onto every later name read
+    off that fixture and flagged an ordinary environment guard. A subscript target
+    IS included: ``seen["u"] = call()`` really does put an observation in ``seen``.
+    """
+    if isinstance(node, ast.Assign):
+        raw = list(node.targets)
+    elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+        raw = [node.target]
+    else:
+        return []
+
+    out: list[str] = []
+
+    def walk(t):
+        if isinstance(t, ast.Name):
+            out.append(t.id)
+        elif isinstance(t, (ast.Tuple, ast.List)):
+            for e in t.elts:
+                walk(e)
+        elif isinstance(t, ast.Starred):
+            walk(t.value)
+        elif isinstance(t, ast.Subscript):
+            walk(t.value)
+        # ast.Attribute: deliberately nothing.
+
+    for t in raw:
+        walk(t)
+    return out
+
+
+def _capability_reads(expr) -> set[str]:
+    """Names this expression reads ONLY as a source of CAPABILITY facts.
+
+    ``registry.caps.stores_events`` and ``adapter.capabilities().owns_schema`` are
+    reads of the CONFIGURATION, whoever owns the object. Without this, narrowing
+    the receiver rule (which had to be narrowed -- an extra assertion was
+    un-flagging real defects) flagged three canonical environment guards, because
+    the object carrying ``.caps`` had itself come back from a call.
+    """
+    out: set[str] = set()
+    for n in ast.walk(expr):
+        marker = None
+        if isinstance(n, ast.Attribute) and n.attr in CAPABILITY_MARKERS:
+            marker = n.value
+        elif (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr in CAPABILITY_MARKERS
+        ):
+            marker = n.func.value
+        if marker is None:
+            continue
+        while isinstance(marker, (ast.Attribute, ast.Subscript)):
+            marker = marker.value
+        if isinstance(marker, ast.Name):
+            out.add(marker.id)
+    return out
+
+
+def _capability_derived(func: ast.AST) -> set[str]:
+    """Names bound from a capability read -- ``caps = adapter.capabilities()``."""
+    out: set[str] = set()
+    for node in ast.walk(func):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+            value = getattr(node, "value", None)
+            if value is not None and _capability_reads(value):
+                out.update(_assign_targets(node))
+    return out
+
+
+def _observes(value: ast.AST) -> bool:
+    """Does this expression CALL the system, as opposed to deriving from a value?"""
+    for n in ast.walk(value):
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        if isinstance(f, ast.Name) and f.id in PURE_CALLS:
+            continue
         return True
     return False
 
 
-def _skip_aliases(tree: ast.AST) -> set[str]:
-    """Names bound to ``pytest.skip`` by an import, e.g. ``from pytest import skip``."""
-    found: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "pytest":
-            for a in node.names:
-                if a.name == "skip":
-                    found.add(a.asname or a.name)
-    return found
+def _roots(func: ast.AST) -> dict[str, set[str]]:
+    """name -> the set of OBSERVATIONS its value stands for.
 
-
-def _receivers(func: ast.AST) -> set[str]:
-    """Names that have a method called ON them somewhere in this function.
-
-    These are the objects the test drives the system through -- ``registry``,
-    ``adapter``, ``blind`` -- not the results it examines. The amendment to D1
-    turns on this set: a guard that reads a receiver is reading configuration,
-    not a result.
+    A name assigned from a call to the system is its own root. A name derived
+    without a fresh call inherits the roots of what it was derived from, so a
+    guard on ``seen["reason"]`` and an assert on ``out`` meet at ``out``.
     """
-    out: set[str] = set()
-    for node in ast.walk(func):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            base = node.func.value
-            while isinstance(base, (ast.Attribute, ast.Subscript)):
-                base = base.value
-            if isinstance(base, ast.Name):
-                out.add(base.id)
-    return out
-
-
-def _call_results(func: ast.AST) -> set[str]:
-    """Names holding a call's result -- a fresh observation of the system.
-
-    Two ways in. Direct: the assigned expression contains a call. Derived: the
-    assigned expression contains NO call and reads a name that is already a
-    result, so ``warnings = rows[0].warnings or ()`` carries ``rows``'s
-    result-ness onto ``warnings``. The derived arm is a bounded closure -- it
-    stops at the next call, because a call produces a NEW value rather than a
-    view of the old one, which is what stops ``registry`` (the object every call
-    is made THROUGH) from being dragged in as a result of itself.
-    """
-    out: set[str] = set()
-    pending: list[tuple[list[str], set[str]]] = []
+    roots: dict[str, set[str]] = {}
+    derived: list[tuple[list[str], set[str]]] = []
 
     for node in ast.walk(func):
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
-            value = node.value
+            value = getattr(node, "value", None)
             if value is None:
                 continue
             targets = _assign_targets(node)
-            if any(isinstance(n, ast.Call) for n in ast.walk(value)):
-                out.update(targets)
+            if _observes(value):
+                for t in targets:
+                    roots.setdefault(t, set()).add(t)
             else:
-                pending.append((targets, _names_read(value)))
+                derived.append((targets, _names_read(value)))
         elif isinstance(node, ast.withitem):
-            if node.optional_vars is not None and isinstance(node.context_expr, ast.Call):
-                for sub in ast.walk(node.optional_vars):
-                    if isinstance(sub, ast.Name):
-                        out.add(sub.id)
+            if node.optional_vars is not None and _observes(node.context_expr):
+                for s in ast.walk(node.optional_vars):
+                    if isinstance(s, ast.Name):
+                        roots.setdefault(s.id, set()).add(s.id)
 
     changed = True
     while changed:
         changed = False
-        for targets, reads in pending:
-            if reads & out and not set(targets) <= out:
-                out.update(targets)
-                changed = True
+        for targets, reads in derived:
+            inherited: set[str] = set()
+            for r in reads:
+                inherited |= roots.get(r, set())
+            if not inherited:
+                continue
+            for t in targets:
+                before = len(roots.get(t, set()))
+                roots.setdefault(t, set()).update(inherited)
+                if len(roots[t]) != before:
+                    changed = True
+    return roots
+
+
+def _driving_receivers(func: ast.AST) -> set[str]:
+    """Names whose method calls PRODUCE an assigned value: the objects a test
+    drives the system through.
+
+    Narrow on purpose. "Any name you call a method on" was the first cut, and it
+    let one extra ``assert result.field.startswith(...)`` launder a result into
+    configuration and un-flag a real defect.
+    """
+    out: set[str] = set()
+
+    def bases_of_producing_calls(value):
+        for n in ast.walk(value):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
+                base = n.func.value
+                while isinstance(base, (ast.Attribute, ast.Subscript)):
+                    base = base.value
+                if isinstance(base, ast.Name):
+                    out.add(base.id)
+
+    for node in ast.walk(func):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            if getattr(node, "value", None) is not None:
+                bases_of_producing_calls(node.value)
+        elif isinstance(node, ast.withitem):
+            if node.optional_vars is not None:
+                bases_of_producing_calls(node.context_expr)
     return out
 
 
 def _locally_bound(func: ast.AST) -> set[str]:
-    """Comprehension and for-loop targets -- ``w`` in ``any(w.startswith(...) ...)``.
-
-    These are iteration variables, not objects the test drives the system through,
-    so a method called on one is not the guard calling the system under test.
-    """
+    """Comprehension and for-loop targets -- ``w`` in ``any(w.startswith(...) ...)``."""
     out: set[str] = set()
     for node in ast.walk(func):
+        target = None
         if isinstance(node, ast.comprehension):
-            for sub in ast.walk(node.target):
-                if isinstance(sub, ast.Name):
-                    out.add(sub.id)
+            target = node.target
         elif isinstance(node, (ast.For, ast.AsyncFor)):
-            for sub in ast.walk(node.target):
-                if isinstance(sub, ast.Name):
-                    out.add(sub.id)
+            target = node.target
+        if target is not None:
+            for s in ast.walk(target):
+                if isinstance(s, ast.Name):
+                    out.add(s.id)
     return out
 
 
-def _proves_environment(func: ast.AST, chain, skip_node, receivers, results) -> str:
-    """Does the guarded block ASSERT the environmental cause before it skips?
+def _assertion_nodes(func: ast.AST) -> list[ast.AST]:
+    """Every construct that ASSERTS something.
 
-    The suite invented this pattern on purpose and documents it in its own words:
-
-        Gated on the CAPABILITY rather than on the outcome, so a store that CAN
-        hold the alias and merged anyway is a finding and not a skip.
-
-    A skip that reads the result under test and then asserts, before skipping,
-    that a CAPABILITY explains that result has converted a result-condition into
-    an environment-condition and shown its work. It is not the ``C3-26`` shape:
-    if the implementation broke tomorrow on a capable backend, the assertion
-    fails and the id does NOT skip.
-
-    Returns the assertion's source if the block proves it, else "".
+    A bare ``assert`` is not the only one. ``with pytest.raises(...)`` is an
+    assertion about a call, and a test whose only check is a raises-block was
+    scoring as "no assert reads this" -- inverting D1's premise silently.
     """
-    for node in ast.walk(func):
-        if not isinstance(node, ast.If):
-            continue
-        if not any(t is node.test for t in chain):
-            continue
-        for branch in (node.body, node.orelse):
-            seen_skip = False
-            for stmt in branch:
-                if any(n is skip_node for n in ast.walk(stmt)):
-                    seen_skip = True
-                    break
-            if not seen_skip:
-                continue
-            for stmt in branch:
-                if any(n is skip_node for n in ast.walk(stmt)):
-                    break
-                if not isinstance(stmt, ast.Assert):
-                    continue
-                names = _names_read(stmt.test)
-                if names & receivers and not names & results:
-                    return ast.unparse(stmt.test)
-    return ""
-
-
-def _asserted_names(func: ast.AST) -> set[str]:
-    out: set[str] = set()
+    out: list[ast.AST] = []
     for node in ast.walk(func):
         if isinstance(node, ast.Assert):
-            out |= _names_read(node)
+            out.append(node)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                call = item.context_expr
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute):
+                    if call.func.attr in ("raises", "warns", "deprecated_call"):
+                        out.append(node)
+                        break
     return out
 
 
-def _guard_chain(func: ast.AST, skip_node: ast.AST) -> list[ast.expr]:
-    """Every ``if`` test that must hold for ``skip_node`` to run, outermost first.
+# --------------------------------------------------------------------------
+# guards
+# --------------------------------------------------------------------------
 
-    Walks DOWN from the function body carrying the active tests, so a skip nested
-    two ``if``s deep reports both. A test the skip sits inside the ``test`` of --
-    a walrus in the condition itself -- is not a guard on it and is not collected.
+def _guard_chain(func: ast.AST, skip_node: ast.AST):
+    """``(tests that must hold for the skip to run, innermost if-node, shape)``.
+
+    ``shape`` is "if" when every enclosing conditional is an ``if``, "other" when
+    the skip sits under a ``while``, an ``except``, a ``match`` arm or a boolean
+    short-circuit, and "" when nothing guards it. The distinction matters: a skip
+    in an ``except`` handler for the exception the test exists to catch is exactly
+    this row's defect, and calling it "unconditional" hides it.
     """
-    chain: list[ast.expr] = []
-    found = False
+    found: dict = {}
 
-    def contains(node) -> bool:
-        return any(n is skip_node for n in ast.walk(node))
-
-    def visit(node, active: list[ast.expr]) -> None:
-        nonlocal found, chain
+    def visit(node, active, inner, shape):
         if found:
             return
         if node is skip_node:
-            chain = list(active)
-            found = True
+            found.update(chain=list(active), inner=inner, shape=shape)
             return
         if isinstance(node, ast.If):
-            if contains(node.test):
-                chain = list(active)
-                found = True
+            if any(n is skip_node for n in ast.walk(node.test)):
+                found.update(chain=list(active), inner=inner, shape=shape or "other")
                 return
             for stmt in node.body:
-                visit(stmt, active + [node.test])
+                visit(stmt, active + [node.test], node, shape or "if")
             for stmt in node.orelse:
-                visit(stmt, active + [node.test])
+                visit(stmt, active + [node.test], node, shape or "if")
+            return
+        if isinstance(node, (ast.While, ast.Try, ast.Match, ast.BoolOp)):
+            for child in ast.iter_child_nodes(node):
+                visit(child, active, inner, "other")
             return
         for child in ast.iter_child_nodes(node):
-            visit(child, active)
+            visit(child, active, inner, shape)
 
     for stmt in getattr(func, "body", []):
-        visit(stmt, [])
+        visit(stmt, [], None, "")
         if found:
             break
-    return chain
+    return found.get("chain", []), found.get("inner"), found.get("shape", "")
 
 
-def _enclosing_functions(tree: ast.AST) -> list[ast.AST]:
-    return [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+def _guard_inline_calls(chain, driving: set[str], local: set[str]) -> set[str]:
+    """Calls made from inside the guard itself, binding no name."""
+    out: set[str] = set()
+    for t in chain:
+        for n in ast.walk(t):
+            if not isinstance(n, ast.Call):
+                continue
+            f = n.func
+            if isinstance(f, ast.Name):
+                if f.id not in PURE_CALLS:
+                    out.add(f.id + "()")
+            elif isinstance(f, ast.Attribute):
+                base = f.value
+                while isinstance(base, (ast.Attribute, ast.Subscript)):
+                    base = base.value
+                if isinstance(base, ast.Name) and base.id not in local:
+                    out.add(f"{base.id}.{f.attr}()")
+    return out
 
+
+def _capability_proof(inner_if, skip_node) -> str:
+    """An assertion, in the SKIP'S OWN BRANCH and before it, proving a CAPABILITY.
+
+    Two narrowings a fresh lens made necessary. It must be the branch the skip is
+    actually in, not any enclosing one; and it must read a capability
+    (``x.caps.flag`` / ``x.capabilities()``), because "any assertion at all" is
+    satisfied by ``assert registry is not None`` and would launder a plain S2.
+    """
+    if inner_if is None:
+        return ""
+    for branch in (inner_if.body, inner_if.orelse):
+        if not any(any(n is skip_node for n in ast.walk(s)) for s in branch):
+            continue
+        for stmt in branch:
+            if any(n is skip_node for n in ast.walk(stmt)):
+                break
+            if not isinstance(stmt, ast.Assert):
+                continue
+            marks = {
+                n.attr for n in ast.walk(stmt.test) if isinstance(n, ast.Attribute)
+            }
+            if marks & CAPABILITY_MARKERS:
+                return ast.unparse(stmt.test)
+    return ""
+
+
+# --------------------------------------------------------------------------
+# classification
+# --------------------------------------------------------------------------
 
 def classify_file(path: Path) -> list[Site]:
     return classify_source(
@@ -374,142 +551,141 @@ def classify_file(path: Path) -> list[Site]:
 
 def classify_source(src: str, rel: str) -> list[Site]:
     tree = ast.parse(src, filename=rel)
-    aliases = _skip_aliases(tree)
+    modules, bare = _pytest_aliases(tree)
 
-    # innermost enclosing function for each skip call
     owner: dict[int, ast.AST] = {}
-    for func in _enclosing_functions(tree):
+    for func in [
+        n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]:
         for node in ast.walk(func):
-            if _is_skip_call(node, aliases):
+            if _is_skip_call(node, modules, bare):
                 prev = owner.get(id(node))
-                if prev is None or (
-                    getattr(func, "lineno", 0) > getattr(prev, "lineno", 0)
-                ):
+                if prev is None or func.lineno > prev.lineno:
                     owner[id(node)] = func
 
     sites: list[Site] = []
-    per_func: dict[str, int] = {}
-    module_level = [
-        n for n in ast.walk(tree) if _is_skip_call(n, aliases) and id(n) not in owner
-    ]
+    cache: dict[int, tuple] = {}
 
     for node in sorted(
-        [n for n in ast.walk(tree) if _is_skip_call(n, aliases)],
+        [n for n in ast.walk(tree) if _is_skip_call(n, modules, bare)],
         key=lambda n: (n.lineno, n.col_offset),
     ):
         func = owner.get(id(node))
         fname = func.name if func is not None else "<module>"
-        ordinal = per_func.get(fname, 0)
-        per_func[fname] = ordinal + 1
+        ordinal = 0  # rewritten below, grouped by guard text
 
         if func is None:
             sites.append(
-                Site(rel, fname, ordinal, node.lineno, UNCONDITIONAL,
-                     "", "skip at module level, outside any test function")
+                Site(rel, fname, ordinal, node.lineno, UNCONDITIONAL, "",
+                     "skip at module level, outside any function", 0)
             )
             continue
 
-        chain = _guard_chain(func, node)
+        if id(func) not in cache:
+            roots = _roots(func)
+            driving = _driving_receivers(func) - _locally_bound(func)
+            observations = {n for n, r in roots.items() if r} - driving
+            assert_roots: set[str] = set()
+            for a in _assertion_nodes(func):
+                for n in _names_read(a):
+                    assert_roots |= roots.get(n, set())
+            params = {a.arg for a in func.args.args + func.args.kwonlyargs}
+            n_asserts = len(_assertion_nodes(func))
+            cache[id(func)] = (
+                roots, driving, observations, assert_roots, params, n_asserts,
+                _locally_bound(func), _capability_derived(func),
+            )
+        (roots, driving, observations, assert_roots, params, n_asserts, local,
+         cap_derived) = cache[id(func)]
+
+        chain, inner_if, shape = _guard_chain(func, node)
+
+        if shape == "other":
+            sites.append(
+                Site(rel, fname, ordinal, node.lineno, UNDECIDABLE,
+                     " and ".join(ast.unparse(t) for t in chain),
+                     "the guard is not an `if` -- a while, an except handler, a match "
+                     "arm or a boolean short-circuit -- so this checker cannot say "
+                     "what it reads", n_asserts)
+            )
+            continue
 
         if not chain:
             sites.append(
-                Site(rel, fname, ordinal, node.lineno, UNCONDITIONAL,
-                     "", "no enclosing `if` -- this skip is unconditional")
+                Site(rel, fname, ordinal, node.lineno, UNCONDITIONAL, "",
+                     "no enclosing conditional -- this skip is unconditional", n_asserts)
             )
             continue
 
         guard_src = " and ".join(ast.unparse(t) for t in chain)
-        guard_names = set()
+        guard_names: set[str] = set()
+        cap_read: set[str] = set()
         for t in chain:
             guard_names |= _names_read(t)
+            cap_read |= _capability_reads(t)
 
-        receivers = _receivers(func) - _locally_bound(func)
-        results = _call_results(func) - receivers
-        asserted = _asserted_names(func)
+        read_obs = (guard_names - cap_read - cap_derived) & observations
+        guard_roots: set[str] = set()
+        for n in read_obs:
+            guard_roots |= roots.get(n, set())
 
-        read_results = guard_names & results
-        sut_calls = _guard_sut_calls(chain, receivers)
-
-        if read_results:
-            if read_results & asserted:
-                proof = _proves_environment(func, chain, node, receivers, results)
-                if proof:
-                    cat = PROVEN_ENV
-                    why = (
-                        "guard reads "
-                        + ", ".join(sorted(read_results & asserted))
-                        + f" -- the result under test -- but the block asserts `{proof}` "
-                        "BEFORE it skips, so a capable backend that behaved wrongly "
-                        "would FAIL here rather than skip"
-                    )
-                    sites.append(Site(rel, fname, ordinal, node.lineno, cat, guard_src, why))
-                    continue
-                why = (
-                    "guard reads "
-                    + ", ".join(sorted(read_results & asserted))
-                    + " -- a call result this test's own assertions also read"
-                )
-                cat = UNDER_TEST
-            else:
-                why = (
-                    "guard reads "
-                    + ", ".join(sorted(read_results))
-                    + " -- a call result no assert in this function reads"
-                )
-                cat = SETUP
-        elif sut_calls:
-            cat = UNDECIDABLE
-            why = (
-                "guard calls "
-                + ", ".join(sorted(sut_calls))
-                + " inline, so there is no bound name to compare against the assertions"
+        def emit(cat, why):
+            sites.append(
+                Site(rel, fname, ordinal, node.lineno, cat, guard_src, why, n_asserts)
             )
-        else:
-            cat = ENV
-            why = "guard reads no call result"
 
-        sites.append(Site(rel, fname, ordinal, node.lineno, cat, guard_src, why))
+        if read_obs:
+            shared = guard_roots & assert_roots
+            if shared:
+                proof = _capability_proof(inner_if, node)
+                if proof:
+                    emit(PROVEN_ENV,
+                         "guard reads " + ", ".join(sorted(read_obs))
+                         + f" -- the result under test -- but the block asserts `{proof}` "
+                         "BEFORE it skips, so a capable backend that behaved wrongly "
+                         "would FAIL here rather than skip")
+                else:
+                    emit(UNDER_TEST,
+                         "guard reads " + ", ".join(sorted(read_obs))
+                         + " -- an observation this test's own assertions also reach"
+                         + (f" (via {', '.join(sorted(shared))})"
+                            if shared != read_obs else ""))
+            else:
+                emit(SETUP,
+                     "guard reads " + ", ".join(sorted(read_obs))
+                     + " -- an observation no assertion in this function reaches")
+            continue
 
+        guarded_params = guard_names & params
+        if guarded_params and not fname.startswith("test_"):
+            emit(UNDECIDABLE,
+                 "guard reads " + ", ".join(sorted(guarded_params))
+                 + " -- a parameter of a HELPER, so the value arrives from a caller "
+                 "this checker does not follow")
+            continue
+
+        inline = _guard_inline_calls(chain, driving, local)
+        if inline:
+            emit(UNDECIDABLE,
+                 "guard calls " + ", ".join(sorted(inline))
+                 + " inline, binding no name, so nothing can be compared against the "
+                 "assertions")
+            continue
+
+        emit(ENV, "guard reads no observation")
+
+    # Ordinals are assigned per (function, GUARD TEXT), not per function, and the
+    # reason is a fresh lens's finding: with a plain per-function counter, adding
+    # an ordinary ENVIRONMENT skip above a flagged one renumbered the flagged one
+    # and the gate failed on a commit that added no defect at all -- with
+    # `--write-baseline` offered as the remedy. "A gate that fails for unrelated
+    # reasons is a gate somebody weakens" is this file's own sentence.
+    seen: dict[tuple[str, str], int] = {}
+    for site in sites:
+        key = (site.func, site.guard)
+        site.ordinal = seen.get(key, 0)
+        seen[key] = site.ordinal + 1
     return sites
-
-
-def _guard_sut_calls(chain, receivers: set[str]) -> set[str]:
-    """Calls made ON a receiver from inside the guard itself."""
-    out: set[str] = set()
-    for t in chain:
-        for n in ast.walk(t):
-            if isinstance(n, ast.Call):
-                f = n.func
-                if isinstance(f, ast.Name):
-                    if f.id not in GUARD_SAFE_CALLS:
-                        out.add(f.id + "()")
-                elif isinstance(f, ast.Attribute):
-                    base = f.value
-                    while isinstance(base, (ast.Attribute, ast.Subscript)):
-                        base = base.value
-                    if isinstance(base, ast.Name) and base.id in receivers:
-                        out.add(f"{base.id}.{f.attr}()")
-    return out
-
-
-def _owning_stmt(func: ast.AST, node: ast.AST):
-    """The statement node that contains ``node``, so guard walking has a target."""
-    for stmt in ast.walk(func):
-        if isinstance(stmt, ast.stmt):
-            for child in ast.walk(stmt):
-                if child is node:
-                    # prefer the innermost statement
-                    inner = None
-                    for s2 in ast.walk(stmt):
-                        if isinstance(s2, ast.stmt) and s2 is not stmt:
-                            for c2 in ast.walk(s2):
-                                if c2 is node:
-                                    inner = s2
-                                    break
-                        if inner is not None:
-                            break
-                    return inner or stmt
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -524,15 +700,18 @@ def _owning_stmt(func: ast.AST, node: ast.AST):
 # 6f's account of the fix, not a recovery -- row 6f fixed both inside its own
 # working tree, so no commit ever held them and `git log -S` finds nothing.
 # `C3-14`'s pre-fix form is NOT recoverable and NOT reconstructible without
-# guessing, so it is EXCLUDED from this set rather than invented. Two of the
-# three known instances are pinned here; the third is named as missing.
+# guessing, so it is EXCLUDED from this set rather than invented.
+#
+# Cases 6 onward were all written by ADVERSARIAL LENSES in round 1, each of
+# which broke the classifier as it then stood. They are pinned so the breakage
+# cannot come back.
 # ---------------------------------------------------------------------------
 
 CALIBRATION: tuple[tuple[str, str, str], ...] = (
     (
         "C3-26 pre-fix (VERBATIM from the brief)",
         UNDER_TEST,
-        """
+        '''
 import pytest
 def test_c3_26(adapter, make_registry):
     blind = make_registry(DegradedAdapter(adapter, indexes_membership=False))
@@ -544,12 +723,12 @@ def test_c3_26(adapter, make_registry):
         )
     assert unscored.confidence is None
     assert unscored.outcome == "existing"
-""",
+''',
     ),
     (
         "C10-16 pre-fix (RECONSTRUCTED, not recovered)",
         UNDER_TEST,
-        """
+        '''
 import pytest
 def test_c10_16(adapter, make_registry):
     registry = make_registry(adapter, approval_policy="auto")
@@ -557,12 +736,12 @@ def test_c10_16(adapter, make_registry):
     if isinstance(merged, Refusal):
         pytest.skip("this backend refused the merge")
     assert not isinstance(merged, Refusal), merged
-""",
+''',
     ),
     (
         "the supervisor's SETUP RESULT shape -- must NOT be flagged",
         SETUP,
-        """
+        '''
 import pytest
 def test_setup(registry):
     gone = registry.retire("boroname", "consolidated", retired_by="user:sd")
@@ -570,24 +749,24 @@ def test_setup(registry):
         pytest.skip("this backend cannot retire the holder")
     out = registry.resolve_type("boroname", ResolveContext())
     assert "RETIRED" in out.reason
-""",
+''',
     ),
     (
         "the supervisor's ENVIRONMENT shape -- must NOT be flagged",
         ENV,
-        """
+        '''
 import pytest
 def test_env(registry):
     if not registry.caps.indexes_membership:
         pytest.skip("this backend cannot read extents")
     out = registry.resolve_type("boroname", ResolveContext())
     assert out.confidence == 1.0
-""",
+''',
     ),
     (
-        "the suite's own NOT REACHABLE shape -- proven environmental, not flagged",
+        "the suite's own NOT REACHABLE shape -- proven environmental",
         PROVEN_ENV,
-        """
+        '''
 import pytest
 def test_proven(adapter, make_registry):
     degraded = make_registry(DegradedAdapter(adapter, stores_aliases=False))
@@ -596,7 +775,166 @@ def test_proven(adapter, make_registry):
         assert degraded.caps.stores_aliases is False, refused
         pytest.skip("NOT REACHABLE: stores_aliases=False drops the alias")
     assert any(w.startswith("identity_guard_skipped:") for w in refused.warnings)
-""",
+''',
+    ),
+    (
+        "LENS B1: an extra assertion calling a method on the result MUST NOT un-flag it",
+        UNDER_TEST,
+        '''
+import pytest
+def test_b1(adapter, make_registry):
+    blind = make_registry(DegradedAdapter(adapter, indexes_membership=False))
+    unscored = blind.resolve_type("commentable", ResolveContext(), tier="opus")
+    if unscored.confidence is not None:
+        pytest.skip("nothing for this id to assert")
+    assert unscored.confidence is None
+    assert unscored.outcome.startswith("ex")
+''',
+    ),
+    (
+        "LENS M8a: the guard reads a DICT-STASHED copy of what the assert reads",
+        UNDER_TEST,
+        '''
+import pytest
+def test_m8a(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    seen = {"reason": out.reason}
+    if seen["reason"] is None:
+        pytest.skip("nothing to assert")
+    assert out.reason == "alias_collision"
+''',
+    ),
+    (
+        "LENS M8b: the guard reads a BOOL derived from what the assert reads",
+        UNDER_TEST,
+        '''
+import pytest
+def test_m8b(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    refused = isinstance(out, Refusal)
+    if refused:
+        pytest.skip("nothing to assert")
+    assert out.warnings
+''',
+    ),
+    (
+        "LENS M7: `with pytest.raises` IS an assertion",
+        UNDER_TEST,
+        '''
+import pytest
+def test_m7(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if isinstance(out, Refusal):
+        pytest.skip("nothing to assert")
+    with pytest.raises(ValueError):
+        out.explode()
+''',
+    ),
+    (
+        "LENS M9: a TRIVIAL proof must not launder an S2 into S5",
+        UNDER_TEST,
+        '''
+import pytest
+def test_m9(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if isinstance(out, Refusal):
+        assert registry is not None
+        pytest.skip("NOT REACHABLE")
+    assert out.warnings
+''',
+    ),
+    (
+        "LENS M5: a skip in an EXCEPT handler is not `unconditional`",
+        UNDECIDABLE,
+        '''
+import pytest
+def test_m5(registry):
+    try:
+        out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    except ValueError:
+        pytest.skip("this backend raises here")
+    assert out.warnings
+''',
+    ),
+    (
+        "LENS M6: `raise pytest.skip.Exception(...)` is a skip",
+        UNDER_TEST,
+        '''
+import pytest
+def test_m6(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if isinstance(out, Refusal):
+        raise pytest.skip.Exception("nothing to assert")
+    assert out.warnings
+''',
+    ),
+    (
+        "LENS M6b: `import pytest as p` hides nothing",
+        UNDER_TEST,
+        '''
+import pytest as p
+def test_m6b(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if isinstance(out, Refusal):
+        p.skip("nothing to assert")
+    assert out.warnings
+''',
+    ),
+    (
+        "LENS B2: a HELPER guarding on its own PARAMETER is undecidable, not environment",
+        UNDECIDABLE,
+        '''
+import pytest
+def _skip_if_cannot_record(registry, out):
+    if isinstance(out, Refusal) and out.reason == "cannot_record_override":
+        pytest.skip("this backend cannot record")
+''',
+    ),
+    # The three below were FALSE POSITIVES this checker produced for real, in the
+    # census run that followed the receiver rule being narrowed. Narrowing it was
+    # forced (see B1); these are what the narrowing cost, and they are pinned so
+    # the cost cannot come back silently. All three are canonical ENVIRONMENT.
+    (
+        "REGRESSION: a capability object bound from a call is still CONFIGURATION",
+        ENV,
+        '''
+import pytest
+def test_c15_09(adapter, make_registry):
+    caps = adapter.capabilities()
+    if caps.stores_attributes:
+        pytest.skip("this backend stores arbitrary attributes")
+    projected = sorted(caps.attribute_projections)[0]
+    out = make_registry(adapter).attribute_census(projected)
+    assert out.complete is False, caps
+''',
+    ),
+    (
+        "REGRESSION: `x.caps.flag` is a capability read whoever owns x",
+        ENV,
+        '''
+import pytest
+def test_c19_68(adapter, make_registry):
+    registry = make_registry(adapter)
+    if not registry.caps.stores_invocations:
+        pytest.skip("this backend does not store invocations")
+    assert registry.list_types("entity").types is not None
+''',
+    ),
+    (
+        "REGRESSION: poking an ATTRIBUTE on a fixture does not make the fixture a result",
+        ENV,
+        '''
+import pytest
+def test_c0_05(adapter):
+    migrations = getattr(adapter, "_migration_sql", None)
+    if migrations is None:
+        pytest.skip("this backend does not expose numbered migrations to inspect")
+    original = migrations()
+    version = len(original)
+    broken = list(original) + [(version + 1, "broken", "NOT SQL")]
+    adapter._migration_sql = lambda: broken
+    assert len(original) == version
+''',
     ),
 )
 
@@ -614,12 +952,41 @@ def run_selftest(verbose: bool = False) -> list[str]:
     return failures
 
 
-def census(directory: Path = CONTRACT_DIR) -> list[Site]:
+# --------------------------------------------------------------------------
+# census, baseline, gate
+# --------------------------------------------------------------------------
+
+def is_generated(path: Path) -> bool:
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for _ in range(12):
+                line = fh.readline()
+                if not line:
+                    break
+                if GENERATED_BANNER in line:
+                    return True
+    except (OSError, UnicodeDecodeError):
+        return False
+    return False
+
+
+def census(directories=SCAN_DIRS) -> list[Site]:
+    if isinstance(directories, (str, Path)):
+        directories = (Path(directories),)
     sites: list[Site] = []
-    for path in sorted(directory.glob("*.py")):
-        if "__pycache__" in path.parts:
+    for directory in directories:
+        if not directory.is_dir():
             continue
-        sites.extend(classify_file(path))
+        for path in sorted(directory.rglob("*.py")):
+            if "__pycache__" in path.parts or is_generated(path):
+                continue
+            try:
+                sites.extend(classify_file(path))
+            except (SyntaxError, UnicodeDecodeError, OSError) as exc:
+                # Fail CLOSED and say which file. A census that silently drops an
+                # unreadable file is a census that passes by not looking.
+                print(f"FAIL: {path} could not be censused: {exc!r}", file=sys.stderr)
+                raise SystemExit(1)
     return sites
 
 
@@ -630,53 +997,196 @@ def flagged_idents(sites) -> list[str]:
 def load_baseline():
     if not BASELINE_PATH.exists():
         return None
-    return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        print(f"FAIL: the baseline at {BASELINE_PATH} is unreadable: {exc}",
+              file=sys.stderr)
+        raise SystemExit(1)
+    if not isinstance(data, dict) or not isinstance(data.get("sites"), list):
+        print(f"FAIL: the baseline at {BASELINE_PATH} is malformed -- `sites` must be "
+              f"a list", file=sys.stderr)
+        raise SystemExit(1)
+    return data
 
 
-def write_baseline(sites) -> None:
-    idents = flagged_idents(sites)
+def _entries(sites) -> list[dict]:
+    return [
+        {"site": s.ident, "asserts": s.asserts, "guard": s.guard}
+        for s in sorted(
+            (s for s in sites if s.category == UNDER_TEST), key=lambda s: s.ident
+        )
+    ]
+
+
+def function_assertions(directories=SCAN_DIRS) -> dict[tuple[str, str], int]:
+    """``(file, function) -> assertion count``, over every function, skip or not.
+
+    Needed because the BEST repair for a flagged site deletes the site: turning
+    ``if X: pytest.skip()`` into ``assert not X`` leaves no skip to classify. Without
+    this map that reads as "the function is GONE" and the sanctioned repair was
+    refused -- which would have pushed people toward the laundering repairs instead.
+    """
+    out: dict[tuple[str, str], int] = {}
+    if isinstance(directories, (str, Path)):
+        directories = (Path(directories),)
+    for directory in directories:
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.rglob("*.py")):
+            if "__pycache__" in path.parts or is_generated(path):
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            except (SyntaxError, UnicodeDecodeError, OSError):
+                continue
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    out[(rel, node.name)] = len(_assertion_nodes(node))
+    return out
+
+
+def _leaving_verdict(entry, current_by_ident, func_asserts=None):
+    """Why did a baselined site stop being flagged? REPAIRED, or DE-ASSERTED?
+
+    This is the hole a fresh lens opened in round 1, and it is the sharpest thing
+    said about this gate. Every flagged site becomes UNFLAGGED if you simply DELETE
+    the assertion that reads the guarded value: the site drops to S1, the census
+    shrinks, and ``--write-baseline`` was documented as "a normal commit anyone may
+    make". **So the cheapest path to a green gate was to remove coverage** -- the
+    exact outcome the ratchet exists to prevent, and worse than the defect it gates.
+
+    Three of the flagged sites are near-identical helpers: ``_tombstone_holding``
+    in ``test_c4_propose_type.py``, ``test_c12_foundry_import.py`` and
+    ``test_c9_retire.py``. Only the c4 copy was flagged, and the only difference is
+    that the c4 copy ASSERTS that its fixture held. **The gate was punishing the
+    strongest of the three.**
+
+    So the enclosing function's assertion count rides in the baseline, and a site
+    may only leave it while that function still asserts at least as much as it did.
+    A repair ADDS assertions -- ``if X: skip()`` becoming ``assert not X``, or
+    becoming the suite's proven-environmental shape, both go UP. Deleting coverage
+    goes DOWN, and that is refused here rather than noticed later in review.
+    """
+    was = entry.get("asserts")
+    site = current_by_ident.get(entry["site"])
+    if site is None:
+        # The skip is gone. That is the BEST repair -- `if X: skip()` became
+        # `assert not X` -- provided the function is still there and still asserts.
+        path, _, rest = entry["site"].partition("::")
+        fname = rest.split("#")[0]
+        now = (func_asserts or {}).get((path, fname))
+        if now is None:
+            return "GONE", (
+                "the skip AND its function are both gone. Deleting a test is not "
+                "repairing it, and this needs a ruling rather than a baseline edit"
+            )
+        if was is not None and now < was:
+            return "DE-ASSERTED", (
+                f"the skip is gone, but `{fname}` went from {was} assert(s) to {now}. "
+                f"The site left the flagged set because COVERAGE WAS REMOVED"
+            )
+        return "REPAIRED", (
+            f"the skip is gone and `{fname}` now holds {now} assert(s) against {was} "
+            f"before -- the skip became an assertion"
+        )
+    if was is not None and site.asserts < was:
+        return "DE-ASSERTED", (
+            f"the enclosing function went from {was} assert(s) to {site.asserts}. "
+            f"This site left the flagged set because COVERAGE WAS REMOVED, not "
+            f"because the skip was repaired. A repair adds assertions"
+        )
+    return "REPAIRED", (
+        f"now {site.category}, with {site.asserts} assert(s) against {was} before"
+    )
+
+
+def write_baseline(sites, allow_deassertion: bool = False) -> int:
+    entries = _entries(sites)
+    current_by_ident = {s.ident: s for s in sites}
+    old = load_baseline()
+
+    if old is not None:
+        func_asserts = function_assertions()
+        keeping = {e["site"] for e in entries}
+        refused = []
+        for entry in old.get("sites", []):
+            if isinstance(entry, str) or entry.get("site") in keeping:
+                continue
+            verdict, why = _leaving_verdict(entry, current_by_ident, func_asserts)
+            if verdict in ("DE-ASSERTED", "GONE") and not allow_deassertion:
+                refused.append(f"{entry['site']}\n        {verdict}: {why}")
+        if refused:
+            print("REFUSED to lower the baseline. These sites left the flagged set "
+                  "WITHOUT being repaired:", file=sys.stderr)
+            for r in refused:
+                print("    " + r, file=sys.stderr)
+            print("\n  Repair them, or get the supervisor's ruling and re-run with\n"
+                  "  --allow-deassertion, so the choice is on the record.",
+                  file=sys.stderr)
+            return 1
+
     payload = {
         "_comment": (
-            "RATCHET BASELINE for check_skip_census.py. Lowering this list is a "
-            "normal commit anyone may make: fix the site, drop its entry. RAISING "
-            "it -- adding an entry -- requires the ontoloche supervisor's ruling. "
-            "The gate fails if `count` disagrees with `sites`, so the number cannot "
-            "move without the site moving with it."
+            "RATCHET BASELINE for check_skip_census.py. A site may only leave this "
+            "list by being REPAIRED. `asserts` is the enclosing function's assertion "
+            "count, carried so that DELETING the assertion -- the cheapest way to "
+            "make this gate green, and strictly worse for the suite -- is refused "
+            "rather than rewarded. RAISING the list requires the ontoloche "
+            "supervisor's ruling. The gate fails if `count` disagrees with `sites`."
         ),
-        "count": len(idents),
-        "sites": idents,
+        "count": len(entries),
+        "sites": entries,
     }
     BASELINE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return 0
 
 
 def run_gate() -> int:
     calibration_failures = run_selftest()
     if calibration_failures:
-        print("check_skip_census: FAIL -- the CLASSIFIER itself regressed", file=sys.stderr)
+        print("check_skip_census: FAIL -- the CLASSIFIER itself regressed",
+              file=sys.stderr)
         for f in calibration_failures:
             print("    " + f, file=sys.stderr)
         return 1
 
+    if not CONTRACT_DIR.is_dir():
+        print(f"FAIL: {CONTRACT_DIR} is not a directory. A census of nothing is not a "
+              f"pass.", file=sys.stderr)
+        return 1
+
     sites = census()
+    if not sites:
+        print("FAIL: the census found NO skip call sites at all, which means the "
+              "instrument is broken rather than the suite being clean.", file=sys.stderr)
+        return 1
+
     found = flagged_idents(sites)
     baseline = load_baseline()
-
     if baseline is None:
         print(f"FAIL: no baseline at {BASELINE_PATH}", file=sys.stderr)
         print("      run --write-baseline to seed it", file=sys.stderr)
         return 1
 
-    declared = list(baseline.get("sites", []))
+    entries = [e for e in baseline.get("sites", []) if isinstance(e, dict)]
+    declared = [e["site"] for e in entries]
     declared_count = baseline.get("count")
-
     failures: list[str] = []
 
+    if len(entries) != len(baseline.get("sites", [])):
+        failures.append("the baseline holds entries that are not objects -- it was "
+                        "written by an older or hand-edited version")
     if declared_count != len(declared):
         failures.append(
-            f"the baseline's own count ({declared_count}) disagrees with its own "
-            f"site list ({len(declared)} entries). The number cannot move without "
-            f"the sites moving with it."
+            f"the baseline's own count ({declared_count}) disagrees with its own site "
+            f"list ({len(declared)} entries). The number cannot move without the sites "
+            f"moving with it."
         )
+    if len(set(declared)) != len(declared):
+        failures.append("the baseline holds DUPLICATE sites, so its count overstates "
+                        "what it actually pins")
 
     new = [i for i in found if i not in set(declared)]
     if new:
@@ -685,12 +1195,15 @@ def run_gate() -> int:
             + "\n".join(f"    + {i}" for i in new)
         )
 
-    stale = [i for i in declared if i not in set(found)]
+    current_by_ident = {s.ident: s for s in sites}
+    stale = [e for e in entries if e["site"] not in set(found)]
     if stale:
+        func_asserts = function_assertions()
+    for entry in stale:
+        verdict, why = _leaving_verdict(entry, current_by_ident, func_asserts)
         failures.append(
-            "baseline holds sites the checker no longer flags. If you fixed them, "
-            "lower the baseline in the same commit (--write-baseline):\n"
-            + "\n".join(f"    - {i}" for i in stale)
+            f"{entry['site']} is no longer flagged -- {verdict}\n        {why}\n"
+            f"        Lower the baseline with --write-baseline in the same commit."
         )
 
     if failures:
@@ -700,10 +1213,8 @@ def run_gate() -> int:
         _print_detail([s for s in sites if s.ident in set(new)], file=sys.stderr)
         return 1
 
-    print(
-        f"check_skip_census: OK -- {len(found)} result-conditioned skip(s), "
-        f"baseline {declared_count}, and the ratchet holds."
-    )
+    print(f"check_skip_census: OK -- {len(found)} result-conditioned skip(s), "
+          f"baseline {declared_count}, and the ratchet holds.")
     return 0
 
 
@@ -714,16 +1225,18 @@ def _print_detail(sites, file=sys.stdout) -> None:
         print(f"      why:   {s.why}", file=file)
 
 
-def run_census() -> int:
-    sites = census()
+def run_census(directories=SCAN_DIRS) -> int:
+    sites = census(directories)
     by_cat: dict[str, list[Site]] = {c: [] for c in CATEGORIES}
     for s in sites:
         by_cat[s.category].append(s)
 
-    print(f"census of {CONTRACT_DIR.relative_to(REPO_ROOT).as_posix()}")
+    print("census of " + ", ".join(
+        d.relative_to(REPO_ROOT).as_posix() for d in
+        ([Path(directories)] if isinstance(directories, (str, Path)) else directories)
+    ) + "   (generated mirrors skipped)")
     print(f"  AST call sites: {len(sites)}")
-    files = sorted({s.file for s in sites})
-    print(f"  files:          {len(files)}")
+    print(f"  files:          {len(sorted({s.file for s in sites}))}")
     print()
     for cat in CATEGORIES:
         print(f"  {cat:24s} {len(by_cat[cat]):4d}")
@@ -750,12 +1263,13 @@ def run_census() -> int:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--census", action="store_true", help="print the full breakdown")
-    p.add_argument(
-        "--write-baseline", action="store_true", help="seed or LOWER the ratchet baseline"
-    )
-    p.add_argument(
-        "--selftest", action="store_true", help="classify the calibration shapes only"
-    )
+    p.add_argument("--dir", help="census a different directory (reporting only)")
+    p.add_argument("--selftest", action="store_true",
+                   help="classify the calibration shapes only")
+    p.add_argument("--write-baseline", action="store_true",
+                   help="seed or LOWER the ratchet baseline")
+    p.add_argument("--allow-deassertion", action="store_true",
+                   help="permit lowering a site that lost coverage. Needs a ruling.")
     args = p.parse_args(argv)
 
     if args.selftest:
@@ -764,12 +1278,16 @@ def main(argv=None) -> int:
             print("FAIL " + f, file=sys.stderr)
         return 1 if failures else 0
     if args.census:
-        return run_census()
+        if args.dir:
+            d = Path(args.dir)
+            return run_census((d if d.is_absolute() else (REPO_ROOT / d)).resolve())
+        return run_census(SCAN_DIRS)
     if args.write_baseline:
         sites = census()
-        write_baseline(sites)
-        print(f"baseline written: {len(flagged_idents(sites))} site(s)")
-        return 0
+        rc = write_baseline(sites, allow_deassertion=args.allow_deassertion)
+        if rc == 0:
+            print(f"baseline written: {len(flagged_idents(sites))} site(s)")
+        return rc
     return run_gate()
 
 
