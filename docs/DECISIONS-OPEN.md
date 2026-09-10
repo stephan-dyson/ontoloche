@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 8 ruled · 6 FYI**
+**2 open · 8 ruled · 7 FYI**
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -13,6 +13,16 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 ---
 
 ## A. Decide when you want to — 2 items
+
+### 17 · The stop you armed has STOOD DOWN — `A3` is closed and the ACTIONS surface is reopen
+
+*No action. On the page because you armed that stop, and you are entitled to know it stood down and on what.*
+
+**What closed it.** Both halves of `A3` now exist: the read half from your `read` ruling, the write half from your `all eight` ruling. **I re-ran the row's own probe myself rather than accepting its report** — the walk by which `A3` still fired now **refuses at the write door**, non-overridably, and the remaining walk's actor **cannot record at all**. So on every reachable path a door refuses or warns, which is exactly what the criterion requires to be *absent*. Recorded as [R103](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-10-supervisor-ruling-R103.md) with the full verification listed so it can be attacked.
+
+**Three things this does NOT do.** **The criterion stays armed** — you armed it and nothing here disarms it; armed and firing are different states, and it fires again on the next entry that meets it. **The register still counts one**, because closing an entry does not remove it — it counts harms ever reached. And **it answers neither of your open questions**: `Q101` and per-key severity are untouched.
+
+**One thing worth your attention about how it got there.** The row that closed it had committed its measuring instrument before the code it measures, found three defects in that instrument first, and verified five separate claims about its own restraint. **Its adversarial round still found three blocking defects, two of which closed a legal operation** — the precise trap your ruling's write-up warned about, re-created by the fix meant to honour it. All fixed and verified before landing. **Self-verification did not substitute for a fresh adversary**, and that is the strongest evidence this project has yet produced for running the review round at all.
 
 ### 16 · `Q101` — when one family declares a key and the other omits it entirely, is that agreement or a contradiction?
 
