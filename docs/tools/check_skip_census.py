@@ -454,7 +454,14 @@ def _assertion_nodes(func: ast.AST) -> list[ast.AST]:
 # --------------------------------------------------------------------------
 
 def _guard_chain(func: ast.AST, skip_node: ast.AST):
-    """``(tests that must hold for the skip to run, innermost if-node, shape)``.
+    """``([(test, taken)], innermost if-node, shape)``.
+
+    ``taken`` is False when the skip is reached through the ``else``, so the
+    condition that actually holds there is ``not test``. **Dropping that was a
+    hole a fresh lens walked straight through**: with polarity discarded, an
+    ``if not isinstance(gone, Refusal): ... else: <skip>`` handed the else-branch
+    the exemption earned by the ``if``, on the one branch where the value IS a
+    refusal and its reason DOES exist. That is F12 again, inside the fix for F12.
 
     ``shape`` is "if" when every enclosing conditional is an ``if``, "other" when
     the skip sits under a ``while``, an ``except``, a ``match`` arm or a boolean
@@ -475,9 +482,9 @@ def _guard_chain(func: ast.AST, skip_node: ast.AST):
                 found.update(chain=list(active), inner=inner, shape=shape or "other")
                 return
             for stmt in node.body:
-                visit(stmt, active + [node.test], node, shape or "if")
+                visit(stmt, active + [(node.test, True)], node, shape or "if")
             for stmt in node.orelse:
-                visit(stmt, active + [node.test], node, shape or "if")
+                visit(stmt, active + [(node.test, False)], node, shape or "if")
             return
         if isinstance(node, (ast.While, ast.Try, ast.Match, ast.BoolOp)):
             for child in ast.iter_child_nodes(node):
@@ -539,16 +546,62 @@ def _guard_inline_calls(chain, driving: set[str], local: set[str]) -> set[str]:
 
 NARROWING_METHODS = frozenset({"startswith", "endswith"})
 
+# The type whose complement is ONE outcome. `not isinstance(x, Refusal)` says the
+# call did not refuse, and there is no `.reason` on that branch to compare -- which
+# is the whole argument for the exemption. `not isinstance(x, Success)` says the
+# opposite: it names the refusal FAMILY, where the reason exists and matters. A
+# lens got the exemption with `Success`, and with `str`, because the type was never
+# examined at all. Declared here, next to CAPABILITY_MARKERS, because the file
+# already carries its domain knowledge as reviewable constants rather than as
+# guesses in a walk -- and NEVER as a named test, which would stop applying the
+# moment anyone renamed one.
+FAMILY_TYPES = frozenset({"Refusal"})
 
-def _reads_capability(node) -> bool:
-    """Does this expression read `x.caps.<flag>` or `x.capabilities()` anywhere?"""
+
+def _mentions_capability(node) -> bool:
+    """Does `x.caps.<flag>` or `x.capabilities()` appear ANYWHERE in this tree?
+
+    Deliberately loose, and used only to decide whether a site was TRYING to prove
+    a capability -- which is what the `why` text needs in order to say something
+    useful about a near miss. It is NOT what grants S5; `_capability_expr` is.
+    """
     return any(
         isinstance(n, ast.Attribute) and n.attr in CAPABILITY_MARKERS
         for n in ast.walk(node)
     )
 
 
-def _falsifying(node) -> bool:
+def _capability_expr(node, cap_derived: set[str], observations: set[str]) -> bool:
+    """Is this expression ITSELF a capability read, rather than one that mentions one?
+
+    The distinction is the whole of a lens's MAJOR: `_falsifying` used to ask only
+    whether a capability appeared somewhere inside the compared side, so
+    `(registry.caps.stores_events and False) is False` -- constantly true, F15's
+    own property -- and `explains(registry.caps, gone) is False` -- opaque, with
+    the result under test passed in as an argument -- both bought S5.
+
+    Accepted: `<base>.<flag>` where `<base>` is `x.caps`, `x.capabilities()`, or a
+    name bound from one (`caps = adapter.capabilities()`), and the owning name is
+    NOT itself the result under test. Everything else is refused, toward S2.
+    """
+    if not isinstance(node, ast.Attribute):
+        return False
+    base = node.value
+    if isinstance(base, ast.Call):
+        base = base.func
+    if isinstance(base, ast.Attribute) and base.attr in CAPABILITY_MARKERS:
+        owner = base.value
+        while isinstance(owner, (ast.Attribute, ast.Subscript)):
+            owner = owner.value
+        # `gone.caps.stores_events`, where `gone` is the result under test, is not a
+        # fact about the environment however it is spelled.
+        return not (isinstance(owner, ast.Name) and owner.id in observations)
+    if isinstance(base, ast.Name):
+        return base.id in cap_derived
+    return False
+
+
+def _falsifying(node, cap_derived: set[str], observations: set[str]) -> bool:
     """Does this expression FAIL on a backend that HAS the capability?
 
     Parts 1 and 3 of the axis, in one walk. `caps.f is False` and `not caps.f`
@@ -559,19 +612,20 @@ def _falsifying(node) -> bool:
     `assert True or registry.caps.stores_events` and every rewording of it.
     """
     if isinstance(node, ast.BoolOp):
-        parts = [_falsifying(v) for v in node.values]
+        parts = [_falsifying(v, cap_derived, observations) for v in node.values]
         return any(parts) if isinstance(node.op, ast.And) else all(parts)
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-        inner = node.operand
-        return _reads_capability(inner) and isinstance(
-            inner, (ast.Attribute, ast.Call, ast.Name, ast.Subscript)
-        )
+        return _capability_expr(node.operand, cap_derived, observations)
     if isinstance(node, ast.Compare):
         if len(node.ops) != 1 or not isinstance(node.ops[0], (ast.Is, ast.Eq)):
             return False
         left, right = node.left, node.comparators[0]
-        return (_reads_capability(left) and _is_false_constant(right)) or (
-            _reads_capability(right) and _is_false_constant(left)
+        return (
+            _capability_expr(left, cap_derived, observations)
+            and _is_false_constant(right)
+        ) or (
+            _capability_expr(right, cap_derived, observations)
+            and _is_false_constant(left)
         )
     return False
 
@@ -598,31 +652,68 @@ def _flatten_and(test) -> list:
     return [test]
 
 
-def _names_a_specific_outcome(test, observations: set[str]) -> bool:
-    """Does this test name ONE outcome, rather than a family of them?
+def _positive_naming(test, observations: set[str], positive: bool = True) -> bool:
+    """Does this test NAME the outcome the capability is claimed to explain?
 
-    A comparison against a string literal over an observation -- `x.reason ==
-    "cannot_record_override"` -- names one reason, and `startswith("...")` names
-    one prefix. NUMERIC constants deliberately do not: `len(x.warnings) > 0` is a
-    threshold, not a reason, and admitting it would let any guard buy a narrowing
-    with a `0`. An ENUM-valued reason is refused too, and that is the fail-closed
-    direction -- it becomes a conversation rather than a silent promotion.
+    A POSITIVE naming only, and the polarity is the point. `x.reason ==
+    "cannot_record_override"` pins the branch to one reason. Its COMPLEMENT pins
+    nothing, and a lens proved it with four shapes the first cut accepted:
+    `x.reason != "alias_collision"`, `x.reason not in (...)`, `"overridable" in
+    x.detail`, and `x.reason != ""`. Each admits every outcome but one -- F12's
+    own sentence, *true of twelve refusals where the capability explains one*,
+    with the quantifier flipped.
+
+    NUMERIC constants never name a reason: `len(x.warnings) > 0` is a threshold,
+    and admitting it sells the promotion for a `0`. An ENUM-valued reason is
+    refused too. Both are the fail-closed direction -- a conversation rather than
+    a silent promotion.
     """
-    for n in ast.walk(test):
-        if (
-            isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Attribute)
-            and n.func.attr in NARROWING_METHODS
-            and any(_string_constant(a) for a in n.args)
-        ):
-            return True
-        if not isinstance(n, ast.Compare):
-            continue
-        operands = [n.left] + list(n.comparators)
-        consts = [o for o in operands if _string_constant(o)]
-        others = [o for o in operands if not _string_constant(o)]
-        if consts and any(_names_read(o) & observations for o in others):
-            return True
+    if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+        return _positive_naming(test.operand, observations, not positive)
+    if isinstance(test, ast.BoolOp):
+        parts = [_positive_naming(v, observations, positive) for v in test.values]
+        # At positive polarity `A and B` is pinned by either conjunct while `A or
+        # B` needs both, since one unnamed branch leaves the outcome free. Under a
+        # negation De Morgan swaps which is which.
+        return any(parts) if isinstance(test.op, ast.And) == positive else all(parts)
+    if not positive:
+        return False
+    if isinstance(test, ast.Compare):
+        if len(test.ops) != 1:
+            return False
+        op, left, right = test.ops[0], test.left, test.comparators[0]
+        if isinstance(op, (ast.Eq, ast.Is)):
+            return (_string_constant(right) and bool(_names_read(left) & observations)) or (
+                _string_constant(left) and bool(_names_read(right) & observations)
+            )
+        if isinstance(op, ast.In):
+            # `x.reason in ("a", "b")` names a closed set. `"key" in x.detail`
+            # does not -- it names a KEY that any number of refusals may carry,
+            # which is why the observation must be on the LEFT.
+            return _string_constant(right) and bool(_names_read(left) & observations)
+        return False
+    if (
+        isinstance(test, ast.Call)
+        and isinstance(test.func, ast.Attribute)
+        and test.func.attr in NARROWING_METHODS
+        and any(_string_constant(a) for a in test.args)
+    ):
+        # A prefix names one marker -- but only over the OBSERVATION. Without that
+        # check a lens laundered a bare `isinstance(gone, Refusal)` with `not
+        # adapter.dsn.startswith("postgres://")`, which narrows nothing about
+        # `gone`, while the `why` said "narrows on a literal outcome".
+        return bool(_names_read(test) & observations)
+    if (
+        isinstance(test, ast.Call)
+        and isinstance(test.func, ast.Name)
+        and test.func.id in {"any", "all"}
+        and len(test.args) == 1
+        and isinstance(test.args[0], (ast.GeneratorExp, ast.ListComp, ast.SetComp))
+    ):
+        comp = test.args[0]
+        if not any(bool(_names_read(g.iter) & observations) for g in comp.generators):
+            return False
+        return _positive_naming(comp.elt, observations, positive)
     return False
 
 
@@ -648,38 +739,53 @@ def _establishes_not_that_type(test, observations: set[str]) -> bool:
     if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
         return False
     call = test.operand
-    return (
+    if not (
         isinstance(call, ast.Call)
         and isinstance(call.func, ast.Name)
         and call.func.id == "isinstance"
-        and bool(call.args)
+        and len(call.args) == 2
         and bool(_names_read(call.args[0]) & observations)
-    )
+    ):
+        return False
+    # THE TYPE IS THE ARGUMENT, and the first cut never looked at it -- a lens got
+    # the exemption with `not isinstance(gone, Success)`, which IS the refusal
+    # family, and again with `not isinstance(gone, str)`, which is true on every
+    # branch. Only the complement of a FAMILY_TYPES type carries the argument.
+    kind = call.args[1]
+    return isinstance(kind, ast.Name) and kind.id in FAMILY_TYPES
 
 
-def _guard_narrows(chain, observations: set[str]) -> str:
+def _guard_narrows(pairs, observations: set[str]) -> str:
     """How the guard narrows, or "" if it does not. Part 2 of the axis.
 
     F12 in one sentence: `isinstance(gone, Refusal)` is true of TWELVE different
     refusals in `retire` and the capability explains ONE, so a capability
     assertion under it fires on eleven cases it does not cover.
     """
-    subs = [s for t in chain for s in _flatten_and(t)]
-    if any(_names_a_specific_outcome(s, observations) for s in subs):
+    effective = []
+    for test, taken in pairs:
+        if taken:
+            effective.extend(_flatten_and(test))
+        else:
+            # On the else-branch the condition that holds is `not test`, and
+            # `not (A and B)` guarantees nothing about A or B separately, so it is
+            # carried whole rather than split.
+            effective.append(ast.UnaryOp(op=ast.Not(), operand=test))
+    if any(_positive_naming(s, observations) for s in effective):
         return "narrows on a literal outcome"
-    exempt = [s for s in subs if _establishes_not_that_type(s, observations)]
+    exempt = [s for s in effective if _establishes_not_that_type(s, observations)]
     family = [
         s
-        for s in subs
+        for s in effective
         if _names_read(s) & observations
         and not _establishes_not_that_type(s, observations)
     ]
     if exempt and not family:
-        return "establishes the value is NOT of the refused type, so there is no reason"
+        return "establishes the value is NOT a refusal, so there is no reason to compare"
     return ""
 
 
-def _capability_proof(chain, inner_if, skip_node, observations: set[str]):
+def _capability_proof(pairs, inner_if, skip_node, observations: set[str], cap_derived):
     """``(proof source, how it narrows)`` when S5 holds; ``("", why not)`` when not.
 
     Two narrowings a fresh lens made necessary in row 6h and both still stand: the
@@ -693,32 +799,66 @@ def _capability_proof(chain, inner_if, skip_node, observations: set[str]):
     """
     if inner_if is None:
         return "", "the skip is not inside an `if`"
-    narrowing = _guard_narrows(chain, observations)
+    branch = None
+    for candidate in (inner_if.body, inner_if.orelse):
+        if any(any(n is skip_node for n in ast.walk(s)) for s in candidate):
+            branch = candidate
+            break
+    if branch is None:
+        return "", "the skip is not in either branch of its own `if`"
+    before = []
+    for stmt in branch:
+        if any(n is skip_node for n in ast.walk(stmt)):
+            break
+        before.append(stmt)
+
+    narrowing = _guard_narrows(pairs, observations)
+    if not narrowing:
+        # THE BRANCH CAN PIN WHAT THE GUARD LEFT OPEN, and that is how
+        # `test_c10_25` is ACTUALLY correct. Its guard is `out.reason !=
+        # "alias_collision"`, a complement that names nothing; the assertion
+        # `out.reason == "predicate_merge"` sitting above the skip is what makes
+        # every other reason FAIL rather than skip. The first cut accepted that
+        # site for its GUARD, which does not carry it -- so the case passed for
+        # the wrong reason and a lens said so.
+        pinned = [
+            s for s in before
+            if isinstance(s, ast.Assert) and _positive_naming(s.test, observations)
+        ]
+        if pinned:
+            narrowing = (
+                "leaves the outcome open in the guard, but the block asserts "
+                f"`{ast.unparse(pinned[0].test)}` before it skips, which FAILS on "
+                "every other outcome"
+            )
     if not narrowing:
         return "", (
             "the guard tests the observation without naming WHICH outcome the "
             "capability explains, so an assertion under it fires on every other "
             "outcome too"
         )
+
     found = ""
-    for branch in (inner_if.body, inner_if.orelse):
-        if not any(any(n is skip_node for n in ast.walk(s)) for s in branch):
+    for stmt in before:
+        if not isinstance(stmt, ast.Assert):
             continue
-        for stmt in branch:
-            if any(n is skip_node for n in ast.walk(stmt)):
-                break
-            if not isinstance(stmt, ast.Assert):
-                continue
-            if not _reads_capability(stmt.test):
-                continue
-            found = ast.unparse(stmt.test)
-            if _falsifying(stmt.test):
-                return found, narrowing
+        if not _mentions_capability(stmt.test):
+            continue
+        found = ast.unparse(stmt.test)
+        if _falsifying(stmt.test, cap_derived, observations):
+            return found, narrowing
     if found:
+        # NOT "cannot fail". A lens fed three expressions that DO fail on a capable
+        # backend -- `caps.f == 0`, `caps.f is not True`, a chained comparison --
+        # and the gate refused each with a sentence that was FALSE of the
+        # expression it had just quoted. Refusing them is fail-closed and right;
+        # printing a false reason is F15 pointed the other way. So the text now
+        # says what this gate READS, which is a claim about the gate.
         return "", (
-            f"the block asserts `{found}` before it skips, but that expression "
-            f"CANNOT FAIL on a backend that holds the capability, so it proves "
-            f"nothing about the environment"
+            f"the block asserts `{found}` before it skips, but that is not a form "
+            f"this gate can verify FAILS on a backend holding the capability -- it "
+            f"reads `<cap> is False`, `not <cap>`, and `and`/`or` combinations of "
+            f"those, and nothing else"
         )
     return "", "no assertion in the skip's own branch reads a capability before it skips"
 
@@ -782,7 +922,8 @@ def classify_source(src: str, rel: str) -> list[Site]:
         (roots, driving, observations, assert_roots, params, n_asserts, local,
          cap_derived) = cache[id(func)]
 
-        chain, inner_if, shape = _guard_chain(func, node)
+        pairs, inner_if, shape = _guard_chain(func, node)
+        chain = [t for t, _ in pairs]
 
         if shape == "other":
             sites.append(
@@ -821,7 +962,9 @@ def classify_source(src: str, rel: str) -> list[Site]:
         if read_obs:
             shared = guard_roots & assert_roots
             if shared:
-                proof, detail = _capability_proof(chain, inner_if, node, read_obs)
+                proof, detail = _capability_proof(
+                    pairs, inner_if, node, read_obs, cap_derived
+                )
                 if proof:
                     # The `why` says WHAT WAS CHECKED and what was not. F15: the old
                     # text quoted the vacuous assertion verbatim and then stated a
@@ -1203,8 +1346,19 @@ def test_c10_25(adapter, make_registry):
 ''',
     ),
     (
-        "AXIS part 2 -- a `startswith` prefix under a negation narrows. MUST stay S5",
-        PROVEN_ENV,
+        # THIS CASE ENCODED THE DEFECT IT WAS WRITTEN TO PIN, and a lens said so:
+        # it would have passed identically with the negation removed and with the
+        # `startswith` on an unrelated object, because the first cut's rule
+        # ignored both. Its expectation is CORRECTED here rather than deleted --
+        # `not any(w.startswith("import_refused:") ...)` is the COMPLEMENT of a
+        # marker test, so it names no outcome, and the exemption does not reach it
+        # because it is not a type test. This is a LIVE site
+        # (`test_c12_foundry_import.py:1402`) and moving it is the whole of this
+        # row's reclassification. Fail-closed, and the supervisor rules on the
+        # baseline.
+        "AXIS part 2 -- a COMPLEMENTED marker test names no outcome, and the "
+        "exemption does not reach it. This case was pinned S5 by the first cut",
+        UNDER_TEST,
         '''
 import pytest
 def test_c12_27(registry):
