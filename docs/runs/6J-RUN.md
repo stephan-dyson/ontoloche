@@ -1349,17 +1349,54 @@ closes a round short, which is what blocked the previous round.)**
 
 **ROUND 4 IS REQUIRED AND HAS NOT RUN.**
 
-**THE LOOP'S STOPPING CRITERION, ruled so this does not run forever:**
+**THE LOOP'S STOPPING CRITERION — WITHDRAWN AND REPLACED, and the replacement is this row's wording.**
 
-> **"The loop ends when a full round produces ZERO in-scope MAJORs in the CODE. Record findings and routed
+**What it was**, ruled in `answers-8` §4:
+
+> *"The loop ends when a full round produces ZERO in-scope MAJORs in the CODE. Record findings and routed
 > findings do not extend it — routed ones are not yours to fix, and record fixes are checked against the
-> round outputs rather than re-reviewed."**
+> round outputs rather than re-reviewed."*
+
+**What replaced it**, ruled in `answers-10` §1 and adopted verbatim from this row's `Q5`:
+
+> **"The loop ends when a full round finds no in-scope code MAJOR reachable by a shape a contributor would
+> plausibly write — measured as: does the shape, or anything structurally like it, appear anywhere in the
+> live suite?"**
+
+**THE ARGUMENT IS ABOUT THE METHOD, NOT ABOUT THIS ROW'S CONVENIENCE.** The axis is a whitelist over an
+open-ended grammar; `S5` is granted on RECOGNITION; and recognition over an open grammar cannot be driven
+to zero by enumeration. **In-scope code MAJORs per round were 6, 7, 2, 7 — four fresh panels and no fall.**
+A criterion of zero is a criterion about an adversary's imagination.
+
+**The supervisor took the withdrawal as his own, and named the pattern in himself:** *"My `answers-8` §4
+rule was the third time this week I specified an OBSERVATION — a count reaching zero — instead of the
+PROPERTY I wanted, which is the gate does not bless ordinary code."*
+
+**AND THE NEW CRITERION DOES NOT RETROACTIVELY END THE LOOP. ROUND 4 FAILS IT TOO, on a measurement he
+took rather than accepted.** Round 4's `all(...)` finding was a genuine round-2 regression — `S2` at
+`ace7081` and `d33ccce`, `S5` at `13de039` — **and it is REACHABLE.** **[Observed — `grep -rEc
+'(any|all)\([a-z_]+\.startswith\(' ontoloche/contract/`]** returns **32** live instances, including
+`test_c12_27`'s own guard; **[Observed — the same grep split by keyword]** `any(` **32**, `all(` **0**.
+**`all` is one keyword away from thirty-two places in the suite a contributor already writes.**
+
+**So round 4 found one in-scope code MAJOR that IS reachable, and the criterion is not met by it.**
 
 **And the criterion has a second clause with teeth:** *"If round 4's only in-scope code MAJORs are again in
 fixes made during round 3, that is the finding, not the individual defects — and it is the seventh
 instance."* **§4.2 carries that at its top rather than in its table.**
 
-**ROUND 5's STATUS IS `Q5`, NOT ASSUMED.** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
+**ROUND 5 IS THE LAST ROUND, WHATEVER IT RETURNS — `answers-10` §3, and the reason is a sentence this row
+wrote about itself.** `Q5` closed with *"that is precisely the judgement I should not make for myself,
+because I am the party who benefits from the loop ending."* The supervisor's answer: *"You were right — and
+adopting your criterion and using the adoption to end the loop in the same breath is exactly the move you
+warned me about."*
+
+**If round 5 finds no reachable in-scope code MAJOR: land.** **If it finds a reachable one: STOP and bring
+it, and do NOT fix it first** — because *"that outcome means the axis is still admitting ordinary code after
+five panels, which is a different and more serious finding than any individual defect, and it is the
+finding, not the defect, that I would need to rule on."*
+
+**`6I-RUN.md` §6.6's rules still bind within that:** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
 be followed by a full round that sees it"*, and *"the last round must see the final text"*. **Round 3
 produced nineteen MAJORs, so round 4 is owed and this table says so rather than closing on a totals row.**
 Nothing goes in after the last round, and round 3 was not it.
@@ -1508,6 +1545,34 @@ evidence about a COMMIT, and editing the commit under the round makes the eviden
 
 **Standing from here: no edits to the reviewed artefact while any lens of the round is still running.**
 
+### §4.3.3 — `J72`: A LENS OF THIS ROW HIT THE `rm` GUARD, BECAUSE THIS ROW'S BRIEFS DID NOT CARRY THE RULE
+
+**[Observed — `answers-9`]** the supervisor was asked to approve `rm -rf "$S/fake_$name"` from a session of
+this row and **DENIED it**: *"`$S` and `$name` are both variables, inside a loop, and I cannot read what
+that expands to from the prompt."*
+
+**This row did not issue that command — one of round 4's lenses did**, building the four
+classifier × tree repos that separate *"my fix caused this"* from *"this was already here"*. **It is still
+this row's defect.** The standing rule — ***`rm` takes a LITERAL absolute path, never a `$var`*** — is one
+the row knows and applies to itself, **and none of the twelve lens briefs written in this row carried it.**
+A brief that tells a subagent where to put scratch files and not how to delete them has delegated the
+dangerous half and kept the safe half.
+
+**His reason is mechanical, and it is why "the lens was careful" is not an answer:** *"The rm-guard
+classifies by matching the command TEXT against a safe-path allowlist. A path inside a variable defeats that
+in BOTH directions: a safe target stops being recognisable as safe, and a dangerous one becomes
+unrecognisable as dangerous. The guard asking me is the system working. Me approving it on trust is the
+system failing."*
+
+**Round 5's briefs carry the rule, and they carry his option 2 rather than option 1:** *"do not `rm` at all
+— build into a directory that does not exist yet and leave the old ones. Scratch space is cheap and a delete
+you never issue cannot be mis-targeted."* **A build step that starts by deleting is a step that can go wrong
+in the one direction the build exists to avoid.**
+
+**And the instrument itself is worth keeping, which is his judgement not this row's:** the fake repos are
+built from `git show <clf>:docs/tools/check_skip_census.py` and `git archive <tree>`, **so they are
+reproducible from shas by anyone — which is what makes the resulting table evidence rather than testimony.**
+
 ### §4.4 — Standing practice the supervisor ruled from this row
 
 > **"When you disagree with a ruling, CONTRADICT it in the questions file. Never RESTATE it."**
@@ -1516,6 +1581,19 @@ evidence about a COMMIT, and editing the commit under the round makes the eviden
 restatement, and it is the most serious finding in the row: a paraphrase that differs from the original is
 indistinguishable from a misreading, **and the record then shows compliance with a ruling the supervisor
 never made.** Rulings are now quoted verbatim in this record with disagreement placed beside the quote.
+
+> **"No edits to the reviewed artefact while any lens of the round is running."**
+
+**Made standing for EVERY row in `answers-10` §5, from this row's `J71` and §4.3.2.** His reason for making
+it standing rather than merely noting it: *"That the lens degraded gracefully is not a reason to keep doing
+it — it is the reason you found out."*
+
+> **`J71`'s rule: a correction is written, then RE-READ FROM DISK and asserted present, and the commit
+> message is checked against `git diff` rather than against intent.**
+
+**His weighting is higher than this row's own:** *"'This row claimed corrections in commit messages that
+were NOT in the tree' is the worst shape in this row's record, worse than a wrong number: a commit message
+is the one artefact a reviewer trusts without opening the diff."*
 
 > *"**STANDING FROM NOW ON: questions to me go in a FILE, not only in the pane**"*
 >
@@ -1527,6 +1605,37 @@ never made.** Rulings are now quoted verbatim in this record with disagreement p
 not acted on within one supervision cycle is unrecoverable. **He sends prose by file for the same reason and
 had not noticed the return channel carried the same defect.** `2026-09-10-oo-6j-questions.md` is that file
 and it carried `Q1`, `Q2` and `Q3`.
+
+---
+
+
+### §4.5 — THE REACH TEST IS A COMMAND, NOT A JUDGEMENT
+
+**Ruled in `answers-10` §4.1:** *"Whatever search establishes 'this shape does not appear in the live suite'
+goes in the record verbatim, so the next row re-runs it rather than re-decides it. A criterion that rests on
+'plausibly written' is only safe because the test underneath it is mechanical."*
+
+**So here it is, runnable, with its output at `a1ce09d`:**
+
+```
+$ cd C:/Users/steph/projects/open-ontology
+$ grep -rEc 'startswith\(""\)'              ontoloche/ | awk -F: '{s+=$2} END{print s+0}'   ->  0
+$ grep -rEc "startswith\(''\)"              ontoloche/ | awk -F: '{s+=$2} END{print s+0}'   ->  0
+$ grep -rEc 'not isinstance\([a-z_]*\.reason' ontoloche/ | awk -F: '{s+=$2} END{print s+0}' ->  0
+$ grep -rEc '\.caps\.[a-z_]* is True'       ontoloche/ | awk -F: '{s+=$2} END{print s+0}'   ->  0
+$ grep -rEc 'assert True or'                ontoloche/ | awk -F: '{s+=$2} END{print s+0}'   ->  0
+
+$ grep -rEc 'any\([a-z_]+\.startswith\('  ontoloche/contract/ | awk -F: '{s+=$2} END{print s+0}'  -> 32
+$ grep -rEc 'all\([a-z_]+\.startswith\('  ontoloche/contract/ | awk -F: '{s+=$2} END{print s+0}'  ->  0
+```
+
+**READ THE LAST TWO TOGETHER — THEY ARE THE POINT OF THE WHOLE TEST.** The `all()` hole scored **0** on its
+own spelling and **32** on its one-keyword neighbour. **A reach test that only searched for the exploit as
+written would have called it unreachable and been wrong.** The test is *"the shape, or anything structurally
+like it"*, and the structural neighbour is where the reach lives.
+
+**That is also why this section is a command and not a paragraph.** The judgement — *would a contributor
+write this?* — is the part that can be wrong in the row's favour. **The grep is the part that cannot.**
 
 ---
 
@@ -1686,3 +1795,39 @@ its local HTML mirror. **And the supervisor is told before this row pushes.**
 
 **12. ROUND 4 IS OWED.** §4.1 records it. Round 3 produced nineteen MAJORs; nothing goes in after the last
 round, and round 3 was not it.
+
+---
+
+## §6 — THE GATE SHIPS WITH KNOWN RESIDUAL HOLES. IT IS NOT CLOSED.
+
+**Ruled in `answers-10` §4.3:** *"The record says the gate SHIPS WITH KNOWN RESIDUAL HOLES and names them.
+It never says 'closed'. A later reader must not be able to conclude from `6J-RUN.md` that the axis is
+complete."*
+
+**IT IS NOT COMPLETE AND THIS SECTION EXISTS SO NOBODY CAN READ IT AS COMPLETE.**
+
+**What the axis now does that it did not:** it reads the guard, tracks its polarity, requires a positive
+naming of the outcome, requires the capability assertion to fail on a capable backend, refuses a capability
+read off the result under test however it is spelled, and refuses to print a justification it cannot
+support. **Four rounds and twenty-two in-scope code MAJORs went into that.**
+
+**What it still cannot do, and the seven shapes are PINNED IN THE GATE as `ROUTED`, not described here:**
+the observation-root machinery — `_driving_receivers`, the `- cap_read - cap_derived` subtraction, and loop
+handling — still misclassifies seven shapes, **including the pinned `C10-16` case defeated by one ordinary
+added line, which lands in `S0`, the most ungated cell.** `--selftest` prints all seven every time it runs.
+**Any round-5 residual joins them**, per `answers-10` §4.2.
+
+**AND THE HONEST GENERALISATION, which is worth more to the next row than the list:** the axis is a
+WHITELIST over an open-ended grammar. **It grants `S5` on RECOGNITION, so every shape it does not recognise
+is refused — fail-closed, correct — and every DEGENERATE shape it does recognise is a hole.** Four panels
+found four batches of degenerate spellings and the count did not fall. **The next hole is not a question of
+whether but of which spelling, and the `ROUTED` block is where it should be written down when someone finds
+it.**
+
+**What makes shipping this defensible is not that the axis is complete. It is that:** every hole found is
+either closed or pinned as executable evidence; the reach test in §4.5 is mechanical and re-runnable; the
+five baselined sites carry a `why` distinguishing a MISSING proof from one this gate cannot verify; and
+`J19` — the ident that is not an identity — is routed with its demonstration rather than buried.
+
+**NOTHING IN THIS RECORD SHOULD BE READ AS "THE FIFTH GATE IS FIXED".** The fifth gate is **better by four
+rounds of measurement and still admits shapes it should not.**
