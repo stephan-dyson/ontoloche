@@ -6,13 +6,13 @@
       "site": "ontoloche/contract/test_c10_merge_types.py::test_c10_22_a_truncated_collision_scan_is_reported_not_silent#0",
       "asserts": 2,
       "guard": "isinstance(out, Refusal)",
-      "why": "guard reads out -- an observation this test's own assertions also reach; NOT proven-environmental because the guard tests the observation without naming WHICH outcome the capability explains, so an assertion under it fires on every other outcome too. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
+      "why": "guard reads out -- an observation this test's own assertions also reach; NOT proven-environmental because THIS CHECKER COULD NOT ESTABLISH that the guard narrows to the outcome the capability explains. It reads a literal `==`/`is`/`in` naming, a `startswith`/`endswith` prefix, an `any(...)` over an observed collection, or `not isinstance(<obs>, Refusal)`, and it found none of those here. THAT IS A STATEMENT ABOUT THIS CHECKER, NOT ABOUT THE GUARD: known shapes it cannot read include a walrus in the guard and several receiver spellings -- `6J-RUN.md` \u00a75 items 2 and 4. If the proof is sound, BASELINE THIS SITE rather than rewriting the test. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
     },
     {
       "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types#0",
       "asserts": 6,
       "guard": "isinstance(gone, Refusal)",
-      "why": "guard reads gone -- an observation this test's own assertions also reach; NOT proven-environmental because the guard tests the observation without naming WHICH outcome the capability explains, so an assertion under it fires on every other outcome too. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
+      "why": "guard reads gone -- an observation this test's own assertions also reach; NOT proven-environmental because THIS CHECKER COULD NOT ESTABLISH that the guard narrows to the outcome the capability explains. It reads a literal `==`/`is`/`in` naming, a `startswith`/`endswith` prefix, an `any(...)` over an observed collection, or `not isinstance(<obs>, Refusal)`, and it found none of those here. THAT IS A STATEMENT ABOUT THIS CHECKER, NOT ABOUT THE GUARD: known shapes it cannot read include a walrus in the guard and several receiver spellings -- `6J-RUN.md` \u00a75 items 2 and 4. If the proof is sound, BASELINE THIS SITE rather than rewriting the test. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
     },
     {
       "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_24_a_skipped_identity_guard_says_so#0",
@@ -24,13 +24,13 @@
       "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_27_a_declined_row_still_carries_what_the_call_could_not_check#0",
       "asserts": 3,
       "guard": "not any((w.startswith('import_refused:') for w in warnings))",
-      "why": "guard reads warnings -- an observation this test's own assertions also reach (via out); NOT proven-environmental because the guard tests the observation without naming WHICH outcome the capability explains, so an assertion under it fires on every other outcome too. NOTE THE KIND: the block DOES assert `registry.caps.stores_aliases is False`, which fails on a backend holding the capability -- so the proof may well be sound and THIS GATE CANNOT VERIFY IT. A limit of the instrument, not an established defect in the suite"
+      "why": "guard reads warnings -- an observation this test's own assertions also reach (via out); NOT proven-environmental because THIS CHECKER COULD NOT ESTABLISH that the guard narrows to the outcome the capability explains. It reads a literal `==`/`is`/`in` naming, a `startswith`/`endswith` prefix, an `any(...)` over an observed collection, or `not isinstance(<obs>, Refusal)`, and it found none of those here. THAT IS A STATEMENT ABOUT THIS CHECKER, NOT ABOUT THE GUARD: known shapes it cannot read include a walrus in the guard and several receiver spellings -- `6J-RUN.md` \u00a75 items 2 and 4. If the proof is sound, BASELINE THIS SITE rather than rewriting the test. NOTE THE KIND: the block DOES assert `registry.caps.stores_aliases is False`, which fails on a backend holding the capability -- so the proof may well be sound and THIS GATE CANNOT VERIFY IT. A limit of the instrument, not an established defect in the suite"
     },
     {
       "site": "ontoloche/contract/test_c3_resolve_type.py::test_c3_27_the_confidence_is_the_MIN_of_both_halves#0",
       "asserts": 4,
       "guard": "answer.type is None or answer.type.name != 'searchable'",
-      "why": "guard reads answer -- an observation this test's own assertions also reach; NOT proven-environmental because the guard tests the observation without naming WHICH outcome the capability explains, so an assertion under it fires on every other outcome too. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
+      "why": "guard reads answer -- an observation this test's own assertions also reach; NOT proven-environmental because THIS CHECKER COULD NOT ESTABLISH that the guard narrows to the outcome the capability explains. It reads a literal `==`/`is`/`in` naming, a `startswith`/`endswith` prefix, an `any(...)` over an observed collection, or `not isinstance(<obs>, Refusal)`, and it found none of those here. THAT IS A STATEMENT ABOUT THIS CHECKER, NOT ABOUT THE GUARD: known shapes it cannot read include a walrus in the guard and several receiver spellings -- `6J-RUN.md` \u00a75 items 2 and 4. If the proof is sound, BASELINE THIS SITE rather than rewriting the test. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
     }
   ]
 }
