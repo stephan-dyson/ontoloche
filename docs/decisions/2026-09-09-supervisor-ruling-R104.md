@@ -4,13 +4,23 @@
 [`6H-RUN.md`](../runs/6H-RUN.md) §3, and recording that **the model this supervisor gave the row was wrong
 and the row proved it.**
 
+> **CORRECTION, made within the hour and recorded rather than erased.** This ruling was first written,
+> committed and pushed saying `S5` spans **five** files. **It spans FOUR** —
+> `test_c10_merge_types.py`, `test_c12_foundry_import.py`, `test_c19_actions.py`, `test_c9_retire.py`,
+> confirmed by running the row's own `check_skip_census.py --census` and listing the distinct paths behind
+> its seven `S5` sites. **The supervisor took the figure from the row's §1.2 prose without counting it**,
+> and the row — which had made the same error twice in its own first draft, caught by its round's numbers
+> lens — flagged it before the supervisor noticed. **That is the fifth carried attribution in this project
+> and the third to come from a document rather than a worker.** The count of *five files* elsewhere in §5
+> is a different and correct fact: the row's diff touched five files.
+
 ---
 
 ## 1. `S5` is a named category. The rule this supervisor wrote would have deleted a correct pattern.
 
 The brief's discriminator said a skip whose guard reads the result under test is **never** legitimate.
 **That is false, and the counter-example is not an edge case — the suite invented the exception on purpose,
-uses it in seven sites across five files, and documented it in its own words.**
+uses it in seven sites across FOUR files, and documented it in its own words.**
 
 **[Observed — read by the supervisor at `ontoloche/contract/test_c10_merge_types.py:1489-1502`, not accepted
 from the row]:**
@@ -33,7 +43,7 @@ applied by the suite before this row existed.
 **category with a name**, not as a footnote to a refuted model, because the next row that touches this needs
 `S5` to be a thing it can look up.
 
-**A gate built on this supervisor's rule would have deleted working coverage in five files.** That sentence
+**A gate built on this supervisor's rule would have deleted working coverage in four files.** That sentence
 belongs in the record more than any number in it.
 
 ## 2. The middle category — reading 1 **and** reading 3. Reading 2 is refused.
@@ -110,7 +120,7 @@ Run by the supervisor against row 6h's `7f13800`, not accepted from the row:
 
 **Twice in one day this supervisor's own instruction was the defect** — the brief's wire-the-gate-in-
 immediately clause left the row no legal move against 121 existing sites, and the discriminator would have
-destroyed a working pattern in five files. **Both were caught because the brief said the model was a
+destroyed a working pattern in four files. **Both were caught because the brief said the model was a
 starting point and not a ruling, and the row took that at its word instead of implementing around it.**
 
 **A brief that cannot be contradicted produces a row that implements the brief's mistakes.**
