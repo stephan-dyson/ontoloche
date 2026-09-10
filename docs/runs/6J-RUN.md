@@ -1238,6 +1238,21 @@ sources. **Two are severe and are not softened here: the pinned `C10-16` case is
 line, landing in `S0-ENVIRONMENT` with the printed sentence "guard reads no observation", which is flatly
 false; and reusing the result's NAME later in the same function does the same.**
 
+**AND ONE PROPERTY THE SUPERVISOR ADDED INSIDE THE AUTHORISATION HE HAD ALREADY GIVEN, MEASURED RATHER
+THAN ASSERTED.** He observed that *"the gate prints 'guard reads no observation' about a guard that
+demonstrably reads one … `F15`'s exact defect, in the `S0` cell instead of the `S5` cell"*, ruled that **the
+gate must not print a justification it cannot support**, and left it to this row to measure whether that was
+reachable without opening the routed subsystem — *"If it cannot be done without opening the routed
+subsystem, say so and route it too — I would rather have that answer than a fix that quietly widens the
+row."*
+
+**IT IS REACHABLE, AND IT IS MESSAGE-ONLY.** The `S0` line now reports what the checker DETERMINED rather
+than asserting a property of the code — *"no name this guard reads was CLASSIFIED as an observation by this
+checker"*, followed by the three ways an observation gets reclassified away and a pointer to §5. The `S3`
+line no longer says *"this skip is unconditional"* about a skip in a loop body. **[Observed]** census
+identical at `61 / 44 / 5 / 1 / 15 / 13`, 40 of 40 calibration cases pass, gate exit 0. **No classification
+moved and `_driving_receivers` was not touched.**
+
 **LENS I FOUND NO CODE DEFECT AND FIVE RECORD MAJORS, AND TWO OF THEM ARE CORRECTIONS THAT WERE THEMSELVES
 WRONG** — `J53` and `J54`. **That is the outcome its brief named as the worst this record can produce, and
 it was briefed to hunt it.** `J46` through `J57` are the rest.
@@ -1262,6 +1277,16 @@ the requirement for round 4.
 | 3 | 3 lenses | `5ac5ec0` | 0 `SHIP IT`, 3 `NOT YET` | 19 MAJOR, 21 MINOR | `J38`-`J57` |
 | **4** | **OWED, NOT RUN** | **the final text** | **—** | **—** | **—** |
 | | **10 lens-passes so far** | | **1 `SHIP IT`, 9 `NOT YET`** | | **`J1`-`J57`, plus `J19`** |
+
+**THE LOOP'S STOPPING CRITERION, ruled so this does not run forever:**
+
+> **"The loop ends when a full round produces ZERO in-scope MAJORs in the CODE. Record findings and routed
+> findings do not extend it — routed ones are not yours to fix, and record fixes are checked against the
+> round outputs rather than re-reviewed."**
+
+**And the criterion has a second clause with teeth:** *"If round 4's only in-scope code MAJORs are again in
+fixes made during round 3, that is the finding, not the individual defects — and it is the seventh
+instance."* **§4.2 carries that at its top rather than in its table.**
 
 **ROUND 4 IS REQUIRED AND HAS NOT RUN.** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
 be followed by a full round that sees it"*, and *"the last round must see the final text"*. **Round 3
@@ -1290,6 +1315,11 @@ this project got better between rounds, and that is why round 2 found more.**
 
 > **A FIX THAT REMOVES A SYMPTOM BY WEAKENING THE THING THAT DETECTS IT.**
 
+**READ THE ROUND-4 RESULT AGAINST THIS FIRST, on the supervisor's ruling: if round 4's only in-scope code
+MAJORs are again in fixes made during round 3, THE FINDING IS THAT — not the individual defects — and it is
+the SEVENTH instance.** Three of the six below are already this row's own, all three found within a round
+of being written.
+
 **Counted, not remarked on:**
 
 | # | the fix | the symptom it removed | what it weakened | found by |
@@ -1316,6 +1346,20 @@ which defeated the very calibration case `J31` was pinned with.**
 > **And `answers-6` §3 asked for exactly this correction in advance:** *"If I ever paraphrase your
 > measurement back at you, treat it as a defect and say so."* **Said.** Two round-3 lenses found it
 > independently.
+>
+> **THE SUPERVISOR TOOK IT AS HIS, AND IT IS THE MIRROR OF THE RULE HE MADE STANDING THE SAME MORNING.**
+> His words:
+>
+> > *"`J26` is mine before it is yours. I wrote 'Five rows, and twice into this one instrument' in
+> > `answers-6` §4 without measuring it, and you put it in a section heading. … I told you never to restate
+> > a ruling because I cannot audit my words against a paraphrase. **The reverse is just as bad: when I put
+> > a COUNT in a ruling, you treat it as authoritative and propagate it** — and I supplied that one from
+> > memory."*
+>
+> **AND THE RULE HE BOUND HIMSELF TO, which is the useful output of this finding:**
+>
+> > *"I will not put a count, a line number, or a date into a ruling unless I measured it in that cycle,
+> > and where I have not, I will mark it `[unmeasured]` so you know to check it rather than carry it."*
 
 **THE TEST THAT WOULD HAVE CAUGHT ALL SIX: *after a fix, can the instrument still distinguish the cases it
 could distinguish before?*** **NO ROW ASKED IT AT THE TIME, AND THIS ROW IS THE FIRST TO ASK IT OF ITS OWN
@@ -1365,22 +1409,46 @@ and it carried `Q1`, `Q2` and `Q3`.
 ---
 
 ## §5 — WHAT THE FOLLOW-ON ROW INHERITS
+**1. `Q4-1` — THE PINNED `C10-16` SHAPE IS DEFEATED BY ONE ADDED LINE, AND IT IS WORSE THAN `F12`.**
+**Ruled first in this list by the supervisor, ahead of `J19`, and the reason goes in terms:**
+
+> **`F12` required someone to REMOVE a clause. THIS REQUIRES SOMEONE TO ADD AN ORDINARY LINE** —
+> `detail = merged.detail.get("overridable")` is a thing a contributor writes without thinking — **and the
+> result lands in `S0`, the most ungated cell there is, with the gate printing "guard reads no
+> observation."**
+
+```python
+merged = registry.merge_types("commentable", "searchable", "same", merged_by="user:sd")
+detail = merged.detail.get("overridable")     # <- the whole exploit
+if isinstance(merged, Refusal):
+    pytest.skip("this backend refused the merge")
+assert not isinstance(merged, Refusal), merged
+```
+
+**`_driving_receivers` reads the result as configuration because a method was called on it and the value
+assigned. This is `LENS B1` again — B1 pinned the ASSERTION spelling and the ASSIGNMENT spelling was never
+pinned, and it is the one the narrowed rule actually keys on.** **[Observed]** identical at `16becf6` and at
+HEAD, so it is not this row's.
+
+**IT IS PINNED IN THE GATE, NOT ONLY HERE — see item 8 and `ROUTED` in `check_skip_census.py`.** The next
+row inherits an executable reproduction rather than this paragraph.
+
 
 **Collected here because everything below is real, live, and would otherwise exist only as a paragraph
 inside a long document — which is `6I-RUN.md` §7's own reason, and the reason this row exists.** Nothing
 here goes in the governance register. The kill row stays **TWENTY-THREE** and the register stays **ONE**.
 
-**1. `J19` — THE SITE IDENT IS NOT AN IDENTITY, AND IT IS THE FIRST THING TO FIX.** §3.3 has the
+**2. `J19` — THE SITE IDENT IS NOT AN IDENTITY, AND IT IS THE FIRST THING TO FIX.** §3.3 has the
 demonstration and §3.6 has the interim. **The interim closes the ADDITION and not the identity: a SWAP
 inside one function — one flagged site removed and a different one added — is still invisible, measured
 rather than assumed.** The fix puts the guard into the ident and **rewrites every entry in
 `skip_census_baseline.json`**, which is why it was routed rather than done here.
 
-**2. §7 item 2's extension is its own row, and that is now a RULING** — `answers-5` §3, on §3.4's
+**3. §7 item 2's extension is its own row, and that is now a RULING** — `answers-5` §3, on §3.4's
 measurement. **Its cost is measured and it is not cheap: eight sites move and three go the wrong way**,
 adding new flagged entries in the three helper functions row 6i repaired.
 
-**3. THREE LATENT SITES, and this row found them rather than inheriting them — `J14`.** Of the five
+**4. THREE LATENT SITES, and this row found them rather than inheriting them — `J14`.** Of the five
 untouched sites carrying `pytest.skip(f"this backend cannot retire the holder ({gone.reason})")`,
 **`test_c12_21` and `test_c5_13` declare `stores_events` in `requires_capability`, so their bare skip is
 structurally DEAD.** The other three do not:
@@ -1395,12 +1463,12 @@ ontoloche/contract/test_c5_approve_reject.py:356   test_c5_15    declares nothin
 `stores_events=False` — all three reach the retire and hit the bare skip.** They are item 5's population and
 this row was not authorised to repair them. **They are LATENT, not dead, and that is new evidence.**
 
-**4. §7 item 4's four baselined sites stay.** Unobserved on three legs across two rows. Naming a capability
+**5. §7 item 4's four baselined sites stay.** Unobserved on three legs across two rows. Naming a capability
 for a refusal never seen fire is `C19-100` closing a legal operation.
 
-**5. §7 item 5's remaining occurrences are still unaudited and are not claimed to be.**
+**6. §7 item 5's remaining occurrences are still unaudited and are not claimed to be.**
 
-**6. ROUND 2 MINORS THIS ROW DID NOT FIX, named rather than absorbed.** A quietly half-audited population is
+**7. ROUND 2 MINORS THIS ROW DID NOT FIX, named rather than absorbed.** A quietly half-audited population is
 worse than an unaudited one, so:
 
 - **`_leaving_verdict` and `_print_detail` look up by `ident`**, which `J19` shows is not unique — so a
@@ -1420,58 +1488,61 @@ worse than an unaudited one, so:
   with its numeric clause deleted, and `test_c10_25`'s label says the guard carries it when the docstring
   says the branch assertion does.
 
-**7. `Q4` — SEVEN PRE-EXISTING DEFECTS IN THE OBSERVATION-ROOT MACHINERY, WITH THEIR SOURCES.** Round 3's
+**8. `Q4` — SEVEN PRE-EXISTING DEFECTS IN THE OBSERVATION-ROOT MACHINERY, WITH THEIR SOURCES.** Round 3's
 classifier lens found them; **[Observed]** all seven classify identically at `16becf6` and at HEAD, so none
 is this row's. They are `_driving_receivers`, the `- cap_read - cap_derived` subtraction in
 `classify_source`, and `_guard_chain`'s loop handling — **row 6h's subsystem, not the `F12`/`F4`/`F15`
 axis.** Carried here with executable evidence rather than prose, which is what `6I-RUN.md` §7 did for this
 row.
 
-**7a. THE PINNED `C10-16` CASE IS DEFEATED BY ONE ADDED LINE, AND IT LANDS IN THE MOST UNGATED CELL.**
+**8a. The `C10-16` defeat — ITEM 1 of this list, put first by the supervisor's ruling. Not repeated here.**
 
-```python
-merged = registry.merge_types("commentable", "searchable", "same", merged_by="user:sd")
-detail = merged.detail.get("overridable")     # <- the whole exploit
-if isinstance(merged, Refusal):
-    pytest.skip("this backend refused the merge")
-assert not isinstance(merged, Refusal), merged
-```
-
-**`S0-ENVIRONMENT`, why: *"guard reads no observation"* — flatly false.** `_driving_receivers` reads the
-result as configuration because a method was called on it and the value assigned. **This is `LENS B1`
-again: B1 pinned the ASSERTION spelling and the ASSIGNMENT spelling was never pinned, and it is the one the
-narrowed rule actually keys on.**
-
-**7b. Reusing the result's NAME later in the function erases it.** `out = adapter.capabilities()` three
+**8b. Reusing the result's NAME later in the function erases it.** `out = adapter.capabilities()` three
 lines after the skip drops the site `S2` -> `S0`; removing only that line restores `S2`. `cap_derived` is
 computed over the whole function and subtracted from the guard's names.
 
-**7c. A capability read OFF the result erases the result** — `if out.caps.stores_events and isinstance(out,
+**8c. A capability read OFF the result erases the result** — `if out.caps.stores_events and isinstance(out,
 Refusal):` -> `S0`.
 
-**7d and 7e. The guard may narrow a DIFFERENT observation than the one it gates.** `if isinstance(out,
+**8d and 8e. The guard may narrow a DIFFERENT observation than the one it gates.** `if isinstance(out,
 Refusal) and other.reason == "empty":` -> `S5`, printing *"narrows on a literal outcome"*, which is false of
 `out`. The branch-pin path has the same hole and prints *"which FAILS on every other outcome"* about an
 outcome that stays open.
 
-**7f and 7g. Loop-carried observations are invisible.** A skip in a `for w in out.warnings:` body ->
+**8f and 8g. Loop-carried observations are invisible.** A skip in a `for w in out.warnings:` body ->
 `S3-UNCONDITIONAL`, *"no enclosing conditional"*; the same loop with an inner `if` -> `S0`. `_positive_naming`
 was taught that a comprehension target carries its observation; `classify_source`'s `read_obs` was not.
 
-**8. TWO TOOLING DEFECTS THAT RIDE WITH `J19`.** `--write-baseline` can emit a file the gate immediately
+**9. TWO TOOLING DEFECTS THAT RIDE WITH `J19`.** `--write-baseline` can emit a file the gate immediately
 rejects, when two flagged skips in one function share an ident — it writes duplicates and `run_gate` fails
 them as DUPLICATE, with no invocation that clears it. And **deleting the `asserts` key from a baseline entry
 silently disables the de-assertion ratchet**, which the code's own docstring calls *"the sharpest thing said
 about this gate"*.
 
-**9. OPEN WITH THE SUPERVISOR, NOT WITH THE NEXT ROW.** `Q4` is unruled. **§4.3's proposed rule — *a
+**10. OPEN WITH THE SUPERVISOR, NOT WITH THE NEXT ROW.** `Q1`, `Q2`, `Q3` and `Q4` are all RULED.
+**§4.3's proposed rule — *a
 measurement of the instrument is stamped with the commit it was taken at, and every such measurement is
 re-taken after the last round* — is an OFFER and has no ruling.** This row minted nothing.
 
-**10. LANDING TASKS THIS ROW HAS NOT DONE.** `docs/README.md` carries no row for 6j — **[Observed —
+**10a. THE ROUTED SEVEN ARE PINNED IN THE GATE ITSELF, and this answers a question the supervisor asked
+before letting the row dismiss it.** He asked whether the harness had a KNOWN-WRONG calibration mode —
+*"recording today's answer as evidence without asserting it is right"* — and said that if it did not, *"that
+is a fine answer; record that you checked."*
+
+**It did not. `run_selftest` compares a case against an EXPECTED category and fails the gate on a mismatch,
+which would have meant pinning a wrong answer as correct and failing the gate the day someone FIXED it — a
+gate that punishes the repair, which is the defect `_leaving_verdict` exists to prevent one cell over.**
+
+**So the mode is built, in three lines of machinery: `ROUTED`.** A `CALIBRATION` case says *this answer is
+right and must not change*. A **`ROUTED`** case says *this answer is WRONG, here is the source that produces
+it, and a change here is NEWS rather than a regression.* **[Observed — `--selftest` at HEAD]** all seven
+print as `ROUTED (known-wrong, still <category>)`, and a move prints a `NOTICE` that does **not** fail the
+gate.
+
+**11. LANDING TASKS THIS ROW HAS NOT DONE.** `docs/README.md` carries no row for 6j — **[Observed —
 `git log -S`]** row 6i added its README row mid-row at `ba71288`, so by that precedent it is overdue rather
 than deferred. `STATUS.md` is correctly a landing task, and under the standing rule its update regenerates
 its local HTML mirror. **And the supervisor is told before this row pushes.**
 
-**11. ROUND 4 IS OWED.** §4.1 records it. Round 3 produced nineteen MAJORs; nothing goes in after the last
+**12. ROUND 4 IS OWED.** §4.1 records it. Round 3 produced nineteen MAJORs; nothing goes in after the last
 round, and round 3 was not it.

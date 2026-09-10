@@ -1034,7 +1034,10 @@ def classify_source(src: str, rel: str) -> list[Site]:
         if not chain:
             sites.append(
                 Site(rel, fname, ordinal, node.lineno, UNCONDITIONAL, "",
-                     "no enclosing conditional -- this skip is unconditional", n_asserts)
+                     "no enclosing `if` was found. This checker did not see a "
+                     "conditional guarding it -- which is not the same as the skip "
+                     "being unconditional: a skip in a loop BODY over the result "
+                     "reaches here too. See `6J-RUN.md` §5 item 3", n_asserts)
             )
             continue
 
@@ -1126,7 +1129,12 @@ def classify_source(src: str, rel: str) -> list[Site]:
                  "assertions")
             continue
 
-        emit(ENV, "guard reads no observation")
+        emit(ENV,
+             "no name this guard reads was CLASSIFIED as an observation by this "
+             "checker. That is usually because the guard reads configuration -- and "
+             "it can also mean the observation was reclassified away: a method called "
+             "on the result and assigned, a capability read off the result, or the "
+             "result's name reused later in the function. See `6J-RUN.md` §5 items 1-3")
 
     # Ordinals are assigned per (function, GUARD TEXT), not per function, and the
     # reason is a fresh lens's finding: with a plain per-function counter, adding
@@ -1765,6 +1773,143 @@ def test_f15_reworded(registry):
 )
 
 
+# ---------------------------------------------------------------------------
+# ROUTED EVIDENCE. Cases whose CURRENT answer is WRONG and is recorded here as
+# EVIDENCE rather than asserted as correct.
+#
+# The supervisor asked whether the harness had such a mode before this row
+# dismissed pinning the routed defects. It did not; this is it, and it is three
+# lines of machinery.
+#
+# The distinction is the whole point. A CALIBRATION case says "this answer is
+# right and must not change". A ROUTED case says "this answer is WRONG, here is
+# the source that produces it, and the next row inherits an executable
+# reproduction rather than my prose". So a change here is NOT a gate failure --
+# it is the routed defect moving, which is news and not a regression. Failing the
+# gate when the next row FIXES one of these would be a gate that punishes the
+# repair, which is the defect `_leaving_verdict` exists to prevent one cell over.
+# ---------------------------------------------------------------------------
+
+ROUTED: tuple[tuple[str, str, str], ...] = (
+    (
+        "Q4-1: the PINNED C10-16 shape, defeated by ONE ADDED LINE. F12 needed a "
+        "clause REMOVED; this needs an ordinary line ADDED, and it lands in S0",
+        ENV,
+        '''
+import pytest
+def test_c10_16(adapter, make_registry):
+    registry = make_registry(adapter, approval_policy="auto")
+    merged = registry.merge_types("commentable", "searchable", "same", merged_by="user:sd")
+    detail = merged.detail.get("overridable")
+    if isinstance(merged, Refusal):
+        pytest.skip("this backend refused the merge")
+    assert not isinstance(merged, Refusal), merged
+''',
+    ),
+    (
+        "Q4-2: reusing the RESULT'S NAME later in the function erases it from the "
+        "guard's observations",
+        ENV,
+        '''
+import pytest
+def test_name_reuse(registry, adapter):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if isinstance(out, Refusal):
+        pytest.skip("this backend refused the merge")
+    assert out.warnings
+    out = adapter.capabilities()
+    assert out.stores_events is not None
+''',
+    ),
+    (
+        "Q4-3: a capability read OFF the result erases the result",
+        ENV,
+        '''
+import pytest
+def test_cap_off_result(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if out.caps.stores_events and isinstance(out, Refusal):
+        pytest.skip("nothing to assert")
+    assert out.warnings
+''',
+    ),
+    (
+        "Q4-4: the guard narrows a DIFFERENT observation than the one it gates",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_two_obs(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    other = registry.list_types("entity")
+    if isinstance(out, Refusal) and other.reason == "empty":
+        assert registry.caps.stores_events is False, out
+        pytest.skip("NOT REACHABLE")
+    assert out.warnings
+''',
+    ),
+    (
+        "Q4-5: the BRANCH-PIN names a different observation than the guard gates",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_two_obs_branch(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    other = registry.list_types("entity")
+    if isinstance(out, Refusal) and other.count == 0:
+        assert other.reason == "empty", other
+        assert registry.caps.stores_events is False, out
+        pytest.skip("NOT REACHABLE")
+    assert out.warnings
+''',
+    ),
+    (
+        "Q4-6: a skip in a loop BODY over the result lands in S3-UNCONDITIONAL",
+        UNCONDITIONAL,
+        '''
+import pytest
+def test_loop_body(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    for w in out.warnings:
+        pytest.skip("this backend warned, so there is nothing to assert")
+    assert out.ok
+''',
+    ),
+    (
+        "Q4-7: test_c12_27's guard rewritten as a for loop lands in S0",
+        ENV,
+        '''
+import pytest
+def test_loop_if(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    for w in out.warnings:
+        if w.startswith("import_refused:"):
+            pytest.skip("refused")
+    assert out.ok
+''',
+    ),
+)
+
+
+def run_routed(verbose: bool = False) -> list[str]:
+    """Classify the ROUTED shapes. Returns NOTICES, never failures.
+
+    Every one of these SHOULD be `S2-RESULT-UNDER-TEST` and is not. A notice here
+    means a routed defect moved -- most likely because someone fixed it, which is
+    the good news this list exists to make visible.
+    """
+    notices: list[str] = []
+    for label, recorded, src in ROUTED:
+        got = [s.category for s in classify_source(src, f"<routed:{label}>")]
+        if got != [recorded]:
+            notices.append(
+                f"{label}: recorded as {recorded}, now {got}. A ROUTED defect MOVED "
+                f"-- update `6J-RUN.md` §5 and this entry. NOT a gate failure."
+            )
+        elif verbose:
+            print(f"    ROUTED (known-wrong, still {recorded:24s}) {label}")
+    return notices
+
+
 def run_selftest(verbose: bool = False) -> list[str]:
     """Classify the calibration shapes. Returns the failures, empty if clean."""
     failures: list[str] = []
@@ -2005,6 +2150,10 @@ def run_gate() -> int:
             print("    " + f, file=sys.stderr)
         return 1
 
+    for notice in run_routed():
+        # A ROUTED case moving is NEWS, not a failure. See ROUTED's own comment.
+        print("check_skip_census: NOTICE -- " + notice)
+
     for required in SCAN_DIRS:
         if not required.is_dir():
             # BOTH trees, not just the sync one. The module docstring records that
@@ -2167,6 +2316,8 @@ def main(argv=None) -> int:
         failures = run_selftest(verbose=True)
         for f in failures:
             print("FAIL " + f, file=sys.stderr)
+        for notice in run_routed(verbose=True):
+            print("NOTICE " + notice)
         return 1 if failures else 0
     if args.census:
         if args.dir:
