@@ -749,7 +749,11 @@ to verify anything.** The verification is two independent things:
 > Two commits later the classifier was rebuilt and the baseline rose under `Q1`. **[Observed — all five
 > re-run at HEAD]** `check_links` **0**, `check_spec_drift` **0**, `check_merge_guard` **0**,
 > `check_capability_matrix` **0**, and `check_skip_census` **0** printing **`5 result-conditioned
-> skip(s), baseline 5`**. **The verdicts survived the rebuild; the figures in the table did not, and
+> skip(s), baseline 5`**. **[Re-run again at `710f732` with the DSN documented at `2A-RUN.md:86`:
+> `check_capability_matrix` exit **0**.]** A round-4 lens reported it as the one gate it could not
+> re-execute, then corrected itself: its first attempt used a guessed DSN and returned `124`, which is
+> `timeout`'s code and not the gate's. **Recorded because a reviewer's self-correction is worth the same
+> weight as its findings.** **The verdicts survived the rebuild; the figures in the table did not, and
 > nothing in this record established that anyone had run them at the landed tree until this line.**
 
 **The set stays FIVE.** The checker fix repaired an existing gate rather than adding one, which is the
@@ -965,8 +969,9 @@ actually costs and I will rule."*** The fix is in and the census re-run. **`J9` 
 §2.7 without coming back to it**, and a promise made to the supervisor and left open is the prior row's
 `F5`/`F6` shape.
 
-**[Observed — the option simulated by making a helper's parameters their own observation roots, then
-re-censusing with a `(file, func, line)` key rather than the colliding `ident`]** **EIGHT sites move, and
+**[Observed at `a9bb767` — the option simulated by making a helper's parameters their own observation
+roots, then re-censusing with a `(file, func, line)` key rather than the colliding `ident`. Re-measured at
+`e3c4ee2` in `J69`, where one row has moved]** **EIGHT sites move, and
 three go the wrong way:**
 
 | movement | count | what it is |
@@ -974,6 +979,28 @@ three go the wrong way:**
 | `_skip_if_cannot_record` `S4` -> `S5` | 1 | the intended win, and it does work |
 | four `conftest.py` sites `S4` -> `S1` | 4 | harmless reclassification |
 | **three `_tombstone_holding` copies `S1` -> `S2`** | **3** | **NEW flagged sites, in the three helpers row 6i repaired** |
+
+> **`J69`, CORRECTED IN PLACE, AND IT IS THE FIRST INSTANCE OF §4.3's PATTERN TO SIT UNDER A RULING.** The
+> table above was measured at `a9bb767` and is **stamped there now**. **[Re-measured at `e3c4ee2` by the
+> method this section states — every parameter of a helper made its own observation root]** the eight
+> movers, the four `conftest` moves and the three `_tombstone_holding` moves all reproduce **at the exact
+> lines `J29` names** — but `_skip_if_cannot_record` now lands in **`S2`, not `S5`**. It was `S5` at
+> `a9bb767`, `ace7081` and `d33ccce` and became `S2` at `13de039`, because round 2's `J31` fix makes
+> `registry.caps.stores_events` a read off an observation once `registry` is a rooted parameter.
+>
+> **So under the stated method the option now buys ZERO promotions and costs FOUR new baseline entries,
+> not one and three.**
+>
+> **THE METHOD IS THE VARIABLE AND THIS SECTION NEVER PINNED IT.** A narrower simulation — rooting only the
+> RESULT parameter and not the fixture — still yields `S5` at HEAD, and that is the truer reading of §7
+> item 2's *"a parameter proven safe WITHIN ITS OWN FUNCTION"*: `registry` is a fixture the helper is
+> handed, not a result it observes. **Both readings are recorded because the section never said which it
+> used, and a lens was right that it could not tell.**
+>
+> **THE RULING IS UNAFFECTED AND STRENGTHENED EITHER WAY.** `answers-5` §3 ruled the extension its own row
+> because the trade is bad: one promotion for three new entries under the original reading, **zero for four
+> under the crude one.** Neither is cheap. **But a ruling resting on a measurement this row let go stale is
+> worth saying plainly rather than repairing quietly.**
 
 **The three helpers guard on `word`, a parameter, and assert `word in (gone.aliases or ())`.** Make the
 parameter an observation root and the guard reads an observation the assertions reach, which is `S2` by
@@ -1182,7 +1209,7 @@ if why == "cannot_record_override":
 
 **That classified `S5`. Delete the alias line and the identical code classifies `S2`.**
 `_capability_proof` was handed `read_obs` — only the names the GUARD reads — so `_capability_expr`'s own
-in-function comment defence, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
+CALIBRATION case label at `check_skip_census.py:1732` **(`J70`: this record attributed the sentence first to `_capability_expr`'s DOCSTRING and then to its in-function COMMENT. It is neither — it is a case LABEL, added in the same commit as this prose, and the docstring says something else. `R104`'s class again, this time against this row's own source file)**, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
 the environment however it is spelled"*, never fired. **It now gets the function's full observation set.**
 
 **`J32` and `J33` are `F15` pointed the other way, twice.** A `caps = adapter.capabilities()` proof — a
@@ -1229,10 +1256,17 @@ census. **All three ran 139, every time.**
 not "fix everything".** Each of lens H's nine exploit sources was run against the classifier at `16becf6`
 and at HEAD. **[Observed]**
 
-| shape | `16becf6` | HEAD | whose defect |
+| shape | `16becf6` | at `5ac5ec0`, the REVIEWED commit | whose defect |
 |---|---|---|---|
 | `caps = gone.caps` then `assert caps.stores_events is False` | `S2` | **`S5`** | **THIS ROW — round 2** |
 | `flags, extra = gone.caps, gone.detail`, same assertion | `S2` | **`S5`** | **THIS ROW — round 2** |
+
+> **`J68`, CORRECTED IN PLACE.** That column was headed **`HEAD`**, and for the first two rows it was
+> **already false at the commit that introduced the table** — `J38`'s fix landed in `596cb93`, the same
+> commit, so both rows read `S2` there and at HEAD. The header now names `5ac5ec0`, the commit the lens
+> actually reviewed. **The other seven rows reproduce identically at both commits and at HEAD.** A
+> measurement of an artefact this row was changing, written into a column headed with a moving target —
+> and the second such instance inside a table that describes the pattern.
 | the guard narrows a DIFFERENT observation than it gates | `S5` | `S5` | pre-existing |
 | the branch-pin names a DIFFERENT observation | `S5` | `S5` | pre-existing |
 | **the PINNED `C10-16` case plus one assignment line** | `S0` | `S0` | pre-existing |
@@ -1397,7 +1431,7 @@ fail a variant of it — *did the fix's own reach shrink where nobody was lookin
 
 ### §4.3 — A PREDICTION SCORED BEFORE THE ARTEFACT SETTLED, FOUR TIMES
 
-**The supervisor flagged two instances and asked whether a third would make it systemic. There are four.**
+**The supervisor flagged two instances and asked whether a third would make it systemic. There are SEVEN, and one of them sits under a ruling.**
 
 | claim | scored at | went false at | corrected as |
 |---|---|---|---|
@@ -1405,6 +1439,9 @@ fail a variant of it — *did the fix's own reach shrink where nobody was lookin
 | §3.6's condition 1 — "`why` changed: 0" | mid-`d33ccce` | later in `d33ccce` | `J21` |
 | §1.6's "NINE of the fourteen" | `9b00bcc` | `ace7081`, then round 2 | `J24` |
 | §3.3's "one guard-edit and it is invisible" | `ace7081` | `d33ccce`, the next commit | `J25` / `J53` |
+| §3.8's nine-shape table, column headed `HEAD` | `5ac5ec0` | `596cb93` — **the commit that wrote it** | `J68` |
+| §3.4's item-2 table, **which a RULING rests on** | `a9bb767` | `13de039` | `J69` |
+| §1.6's calibration headline | `9b00bcc` | `ace7081`, `13de039`, `596cb93` | `J24` / `J64` |
 
 **IT IS SYSTEMIC AND IT IS NOT CARELESSNESS. It is a structural property of a row that fixes its own
 instrument between measurements:** every number about the classifier is a measurement OF an artefact this
@@ -1545,7 +1582,9 @@ Refusal) and other.reason == "empty":` -> `S5`, printing *"narrows on a literal 
 outcome that stays open.
 
 **8f and 8g. Loop-carried observations are invisible.** A skip in a `for w in out.warnings:` body ->
-`S3-UNCONDITIONAL`, *"no enclosing conditional"*; the same loop with an inner `if` -> `S0`. `_positive_naming`
+`S3-UNCONDITIONAL` — printing, since `11c4046`, *"no enclosing `if` was found. This checker did not see a
+conditional guarding it -- which is not the same as the skip being unconditional"*, the corrected text and
+still an ungated cell for a result-conditioned skip; the same loop with an inner `if` -> `S0`. `_positive_naming`
 was taught that a comprehension target carries its observation; `classify_source`'s `read_obs` was not.
 
 **9. ONE TOOLING DEFECT NOT ALREADY IN ITEM 7.** **Deleting the `asserts` key from a baseline entry silently
