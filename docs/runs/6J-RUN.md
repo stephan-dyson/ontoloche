@@ -1456,7 +1456,9 @@ surgery."*
 
 **`J75`: this totals row has now been corrected THREE times — `J67` closed it four findings short, and it
 closed six short again after round 4 — so the rule this row leaves behind is that the register is
-recomputed from `grep -oE 'J[0-9]+' ` rather than incremented by hand.** **[Observed — `grep -oE 'J[0-9]+' docs/runs/6J-RUN.md | sort -u -V`]** the register runs to **`J82`** with **77 distinct labels**; the 5 numbers not written as prose blocks are `J39`-`J45`, which live in the gate as `ROUTED` entries `Q4-1`..`Q4-7`, and `J51`, which is §3.8's round-3 blocker. **This line is recomputed by that command, not incremented.**
+recomputed from `grep -oE 'J[0-9]+' ` rather than incremented by hand.** **[Observed — `grep -oE 'J[0-9]+' docs/runs/6J-RUN.md | sort -u -V`]** the register runs to **`J82`** and every number from `J1` to `J82` appears. **`J39`, `J40`, `J41`, `J42`, `J43`, `J44` and `J45` are the seven `Q4` routings and appear only here and in the gate, as `ROUTED` entries `Q4-1`..`Q4-7` — they are executable reproductions rather than prose findings.** **This line is RECOMPUTED by that command, never incremented by hand: the register was closed short three times before the rule.**
+
+**AND IT HAS A FIXED POINT, which is worth one sentence because it caught this row twice in five minutes.** A line that reports which labels are MISSING creates labels by naming them. The first two attempts each said something true when written and false once written. **The stable form names every label rather than the gaps — a self-counting statement must be written at its fixed point or not at all.**
 
 **`J39`-`J45` ARE THE SEVEN `Q4` ROUTINGS**, carried in §5 item 8 and pinned in the gate as `ROUTED[0..6]`
 rather than written as prose findings. **`J51` is the round-3 blocker — the record not saying a round 3
