@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import dataclasses
 import json
 import logging
 import re
@@ -60,9 +61,11 @@ from .actions import (
     ActionFamily,
     Effect,
     EdgeRef,
+    InputSpec,
     Invocation,
     InvocationProvenance,
     InvocationReport,
+    Precondition,
     Preflight,
     PreconditionResult,
     ProjectionReport,
@@ -1439,22 +1442,34 @@ class Registry:
     def _declaration_agreement(self, written, answered) -> tuple[bool, float | None]:
         """How much of two action families' DECLARATION still agrees. Rule **5.3.2-10**.
 
-        **Why this compares all EIGHT declared keys while the write doors compare four,
-        and why that asymmetry is deliberate rather than this call being stricter by
-        accident.** It is §3.1's distinction again, at a second surface:
+        **`Q99` IS RULED `all eight` (R102, 2026-09-09, row 6g), so the asymmetry this
+        docstring used to argue for is DISSOLVED.** Both sides compare the same eight
+        keys. **The superseded reasoning is kept because it was true for one day and a
+        reader may have built on it:** *"Why this compares all EIGHT declared keys while
+        the write doors compare four, and why that asymmetry is deliberate rather than
+        this call being stricter by accident ... `_GOVERNANCE_KEYS`'s four are what row
+        6d needed for the case in front of it, not a decision anyone made."* The last
+        clause of that sentence is why the founder was asked, and he answered.
 
-        * `merge_types` and `retire(successor=)` must decide **what to FORBID**. That is
-          a policy question -- *which contradictions are grave enough to refuse a
-          collapse* -- and it is exactly **Q99**, minted 2026-09-09 out of this row's own
-          evidence and sitting unruled on the founder's page. `_GOVERNANCE_KEYS`'s four
-          are what row 6d needed for the case in front of it, not a decision anyone made.
+        **The distinction the two sides still draw is 3.1's, and it is not about which
+        keys:**
+
+        * `merge_types` and `retire(successor=)` decide **what to FORBID** -- they
+          REFUSE a contradiction, non-overridably.
         * This call decides **what to VOUCH FOR**, and refuses nothing (rule 5.3.2-11).
           *"These two words denote one thing"* is falsified by **any** declared
           difference, whether or not that difference is grave enough to forbid the merge.
 
-        So comparing all eight here **does not pre-empt Q99** -- it never refuses, so it
-        never answers Q99's question. It would pre-empt it if this call refused, and rule
-        5.3.2-11 is why it does not.
+        **Where they DO still part company, and a caller must not be surprised by it:
+        ABSENCE.** A key present on one side and absent on the other does **not agree**
+        here and lowers the score. The write door does **not** read it as a contradiction
+        on the four keys R102 added, because R102 4 left absence unruled and row 6g took
+        the least-refusing option rather than minting a refusal nobody decided
+        (`C19-106`). **That residual is now `Q101`**, minted by the supervisor out of row
+        6g's measurement that the write door reads an absence as agreement in one case
+        and as a contradiction in the other. **So two families that PASS the merge door
+        can still redirect below 1.0 here** -- `C3-21`'s fixture is exactly that, and his
+        ruling on `Q101` gets to move it.
 
         **An UNDECLARED family scores `None`, not agreement.** Row 6d's line at the write
         door -- *a family that has not DECLARED is not a family that declared
@@ -8416,11 +8431,24 @@ class Registry:
             cursors.add(after)
         return records, why
 
-    #: The declaration keys a COLLAPSE between two action families must not contradict.
-    #: `inputs`, `preconditions`, `reachability` and `payload_schema` are deliberately NOT
-    #: here: they are the family's SHAPE, and a shape divergence does not let a caller
-    #: invoke something they could not invoke before. These four are the blast radius --
-    #: who may run it, at what tier, whether it can be undone, and what it may do.
+    #: **NO LONGER THE KEYS A COLLAPSE IS COMPARED ON.** Founder ruling **R102**
+    #: (`Q99`, "all eight", 2026-09-09) put every one of `ACTIONS.md` 2.2's declared keys
+    #: into the identity, and `_action_declarations_diverge` now loops `_DECLARED_KEYS`.
+    #: **This tuple survives for ONE purpose:** naming which four keep their shipped
+    #: per-key ABSENCE behaviour, which R102 4 left unruled and `Q101` now carries.
+    #:
+    #: **SUPERSEDED, kept struck rather than deleted** because it was the shipped
+    #: reasoning and a reader may have built on it: *"The declaration keys a COLLAPSE
+    #: between two action families must not contradict. `inputs`, `preconditions`,
+    #: `reachability` and `payload_schema` are deliberately NOT here: they are the
+    #: family's SHAPE, and a shape divergence does not let a caller invoke something they
+    #: could not invoke before."* **That last clause is false on its own terms** -- a
+    #: `preconditions` divergence DOES let a caller invoke something they could not
+    #: invoke before, because the survivor's guard stops applying to the word the caller
+    #: still uses. `C19-104` constructs exactly that.
+    #:
+    #: These four remain the blast radius -- who may run it, at what tier, whether it can
+    #: be undone, and what it may do -- but blast radius is no longer the test.
     _GOVERNANCE_KEYS = ("approval_mode", "min_auto_tier", "reversibility", "effects")
 
     def _action_declarations_diverge(self, here, there) -> dict | None:
@@ -8490,16 +8518,157 @@ class Registry:
         # sort would be sufficient but would re-implement §2.5's `why` rule by hand --
         # `effect_identity` gets order, `why`-excluded-for-protocol-ops and
         # `why`-IS-identity-for-`host_state` in one call, and removes the second home.
+        # **FOUNDER RULING R102 -- `Q99` is ruled `all eight`** (2026-09-09, row 6g).
+        # This loop ran over `_GOVERNANCE_KEYS`, which is FOUR of `ACTIONS.md` 2.2's
+        # EIGHT declared keys. `inputs`, `preconditions`, `reachability` and
+        # `payload_schema` were never compared, so **the comparator could not see the
+        # contradiction it exists to catch**: two families agreeing on the four and
+        # differing on `preconditions` collapsed here with no refusal, no `force` and no
+        # acknowledgement, `resolve_type` answered the dead word with the survivor at
+        # 1.0, a Haiku-tier actor recorded `applied`, and the survivor's ledger read
+        # `n=0`. That is the route by which entry `A3` fires this project's governance
+        # stop criterion (R100). `C19-104`.
+        #
+        # **The trap R102 3 names, and the reason this loop does not use `!=`.** Row 6d's
+        # own A3 fix compared the list-valued `effects` with `!=` and CLOSED A LEGAL
+        # OPERATION, non-overridably, at all three doors (`C19-100`). Going from four
+        # keys to eight adds THREE more list-valued keys and so triples that surface.
+        # Row 6f solved it on the READ side and this door SHARES that solution rather
+        # than holding a second opinion: `_UNORDERED_DECLARED_KEYS` and `_unordered` are
+        # the same members `_declaration_agreement` uses, two thousand lines up.
+        # `C19-105` asserts each of the three in its own pair. **The reason first
+        # published for that was WRONG and is corrected here:** this row claimed a
+        # combined fixture "goes green while two comparisons are still `!=`". It goes
+        # RED -- one refusal fails the whole merge, so a combined fixture fails whenever
+        # ANY of the three is still `!=`. Separate pairs buy failure LOCALISATION, not
+        # detection. Found by the round's second lens, which built the fixture and ran
+        # it rather than reasoning about it.
         diverging: dict[str, list] = {}
-        for key in self._GOVERNANCE_KEYS:
-            left, right = mine.get(key), theirs.get(key)
+        for key in self._DECLARED_KEYS:
+            if key in self._GOVERNANCE_KEYS:
+                # **The four row 6d compared, byte-for-byte as they shipped.** An absent
+                # key reads `None` here and a declared value does not, so a per-key
+                # ABSENCE already refuses on these four, non-overridably, and has since
+                # `304967a`. **Nobody decided that** -- it falls out of `.get()`. It is
+                # recorded as a finding in `6G-RUN.md` 1.5 and ROUTED, because reversing
+                # shipped behaviour is a decision and not a tidy-up.
+                left, right = mine.get(key), theirs.get(key)
+            else:
+                # **The four R102 ADDED, and the one cell the ruling deliberately did not
+                # decide.** R102 4: *"`all eight` says which keys are compared WHEN BOTH
+                # SIDES DECLARE, not what to do when one does not."* So an absence is not
+                # read as a contradiction here. That is the least-refusing option and the
+                # one consistent with this method's own declare-nothing branch above --
+                # *a family that has not DECLARED is not a family that declared
+                # differently.*
+                #
+                # **Why the presence test is not `.get()`, measured rather than
+                # reasoned.** 2.2 says of `reachability` that *"an empty list is a
+                # POSITIVE declaration -- this host exposes me on no named surface --
+                # not a forgotten field."* With `.get()`, `reachability=[]` and an absent
+                # `reachability` both read as the empty set and compare EQUAL, while
+                # `reachability=["mcp"]` against the same absence compares UNEQUAL and
+                # refuses. **[Observed]** exactly that, from a working implementation:
+                # one absence permitted, the other refused non-overridably. A comparator
+                # that reads an absence as agreement in one case and as a contradiction
+                # in the other is not applying a rule. Row 6f's round 2 found this shape
+                # as a BLOCKING at the read door and its comment is above
+                # `_declaration_agreement`. `C19-106`.
+                here_has, there_has = key in mine, key in theirs
+                if here_has != there_has or not here_has:
+                    continue
+                left, right = mine[key], theirs[key]
             if key == "effects":
                 if self._effect_identities(left) == self._effect_identities(right):
+                    continue
+            elif key in self._PARSED_DECLARED_KEYS:
+                # **`C19-107` / `C19-108` -- the round's BLOCKING 1 and 2, and this row
+                # made both.** The first cut compared these two through `_unordered`,
+                # which is `json.dumps` over the RAW STORED DICT. `effects` never had
+                # that problem because it goes through `Effect.from_dict` +
+                # `effect_identity`, which NORMALISES. So two `InputSpec` dicts that
+                # parse to the IDENTICAL dataclass -- one written full, one omitting the
+                # optional keys whose value is `None` -- were refused
+                # `action_declarations_diverge`, **non-overridably, at all three doors,
+                # under `force`**, while the same omission applied to `effects` was
+                # PERMITTED. Identical data, opposite answers, and the only difference
+                # was the comparison method. **That is `C19-100`'s own sentence one key
+                # over: it CLOSED A LEGAL OPERATION**, and `import_types` takes its
+                # attributes from exactly the external JSON producers that omit nulls.
+                #
+                # **And `_unordered` unorders only the TOP level**, so a pure element
+                # ORDER flip of the NESTED `InputSpec.kinds` -- consumed as pure
+                # membership at `kind not in spec.kinds` -- refused non-overridably too.
+                # `ACTIONS.md` §1's non-goals say *no ordering*, and they do not stop at
+                # the first level of nesting.
+                #
+                # **R102 §3 said compare the four new keys as SETS like the read side.
+                # That was right in letter and the trap was one level deeper**: the fix
+                # is the top-level ordering AND the member normalisation, which is what
+                # `effects` had all along.
+                if self._declared_identities(key, left) == self._declared_identities(
+                    key, right
+                ):
+                    continue
+            elif key in self._UNORDERED_DECLARED_KEYS:
+                if self._unordered(left) == self._unordered(right):
                     continue
             elif left == right:
                 continue
             diverging[key] = [left, right]
         return diverging or None
+
+    #: The declared keys whose members are PARSED shapes rather than plain strings, and
+    #: so must be compared through the package's own `from_dict` rather than through
+    #: their stored JSON. `reachability` is a list of opaque strings and stays with
+    #: `_unordered`; `effects` keeps `effect_identity`, which already did exactly this.
+    _PARSED_DECLARED_KEYS = {"inputs": InputSpec, "preconditions": Precondition}
+
+    @staticmethod
+    def _declared_identities(key: str, raw) -> frozenset:
+        """One declared list as a SET of PARSED identities. `C19-107`, `C19-108`.
+
+        **Why parsed and not serialised.** `ACTIONS.md` §2.2 makes these keys lists of
+        typed shapes that live in `attributes` as plain JSON, and the package's own
+        `from_dict` is the one place that says what a stored dict MEANS -- it fills
+        defaults (`Precondition.namespace` reads `d.get("namespace") or "default"`) and
+        coerces (`InputSpec.required` reads `bool(...)`). Comparing the JSON instead
+        compares how a producer chose to spell it.
+
+        **Nested membership is unordered too.** `kinds` and `families` are consumed as
+        membership tests, never by position, so they are compared as sets. That is §1's
+        *"no ordering"* applied at the level where the ordering actually was.
+
+        **What is deliberately NOT decided here.** Every parsed field is part of the
+        identity, `why` included. `ACTIONS.md` §2.5 excludes `why` from identity for the
+        three protocol *effect* ops and says so explicitly; **no such rule exists for a
+        precondition**, and inventing one would be deciding what the registry refuses.
+        Routed, not ruled.
+
+        A member that will not parse keeps its own repr rather than being coerced into
+        agreement -- Rule U's shape at a comparison, the same cut `_effect_identities`
+        makes: *we could not read this* is not *this is the same*.
+        """
+        shape = Registry._PARSED_DECLARED_KEYS[key]
+        out = []
+        for item in raw or ():
+            try:
+                parsed = item if isinstance(item, shape) else shape.from_dict(item)
+                out.append(Registry._parsed_identity(parsed))
+            except (TypeError, ValueError, AttributeError, KeyError):
+                out.append(("<unreadable>", repr(item)))
+        return frozenset(out)
+
+    @staticmethod
+    def _parsed_identity(parsed) -> tuple:
+        """A parsed declaration member as a hashable identity, membership unordered."""
+        fields = []
+        for f in dataclasses.fields(parsed):
+            value = getattr(parsed, f.name)
+            if isinstance(value, (list, tuple)):
+                value = frozenset(value)
+            fields.append((f.name, value))
+        return (type(parsed).__name__, tuple(fields))
 
     @staticmethod
     def _effect_identities(raw) -> frozenset:

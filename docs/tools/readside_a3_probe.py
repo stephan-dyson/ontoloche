@@ -103,9 +103,11 @@ def walk(label, *, shape: str):
                     governance keys contradict.
     ``"bare"``      the hole `304967a` left on purpose -- the absorbed family declares
                     nothing, so it is not "declaring differently".
-    ``"uncompared"`` both families declare, and the four keys AGREE -- they differ on
-                    ``preconditions``, which is one of the four keys of `ACTIONS.md`
-                    2.2's eight that `_GOVERNANCE_KEYS` does **not** compare. Row 6d's
+    ``"uncompared"`` both families declare, and the four keys row 6d compared AGREE --
+                    they differ on ``preconditions``. **The name is now HISTORICAL:**
+                    founder ruling **R102** (`Q99`, "all eight", row 6g) put all eight
+                    declared keys into the comparator, so this walk is no longer an
+                    UNCOMPARED key and the write door now REFUSES it. Row 6d's
                     own finding A10 already observed that narrowing the tuple to two keys
                     survives the suite; this asks the complementary question -- what does
                     the tuple not reach at all?
@@ -210,7 +212,8 @@ def main() -> int:
         shape="bare",
     )
     walk(
-        "WALK 3 -- both declare, four keys AGREE, they differ on an UNCOMPARED key",
+        "WALK 3 -- both declare, row 6d's four AGREE, they differ on preconditions "
+        "(UNCOMPARED until R102; the write door now REFUSES this collapse)",
         shape="uncompared",
     )
     print("\n(Both walks are printed. A probe that runs only the walk it expects to")

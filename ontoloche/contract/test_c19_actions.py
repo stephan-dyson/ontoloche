@@ -4608,9 +4608,25 @@ def test_c19_99_two_agreeing_families_still_merge(adapter, make_registry):
     declarations AGREE must still collapse, exactly as `C10-09`, `C12-09`, `C12-15` and
     `C16-07` keep the operation each of their guards narrowed rather than closed.
 
-    It also pins what is **not** compared: `inputs`, `preconditions`, `reachability` and
-    `payload_schema` are the family's SHAPE, and a shape divergence does not let a caller
-    invoke something they could not invoke before.
+    > **AMENDED by row 6g, founder ruling R102 (`Q99` ruled `all eight`).** This
+    > docstring said: *"It also pins what is not compared: `inputs`, `preconditions`,
+    > `reachability` and `payload_schema` are the family's SHAPE, and a shape divergence
+    > does not let a caller invoke something they could not invoke before."* **R102
+    > ruled the opposite** -- every declared key is part of the identity -- and the
+    > sentence is kept struck rather than deleted because it was the shipped reasoning.
+    >
+    > **Two things worth saying about that sentence rather than just removing it.**
+    > First, its claim was **never exercised by this id's body**: `_verb` declares only
+    > `reversibility` and `approval_mode`, so both families here are identical on all
+    > eight keys and no shape divergence was ever constructed. It was prose asserting
+    > coverage the code did not have -- the shape `check_spec_drift.py` exists for and
+    > which nothing catches inside a docstring. Second, the reasoning was wrong on its
+    > own terms: a `preconditions` divergence **does** let a caller invoke something they
+    > could not invoke before, because the survivor's guard stops applying to the word
+    > the caller still uses. `C19-104` constructs exactly that.
+    >
+    > **What this id still pins is unchanged and is the half a careless fix deletes:**
+    > two families whose declarations AGREE must still collapse.
     """
     registry = make_registry(adapter, approval_policy="auto")
     if not registry.caps.stores_attributes:
@@ -4804,3 +4820,411 @@ def test_c19_103_an_extra_effect_and_a_differing_tier_still_refuse(
     )
     assert isinstance(tier, Refusal), ("min_auto_tier is a governance key", tier)
     assert "min_auto_tier" in tier.detail["diverging"], tier.detail
+
+
+# --------------------------------------------------------------------------------------
+# Row 6g -- founder ruling R102, `Q99` ruled `all eight`. The write doors compare every
+# key an action family declares, not the four `_GOVERNANCE_KEYS` row 6d needed for the
+# case in front of it.
+# --------------------------------------------------------------------------------------
+
+
+def _eight_kwargs(**overrides):
+    """All eight of `ACTIONS.md` §2.2's keys, with any of them overridable.
+
+    The base is **reversible** deliberately: §2.2's one cross-field rule is
+    ``reversibility="irreversible" => approval_mode MUST be "human"``, refused at
+    declaration, and an irreversible base would make the `approval_mode` cell
+    unmeasurable rather than measured.
+    """
+    kw = dict(
+        approval_mode="auto",
+        min_auto_tier="haiku",
+        reversibility="reversible",
+        effects=[
+            Effect(op="propose_type", namespace="default", kind="entity"),
+            Effect(op="host_state", why="writes a row in the host's own ledger"),
+        ],
+        inputs=[
+            InputSpec(name="target", ref="instance", kinds=("entity",)),
+            InputSpec(name="other", ref="instance", kinds=("entity",)),
+        ],
+        preconditions=[
+            Precondition(
+                kind="predicate_holds", subject="target", predicate="never_holds",
+                why="the family requires this predicate before it runs",
+            ),
+            Precondition(
+                kind="predicate_holds", subject="other", predicate="also_never_holds",
+                why="and this one too",
+            ),
+        ],
+        reachability=["mcp", "cli"],
+        payload_schema=None,
+    )
+    kw.update(overrides)
+    return kw
+
+
+def _verb_eight(registry, name, *, definition="one and the same verb", **overrides):
+    """A family declaring all eight keys. Identical definitions, for `C19-97`'s reason."""
+    return seed(
+        registry, name, kind="action", definition=definition,
+        attributes=action_attributes(**_eight_kwargs(**overrides)),
+    )
+
+
+def _eight_key_ground(registry):
+    """The rows an eight-key declaration references.
+
+    Their absence refuses the DECLARATION, which measures the fixture instead of the
+    door -- three of row 6g's census cells did exactly that before this was added.
+    """
+    for pred in ("never_holds", "also_never_holds"):
+        seed(registry, pred, kind="predicate")
+    for ent in ("guarded_thing", "other_thing"):
+        seed(registry, ent, kind="entity")
+
+
+def _merge_eight(registry, a, b):
+    return registry.merge_types(
+        a, b, "one and the same", merged_by="user:sd",
+        acknowledge=("no_consumer_evidence", "definitions_diverge"),
+    )
+
+
+def _skip_if_cannot_record(registry, out):
+    """`C19-100`'s audited pattern, reused rather than re-argued.
+
+    NOT REACHABLE is never a pass: the skip is gated on the CAPABILITY, so a store that
+    CAN record and still refused is a finding. **This is a skip decided by the
+    ENVIRONMENT, not by the result under test** -- the distinction three ids in this
+    suite have already been caught on the wrong side of.
+    """
+    if isinstance(out, Refusal) and out.reason == "cannot_record_override":
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", out.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the acknowledgement before the "
+            "governance keys are compared"
+        )
+    return False
+
+
+def test_c19_104_a_contradiction_on_preconditions_refuses_the_collapse(
+    adapter, make_registry
+):
+    """**Founder ruling R102 -- `Q99` is `all eight`.** The cell A3 still walked through.
+
+    `_GOVERNANCE_KEYS` compared four of `ACTIONS.md` §2.2's eight, and `preconditions`
+    was not one of them. **[Observed 2026-09-09 at `4960831`, by row 6f and independently
+    by the supervisor]** two families agreeing on all four compared keys and differing on
+    `preconditions` collapsed through `retire(successor=)` with **no refusal, no `force`
+    and no acknowledgement**; `resolve_type` then answered the dead word with the
+    survivor at **1.0**, a Haiku-tier actor recorded `applied`, and the survivor's ledger
+    read `n=0` -- the record filed under the dead word.
+
+    **That is the route by which entry `A3` fires this project's governance stop
+    criterion** (R100), and R102 is the ruling that closes it at the write door: *every
+    key an action family declares is part of the identity two families must share before
+    they may collapse.*
+
+    Non-overridable for the reason `C19-97` gives and this id does not restate.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _eight_key_ground(registry)
+    _verb_eight(registry, "old_verb")
+    _verb_eight(
+        registry, "new_verb",
+        preconditions=[
+            Precondition(
+                kind="predicate_holds", subject="target", predicate="never_holds",
+                why="the survivor guards this verb behind ONE precondition, not two",
+            ),
+        ],
+    )
+
+    merged = _merge_eight(registry, "old_verb", "new_verb")
+    assert isinstance(merged, Refusal), (
+        "two families whose preconditions contradict must not collapse onto one word "
+        "-- R102, Q99 ruled `all eight`",
+        getattr(merged, "reason", None),
+    )
+    assert merged.reason == "action_declarations_diverge", merged.reason
+    assert merged.detail["overridable"] is False
+    assert "preconditions" in merged.detail["diverging"], merged.detail
+
+    retired = registry.retire(
+        "old_verb", "superseded", retired_by="user:sd", successor="new_verb", force=True
+    )
+    assert isinstance(retired, Refusal), (
+        "force overrides what could be SEEN, never what would become TRUE", retired,
+    )
+    assert retired.reason == "action_declarations_diverge", retired.reason
+    assert retired.detail["overridable"] is False
+
+
+def test_c19_105_the_three_new_list_keys_are_order_insensitive_too(
+    adapter, make_registry
+):
+    """**`C19-100`'s defect, tripled by R102, and refused in advance.**
+
+    Row 6d's own A3 fix compared the list-valued `effects` with `!=`, so two families
+    whose governance was IDENTICAL and whose effects were merely written in a different
+    ORDER were refused `action_declarations_diverge` -- non-overridably, at all three
+    doors, under every acknowledgement and under `force=True`. In the registry's own
+    words it **CLOSED A LEGAL OPERATION**.
+
+    **`all eight` adds three more list-valued keys** -- `inputs`, `preconditions`,
+    `reachability` -- so the same `!=` would re-create that defect three more times, at
+    the door where it is non-overridable. `ACTIONS.md` §1's non-goals say *"no
+    ordering"*, and row 6f already answered this on the READ side with
+    `_UNORDERED_DECLARED_KEYS`, which this door now shares rather than reimplements.
+
+    **Each key is asserted in its own pair -- and the reason first published for that was
+    WRONG, so it is corrected here rather than quietly restated.** This id's docstring
+    claimed a single fixture reversing all three at once *"would go green while two of
+    the three comparisons were still `!=`"*. **It goes RED.** One refusal is enough to
+    fail the merge, so a combined fixture fails whenever **any** of the three is still
+    `!=`; it detects the defect perfectly well and merely does not say WHICH key caused
+    it. **Separate pairs buy failure LOCALISATION, not detection.**
+
+    **Found by the round's second lens, which built the combined fixture and RAN it**
+    instead of reasoning about it -- and the original sentence argued the opposite of
+    what the code does, which is the `C19-99` shape committed by the row created to catch
+    `C19-99`. The separate pairs are kept, because localisation on a non-overridable
+    refusal at three doors is worth having; the justification is now true.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _eight_key_ground(registry)
+
+    for i, key in enumerate(("inputs", "preconditions", "reachability")):
+        left, right = f"verb_{i}_a", f"verb_{i}_b"
+        forward = _eight_kwargs()[key]
+        _verb_eight(registry, left, **{key: list(forward)})
+        _verb_eight(registry, right, **{key: list(reversed(forward))})
+
+        out = _merge_eight(registry, left, right)
+        _skip_if_cannot_record(registry, out)
+        assert not isinstance(out, Refusal), (
+            f"{key!r} declared in a different order is the SAME declaration -- "
+            f"ACTIONS.md 1 says NO ORDERING, and C19-100 records what the opposite "
+            f"comparison cost at this very door",
+            key, getattr(out, "reason", None), getattr(out, "detail", None),
+        )
+
+
+def test_c19_106_an_absent_key_is_not_a_contradiction_on_the_four_R102_added(
+    adapter, make_registry
+):
+    """**W5 -- a key PRESENT on one side and ABSENT on the other. R102 §4 does NOT rule it.**
+
+    *"`all eight` says which keys are compared **when both sides declare**, not what to
+    do when one does not."* So this id pins the **least-refusing** answer for the four
+    keys R102 added -- the answer consistent with the shipped, argued declare-nothing
+    branch, *a family that has not DECLARED is not a family that declared differently* --
+    and it pins it so a later row cannot extend the `.get()` comparison onto these keys
+    by side effect and call the result symmetry with the read.
+
+    **The second case is the one that matters, and it is why both are asserted together.**
+    `ACTIONS.md` §2.2 says of `reachability`: *"an empty list is a POSITIVE declaration --
+    this host exposes me on no named surface -- not a forgotten field."* Under a
+    `mine.get(key)` comparison a family declaring `reachability=[]` and a family that
+    never declared `reachability` at all read as the **same empty set** and compare EQUAL,
+    while `reachability=["mcp"]` against that same absence compares UNEQUAL and refuses.
+    **A comparator that reads an absence as agreement in one case and as a contradiction
+    in the other is not applying a rule**, and row 6f's round 2 found that exact shape as
+    a BLOCKING on the read side.
+
+    **What this id does NOT touch:** the four keys `_GOVERNANCE_KEYS` already compared.
+    They refuse on a per-key absence TODAY, at `4960831`, non-overridably --
+    `6G-RUN.md` §1.5 -- and reversing shipped behaviour is a decision, not a tidy-up. It
+    is routed to the supervisor, not settled here.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _eight_key_ground(registry)
+
+    for i, declared in enumerate(([], ["mcp", "cli"])):
+        left, right = f"absent_{i}", f"present_{i}"
+        present = action_attributes(**_eight_kwargs(reachability=declared))
+        absent = dict(present)
+        absent.pop("reachability")
+        seed(registry, left, kind="action", definition="one and the same verb",
+             attributes=absent)
+        seed(registry, right, kind="action", definition="one and the same verb",
+             attributes=present)
+
+        out = _merge_eight(registry, left, right)
+        _skip_if_cannot_record(registry, out)
+        assert not isinstance(out, Refusal), (
+            "an ABSENT key is not a key declared differently -- R102 section 4 leaves "
+            "this unruled and row 6g takes the least-refusing option rather than "
+            "minting a refusal nobody decided",
+            f"reachability={declared!r} against absent",
+            getattr(out, "reason", None), getattr(out, "detail", None),
+        )
+
+
+def test_c19_107_a_genuinely_different_inputs_refuses_and_a_respelt_one_does_not(
+    adapter, make_registry
+):
+    """**The round's BLOCKING 1 and BLOCKING 3, in one id, because they are one gap.**
+
+    **BLOCKING 3 — `inputs` was load-bearing for ZERO ids and ZERO gate cells.** Dropping
+    it from the write door's key set left the contract suite **byte-identical to
+    baseline**. That is `C19-103`'s own recorded shape — *"a fixture that cannot fail on
+    its own subject, which is why the mutation removing half the rule survived"* — and
+    R102's landing re-created it for one of the four keys it added. `C19-105` only
+    asserts that a REORDERED `inputs` does **not** refuse; nothing asserted that a
+    genuinely different one **does**. The first half below is that assertion.
+
+    **BLOCKING 1 — the comparison was over SERIALISED TEXT, not parsed identity.** The
+    first cut compared `inputs` and `preconditions` through `_unordered`, which is
+    `json.dumps` over the raw stored dict, while `effects` went through
+    `Effect.from_dict` + `effect_identity`, which NORMALISES. So two `InputSpec` dicts
+    that parse to the **identical dataclass** — one written full, one omitting the
+    optional keys whose value is `None` — were refused `action_declarations_diverge`,
+    **non-overridably, at all three doors, under `force`**, while the same omission on
+    `effects` was PERMITTED. **Identical data, opposite answers, and the only difference
+    was the comparison method.** It CLOSED A LEGAL OPERATION, which is `C19-100`'s
+    sentence one key over, and `import_types` takes its attributes from exactly the
+    external JSON producers that omit nulls.
+
+    **Both halves are asserted together deliberately.** An id that only pins the refusal
+    would have gone green over the defect; an id that only pins the respelling would not
+    have closed the coverage gap. The pair is what makes the key load-bearing in the
+    direction that matters — *a fixture that cannot fail on its own subject* is the thing
+    being removed.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _eight_key_ground(registry)
+
+    # HALF ONE -- a genuinely different `inputs` REFUSES. Nothing asserted this before.
+    _verb_eight(registry, "pays_out")
+    _verb_eight(
+        registry, "disburses",
+        inputs=_eight_kwargs()["inputs"]
+        + [InputSpec(name="third", ref="instance", kinds=("entity",))],
+    )
+    out = _merge_eight(registry, "pays_out", "disburses")
+    assert isinstance(out, Refusal), (
+        "a family taking an input the other does not is not the same family -- R102 "
+        "ruled all eight, and `inputs` is one of the eight",
+        getattr(out, "reason", None),
+    )
+    assert out.reason == "action_declarations_diverge", out.reason
+    assert out.detail["overridable"] is False
+    assert "inputs" in out.detail["diverging"], out.detail
+
+    # HALF TWO -- the SAME declaration, respelt by a producer that omits null-valued
+    # optional keys, is the SAME declaration. `InputSpec.from_dict` and
+    # `Precondition.from_dict` are what say so.
+    full = action_attributes(**_eight_kwargs())
+    respelt = dict(full)
+    for key in ("inputs", "preconditions"):
+        respelt[key] = [
+            {k: v for k, v in member.items() if v is not None} for member in full[key]
+        ]
+    parsed_same = [
+        InputSpec.from_dict(a) == InputSpec.from_dict(b)
+        for a, b in zip(full["inputs"], respelt["inputs"])
+    ]
+    assert all(parsed_same), (
+        "the fixture must respell WITHOUT changing the parsed shape, or this id is "
+        "asserting something else entirely",
+        full["inputs"], respelt["inputs"],
+    )
+    seed(registry, "draws_down", kind="action", definition="one and the same verb",
+         attributes=full)
+    seed(registry, "withdraws", kind="action", definition="one and the same verb",
+         attributes=respelt)
+
+    respelt_out = _merge_eight(registry, "draws_down", "withdraws")
+    _skip_if_cannot_record(registry, respelt_out)
+    assert not isinstance(respelt_out, Refusal), (
+        "two declarations that parse to the identical shape are the SAME declaration -- "
+        "comparing their JSON compares how a producer chose to spell it, and refusing "
+        "on that closes a legal operation (C19-100's defect, one key over)",
+        getattr(respelt_out, "reason", None), getattr(respelt_out, "detail", None),
+    )
+
+
+def test_c19_108_nested_membership_inside_a_declared_input_is_unordered_too(
+    adapter, make_registry
+):
+    """**The round's BLOCKING 2. `ACTIONS.md` §1's *"no ordering"* does not stop at the
+    first level of nesting.**
+
+    `_unordered` unorders the TOP-LEVEL list. `InputSpec.kinds` is a list INSIDE a
+    member, and it is consumed as pure membership — `kind not in spec.kinds` at the
+    invocation door, `_FORBIDDEN_INPUT_KIND in spec.kinds` at the declaration door —
+    never by position. So a family declaring `kinds=("entity","edge")` and one declaring
+    `kinds=("edge","entity")` are the same family, and the first cut of row 6g's
+    comparator refused them **`action_declarations_diverge`, non-overridably, at all
+    three doors**.
+
+    **`C19-105` cannot see this**, because it reverses only the top-level list. That is
+    the reason this is its own id rather than another iteration of that loop: a defect
+    one level down needs a fixture one level down.
+
+    **The first attempt to reproduce it FAILED, and the reason is kept** because it is
+    the same mistake row 6g's census made three times: `kinds=("entity","predicate")` is
+    refused at DECLARATION with `input_kind_mismatch` — `predicate` is the one forbidden
+    input kind (`ACTIONS.md` §2.3) — so the pair never reached the door and the
+    non-reproduction was about the fixture, not the comparator. **A failed reproduction
+    filed as evidence of absence is false assurance**; this one was retried with valid
+    kinds instead.
+    """
+    registry = make_registry(adapter, approval_policy="auto")
+    if not registry.caps.stores_attributes:
+        pytest.skip("this backend stores no attributes, so a family cannot be declared")
+    _eight_key_ground(registry)
+
+    # **`preconditions` is narrowed WITH `inputs`, and the first cut forgot to.** A
+    # `Precondition.subject` must name a declared `InputSpec` (ACTIONS.md 2.4), so
+    # dropping the second input while leaving the condition that references it is
+    # refused `attributes_schema_violation` at DECLARATION -- the pair never reaches the
+    # door, and the cell measures the fixture. Row 6g's census made this same mistake
+    # three times and it is written here rather than quietly corrected.
+    forward = action_attributes(
+        **_eight_kwargs(
+            inputs=[InputSpec(name="target", ref="instance", kinds=("entity", "edge"))],
+            preconditions=[
+                Precondition(
+                    kind="predicate_holds", subject="target", predicate="never_holds",
+                    why="the family requires this predicate before it runs",
+                ),
+            ],
+        )
+    )
+    flipped = dict(forward)
+    flipped["inputs"] = [
+        dict(member, kinds=list(reversed(member["kinds"])))
+        for member in forward["inputs"]
+    ]
+    assert flipped["inputs"][0]["kinds"] != forward["inputs"][0]["kinds"], (
+        "the fixture must actually reverse something, or this id asserts nothing",
+        forward["inputs"], flipped["inputs"],
+    )
+
+    seed(registry, "opens_gate", kind="action", definition="one and the same verb",
+         attributes=forward)
+    seed(registry, "unlatches", kind="action", definition="one and the same verb",
+         attributes=flipped)
+
+    out = _merge_eight(registry, "opens_gate", "unlatches")
+    _skip_if_cannot_record(registry, out)
+    assert not isinstance(out, Refusal), (
+        "the kinds a declared input accepts are a SET -- they are read by membership "
+        "and never by position, and ACTIONS.md 1 says NO ORDERING",
+        getattr(out, "reason", None), getattr(out, "detail", None),
+    )
