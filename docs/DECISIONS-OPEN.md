@@ -238,14 +238,22 @@ Register entry: [`2026-08-30-4c-rulings-R48-R57.md`](https://github.com/stephan-
 
 ### 7 · Where the project stands
 
-`main` = `origin/main`, **everything pushed**, working tree clean, `check_links` green and `check_spec_drift` exit 0.
+**Every figure in this item was re-measured at 2026-09-10 00:20.** It had gone stale in four places at once, which is why it now carries a stamp.
 
-**Corrected 2026-09-09:** `STATUS.md` had been naming `08cc48a` as the day's landing commit with two commits landed after it, and the first fix for that went stale the moment it was pushed, because a document that pins the current head is wrong on its own write. It now states the fact and names no head. This page carries no head either, for the same reason.
+`main` = `origin/main`, **everything pushed**, working tree clean.
 
-**No session is running** in this project; row 6e was closed after its record landed and was indexed in `docs/README.md`.
+**The standing gate set is FIVE, not two**: `check_links`, `check_spec_drift`, `check_merge_guard`, `check_capability_matrix`, and `check_skip_census` — the fifth added by row 6h. **All five exit 0 under my own run.** *(This item said "`check_links` green and `check_spec_drift` exit 0" for days, naming two of five.)*
 
-**Kill-row count stays TWENTY-THREE.** Governance register opens at **ONE**. Next ruling **R99**.
+**No session is running** in this project. *(This item said row 6e was the last one closed; rows 6f, 6g and 6h have opened and closed since.)*
+
+**Kill-row count stays TWENTY-THREE.** The governance register still counts **ONE**, and its single entry `A3` is now **CLOSED** — the criterion **stays ARMED**, because armed and firing are different states. **The latest ruling is R104.** *(This item said "next ruling R99", five rulings ago.)*
+
+**This page still carries no current-head sha**, and neither does `STATUS.md`, because a document that pins the current head is wrong on its own write.
 
 ### 8 · Beacon is not at risk
 
-The 2026-09-07 and 2026-09-09 commits touch `docs/` only — no storage contract — so beacon's pin `802ddf02` is unaffected, and it was re-verified as an ancestor at each landing.
+**Beacon's pin `802ddf02` is still an ancestor of `origin/main` — [Observed 2026-09-10 00:20], by `git merge-base --is-ancestor`, not by inference.** That is the claim that matters and it holds.
+
+**But the reason this item used to give was wrong, and a reassurance resting on a false premise is worse than none.** It said the 2026-09-07 and 2026-09-09 commits *"touch `docs/` only"*. They do not. Since 2026-09-07 the non-`docs/` files changed are **`ontoloche/registry.py` and `ontoloche/aio/registry.py`**, four contract test files across both trees, `ontoloche/contract/test_manifest.py`, `ROADMAP.md` and `STATUS.md`. **The registry itself changed — that was the entire point of rows 6f and 6g**, which implemented your `read` and `all eight` rulings.
+
+**So the honest statement is the measured one:** the pin is verified as an ancestor at each landing, and it is verified again here.
