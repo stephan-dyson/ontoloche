@@ -1,4 +1,10 @@
-# 6J-RUN — THE FIFTH GATE'S REGRESSION-DETECTION HOLE, CLOSED AS AN AXIS
+# 6J-RUN — THE FIFTH GATE'S REGRESSION-DETECTION HOLE, NARROWED AS AN AXIS. IT SHIPS WITH KNOWN HOLES.
+
+> **`J73`, CORRECTED IN PLACE. THIS TITLE SAID "CLOSED AS AN AXIS" UNTIL THE LAST COMMIT OF THE ROW.**
+> `answers-10` §4.3 forbids it in terms — *"It never says 'closed'. A later reader must not be able to
+> conclude from `6J-RUN.md` that the axis is complete."* — and §6, written to obey that ruling, sat 1800
+> lines below the first line a reader sees. **The title was written in §0 before any of this was known and
+> was never revisited.** Found by a round-5 lens and ruled on by the supervisor in `answers-11` §6.
 
 **Row 6j, under the brief `2026-09-10-oo-gate-hole-followon.md` and the answers file
 `2026-09-10-oo-6j-supervisor-answers-1.md` that carried the GO.**
@@ -714,8 +720,10 @@ three.
 > exactly that, `2 / 1 / 0`. Row 6i's fourth repair, `test_c10_merge_types.py:1374`, fires under a
 > **different** message ("refuses the acknowledgement"), and its `test_c9_retire.py` copy fires on no leg.
 >
-> **THE SHAPE IS THE POINT: `6 + 3 = 9`, so the wrong split summed correctly.** `6I-RUN.md` §6.6 names that
-> as the error that survives review, this record quotes that warning two sections earlier, and then commits
+> **THE SHAPE IS THE POINT: `6 + 3 = 9`, so the wrong split summed correctly.** `6I-RUN.md` **§1.1, at line
+> 228**, names that as the error that survives review — ***"A wrong split that sums correctly is exactly the
+> shape that survives review"*** — **(`J81`: this cited §6.6, which is that row's round table and says
+> nothing of the kind. `R104`'s class, inside the correction whose subject is a wrong split.)** — this record quotes that warning two sections earlier, and then commits
 > it. **Found by two independent lenses; one of them also checked it against `6I-RUN.md` §4.1's landed table
 > and found this row contradicting a record it had itself cited.**
 
@@ -1033,7 +1041,7 @@ three helper functions row 6i repaired last night.**
 
 ### §3.5 — What is open, and where it is written down
 
-**THREE items are with the supervisor in
+**FIVE questions went to the supervisor in
 `C:\Users\steph\.claude\fleet-supervisor\briefs\2026-09-10-oo-6j-questions.md`**, each with the options,
 this row's recommendation, and what it blocks:
 
@@ -1220,7 +1228,13 @@ if why == "cannot_record_override":
 
 **That classified `S5`. Delete the alias line and the identical code classifies `S2`.**
 `_capability_proof` was handed `read_obs` — only the names the GUARD reads — so `_capability_expr`'s own
-CALIBRATION case label at `check_skip_census.py:1732` **(`J70`: this record attributed the sentence first to `_capability_expr`'s DOCSTRING and then to its in-function COMMENT. It is neither — it is a case LABEL, added in the same commit as this prose, and the docstring says something else. `R104`'s class again, this time against this row's own source file)**, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
+in-function comment at `check_skip_census.py:681-682` **(`J74`: `J70` was WRONG on all three of its claims
+and it REVERTED A CORRECT CITATION. [Observed] the sentence IS the in-function comment, verbatim, at 681-682
+— which is what `710f732` already said. `a1ce09d`'s `J70` changed a right citation to a wrong one, pointing
+at line 1732, which holds a DIFFERENT sentence — `gone.caps`, no `.stores_events`, no "where `gone` is the
+result under test" — inside a `CALIBRATION` tuple, landed in a different commit. **A correction that makes
+the record worse is the sharpest form of the class this row keeps finding, and the supervisor ruled it back
+in `answers-11` §6 using this row's own words for it.**)**, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
 the environment however it is spelled"*, never fired. **It now gets the function's full observation set.**
 
 **`J32` and `J33` are `F15` pointed the other way, twice.** A `caps = adapter.capabilities()` proof — a
@@ -1326,6 +1340,105 @@ MAJORs — **had been seen by no lens.** **`F14` asserted a round before it ran;
 a reader took the review as finished. Same defect class, opposite direction.** §4.1 now carries round 3 and
 the requirement for round 4.
 
+### §3.9 — ROUND 5: THE LAST ROUND. IT FOUND FOUR REACHABLE IN-SCOPE MAJORS AND THREE OF THEM WERE THIS ROW'S.
+
+**Reviewed `adddae8`. The tree was FROZEN for the whole round** — the first round run under the rule
+`J71`/§4.3.2 produced, and the reason §4.3.2 exists.
+
+| lens | subject | verdict | raw findings |
+|---|---|---|---|
+| N | the classifier, with a REACH verdict required per finding | `NOT YET` | 3 MAJOR in-scope, 6 MINOR |
+| O | every number and citation | `NOT YET` | 1 MAJOR in-scope, 15 record MAJOR, 6 MINOR |
+| P | the document as a series | `NOT YET` | 12 record MAJOR, 10 MINOR — **and no in-scope code MAJOR** |
+
+**THE FOUR, EVERY ONE REPRODUCED HERE BEFORE IT WAS ACCEPTED, EVERY ONE WITH ITS REACH MEASURED:**
+
+| # | shape | direction | root cause | reach |
+|---|---|---|---|---|
+| 1 | a guard naming a DISJUNCTION of reasons | **false BLESSING** | **this row's `_guard_narrows`** | **6 live `.reason in (...)` sites** |
+| 2 | a WALRUS in the guard | false REFUSAL + false sentence | **this row's round-2 fix** | 2 live walrus skip guards |
+| 3 | the system driven through a plain FUNCTION | false REFUSAL + false sentence | routed cause, in-scope SENTENCE | 11 live functions |
+| 4 | the observation in the RECEIVER | **false BLESSING** | **this row's round-4 fix** | 4 live strict instances |
+
+**AND THE FINDING IS NOT ANY OF THEM. THE SUPERVISOR RULED IT IN `answers-11` §1:**
+
+> **"After five rounds, this row's fix rate has become the dominant source of defects in the instrument it
+> was opened to repair. More fixing here is the wrong instrument, not the right one."**
+
+**The count did not fall — 6, 7, 2, 7, 4 — and the COMPOSITION INVERTED.** Rounds 1 to 4 found holes the
+axis never closed. **Round 5 mostly found holes this row opened.** Eight streak instances deep, three of
+them arriving in one round.
+
+**THIS ROW STOPPED AND BROUGHT IT WITHOUT FIXING**, per `answers-10` §3. **And it reported that its own
+recommendation had grown against its own interest** — `Q6` recommended fixing the two that were this row's;
+the addendum reported it was three of four and said so before the ruling rather than after. **`Q6` also
+carried a prediction that was WRONG and is flagged as such in the questions file: *"Round 5's third lens has
+not reported. Its subject is numbers and citations, so it cannot change this answer."* It changed the
+answer.**
+
+### §3.9.1 — THE ASYMMETRY THAT DECIDED THE RULING, and it is why ONE change ships
+
+**Option 2 — fix nothing, route everything — was REFUSED, on a distinction this row raised and the
+supervisor ruled on:**
+
+> **"A gate that UNDER-refuses is no worse than the gate it replaces."** At `16becf6` the gate blessed
+> everything carrying a capability assertion — that is `F12`. Residual blessing holes are strictly better
+> than that, and they are routed with executable evidence.
+>
+> **"A gate that OVER-refuses while printing a FALSE REASON is WORSE than the gate it replaces."**
+
+**Quoting this row's own sentence back as the thing being ruled on:** *"They will not argue with the gate.
+They will rewrite correct code to satisfy it, or delete the assertion."*
+
+**That is the instrument causing the damage it exists to prevent, and it is NEW HARM THIS ROW INTRODUCED.
+It must not ship.**
+
+### §3.9.2 — WHAT SHIPPED: THE `why` TEXT, AND NOTHING ELSE
+
+**The ruling: `answers-11` §3.** *"The gate must never assert what it has not established. Where the
+classifier cannot establish the proof, the sentence says what it could not check."* **No classifier changes
+— not the walrus predicate, not the receiver branches, not `_guard_narrows`.**
+
+**PROVEN, not asserted. [Observed — both modules parsed, every string constant normalised to a single
+placeholder, the ASTs compared]** the AST of `check_skip_census.py` at `adddae8` and at the landed commit
+are **IDENTICAL**. **No control flow, no predicate, no name, no default argument differs. The only change is
+string content.**
+
+| the sentence that stood | what it asserted that was not established |
+|---|---|
+| *"the guard tests the observation without naming WHICH outcome the capability explains"* | that the GUARD names nothing — when the checker merely could not read it |
+| *"narrows on a literal outcome"* | **singular**, about guards naming two, three or four |
+| *"it reads the capability off X — THE RESULT UNDER TEST"* | that a fixture-built registry IS the result |
+| *"the FORM is fine; the OWNER is not"* | a verdict on an owner the checker had classified, not established |
+
+**Each now reports what THIS CHECKER could not do, names the known shapes it cannot read, points at §5, and
+— the operative half — TELLS THE READER TO BASELINE THE SITE RATHER THAN REWRITE THE TEST.**
+
+**So the walrus and plain-function shapes are STILL REFUSED. They are refused HONESTLY**, and they land in
+the baseline as `Q1`'s category — ***proof exists, the instrument cannot see it.*** **That is the harm
+closed without touching the machinery generating the defects**, which is the whole of the ruling.
+
+**THE CHECK THE RULING NAMED, and it is why this is a re-pass and not a round:** the `why` change touches no
+classification, **so the census cannot move.** **[Observed]** `61 / 44 / 5 / 1 / 15 / 13` = 139, before and
+after, gate exit 0, 47 calibration cases and 11 `ROUTED`. **If a cell had moved, the change was not what it
+claimed and this row stops.** It did not.
+
+### §3.9.3 — ALL FOUR CLASSIFICATIONS ARE ROUTED, WITH THEIR REPRODUCTIONS IN THE GATE
+
+**`ROUTED` now carries ELEVEN entries** — the seven from `Q4` and the four from round 5 — and
+`--selftest` prints every one on every invocation as `ROUTED (known-wrong, still <category>)`. **The next
+row inherits executable reproductions, not this prose.**
+
+**For #1 the record states BOTH READINGS and picks neither**, because the supervisor ruled that picking is
+*"a decision for a row that can measure the consequences of each, and this row cannot without more
+surgery."*
+
+- **Reading A:** each disjunct names an outcome, so the rule in §0.2 admits the guard, and the defect is
+  that the `why` says *"a literal outcome"* about a guard naming four — **the `F15` shape.**
+- **Reading B:** the rule should require the guard to name the outcome the capability explains and no
+  others, so admitting a disjunction is `F12`'s hazard with the family written out.
+
+**Either reading leaves an in-scope code defect, which is why it is routed rather than closed.**
 ---
 
 ## §4 — WHAT THE ROUNDS SAY ABOUT THE ROUNDS
@@ -1337,8 +1450,13 @@ the requirement for round 4.
 | 1 | 4 lenses | `a9bb767` | 1 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 22 MINOR | `J1`-`J18` |
 | 2 | 3 lenses | `d33ccce` | 0 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 20 MINOR | `J20`-`J37` |
 | 3 | 3 lenses | `5ac5ec0` | 0 `SHIP IT`, 3 `NOT YET` | 19 MAJOR, 21 MINOR | `J38`-`J61` |
-| 4 | 3 lenses | `11c4046` | 0 `SHIP IT`, 3 `NOT YET` (2 of 3 reported) | 14 MAJOR, 15 MINOR so far | `J62`-`J66` |
-| | **13 lens-passes so far** | | **1 `SHIP IT`, 12 `NOT YET`** | | **`J1`-`J66`, plus `J19`** |
+| 4 | 3 lenses | `11c4046` (tail against `710f732` — §4.3.2) | 0 `SHIP IT`, 3 `NOT YET` | 21 MAJOR, 17 MINOR | `J62`-`J72` |
+| **5** | **3 lenses** | **`adddae8`, FROZEN throughout** | **0 `SHIP IT`, 3 `NOT YET`** | **4 in-scope code MAJOR, 27 record MAJOR, 22 MINOR** | **`J73`-`J74` + the four ROUTED** |
+| | **16 lens-passes** | | **1 `SHIP IT`, 15 `NOT YET`** | | **`J1`-`J74`, plus `J19`** |
+
+**`J75`: this totals row has now been corrected THREE times — `J67` closed it four findings short, and it
+closed six short again after round 4 — so the rule this row leaves behind is that the register is
+recomputed from `grep -oE 'J[0-9]+' ` rather than incremented by hand.** **[Observed — `grep -oE 'J[0-9]+' docs/runs/6J-RUN.md | sort -u -V`]** the register runs to **`J82`** with **77 distinct labels**; the 5 numbers not written as prose blocks are `J39`-`J45`, which live in the gate as `ROUTED` entries `Q4-1`..`Q4-7`, and `J51`, which is §3.8's round-3 blocker. **This line is recomputed by that command, not incremented.**
 
 **`J39`-`J45` ARE THE SEVEN `Q4` ROUTINGS**, carried in §5 item 8 and pinned in the gate as `ROUTED[0..6]`
 rather than written as prose findings. **`J51` is the round-3 blocker — the record not saying a round 3
@@ -1347,7 +1465,11 @@ existed — which §3.8 records.** **(`J67`: the totals row previously closed on
 saying where they lived. A register that closes four findings short is the same defect as a register that
 closes a round short, which is what blocked the previous round.)**
 
-**ROUND 4 IS REQUIRED AND HAS NOT RUN.**
+**`J76`, CORRECTED IN PLACE: this read "ROUND 4 IS REQUIRED AND HAS NOT RUN" and stood, at HEAD, ten lines
+below the table recording round 4 as three lenses over `11c4046`.** Two round-5 lenses found it
+independently. **It is `F14` pointed the other way — the ledger saying OUTSTANDING while the row above says
+DELIVERED — in the section written to make the streak honest.** Round 4 ran, round 5 ran and was the last,
+and §3.9 records it.
 
 **THE LOOP'S STOPPING CRITERION — WITHDRAWN AND REPLACED, and the replacement is this row's wording.**
 
@@ -1398,7 +1520,7 @@ finding, not the defect, that I would need to rule on."*
 
 **`6I-RUN.md` §6.6's rules still bind within that:** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
 be followed by a full round that sees it"*, and *"the last round must see the final text"*. **Round 3
-produced nineteen MAJORs, so round 4 is owed and this table says so rather than closing on a totals row.**
+produced nineteen MAJORs, so round 5 was the last round and §3.9 records what it found rather than closing on a totals row.**
 Nothing goes in after the last round, and round 3 was not it.
 
 **`J19` carries no round.** It is the ident defect, and **no lens found it** — §3.0.
@@ -1427,7 +1549,7 @@ this project got better between rounds, and that is why round 2 found more.**
 
 **READ THE ROUND-4 RESULT AGAINST THIS FIRST, on the supervisor's ruling: if round 4's only in-scope code
 MAJORs are again in fixes made during round 3, THE FINDING IS THAT — not the individual defects — and it is
-the SEVENTH instance.** Three of the six below are already this row's own, all three found within a round
+the SEVENTH instance.** **FOUR** of the six below are this row's own **(`J79`: this said THREE while the heading eleven lines down says FOUR — `J66` updated the heading and the table and left this sentence above them)**, all four found within a round
 of being written.
 
 **Counted, not remarked on:**
@@ -1484,7 +1606,7 @@ FIX — §3.6.** **(`J48`: this read "and no row has asked it", which contradict
 its own fix in §3.6"* and §3.6's answer to it, three hundred lines earlier in the same document.)** Instances 2 and 4 fail it outright. Instances 1 and 3
 fail a variant of it — *did the fix's own reach shrink where nobody was looking?*
 
-### §4.3 — A PREDICTION SCORED BEFORE THE ARTEFACT SETTLED, FOUR TIMES
+### §4.3 — A PREDICTION SCORED BEFORE THE ARTEFACT SETTLED — **the heading said FOUR, the table says SEVEN, and §4.3.1 adds an EIGHTH. `J77`: three counts of one thing in one section, which is `J66`'s defect one section away. The table is the count.**
 
 **The supervisor flagged two instances and asked whether a third would make it systemic. There are SEVEN, and one of them sits under a ruling.**
 
@@ -1492,7 +1614,7 @@ fail a variant of it — *did the fix's own reach shrink where nobody was lookin
 |---|---|---|---|
 | `P1` — "the census moved 0" | `9b00bcc` | `ace7081`, and again at `13de039` | `J20` / §1.4.1 |
 | §3.6's condition 1 — "`why` changed: 0" | mid-`d33ccce` | later in `d33ccce` | `J21` |
-| §1.6's "NINE of the fourteen" | `9b00bcc` | `ace7081`, then round 2 | `J24` |
+| ~~`§1.6's "NINE of the fourteen"`~~ | — | — | **`J78`: STRUCK. This and the row below are the SAME §1.6 sentence at two stages of one staleness chain, counted twice — §5 item 9 corrects this record for exactly that act. The table is SIX.** |
 | §3.3's "one guard-edit and it is invisible" | `ace7081` | `d33ccce`, the next commit | `J25` / `J53` |
 | §3.8's nine-shape table, column headed `HEAD` | `5ac5ec0` | `596cb93` — **the commit that wrote it** | `J68` |
 | §3.4's item-2 table, **which a RULING rests on** | `a9bb767` | `13de039` | `J69` |
@@ -1504,7 +1626,7 @@ row keeps changing, and a round that produces MAJORs guarantees the artefact cha
 
 **THE RULE THIS ROW DRAWS FROM IT, offered to the supervisor rather than minted:** *a measurement of the
 instrument is stamped with the commit it was taken at, and every such measurement is RE-TAKEN after the last
-round.* **§1.4.1 is that re-take** — **`J52`: this pointed at "§6", which does not exist. This document runs §0 to §5. The number was carried from `answers-7` §3's *"Say so in §6 if it applies"*, which is `6I-RUN.md`'s numbering, and imported without remapping.** `P2` and `P3` survived the re-take; `P1` did not.
+round.* **§1.4.1 is that re-take** — **`J52`: this pointed at "§6", which did not exist WHEN IT WAS WRITTEN. **`J80`: it does now — `adddae8` added §6, so this correction was falsified by a later commit of the same row, inside the section whose subject is measurements going stale under a moving artefact.** The number was carried from `answers-7` §3's *"Say so in §6 if it applies"*, which is `6I-RUN.md`'s numbering, and imported without remapping.** `P2` and `P3` survived the re-take; `P1` did not.
 
 ### §4.3.1 — `J71`: THIS ROW CLAIMED CORRECTIONS IN COMMIT MESSAGES THAT WERE NOT IN THE TREE
 
@@ -1554,7 +1676,7 @@ that expands to from the prompt."*
 **This row did not issue that command — one of round 4's lenses did**, building the four
 classifier × tree repos that separate *"my fix caused this"* from *"this was already here"*. **It is still
 this row's defect.** The standing rule — ***`rm` takes a LITERAL absolute path, never a `$var`*** — is one
-the row knows and applies to itself, **and none of the twelve lens briefs written in this row carried it.**
+the row knows and applies to itself, **and none of the lens briefs written in this row up to that point carried it **(`J82`: this said TWELVE while §4.1 counts sixteen lens-passes; the briefs are one per lens, so the figure is however many had been written by round 4 — stated as a relation rather than a number, because the exact count was never measured)**.**
 A brief that tells a subagent where to put scratch files and not how to delete them has delegated the
 dangerous half and kept the safe half.
 
@@ -1758,7 +1880,7 @@ disables the de-assertion ratchet**, which the code's own docstring calls *"the 
 this gate"*. **(This item read "TWO TOOLING DEFECTS" and its first was already item 7's second bullet —
 counted twice, in a section whose unit of count is the point.)**
 
-**10. OPEN WITH THE SUPERVISOR, NOT WITH THE NEXT ROW.** `Q1`, `Q2`, `Q3` and `Q4` are all RULED.
+**10. OPEN WITH THE SUPERVISOR, NOT WITH THE NEXT ROW.** `Q1` through `Q6` are ALL RULED — including `Q5`, whose adopted criterion was this row's own sentence and is now the standing stopping rule for every subsequent loop, and `Q6`, which ruled that this row's fix rate had become the dominant defect source.
 **§4.3's proposed rule — *a
 measurement of the instrument is stamped with the commit it was taken at, and every such measurement is
 re-taken after the last round* — is an OFFER and has no ruling.** This row minted nothing.
@@ -1793,7 +1915,7 @@ constant, and a capability assertion nested one `if` deeper in the branch.
 than deferred. `STATUS.md` is correctly a landing task, and under the standing rule its update regenerates
 its local HTML mirror. **And the supervisor is told before this row pushes.**
 
-**12. ROUND 4 IS OWED.** §4.1 records it. Round 3 produced nineteen MAJORs; nothing goes in after the last
+**12. THE ROUNDS ARE FINISHED.** Five ran; §4.1 records which saw which text. Round 5 was the last by ruling and produced four routed classifications; nothing goes in after the last
 round, and round 3 was not it.
 
 ---

@@ -890,7 +890,13 @@ def _guard_narrows(pairs, observations: set[str]) -> str:
             # carried whole rather than split.
             effective.append(ast.UnaryOp(op=ast.Not(), operand=test))
     if any(_positive_naming(s, observations) for s in effective):
-        return "narrows on a literal outcome"
+        # NOT "a literal outcome" -- singular. This gate checks that AT LEAST ONE
+        # literal naming is present; it does NOT check that the guard names exactly
+        # one. `x.reason in ("a", "b", "c", "d")` satisfies it, and a capability
+        # assertion under it fires on the three the capability does not explain.
+        # That is routed (`6J-RUN.md` §5) and the sentence must not overstate what
+        # was established while it stands.
+        return "carries at least one literal naming of an outcome"
     exempt = [s for s in effective if _establishes_not_that_type(s, observations)]
     family = [
         s
@@ -921,8 +927,12 @@ def _why_not_falsifying(test, cap_env, all_observations: set[str]) -> str:
     if shared:
         return (
             "it reads the capability off " + ", ".join(sorted(shared))
-            + " -- THE RESULT UNDER TEST -- which is not a fact about the "
-            "environment however it is spelled. The FORM is fine; the OWNER is not"
+            + ", which THIS CHECKER CLASSIFIED as an observation. If that is right, "
+            "the capability is being read off the result under test and is not a fact "
+            "about the environment however it is spelled. **This checker's observation "
+            "roots are known to misclassify a fixture-built registry when the system is "
+            "driven through a plain function rather than a method** -- `6J-RUN.md` §5 "
+            "item 3. The FORM of the assertion is fine either way"
         )
     if any(
         isinstance(nd, ast.Attribute)
@@ -931,9 +941,9 @@ def _why_not_falsifying(test, cap_env, all_observations: set[str]) -> str:
         for nd in ast.walk(test)
     ):
         return (
-            "it reads the capability off a FRESH CALL to the system, so the owner "
-            "is a result under test that no name holds. The FORM is fine; the "
-            "OWNER is not"
+            "it reads the capability off a call this checker classified as an "
+            "OBSERVATION, so no name holds the owner and it cannot be checked "
+            "further. The FORM of the assertion is fine"
         )
     return (
         "that is not a form this gate can verify FAILS on a backend holding the "
@@ -1004,9 +1014,14 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
                     held = ast.unparse(stmt.test)
                     break
         base = (
-            "the guard tests the observation without naming WHICH outcome the "
-            "capability explains, so an assertion under it fires on every other "
-            "outcome too"
+            "THIS CHECKER COULD NOT ESTABLISH that the guard narrows to the outcome "
+            "the capability explains. It reads a literal `==`/`is`/`in` naming, a "
+            "`startswith`/`endswith` prefix, an `any(...)` over an observed "
+            "collection, or `not isinstance(<obs>, Refusal)`, and it found none of "
+            "those here. THAT IS A STATEMENT ABOUT THIS CHECKER, NOT ABOUT THE GUARD: "
+            "known shapes it cannot read include a walrus in the guard and several "
+            "receiver spellings -- `6J-RUN.md` §5 items 2 and 4. If the proof is "
+            "sound, BASELINE THIS SITE rather than rewriting the test"
         )
         if held:
             return "", (
@@ -1199,10 +1214,12 @@ def classify_source(src: str, rel: str) -> list[Site]:
                          "guard reads " + ", ".join(sorted(read_obs))
                          + f" -- the result under test -- but it {detail}, and the block "
                          f"asserts `{proof}` before it skips, an expression that FAILS on "
-                         "a backend holding the capability. CHECKED: the narrowing, the "
-                         "falsifying sense, and that the assertion is defeatable. NOT "
-                         "CHECKED, because no AST can know it: that this capability is "
-                         "the one that explains this outcome")
+                         "a backend holding the capability. CHECKED: that a narrowing is "
+                         "PRESENT, the falsifying sense, and that the assertion is "
+                         "defeatable. NOT CHECKED: that the guard names EXACTLY one "
+                         "outcome rather than several (`6J-RUN.md` §5 item 1), and -- "
+                         "because no AST can know it -- that this capability is the one "
+                         "that explains this outcome")
                 else:
                     emit(UNDER_TEST,
                          "guard reads " + ", ".join(sorted(read_obs))
@@ -1998,6 +2015,68 @@ def test_f15_reworded(registry):
 # ---------------------------------------------------------------------------
 
 ROUTED: tuple[tuple[str, str, str], ...] = (
+    (
+        "R5-1: a DISJUNCTION of reasons buys S5, and the enumerated family is C19-100's "
+        "hazard written out. On a backend with stores_events=False refusing "
+        "live_consumers, the assertion PASSES and the test skips on an outcome the "
+        "capability does not explain. SIX live `.reason in (...)` sites, one edit away",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_disjunction_of_reasons(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if gone.reason in ("cannot_record_override", "live_consumers"):
+        assert registry.caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert gone.aliases
+''',
+    ),
+    (
+        "R5-2: a WALRUS in the guard is invisible to _positive_naming, so the canonical "
+        "live S5 narrowing is REFUSED. Split the walrus onto its own line and the "
+        "identical test is S5. TWO live walrus skip guards",
+        UNDER_TEST,
+        '''
+import pytest
+def test_walrus_in_guard(registry):
+    if (gone := registry.retire("beta", "gone", retired_by="user:sd")).reason == "cannot_record_override":
+        assert registry.caps.stores_events is False, gone
+        pytest.skip("this backend cannot record the override")
+    assert gone.ok is True
+''',
+    ),
+    (
+        "R5-3: the system driven through a plain FUNCTION leaves the fixture registry "
+        "classified an observation, so a CORRECT proof is refused. Change one word to a "
+        "method call and the same test is S5. ELEVEN live functions",
+        UNDER_TEST,
+        '''
+import pytest
+def test_function_driven(adapter, make_registry):
+    registry = make_registry(adapter, approval_policy="auto")
+    seed(registry, "row_0", definition="a row")
+    gone = registry_import(registry, "imported_here")
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_aliases is False
+        pytest.skip("this backend cannot record the override")
+    assert gone.ok is True
+''',
+    ),
+    (
+        "R5-4: the round-4 receiver check reached the startswith branch only, so moving "
+        "the observation into the RECEIVER buys S5 on the Eq branch. FOUR live "
+        "instances of the strict shape",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_observation_in_receiver(registry, adapter):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and adapter.dsn[:len(gone.reason)] == "postgres":
+        assert registry.caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert gone.aliases
+''',
+    ),
     (
         "Q4-1: the PINNED C10-16 shape, defeated by ONE ADDED LINE. F12 needed a "
         "clause REMOVED; this needs an ordinary line ADDED, and it lands in S0",
