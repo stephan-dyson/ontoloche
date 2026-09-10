@@ -513,16 +513,194 @@ def _guard_inline_calls(chain, driving: set[str], local: set[str]) -> set[str]:
     return out
 
 
-def _capability_proof(inner_if, skip_node) -> str:
-    """An assertion, in the SKIP'S OWN BRANCH and before it, proving a CAPABILITY.
+# --------------------------------------------------------------------------
+# THE S5 PROOF, AS AN AXIS -- `6I-RUN.md` §7's three independent parts.
+#
+#   what is asserted    is the capability asserted in the sense that FAILS on a
+#                       backend that HAS it?             F4: `... is True`
+#   when it is reached  does the guard narrow to a reason, or establish that
+#                       there is no reason to narrow?    F12: guard never read
+#   whether it can fail is the assertion's own expression defeatable?
+#                                                        F15: `assert True or X`
+#
+# EACH IS A RULE ABOUT THE SHAPE, not a list of the cases that produced it. A set
+# built from three remembered names will not catch the fourth nobody has thought
+# of, and `_capability_proof` used to check exactly one of the three.
+#
+# Parts 1 and 3 are ONE recursive predicate, `_falsifying`, and that is not a
+# shortcut: "can this expression fail whenever the capability is present" is the
+# question both of them ask. `assert caps.f is True` cannot fail on a capable
+# backend and neither can `assert True or caps.f`; the same walk refuses both.
+#
+# EVERY AMBIGUITY RESOLVES TOWARD S2. S5 is the UNGATED cell, so a checker unsure
+# whether a proof is real must not grant the promotion. Failing toward the gated
+# cell costs a conversation. Failing toward the ungated one is F12.
+# --------------------------------------------------------------------------
 
-    Two narrowings a fresh lens made necessary. It must be the branch the skip is
-    actually in, not any enclosing one; and it must read a capability
-    (``x.caps.flag`` / ``x.capabilities()``), because "any assertion at all" is
-    satisfied by ``assert registry is not None`` and would launder a plain S2.
+NARROWING_METHODS = frozenset({"startswith", "endswith"})
+
+
+def _reads_capability(node) -> bool:
+    """Does this expression read `x.caps.<flag>` or `x.capabilities()` anywhere?"""
+    return any(
+        isinstance(n, ast.Attribute) and n.attr in CAPABILITY_MARKERS
+        for n in ast.walk(node)
+    )
+
+
+def _falsifying(node) -> bool:
+    """Does this expression FAIL on a backend that HAS the capability?
+
+    Parts 1 and 3 of the axis, in one walk. `caps.f is False` and `not caps.f`
+    fail on a capable backend; `caps.f is True` does not, and that is F4's
+    exploit -- inverted, trivially true on every real backend. `and` needs ONE
+    falsifying operand because either operand can fail the whole; `or` needs
+    BOTH, because a single non-falsifying operand carries it -- which is F15's
+    `assert True or registry.caps.stores_events` and every rewording of it.
+    """
+    if isinstance(node, ast.BoolOp):
+        parts = [_falsifying(v) for v in node.values]
+        return any(parts) if isinstance(node.op, ast.And) else all(parts)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        inner = node.operand
+        return _reads_capability(inner) and isinstance(
+            inner, (ast.Attribute, ast.Call, ast.Name, ast.Subscript)
+        )
+    if isinstance(node, ast.Compare):
+        if len(node.ops) != 1 or not isinstance(node.ops[0], (ast.Is, ast.Eq)):
+            return False
+        left, right = node.left, node.comparators[0]
+        return (_reads_capability(left) and _is_false_constant(right)) or (
+            _reads_capability(right) and _is_false_constant(left)
+        )
+    return False
+
+
+def _is_false_constant(node) -> bool:
+    return isinstance(node, ast.Constant) and node.value is False
+
+
+def _string_constant(node) -> bool:
+    """A string literal, or a tuple/list/set of them -- `x.reason in ("a", "b")`."""
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, (str, bytes))
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return bool(node.elts) and all(_string_constant(e) for e in node.elts)
+    return False
+
+
+def _flatten_and(test) -> list:
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+        out: list = []
+        for value in test.values:
+            out.extend(_flatten_and(value))
+        return out
+    return [test]
+
+
+def _names_a_specific_outcome(test, observations: set[str]) -> bool:
+    """Does this test name ONE outcome, rather than a family of them?
+
+    A comparison against a string literal over an observation -- `x.reason ==
+    "cannot_record_override"` -- names one reason, and `startswith("...")` names
+    one prefix. NUMERIC constants deliberately do not: `len(x.warnings) > 0` is a
+    threshold, not a reason, and admitting it would let any guard buy a narrowing
+    with a `0`. An ENUM-valued reason is refused too, and that is the fail-closed
+    direction -- it becomes a conversation rather than a silent promotion.
+    """
+    for n in ast.walk(test):
+        if (
+            isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr in NARROWING_METHODS
+            and any(_string_constant(a) for a in n.args)
+        ):
+            return True
+        if not isinstance(n, ast.Compare):
+            continue
+        operands = [n.left] + list(n.comparators)
+        consts = [o for o in operands if _string_constant(o)]
+        others = [o for o in operands if not _string_constant(o)]
+        if consts and any(_names_read(o) & observations for o in others):
+            return True
+    return False
+
+
+def _establishes_not_that_type(test, observations: set[str]) -> bool:
+    """`not isinstance(x, T)` over an observation -- the value is NOT a `T`.
+
+    THE ONE EXEMPTION from the narrowing requirement, and it is a rule about the
+    SHAPE rather than about a site: hard-coding a test name into the instrument
+    stops applying the moment anyone renames the test.
+
+    On this branch the value is not a `Refusal`, so `x.reason` DOES NOT EXIST. A
+    rule demanding a reason comparison here demands an attribute reference that
+    would raise, and **a requirement no correct site can meet is a defect in the
+    checker, not a rule.** The proof is complete by another route: a backend that
+    CAN do the thing and did it anyway fails the capability assertion.
+
+    Narrowed to the TYPE test on purpose. `not x.ok` is NOT exempt -- `x.reason`
+    is right there to compare against, so the requirement CAN be met, and a
+    negated truthiness test admits a family exactly as a positive one does.
+    Otherwise "invert your guard and the reason requirement disappears" would be
+    true by accident, which is F12's shape wearing a different hat.
+    """
+    if not (isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not)):
+        return False
+    call = test.operand
+    return (
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "isinstance"
+        and bool(call.args)
+        and bool(_names_read(call.args[0]) & observations)
+    )
+
+
+def _guard_narrows(chain, observations: set[str]) -> str:
+    """How the guard narrows, or "" if it does not. Part 2 of the axis.
+
+    F12 in one sentence: `isinstance(gone, Refusal)` is true of TWELVE different
+    refusals in `retire` and the capability explains ONE, so a capability
+    assertion under it fires on eleven cases it does not cover.
+    """
+    subs = [s for t in chain for s in _flatten_and(t)]
+    if any(_names_a_specific_outcome(s, observations) for s in subs):
+        return "narrows on a literal outcome"
+    exempt = [s for s in subs if _establishes_not_that_type(s, observations)]
+    family = [
+        s
+        for s in subs
+        if _names_read(s) & observations
+        and not _establishes_not_that_type(s, observations)
+    ]
+    if exempt and not family:
+        return "establishes the value is NOT of the refused type, so there is no reason"
+    return ""
+
+
+def _capability_proof(chain, inner_if, skip_node, observations: set[str]):
+    """``(proof source, how it narrows)`` when S5 holds; ``("", why not)`` when not.
+
+    Two narrowings a fresh lens made necessary in row 6h and both still stand: the
+    assertion must be in the branch the skip is actually in, not any enclosing
+    one, and it must read a capability, because "any assertion at all" is
+    satisfied by `assert registry is not None`. What row 6h's fix never did was
+    LOOK AT THE GUARD, and that is F12.
+
+    The refusal reason is returned rather than dropped: a site that ALMOST proved
+    it is more useful to a reader than a bare S2.
     """
     if inner_if is None:
-        return ""
+        return "", "the skip is not inside an `if`"
+    narrowing = _guard_narrows(chain, observations)
+    if not narrowing:
+        return "", (
+            "the guard tests the observation without naming WHICH outcome the "
+            "capability explains, so an assertion under it fires on every other "
+            "outcome too"
+        )
+    found = ""
     for branch in (inner_if.body, inner_if.orelse):
         if not any(any(n is skip_node for n in ast.walk(s)) for s in branch):
             continue
@@ -531,12 +709,18 @@ def _capability_proof(inner_if, skip_node) -> str:
                 break
             if not isinstance(stmt, ast.Assert):
                 continue
-            marks = {
-                n.attr for n in ast.walk(stmt.test) if isinstance(n, ast.Attribute)
-            }
-            if marks & CAPABILITY_MARKERS:
-                return ast.unparse(stmt.test)
-    return ""
+            if not _reads_capability(stmt.test):
+                continue
+            found = ast.unparse(stmt.test)
+            if _falsifying(stmt.test):
+                return found, narrowing
+    if found:
+        return "", (
+            f"the block asserts `{found}` before it skips, but that expression "
+            f"CANNOT FAIL on a backend that holds the capability, so it proves "
+            f"nothing about the environment"
+        )
+    return "", "no assertion in the skip's own branch reads a capability before it skips"
 
 
 # --------------------------------------------------------------------------
@@ -637,19 +821,28 @@ def classify_source(src: str, rel: str) -> list[Site]:
         if read_obs:
             shared = guard_roots & assert_roots
             if shared:
-                proof = _capability_proof(inner_if, node)
+                proof, detail = _capability_proof(chain, inner_if, node, read_obs)
                 if proof:
+                    # The `why` says WHAT WAS CHECKED and what was not. F15: the old
+                    # text quoted the vacuous assertion verbatim and then stated a
+                    # consequence that was false of the very expression it had just
+                    # quoted -- it printed the disproof and drew the opposite
+                    # conclusion, and told the reader not to look.
                     emit(PROVEN_ENV,
                          "guard reads " + ", ".join(sorted(read_obs))
-                         + f" -- the result under test -- but the block asserts `{proof}` "
-                         "BEFORE it skips, so a capable backend that behaved wrongly "
-                         "would FAIL here rather than skip")
+                         + f" -- the result under test -- but it {detail}, and the block "
+                         f"asserts `{proof}` before it skips, an expression that FAILS on "
+                         "a backend holding the capability. CHECKED: the narrowing, the "
+                         "falsifying sense, and that the assertion is defeatable. NOT "
+                         "CHECKED, because no AST can know it: that this capability is "
+                         "the one that explains this outcome")
                 else:
                     emit(UNDER_TEST,
                          "guard reads " + ", ".join(sorted(read_obs))
                          + " -- an observation this test's own assertions also reach"
                          + (f" (via {', '.join(sorted(shared))})"
-                            if shared != read_obs else ""))
+                            if shared != read_obs else "")
+                         + f"; NOT proven-environmental because {detail}")
             else:
                 emit(SETUP,
                      "guard reads " + ", ".join(sorted(read_obs))
@@ -934,6 +1127,229 @@ def test_c0_05(adapter):
     broken = list(original) + [(version + 1, "broken", "NOT SQL")]
     adapter._migration_sql = lambda: broken
     assert len(original) == version
+''',
+    ),
+    # -----------------------------------------------------------------------
+    # ROW 6j: THE AXIS. Derived from the three PARTS, not from the three names
+    # -- a set built from three remembered cases will not catch the fourth
+    # nobody has thought of. One case per part per DIRECTION: the shape that
+    # must be refused, and the shape that must still be accepted. The accept
+    # cases are drawn from live sites so the set cannot drift from the suite.
+    # -----------------------------------------------------------------------
+    (
+        "AXIS part 2 (F12) -- the repaired shape, narrowed. MUST stay S5",
+        PROVEN_ENV,
+        '''
+import pytest
+def _tombstone_holding(registry, word="zzz_moved"):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", gone.detail,
+        )
+        pytest.skip("NOT REACHABLE: stores_events=False refuses the forced retire")
+    assert not isinstance(gone, Refusal), gone
+    assert word in (gone.aliases or ()), gone.aliases
+    return gone
+''',
+    ),
+    (
+        "AXIS part 2 (F12) EXPERIMENT 1 -- the SAME site with ONLY the reason clause "
+        "removed. Classified S5 before this fix, which is the whole finding",
+        UNDER_TEST,
+        '''
+import pytest
+def _tombstone_holding(registry, word="zzz_moved"):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", gone.detail,
+        )
+        pytest.skip("NOT REACHABLE: stores_events=False refuses the forced retire")
+    assert not isinstance(gone, Refusal), gone
+    assert word in (gone.aliases or ()), gone.aliases
+    return gone
+''',
+    ),
+    (
+        "AXIS part 2 (F12) EXPERIMENT 2 -- the supervisor's AUTHORISED one-liner, "
+        "verbatim. It moved this site S2 -> S5 while leaving the defect in place",
+        UNDER_TEST,
+        '''
+import pytest
+def _tombstone_holding(registry, word="zzz_moved"):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal):
+        assert registry.caps.stores_events is False, gone
+        pytest.skip(f"this backend refused the forced retire ({gone.reason})")
+    assert word in (gone.aliases or ()), gone.aliases
+    return gone
+''',
+    ),
+    (
+        "AXIS part 2 -- `reason !=` narrows as well as `reason ==`. MUST stay S5",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_c10_25(adapter, make_registry):
+    registry = make_registry(adapter)
+    out = registry.merge_types("alpha", "beta", "one", merged_by="user:sd")
+    assert isinstance(out, Refusal), out
+    if out.reason != "alias_collision":
+        assert registry.caps.indexes_membership is False, out.reason
+        assert out.reason == "predicate_merge", out.reason
+        pytest.skip("NOT REACHABLE: indexes_membership=False makes both extents unknowable")
+    assert out.detail["overridable"] is False
+''',
+    ),
+    (
+        "AXIS part 2 -- a `startswith` prefix under a negation narrows. MUST stay S5",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_c12_27(registry):
+    out = registry.import_types([{"name": "plaza"}], namespace="dpr", kind="entity")
+    assert out, out
+    warnings = tuple(out[0].warnings or ())
+    if not any(w.startswith("import_refused:") for w in warnings):
+        assert registry.caps.stores_aliases is False, warnings
+        pytest.skip("NOT REACHABLE: stores_aliases=False drops the alias")
+    assert any(w.startswith("import_field_ignored:") for w in warnings), warnings
+''',
+    ),
+    (
+        "AXIS part 2 -- a NUMERIC constant must not buy a narrowing. `len(x) > 0` is a "
+        "threshold, not a reason, and admitting it sells the exemption for a `0`",
+        UNDER_TEST,
+        '''
+import pytest
+def test_numeric_is_not_a_reason(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if isinstance(out, Refusal) and len(out.warnings) > 0:
+        assert registry.caps.stores_events is False, out
+        pytest.skip("NOT REACHABLE")
+    assert out.warnings
+''',
+    ),
+    # THE EXEMPTION, IN ALL THREE DIRECTIONS. An exemption is a NEW WAY THROUGH
+    # THE GATE -- F12's shape wearing a different hat -- so "invert your guard and
+    # the reason requirement disappears" must not become true by accident. The
+    # gate's response to abusing it is written down here on purpose.
+    (
+        "EXEMPTION, legitimate: an inverse guard WITH a capability proof. The value is "
+        "not a Refusal, so `.reason` does not exist and no narrowing can be demanded",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_c10_27(adapter, make_registry):
+    degraded = make_registry(DegradedAdapter(adapter, stores_aliases=False))
+    refused = degraded.merge_types("ent_a", "ent_b", "one", merged_by="user:sd")
+    if not isinstance(refused, Refusal):
+        assert degraded.caps.stores_aliases is False, (
+            "this backend stores aliases, so the collision was real", refused,
+        )
+        pytest.skip("NOT REACHABLE: stores_aliases=False drops the alias")
+    assert any(w.startswith("identity_guard_skipped:") for w in refused.warnings)
+''',
+    ),
+    (
+        "EXEMPTION, abused: an inverse guard with NO capability proof is still FLAGGED. "
+        "Inverting a guard buys nothing on its own",
+        UNDER_TEST,
+        '''
+import pytest
+def test_inverse_with_no_proof(adapter, make_registry):
+    degraded = make_registry(DegradedAdapter(adapter, stores_aliases=False))
+    refused = degraded.merge_types("ent_a", "ent_b", "one", merged_by="user:sd")
+    if not isinstance(refused, Refusal):
+        pytest.skip("this leg did not refuse, so there is nothing to assert")
+    assert any(w.startswith("identity_guard_skipped:") for w in refused.warnings)
+''',
+    ),
+    (
+        "EXEMPTION, abused: an inverse guard with a VACUOUS proof. F15 applies here too "
+        "and the exemption must not smuggle it past",
+        UNDER_TEST,
+        '''
+import pytest
+def test_inverse_with_a_vacuous_proof(adapter, make_registry):
+    degraded = make_registry(DegradedAdapter(adapter, stores_aliases=False))
+    refused = degraded.merge_types("ent_a", "ent_b", "one", merged_by="user:sd")
+    if not isinstance(refused, Refusal):
+        assert True or degraded.caps.stores_aliases
+        pytest.skip("NOT REACHABLE: stores_aliases=False drops the alias")
+    assert any(w.startswith("identity_guard_skipped:") for w in refused.warnings)
+''',
+    ),
+    (
+        "EXEMPTION, boundary: `not x.ok` is NOT exempt. `x.reason` IS available there, "
+        "so the requirement CAN be met, and a negated truthiness test admits a family "
+        "exactly as a positive one does",
+        UNDER_TEST,
+        '''
+import pytest
+def test_negated_truthiness_is_not_the_exemption(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    if not out.ok:
+        assert registry.caps.stores_events is False, out
+        pytest.skip("NOT REACHABLE")
+    assert out.warnings
+''',
+    ),
+    (
+        "AXIS part 1 (F4) -- the INVERTED sense. `is True` is trivially true on every "
+        "real backend, so it cannot fail and proves nothing",
+        UNDER_TEST,
+        '''
+import pytest
+def test_f4_inverted_sense(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_events is True, gone
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "AXIS part 1 (F4) -- a BARE TRUTHY capability read is the same defect without "
+        "the `is True` spelling",
+        UNDER_TEST,
+        '''
+import pytest
+def test_f4_bare_truthy(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_events, gone
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "AXIS part 3 (F15) -- `assert True or X` verbatim. The gate used to QUOTE this "
+        "expression and then state a consequence that is false of it",
+        UNDER_TEST,
+        '''
+import pytest
+def test_f15_verbatim(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert True or registry.caps.stores_events
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "AXIS part 3 (F15) -- the same vacuity NOT spelled `True or`, so the pin is on "
+        "the property rather than on the wording",
+        UNDER_TEST,
+        '''
+import pytest
+def test_f15_reworded(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_events is False or registry is not None, gone
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
 ''',
     ),
 )
