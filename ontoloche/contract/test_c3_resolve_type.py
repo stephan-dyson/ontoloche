@@ -691,8 +691,27 @@ def test_c3_17_a_tombstone_elsewhere_is_found_by_the_words_it_answers_to(
     gone = registry.retire(
         "boroname", "consolidated", retired_by="user:sd", namespace="dpr", force=True
     )
-    if isinstance(gone, Refusal):
-        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    # NOT REACHABLE, never a pass. `retire`'s `if force and not self.caps.stores_events`
+    # (`registry.py:3969`) refuses a destructive override that cannot be written down, so
+    # on such a store this fixture cannot be built at all. **Gated on the CAPABILITY**, so
+    # a store that CAN record events and still refused this way is a finding, not a skip.
+    #
+    # Narrowed to the ONE reason the capability explains, on the four-file precedent. With
+    # `force=True` and no `successor` it is the only refusal `retire` can reach -- 9 of its
+    # 12 are gated behind `successor is not None` and the other 2 behind `not force`. The
+    # bare form this line used to carry told a backend refusing for an unrelated reason,
+    # while recording events perfectly well, that it had failed: `C19-100`'s defect.
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", gone.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the forced retire before there "
+            "is a tombstone for the other namespace to find"
+        )
+    assert not isinstance(gone, Refusal), (
+        "the fixture's forced retire refused for a reason no capability explains", gone,
+    )
 
     # CONTROL: the tombstone's own NAME has been surfaced since row 3e.
     by_name = registry.resolve_type(
