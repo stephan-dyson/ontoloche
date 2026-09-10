@@ -1,0 +1,12 @@
+{
+  "_comment": "RATCHET BASELINE for check_skip_census.py. Lowering this list is a normal commit anyone may make: fix the site, drop its entry. RAISING it -- adding an entry -- requires the ontoloche supervisor's ruling. The gate fails if `count` disagrees with `sites`, so the number cannot move without the site moving with it.",
+  "count": 6,
+  "sites": [
+    "ontoloche/contract/test_c10_merge_types.py::test_c10_22_a_truncated_collision_scan_is_reported_not_silent#1",
+    "ontoloche/contract/test_c10_merge_types.py::test_c10_24_merge_states_a_skipped_identity_guard_too#1",
+    "ontoloche/contract/test_c12_foundry_import.py::test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types#1",
+    "ontoloche/contract/test_c12_foundry_import.py::test_c12_24_a_skipped_identity_guard_says_so#2",
+    "ontoloche/contract/test_c3_resolve_type.py::test_c3_27_the_confidence_is_the_MIN_of_both_halves#0",
+    "ontoloche/contract/test_c4_propose_type.py::_tombstone_holding#1"
+  ]
+}
