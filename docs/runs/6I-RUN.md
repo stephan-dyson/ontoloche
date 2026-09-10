@@ -221,8 +221,15 @@ separates:
 | the guard is not an `if` at all | 2 | a third, not routed either |
 
 **Counted by the checker's own `why` text, after I first wrote 5 / 9 / 2 from reading a truncated listing
-and had to correct it.** `6 + 8 + 2 = 16`; the earlier numbers did not add up and that is how the miscount
-was caught.
+and had to correct it.** I derived the `9` as `16 - 5 - 2` rather than counting it, so **`5 + 9 + 2` sums to
+16 exactly as `6 + 8 + 2` does, and the total could not reveal the error.** It came out only when I
+recounted the inline shape directly from the `why` text and got 8 against my own 9.
+
+**A wrong split that sums correctly is exactly the shape that survives review**, and the first version of
+this paragraph made it worse: it claimed the numbers "did not add up and that is how the miscount was
+caught", which is false — they added up perfectly, which is why the miscount survived a pass. That sentence
+is corrected here rather than quietly deleted, because a record that hides how a defect nearly survived is
+worth less than the corrected number.
 
 **Of the six, exactly ONE takes a RESULT as the parameter:**
 
@@ -303,3 +310,338 @@ justify a row. Three things do:
 site and that site is correct. **This is exposure, not a defect**, and `6H-RUN.md` §0.3 pre-registered it
 as known exposure (b) before it fired. It should be built because the next helper written in that shape
 will not be correct, not because this one is.
+
+---
+
+## §2 — ITEM 2: THE INSTRUMENTATION, AND THE MISS THAT FOUND A WRONG NUMBER IN A LANDED RECORD
+
+**`P1` was `0`. The answer is `2`. The miss is the result.**
+
+Had `P1` come in at `0` it would have confirmed a prediction derived from a cell that is wrong, and nobody
+would have looked at the cell. **The miss is what sent me back to the derivation, and the derivation is
+where the defect was.** That is the second time in two rows that the useful finding came from the
+prediction failing rather than holding.
+
+### §2.1 — The async three-backend leg, at the floor
+
+```
+OO_POSTGRES_DSN=... py -m pytest -q -rs --pyargs ontoloche.aio.contract
+979 passed, 316 skipped, 0 failed in 385.71s
+```
+
+**Identical to row 6h's landing figure, at `0fcac56`, which is `d3f9a79` plus this row's
+pre-registration and its item 3 scope — both docs-only.** `git diff --stat 7f13800..d3f9a79` touches
+`STATUS.md`, `docs/DECISIONS-OPEN.md`, `docs/README.md` and the `R104` file and no code at all, so 6h's
+`943` / `979` are a valid floor for this row and were not re-taken for their own sake.
+
+**Which of the six fired**, by mapping each baselined site onto its async mirror through
+`classify_source` — same function name, same guard text — and matching the mirror's line against the
+`-rs` block:
+
+| baselined site | async mirror | fired |
+|---|---|---|
+| `test_c10_22_a_truncated_collision_scan_is_reported_not_silent#0` | `aio/test_c10_merge_types.py:1192` | no |
+| **`test_c10_24_merge_states_a_skipped_identity_guard_too#0`** | **`aio/test_c10_merge_types.py:1321`** | **YES** |
+| `test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types#0` | `aio/test_c12_foundry_import.py:1067` | no |
+| `test_c12_24_a_skipped_identity_guard_says_so#0` | `aio/test_c12_foundry_import.py:1209` | no |
+| `test_c3_27_the_confidence_is_the_MIN_of_both_halves#0` | `aio/test_c3_resolve_type.py:1289` | no |
+| **`_tombstone_holding#0`** | **`aio/test_c4_propose_type.py:460`** | **YES** |
+
+```
+SKIPPED [1] aio/test_c10_merge_types.py:1321: this backend refused for another reason (cannot_record_override)
+SKIPPED [1] aio/test_c4_propose_type.py:460:  this backend cannot retire the holder (cannot_record_override)
+```
+
+**The two that fired are exactly the two the brief authorised, and both fired as `cannot_record_override`
+— the one reason the narrowed guard of §0.2 keeps as a skip.** The four unobserved sites fired nowhere on
+this leg either.
+
+### §2.2 — Why `P1`'s derivation was unsound, and it is not that I guessed badly
+
+`P1` step 4 read: *"the async three-backend leg is the mirror of the leg that fired 0."* That step is only
+sound if `6H-RUN.md` §3.2's `0` for `sync, three backends` is right, and **it cannot be**, for a reason
+that needs no re-run to establish.
+
+**[Observed — `ontoloche/contract/conftest.py:35` and `:100`]:**
+
+```python
+BACKENDS = ("sqlite", "postgres", "sqlite_minimal")
+...
+metafunc.parametrize("backend", list(BACKENDS))
+```
+
+**Both legs parametrise over the SAME three backends.** The `sync, SQLite only` leg is not a different
+selection — it is the same collected set with the `postgres` third skipping inside `adapter_factory` for
+want of a DSN. **The `sqlite_minimal` cases are bit-identical between the two legs.**
+
+`sqlite_minimal` is *"a real SQLite store with four of the nine reference tables absent -- five capability
+flags declined at once, natively rather than through `DegradedAdapter`"* (conftest's own comment). It is
+the backend that declines `stores_events`, and it is the one these two sites fire under.
+
+**So a site that fires under `sqlite_minimal` on the SQLite-only leg MUST fire under `sqlite_minimal` on
+the three-backend leg.** §3.2's `2` and `0` are inconsistent **by construction**, before any measurement.
+One of the two cells is wrong as a matter of how the suite parametrises.
+
+**What is wrong is a MEASUREMENT, not a judgement.** Row 6h declined to repair four sites it had not
+observed firing, and R104 upheld that as the best judgement in the row. **That restraint was correct then
+and this measurement makes it more correct, not less** — the four still fire nowhere. A wrong cell in a
+firing table did not produce a wrong call; it produced a right call for a partly wrong reason, and it then
+produced a wrong prediction in the row that inherited it.
+
+**`6H-RUN.md` is landed and this row does not touch it.** The corrected measurement lives here. The
+supervisor holds the correction to `6H-RUN.md` and to `R104` as their own commit, after this row lands,
+with the wrong figure left legible.
+
+### §2.3 — The sync three-backend control, and which cell is wrong
+
+```
+OO_POSTGRES_DSN=... py -m pytest -q -rs --pyargs ontoloche.contract
+943 passed, 316 skipped, 0 failed in 680.20s
+```
+
+**The totals reproduce row 6h exactly and the firing table contradicts it.** Same leg, same floor, same
+`943 / 316 / 0`, different cell — so nobody can attribute the difference to a different run.
+
+| baselined site | sync SQLite only (6h) | **sync three backends** | **async three backends** |
+|---|---|---|---|
+| `test_c10_22_a_truncated_collision_scan_is_reported_not_silent#0` | — | no | no |
+| **`test_c10_24_merge_states_a_skipped_identity_guard_too#0`** | **fired** | **FIRED** | **FIRED** |
+| `test_c12_21_a_word_a_tombstone_answers_to_is_not_free_at_import_types#0` | — | no | no |
+| `test_c12_24_a_skipped_identity_guard_says_so#0` | — | no | no |
+| `test_c3_27_the_confidence_is_the_MIN_of_both_halves#0` | — | no | no |
+| **`_tombstone_holding#0`** | **fired** | **FIRED** | **FIRED** |
+| **row 6h §3.2 recorded** | **2** | **0** | *not counted* |
+
+**`6H-RUN.md` §3.2's `0` for `sync, three backends` is the wrong cell. The correct value is `2`.** Both
+three-backend legs report **314 distinct skip sites** and fire the same two, both as
+`cannot_record_override`.
+
+### §2.4 — ITEM 2's VERDICT: the four stay baselined, on three legs instead of one
+
+**NOT REPAIRED, and now for a materially better reason than the brief could give.** The four sites fired on
+**no leg** — not `sync, SQLite only`, not `sync, three backends`, not `async, three backends`. Naming a
+capability for a refusal observed nowhere is inventing the cause, and getting it wrong converts a legal
+skip into a false failure on a conformant degraded backend. **An unrepaired site with a recorded reason is
+a better outcome than a repaired one with an invented cause.**
+
+**And ITEM 1's two are evidenced on three legs**, not on the one superseded leg the brief cited:
+
+```
+sync, SQLite only      test_c10_merge_types.py:1337 / test_c4_propose_type.py:467   cannot_record_override
+sync, three backends   test_c10_merge_types.py:1337 / test_c4_propose_type.py:467   cannot_record_override
+async, three backends  aio/...:1321                 / aio/...:460                   cannot_record_override
+```
+
+---
+
+## §3 — ITEMS 1 AND 4, APPLIED AS ONE CHANGE
+
+### §3.1 — What changed, and the shape it took
+
+Four sites, four sync files, plus the four generated mirrors. **All three `_tombstone_holding` copies now
+have byte-identical bodies**, which is R104 reading 1 applied in the direction R104 named: **UP**.
+
+```python
+gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+    assert registry.caps.stores_events is False, (
+        "this backend records events, so the refusal is not a capability", gone.detail,
+    )
+    pytest.skip("NOT REACHABLE: stores_events=False refuses the forced retire ...")
+assert not isinstance(gone, Refusal), (
+    "the fixture's forced retire refused for a reason no capability explains", gone,
+)
+assert word in (gone.aliases or ()), (
+    "INTERFACE.md 5.8 -- a tombstone keeps its words by design", gone.aliases
+)
+```
+
+**The narrowing is the whole repair and the bare form would have been a defect** — see §0.2. The
+fall-through is what makes narrowing safe: a refusal no capability explains now FAILS the id instead of
+skipping it, which is R104's own sentence about what `S5` is for.
+
+### §3.2 — ITEM 4 IS NOT COSMETIC, and this is the measurement that says so
+
+**`test_c12_foundry_import.py:1114` — the c12 twin — fires on 2 live ids** on both three-backend legs. So
+R104's reading 1 was right about **a path the suite actually walks**, not about a theoretical symmetry. The
+c9 twin is silent on every leg; that does not weaken the reading, it means one of the three was reachable
+and unasserted rather than none of them.
+
+### §3.3 — The safety of the narrowing, MEASURED on the pre-repair code
+
+**Every firing of these guards across the whole async leg — seven of them — is `cannot_record_override`.
+Zero other reasons, anywhere:**
+
+```
+aio/test_c10_merge_types.py:1266     cannot_record_override
+aio/test_c10_merge_types.py:1321     cannot_record_override
+aio/test_c12_foundry_import.py:1100  cannot_record_override   (2 ids)
+aio/test_c12_foundry_import.py:1275  cannot_record_override
+aio/test_c3_resolve_type.py:687      cannot_record_override
+aio/test_c4_propose_type.py:460      cannot_record_override
+```
+
+So the fall-through would have fired on nothing across 979 passing ids. **That is a measurement on the
+PRE-repair code and the claim is about the POST-repair code**, so it predicts rather than proves; §4's legs
+are what prove it.
+
+### §3.4 — The census, the baseline, and `P2`
+
+**`P2` predicted `4`. The baseline count is `4`. HIT.**
+
+| cell | before | after | why |
+|---|---|---|---|
+| `S2-RESULT-UNDER-TEST` | 6 | **4** | the two authorised sites left |
+| `S5-PROVEN-ENVIRONMENTAL` | 7 | **11** | **+4 — exactly the four repaired, each `S5` by name** |
+| `S1-SETUP-RESULT` | 49 | **47** | the two twins moved out of `S1`, not into `S2` |
+| `S0` / `S3` / `S4` | 60 / 1 / 16 | 60 / 1 / 16 | untouched |
+
+The `written` guard in all three helper copies stayed `S1`, as §0.4 derived: nothing added reads `written`.
+`--write-baseline` accepted the lowering as **REPAIRED** rather than **DE-ASSERTED** — the enclosing
+functions went UP in assertion count, which is the check `_leaving_verdict` exists to make.
+
+**The four sites left in the baseline are exactly item 2's four unobserved sites.**
+
+### §3.5 — The mirror, checked the way section D requires
+
+```
+git diff --stat origin/main -- ontoloche/contract      ->  4 files, 95 insertions(+), 8 deletions(-)
+git diff --stat origin/main -- ontoloche/aio/contract  ->  4 files, 95 insertions(+), 8 deletions(-)
+```
+
+**The mirror moved by exactly the amount the source moved, file for file.** `unasync.py` reporting
+*"wrote 4 of 25 files"* is NOT this check and is not offered as one — it is the generator's own account of
+what it did. The check that the mirror AGREES is `test_generated_matches_source.py` on the async leg.
+
+The per-file split is itself a check: `test_c4_propose_type.py` gains **24** lines against **27** for its
+two twins, and the 3-line difference is exactly the fixture assertion the c4 copy already had and the other
+two did not. **If that number had come out equal, item 4 would not have done anything.**
+
+---
+
+## §4 — THE SUITE AT THE FINAL STATE
+
+Run **one at a time, never in parallel**, by §0.7's own commands. The four static gates were run
+concurrently with one leg, which inflates that leg's wall clock and cannot change a pass or a fail.
+
+| leg | floor | **final state** | delta |
+|---|---|---|---|
+| sync, SQLite only | 527 / 731 / 0 at `e548541` | **528 passed, 731 skipped, 0 failed** (309.34s) | **+1 passed** |
+| sync, three backends | **943 / 316 / 0** (680.20s, taken by THIS row at `0fcac56`) | **943 passed, 316 skipped, 0 failed** (688.54s) | **0** |
+| async, three backends | **979 / 316 / 0** (385.71s, taken by THIS row at `0fcac56`) | **979 passed, 316 skipped, 0 failed** (372.06s) | **0** |
+
+**The `+1` on the SQLite-only leg is row 6h's gate-runner, not this row's.** That leg's floor is
+`e548541`, five commits back, because 6h did not re-run it — §3.5 of `6H-RUN.md` says so and this row does
+not pretend otherwise. Between `e548541` and `d3f9a79` the only code change is 6h's own, which added the
+runner; `git diff --stat 7f13800..d3f9a79` is docs-only. **So 527 to 528 is fully accounted for and this
+row contributed none of it.**
+
+**The two three-backend floors were taken by THIS row at `0fcac56`, not inherited.** That is the whole
+reason §2.3 can say which of 6h's cells is wrong.
+
+### §4.1 — CRITERION 5, and the thing it was set to catch
+
+**316 skipped before, 316 skipped after, on both three-backend legs. Zero drift, so there is nothing to
+explain.**
+
+§0.5 predicted that if this number moved it would move DOWN, because narrowing a guard can only skip fewer
+ids. **It did not move at all, and the reason is §3.3's measurement: there was no id skipping on any other
+reason for the narrowing to take away.** The supervisor's `answers-2` warned to expect ids that used to
+skip on some other refusal reason now falling through to the assertion and FAILING. **That hypothesis is
+now tested rather than assumed on both sides: it was measured false on the pre-repair code and confirmed
+false on the post-repair code.**
+
+The four repaired sites skip with their new reasons in exactly the pattern they fired in before:
+
+```
+test_c10_merge_types.py:1352     1 id    NOT REACHABLE: stores_events=False refuses the acknowledgement ...
+test_c12_foundry_import.py:1128  2 ids   NOT REACHABLE: stores_events=False refuses the forced retire ...
+test_c4_propose_type.py:481      1 id    NOT REACHABLE: stores_events=False refuses the forced retire ...
+test_c9_retire.py:1751           0 ids   (silent on every leg, before and after)
+```
+
+### §4.2 — The five gates
+
+| gate | result |
+|---|---|
+| `check_links.py` | **exit 0** |
+| `check_spec_drift.py` | **exit 0** |
+| `check_merge_guard.py` | **exit 0** |
+| `check_capability_matrix.py` | **exit 0** |
+| `check_skip_census.py` | **exit 0** |
+
+**This is this row's run. The supervisor runs them again before closing the row, and that run is the one
+that counts** — "landed" means verified on `origin` by `git ls-remote`, never a row's own word for it.
+
+### §4.3 — CRITERION 6, both halves, because the first half alone is not the check
+
+**Half one — the diff:**
+
+```
+git diff --stat origin/main -- ontoloche/contract      ->  4 files, 95 insertions(+), 8 deletions(-)
+git diff --stat origin/main -- ontoloche/aio/contract  ->  4 files, 95 insertions(+), 8 deletions(-)
+```
+
+**Half two — the agreement:** `ontoloche/aio/contract/test_generated_matches_source.py` **ran and passed on
+the final async leg.** It does not merely check that the files look regenerated: it loads `tools/unasync.py`
+and **regenerates the whole tree in memory, comparing byte for byte.** It is absent from the `-rs` skip
+block on both the floor and the final leg, which is how this row knows it RAN rather than skipping — the
+test skips itself from an installed wheel where `tools/` is not shipped, and a skipped anti-drift check
+reads exactly like a passing one in a totals line.
+
+**`unasync.py` was run ONCE, as a generator, to produce the mirror. It was never run to verify anything.**
+
+---
+
+## §5 — LANDING, AND WHAT THIS ROW DID NOT DO
+
+### §5.1 — The two predictions, recorded at equal length because a hit is not more virtuous than a miss
+
+**`P1` predicted `0`. The answer is `2`. MISSED.** The derivation's step 4 inherited `6H-RUN.md` §3.2's
+`sync, three backends = 0` and reasoned the async leg mirrors it. The step was unsound because the cell was
+wrong, and **the miss is what sent me to the cell.** A hit would have confirmed a prediction resting on a
+wrong number and nobody would have looked. §2.2 and §2.3 exist because `P1` failed.
+
+**`P2` predicted `4`. The baseline count is `4`. HIT.** Its four derivation steps were each right for the
+reason given: `count` must equal `len(sites)`; two entries left by gaining a capability proof in the skip's
+own branch; **no entry entered**, because the same commit that made the twins `S2`-eligible also made them
+`S5`; and the `written` guard stayed `S1` because nothing added reads `written`. §3.4's census confirms all
+four.
+
+**The miss produced the better finding and the hit is the one that looks like success.** Both are here at
+the same length on purpose.
+
+### §5.2 — NOT DONE, deliberately, and each with its reason
+
+- **Item 2's four sites are NOT repaired.** They fired on **no leg of three**. Naming a capability for a
+  refusal observed nowhere is inventing the cause, and getting it wrong closes a legal operation on a
+  conformant degraded backend. They stay baselined with a recorded reason.
+- **Item 3's checker is NOT built.** Scoped in §1, verdict **its own row**, and the reason is the identity
+  scheme rather than the size: a checker that follows values across call boundaries makes one helper `S1`
+  under one caller and `S2` under another, which `(file, function, ordinal)` cannot express. **The baseline
+  itself has to change first.** The cheaper build is named in §1.2 so the next row starts from a scoped
+  option rather than from the whole problem.
+- **`6H-RUN.md` is NOT edited.** Row 6h is landed and its session is closed. The corrected measurement lives
+  here; the supervisor corrects `6H-RUN.md` and `R104` as their own commit after this row lands, with the
+  wrong figure left legible.
+- **The kill-row count stays TWENTY-THREE.** Nothing here merges a capability predicate or collapses two
+  words onto one identity. Suite integrity is not meaning destruction.
+- **The governance register stays at ONE.** `Q101` and per-key severity are the founder's and are open.
+- **No ruling is minted.** §0.2 and §0.3 contradicted the brief on evidence and were accepted without one.
+
+### §5.3 — The defect shape this row met three times
+
+**`C19-100` — *it closed a legal operation* — was waiting in three separate plausible next steps:**
+
+1. **The brief's authorised repair line**, asserting `stores_events is False` under a bare
+   `isinstance(gone, Refusal)`, at a site whose own skip message reads *"this backend refused for another
+   reason"*.
+2. **Item 2's four unobserved sites**, where naming a capability for an unseen refusal is the same act at a
+   different door.
+3. **A naive item 3 checker**, which would flag `_run_the_race(first, ...)` — a guard reading
+   `first.capabilities().stores_proposals`, the canonical legitimate environment guard — as a
+   result-conditioned skip.
+
+**Row 6g re-created this defect at three doors on 2026-09-07 while trying to honour the ruling against it.**
+Three near-misses in one row, in three different shapes, is not caution being rewarded — it is a defect that
+is genuinely easy to re-commit, and the thing that caught all three was measuring before naming.
