@@ -365,3 +365,25 @@ moved cell, because a moved cell would have to be explained away first.
 
 **This is raised as a shape, not bent to fit.** If the supervisor wants a moved cell it can only come from
 repairing something the fix now flags — and the fix flags nothing new on this tree.
+
+---
+
+## §2 — THE THREE LIVE SITES
+
+### §2.0 — `P3`, ONE INTEGER: **3**, committed before the census that scores it
+
+**The repairs are written and the mirror is regenerated. The census has NOT been run since.** This
+sub-section is committed alone so `git log` carries the order, exactly as §0 was.
+
+**`P3` predicts that THREE sites change category, all of them `S1-SETUP-RESULT` -> `S5-PROVEN-ENVIRONMENTAL`,
+leaving `S1` at 44 and `S5` at 14 with the 139 total unchanged.**
+
+Derived by reading, not run: each of the three guards reads `gone`, an observation, and **before the repair
+no assertion in any of the three functions reached it** — which is what put them in `S1` rather than in the
+gated `S2` cell, and is why they were never baselined. The repair adds `assert not isinstance(gone,
+Refusal)`, which reaches `gone` for the first time, so each site crosses into the observation-shared branch
+and is then promoted by a proof the fixed checker validates on all three parts.
+
+**Falsifier:** any count other than 3, any site landing anywhere but `S5`, or any movement in `S0`, `S2`,
+`S3` or `S4`. **A site landing in `S2` would mean the repair produced exactly the shape it was made to
+remove**, and it would be reported before anything else.

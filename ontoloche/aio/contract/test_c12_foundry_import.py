@@ -1294,8 +1294,27 @@ async def test_c12_26_the_import_name_door_holds_the_byte_identical_tombstone(
     registry = await make_registry(adapter, approval_policy="auto")
     await seed(registry, "w", kind="entity", definition="a thing")
     gone = await registry.retire("w", "no longer used", retired_by="user:sd", force=True)
-    if isinstance(gone, Refusal):
-        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    # NOT REACHABLE, never a pass. `retire`'s `if force and not self.caps.stores_events`
+    # (`registry.py:3969`) refuses a destructive override that cannot be written down, so
+    # on such a store this fixture cannot be built at all. **Gated on the CAPABILITY**, so
+    # a store that CAN record events and still refused this way is a finding, not a skip.
+    #
+    # Narrowed to the ONE reason the capability explains, on the four-file precedent. With
+    # `force=True` and no `successor` it is the only refusal `retire` can reach -- 9 of its
+    # 12 are gated behind `successor is not None` and the other 2 behind `not force`. The
+    # bare form this line used to carry told a backend refusing for an unrelated reason,
+    # while recording events perfectly well, that it had failed: `C19-100`'s defect.
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", gone.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the forced retire before there "
+            "is a byte-identical tombstone for the name door to hold"
+        )
+    assert not isinstance(gone, Refusal), (
+        "the fixture's forced retire refused for a reason no capability explains", gone,
+    )
 
     # CONTROL: `propose_type` has no such exclusion and answers this way.
     control = await registry.propose_type(
