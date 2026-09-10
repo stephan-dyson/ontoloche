@@ -49,13 +49,15 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 **Not urgent.** Nothing is blocked: row 6g proceeds and publishes the asymmetry. But one contract id now pins exactly this question, and your ruling will move it.
 
-### 10 · `oo-pg` is carrying **958** leftover schemas, and the leak is still running. Drop them, or leave them?
+### 10 · `oo-pg` is carrying **989** leftover schemas, and the leak is still running. Drop them, or leave them?
 
 *Low stakes. Raised by your item-4 ruling, not blocking anything.*
 
-**TL;DR.** Your `drop it` on item 4 authorised deleting one namespace attributed to row 6d. That namespace **does not exist** (see item 4 in section E). What *does* exist is **958 `oo_*` schemas** on the `oo-pg` container, left by every three-leg suite run this project has made. **This page said 625 until 2026-09-10, when I counted them instead of re-reading the figure** — and I had been carrying a third number, 741, in my own cycle prompt. **Three figures, none checked at the point of use; only the fourth was measured.** **I did not touch them**, because they are a different and much larger object than the one you ruled on, and reading your word as covering them would be taking a destructive action you did not sanction.
+**TL;DR.** Your `drop it` on item 4 authorised deleting one namespace attributed to row 6d. That namespace **does not exist** (see item 4 in section E). What *does* exist is **989 `oo_*` schemas** on the `oo-pg` container, left by every three-leg suite run this project has made. **This page said 625 until 2026-09-10, when I counted them instead of re-reading the figure** — and I had been carrying a third number, 741, in my own cycle prompt. **Three figures, none checked at the point of use; only the fourth was measured.** **I did not touch them**, because they are a different and much larger object than the one you ruled on, and reading your word as covering them would be taking a destructive action you did not sanction.
 
-**The facts.** **[Observed 2026-09-10 03:33]** `select count(*) from information_schema.schemata where schema_name like 'oo\_%'` against `open_ontology` on the running container returns **958**. The series: **193** during row 6c, **476** on 2026-09-05, **625** on 2026-09-09, **896** at 00:07 on 2026-09-10, **958** now.
+**The facts.** **[Observed 2026-09-10 03:33]** `select count(*) from information_schema.schemata where schema_name like 'oo\_%'` against `open_ontology` on the running container returns **989** *(re-measured 2026-09-10 12:08)*. The series: **193** during row 6c, **476** on 2026-09-05, **625** on 2026-09-09, **896** at 00:07, **958** at 03:33, **989** now.
+
+**AND THE COUNT IS NOT MONOTONIC, which I only saw by sampling it twice during a run.** It went **996 at 06:47 and 989 at 07:01** while a suite was mid-flight — the legs create schemas and teardown drops some of them. **What accumulates is the residue, not the gross.** The earlier wording let this read as a one-way leak; it is a leak with partial cleanup.
 
 **AND THE MECHANISM IS NOW MEASURED RATHER THAN INFERRED FROM THE SERIES.** The count sat at **896 for a full hour** while nothing was running, then rose to **958** while one row ran its three suite legs. **The flat hour is the control and the +62 is the treatment.** This page used to tell you these accumulate from suite runs; that was a story fitted to a rising series, and it now has a control arm.
 
