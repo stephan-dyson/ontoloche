@@ -25,21 +25,21 @@ before the register has entries that would tempt it to be written favourably:
 **Q97 was the founder's, and on 2026-09-09 he ruled `arm`.** The criterion above is adopted **as written** —
 `amend` was offered and not taken. It is **LIVE**.
 
-> ### ✅ THE CRITERION HAS STOOD DOWN, 2026-09-10 — ENTRY 1 (A3) IS CLOSED
+> ### ✅ THE CRITERION HAS STOOD DOWN, 2026-09-09 — ENTRY 1 (A3) IS CLOSED
 >
-> **[R103](2026-09-10-supervisor-ruling-R103.md)** closes A3 on evidence the supervisor measured
+> **[R103](2026-09-09-supervisor-ruling-R103.md)** closes A3 on evidence the supervisor measured
 > rather than accepted. **The criterion remains ARMED** — the founder armed it and nothing has
 > disarmed it. **Armed and firing are different states:** it is armed, no longer firing, and it will
-> fire again on the next entry that meets it. **The ACTIONS-surface stop in force since 2026-09-09 is
-> LIFTED.**
+> fire again on the next entry that meets it. **The ACTIONS-surface stop, in force since earlier the
+> same day, is LIFTED** — it held for about seven hours, not for a day.
 >
 > **The count stays at ONE. Closing an entry does not remove it** — this register counts harms EVER
 > REACHED, and A3 was reached.
 >
-> *The text below is the record of the criterion firing, kept as written. It is what was true from
-> 2026-09-09 to 2026-09-10 and a reader may have built on it.*
+> *The text below is the record of the criterion firing, kept as written. It is what was true for part
+> of 2026-09-09 and a reader may have built on it.*
 >
-> ### ⛔ THE CRITERION WAS FIRED, 2026-09-09 to 2026-09-10. Entry 1 (A3) met it.
+> ### ⛔ THE CRITERION WAS FIRED AND STOOD DOWN WITHIN 2026-09-09. Entry 1 (A3) met it.
 >
 > This was disclosed before the word was given: the decision page said *"the criterion goes live and entry 1
 > (A3) fires it immediately, because A3 is exactly that shape."* He armed it anyway, which makes the halt
@@ -147,7 +147,7 @@ kept:**
 different: an *overridable* `definitions_diverge` is the only thing between a caller and a collapse that
 `preflight` treats as **non-overridable** at invocation time.
 
-**CLOSED 2026-09-10 by [R103](2026-09-10-supervisor-ruling-R103.md).** On every walk reachable by
+**CLOSED 2026-09-09 by [R103](2026-09-09-supervisor-ruling-R103.md).** On every walk reachable by
 ordinary calls, at least one door now refuses or warns — so the criterion's final clause, *and no
 door refuses or warns*, is **not satisfied anywhere**. Walk 3, the route by which this entry still
 fired, **REFUSES `action_declarations_diverge` non-overridably** at the write door. Both halves

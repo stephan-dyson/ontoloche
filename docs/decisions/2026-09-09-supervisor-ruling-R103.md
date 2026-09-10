@@ -1,7 +1,9 @@
 # R103 — `A3` is CLOSED. The governance stop criterion stands down. The ACTIONS surface reopens.
 
-**Supervisor ruling, 2026-09-10.** Closing the governance register's only entry, on evidence the supervisor
+**Supervisor ruling, 2026-09-09.** Closing the governance register's only entry, on evidence the supervisor
 measured rather than accepted.
+
+> **CORRECTION, made the same day and recorded rather than erased.** This ruling was first written, committed and pushed as `2026-09-10`, in five documents and this filename. **It is a 2026-09-09 ruling** — its own commit `74193d2` is stamped `2026-09-09 20:23:36 -0400`, and the supervisor asserted tomorrow's date from a carried assumption instead of reading the clock. The file was renamed and every reference corrected in the following commit. **The correction is noted here because this is the register's closing record and the defect is the exact one this supervisor spent the day policing:** a fact carried forward without being re-checked at the point of use. **Nothing about the evidence, the reasoning, or the closure changes** — only the date they were recorded under.
 
 **Row 6g routed this rather than taking it**, on the reasoning that *"closing an entry is the same class of
 act as opening one"* — the register's own standing rule 2. Its `6G-RUN.md` §8.3 states the pass condition
