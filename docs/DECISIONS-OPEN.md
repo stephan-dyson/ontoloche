@@ -49,13 +49,15 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 **Not urgent.** Nothing is blocked: row 6g proceeds and publishes the asymmetry. But one contract id now pins exactly this question, and your ruling will move it.
 
-### 10 · `oo-pg` is carrying 625 leftover schemas. Drop them, or leave them?
+### 10 · `oo-pg` is carrying **896** leftover schemas, not the 625 this page has been telling you. Drop them, or leave them?
 
 *Low stakes. Raised by your item-4 ruling, not blocking anything.*
 
-**TL;DR.** Your `drop it` on item 4 authorised deleting one namespace attributed to row 6d. That namespace **does not exist** (see item 4 in section E). What *does* exist is **625 `oo_*` schemas** on the `oo-pg` container, left by every three-leg suite run this project has made. **I did not touch them**, because they are a different and much larger object than the one you ruled on, and reading your word as covering them would be taking a destructive action you did not sanction.
+**TL;DR.** Your `drop it` on item 4 authorised deleting one namespace attributed to row 6d. That namespace **does not exist** (see item 4 in section E). What *does* exist is **896 `oo_*` schemas** on the `oo-pg` container, left by every three-leg suite run this project has made. **This page said 625 until 2026-09-10, when I counted them instead of re-reading the figure** — and I had been carrying a third number, 741, in my own cycle prompt. **Three figures, none checked at the point of use; only the fourth was measured.** **I did not touch them**, because they are a different and much larger object than the one you ruled on, and reading your word as covering them would be taking a destructive action you did not sanction.
 
-**The facts.** 625 as of today, up from **476** on 2026-09-05 and **193** during row 6c. The container has `RestartCount=0` and a persistent volume, so they accumulate indefinitely. They **slow the postgres leg** of the three-leg suite; they have never failed it.
+**The facts.** **[Observed 2026-09-10 00:07]** `select count(*) from information_schema.schemata where schema_name like 'oo\_%'` against `open_ontology` on the running container returns **896**. The series: **193** during row 6c, **476** on 2026-09-05, **625** on 2026-09-09, **896** now.
+
+**That is +271 in a single day, the largest jump in the series** — three rows landed on 2026-09-09 and each ran the postgres leg. The container has `RestartCount=0` and a persistent volume, so they accumulate indefinitely. **This is not a pile of old junk; it is a leak that is still running.** They **slow the postgres leg** of the three-leg suite; they have never failed it.
 
 - **`drop them`** — I confirm each is a suite artefact and nothing else's, report the list length, then remove. The postgres leg gets faster. Nothing in the repo depends on them.
 - **`leave them`** — they keep accumulating. The cost is suite time, and it grows.
@@ -128,7 +130,7 @@ This page promised that on `drop it` I would *"confirm the namespace is the row'
 
 **The name has no source in the row's own record.** It appears nowhere in `6D-RUN.md`. Its only occurrences anywhere are in the supervisor documents that carried the item forward. **So this item spent four days on your page naming an object that was never observed.** The page did disclose it was unverified, which is why this is a hygiene failure rather than a false claim — but verifying it was one command, and it should have happened when the item was written, not when you ruled on it. The standing correction is recorded in the supervisor's handoff.
 
-The real residue is 625 `oo_*` schemas, which is **item 10** above rather than something folded into a word you gave about something else.
+The real residue is the `oo_*` schemas, which is **item 10** above rather than something folded into a word you gave about something else. *(625 when this was written; **896** when counted on 2026-09-10.)*
 
 ---
 
