@@ -3874,6 +3874,18 @@ _ACTION_CELLS = (
     ("host_state why", "host_a", "host_b", "action_declarations_diverge"),
     ("min_auto_tier", "tier_a", "tier_b", "action_declarations_diverge"),
     ("approval_mode", "mode_a", "mode_b", "action_declarations_diverge"),
+    # **Row 6g, founder ruling R102 -- `Q99` ruled `all eight`.** The five cells above
+    # drive only `_GOVERNANCE_KEYS`, which was FOUR of `ACTIONS.md` 2.2's EIGHT declared
+    # keys. `inputs`, `preconditions`, `reachability` and `payload_schema` were never
+    # compared, so this axis could not see A3's live route -- and G2's own lesson is that
+    # a rule invisible to this gate is a rule the suite stays byte-identical to baseline
+    # about. **Both directions again**, for the same reason the two cells above exist:
+    # widening from four keys to eight adds THREE more LIST-valued keys, so a `!=`
+    # comparison would re-create `C19-100`'s closed-a-legal-operation defect three more
+    # times at the door where it is non-overridable.
+    ("reachability", "reach_a", "reach_b", "action_declarations_diverge"),
+    ("reachability reordered", "rorder_a", "rorder_b", None),
+    ("payload_schema", "pay_a", "pay_b", "action_declarations_diverge"),
 )
 
 
@@ -3909,6 +3921,22 @@ def _action_attrs(which: str) -> dict:
     if which == "mode_b":
         return dict(base, effects=[add_edge], approval_mode="human",
                     reversibility="irreversible")
+    # Row 6g -- the keys R102 added. `reachability` is a list of OPAQUE strings and
+    # `payload_schema` an opaque name, so neither needs a seeded row to be declarable;
+    # `inputs` and `preconditions` reference registered types and are driven by `C19-104`
+    # and `C19-105` instead, which is said here rather than left as a silent omission.
+    if which == "reach_a":
+        return dict(base, effects=[add_edge], reachability=["mcp", "cli"])
+    if which == "reach_b":
+        return dict(base, effects=[add_edge], reachability=["slack"])
+    if which == "rorder_a":
+        return dict(base, effects=[add_edge], reachability=["mcp", "cli"])
+    if which == "rorder_b":
+        return dict(base, effects=[add_edge], reachability=["cli", "mcp"])
+    if which == "pay_a":
+        return dict(base, effects=[add_edge], payload_schema="schema_one")
+    if which == "pay_b":
+        return dict(base, effects=[add_edge], payload_schema="schema_two")
     raise AssertionError(which)  # pragma: no cover
 
 

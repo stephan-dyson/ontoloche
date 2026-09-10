@@ -853,6 +853,33 @@ async def test_c3_21_an_action_familys_identity_is_verified_by_its_declaration(r
     **A3 is NOT closed by this id.** Its write doors still let the collapse through on
     a key they do not compare; this pins only that the READ stops delivering a clean
     1.0 over it.
+
+    > **AMENDED by row 6g, founder ruling R102 (`Q99` ruled `all eight`).** This id's
+    > fixture was two families agreeing on the four compared governance keys and
+    > differing on `inputs` and `preconditions`, and it asserted that **the write doors
+    > PERMIT that collapse** -- *"that is the point of the fixture, and it is Q99's
+    > subject."* **R102 ruled `all eight` and the write doors now REFUSE it**, so the
+    > fixture asserts something that can no longer happen. The superseded assertion is
+    > kept in a comment below rather than deleted, for the same reason rule 5.3.2-3 is
+    > struck rather than removed.
+    >
+    > **The replacement fixture is the ONE shape on which the two sides still part
+    > company, and choosing it is the point.** R102 §2 dissolved the read/write
+    > asymmetry on contradictions -- both sides now take all eight keys. What it
+    > deliberately did **not** decide is **absence**: a key present on one side and
+    > absent on the other. The read treats that as *not agreeing* and scores below 1.0
+    > (5.3.2-10). The write does **not** read it as a contradiction on the four keys
+    > R102 added, because R102 §4 leaves it unruled and row 6g took the least-refusing
+    > option (`C19-106`). **So this id keeps asserting exactly what it always asserted --
+    > a pair the write door permits, redirecting below 1.0 at the read -- on the only
+    > operand for which that sentence is still true.**
+    >
+    > **AND THIS ID WILL MOVE AGAIN, which is written here so the next move does not read
+    > as drift.** Per-key absence is the subject of **`Q101`**, minted by the supervisor
+    > on 2026-09-09 out of row 6g's finding that the write door reads an absence as
+    > agreement in one case and as a contradiction in the other, with nobody having
+    > decided either. **This fixture therefore pins the very thing the founder is about
+    > to rule on**, and his ruling gets to change it.
     """
     common = dict(
         approval_mode="auto",
@@ -860,31 +887,32 @@ async def test_c3_21_an_action_familys_identity_is_verified_by_its_declaration(r
         reversibility="reversible",
         effects=(Effect(op="propose_type", namespace="default", kind="entity"),),
     )
-    await seed(registry, "old_verb", kind="action", attributes=action_attributes(**common))
-    await seed(registry, "guardrail", kind="predicate", definition="a capability")
-    await seed(
-        registry,
-        "new_verb",
-        kind="action",
-        attributes=action_attributes(
-            inputs=(InputSpec(name="target", ref="instance", kinds=("entity",)),),
-            preconditions=(
-                Precondition(
-                    kind="predicate_holds",
-                    subject="target",
-                    predicate="guardrail",
-                    why="the survivor protects this verb; the absorbed family did not",
-                ),
-            ),
-            **common,
-        ),
-    )
+    # SUPERSEDED FIXTURE, row 6d..6f (kept, not deleted): `new_verb` declared `inputs`
+    # and a `preconditions` guardrail the absorbed family did not, and this id asserted
+    #     assert isinstance(retired, TypeEntry), (
+    #         "the four governance keys AGREE, so the write doors permit this collapse "
+    #         "-- that is the point of the fixture, and it is Q99's subject")
+    # **R102 ruled `all eight` and that collapse is now REFUSED `action_declarations_
+    # diverge`, non-overridably, at all three doors** (`C19-104`). The assertion above
+    # cannot hold and is not weakened to fit -- the fixture moves to the operand that
+    # still has the property the id is about.
+    survivor = action_attributes(reachability=("mcp",), **common)
+    absorbed = dict(survivor)
+    # **A per-key ABSENCE, and it is the whole fixture.** `ACTIONS.md` 2.2 makes
+    # `reachability` required, so leaving it out is not "declaring nothing" -- this
+    # family declares, and is silent on one key. The write door does not read that as a
+    # contradiction (R102 4 leaves absence unruled; `C19-106`), and the read does not
+    # read it as agreement (*unknowable is not equal*).
+    absorbed.pop("reachability")
+    await seed(registry, "old_verb", kind="action", attributes=absorbed)
+    await seed(registry, "new_verb", kind="action", attributes=survivor)
     retired = await registry.retire(
         "old_verb", "superseded", retired_by="user:sd", successor="new_verb"
     )
     assert isinstance(retired, TypeEntry), (
-        f"the four governance keys AGREE, so the write doors permit this collapse -- "
-        f"that is the point of the fixture, and it is Q99's subject: {retired}"
+        f"an ABSENT key is not a key declared differently, so the write door still "
+        f"permits this collapse -- R102 4 leaves absence unruled and C19-106 pins the "
+        f"least-refusing answer: {retired}"
     )
 
     answer = await registry.resolve_type("old_verb", ResolveContext(), tier="haiku")
