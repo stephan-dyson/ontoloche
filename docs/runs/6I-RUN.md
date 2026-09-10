@@ -190,3 +190,116 @@ Pre-registration committed alone, before measurement, with the miss recorded aft
 round with fresh lenses before landing, and nothing goes in after it.** Explicit paths staged, never
 `git add -A`, with `git status --porcelain` immediately before staging. `rm` takes a literal absolute path.
 The supervisor is told before any push, and **"landed" means verified on `origin` by `git ls-remote`**.
+
+---
+
+## §1 — ITEM 3: THE HELPER-PARAMETER HOLE, SCOPED. IT IS ITS OWN ROW, AND THE REASON IS NOT ITS SIZE
+
+**Scope only. Nothing was built.** The brief asked for a scope and a verdict rather than half a checker,
+and the verdict is **its own row** for a reason that is not "it is big".
+
+### §1.1 — The cell, measured rather than described
+
+`py docs/tools/check_skip_census.py --census` at `0fcac56`:
+
+```
+S0-ENVIRONMENT             60
+S1-SETUP-RESULT            49
+S2-RESULT-UNDER-TEST        6
+S3-UNCONDITIONAL            1
+S4-UNDECIDABLE             16
+S5-PROVEN-ENVIRONMENTAL     7
+```
+
+**`S4` is 16 sites and it is not one hole, it is three**, which neither the brief nor `6H-RUN.md` §3.3
+separates:
+
+| sub-shape | count | what it is |
+|---|---|---|
+| **the guard reads a HELPER's parameter** | **6** | item 3's hole |
+| the guard calls inline and binds no name | 8 | a different hole, not routed to this row |
+| the guard is not an `if` at all | 2 | a third, not routed either |
+
+**Counted by the checker's own `why` text, after I first wrote 5 / 9 / 2 from reading a truncated listing
+and had to correct it.** `6 + 8 + 2 = 16`; the earlier numbers did not add up and that is how the miscount
+was caught.
+
+**Of the six, exactly ONE takes a RESULT as the parameter:**
+
+```
+ontoloche/contract/test_c19_actions.py:4908  _skip_if_cannot_record#0   guard reads `out`
+```
+
+The other five do not:
+
+```
+ontoloche/contract/conftest.py:142                  adapter_factory#0   guard reads `backend`
+ontoloche/contract/conftest.py:198                  adapter#0           guard reads `request`
+ontoloche/aio/contract/conftest.py:165              adapter_factory#0   guard reads `backend`
+ontoloche/aio/contract/conftest.py:221              adapter#0           guard reads `request`
+ontoloche/aio/contract/test_c0_backend_local.py:120 _run_the_race#0     guard reads `first`
+```
+
+**Four of those five are pytest FIXTURES.** `backend` is a parametrisation string and `request` is pytest's
+own request object, and both arrive from the fixture machinery rather than from any call this or any other
+static checker can find in the source. **They are not reachable by "following values across call
+boundaries" — there is no calling expression to follow.**
+
+**The fifth is worse than unreachable, and it is the one that should decide the build.**
+`_run_the_race(first, ...)`'s guard is `not (await first.capabilities()).stores_proposals` — **the canonical
+LEGITIMATE environment guard, the exact shape `S0` exists for.** It sits in `S4` only because `first` is a
+parameter, and `first` is an ADAPTER: the object the test drives the system through, which this checker
+already has a RECEIVER rule to keep out of the observation set. **A pass that flags helper parameters
+without resolving them would flag a capability read as a result-conditioned skip.**
+
+So the hole's resolvable, result-carrying population today is **one site**, and that site is correctly
+written.
+
+### §1.2 — Why the general shape is the wrong build, and what the right one is
+
+The brief describes closing this as *"following values across call boundaries"*. That is the general
+interprocedural build and it has a defect the existing gate does not have.
+
+**`_skip_if_cannot_record` has FOUR call sites** — `test_c19_actions.py` lines 5013, 5065, 5152, 5225 — and
+they are four different enclosing tests with four different assertion sets. **The same helper site is
+therefore `S1` under one caller and potentially `S2` under another**, which breaks the thing that makes the
+current baseline stable: site identity is `(file, function, ordinal)`, deliberately not the line number,
+*"because a gate that fails for unrelated reasons is a gate somebody weakens"* — this checker's own
+sentence. A per-caller category needs a per-caller identity, and a per-caller identity means one helper
+appears in the baseline `N` times and renumbers whenever a caller is added.
+
+**The cheaper build that gets the property without the identity problem.** The question item 3 actually
+needs answered is binary and does not need a category per caller:
+
+> Does **any** caller of this helper assert on the value it passes in?
+
+That is **one hop, same module, name-resolved** — build a module-level map of `FunctionDef` by name, bind
+each call's positional and keyword arguments to the helper's parameters, and run the *existing*
+`_roots` / `_assertion_nodes` machinery on the caller. If any caller asserts on the argument's root, the
+helper's guard is reading the result under test and must carry the `S5` proof or be flagged. Site identity
+stays `(file, helper, ordinal)`. **No new baseline shape, no renumbering, no cross-module analysis.**
+
+### §1.3 — The verdict, and it is not about line count
+
+**Its own row.** The build above is perhaps 120-180 lines plus calibration, which by itself would not
+justify a row. Three things do:
+
+1. **It moves a whole cell.** Sites currently reported as `S4` — *"an honest refusal to answer, and it is
+   never gated"* — become gateable. Changing what a category MEANS is not a change you land inside a row
+   whose subject is four skip sites.
+2. **The five non-result sites must be excluded by a rule, not by luck.** If the new pass flags a
+   parameter it cannot resolve, `conftest.py`'s fixtures enter the baseline for reading `backend` and
+   `request`, which are environment through and through — and `_run_the_race` enters it for reading a
+   CAPABILITY, which is the shape `S0` is named after. **That is `C19-100` again, a legal skip closed by a
+   gate**, and it is not hypothetical: the failure is already visible in today's `S4` listing. The rule that
+   excludes them ("a parameter with no resolvable caller stays `S4`", and the receiver rule extended across
+   the call) has to be calibrated and mutation-tested, not asserted.
+3. **The gate's own calibration set has to grow with it**, and the term this row is held to says the
+   adversarial round comes before landing. Row 6h's round found five blocking, two of them in fixes made an
+   hour earlier. A cell-moving change bolted onto the end of this row would get the round this row's
+   subject earned, not the round its own subject needs.
+
+**What is NOT a reason to give it a row: urgency.** The hole's entire result-carrying population is one
+site and that site is correct. **This is exposure, not a defect**, and `6H-RUN.md` §0.3 pre-registered it
+as known exposure (b) before it fired. It should be built because the next helper written in that shape
+will not be correct, not because this one is.
