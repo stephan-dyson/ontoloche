@@ -528,7 +528,22 @@ def _guard_chain(func: ast.AST, skip_node: ast.AST):
             for stmt in node.orelse:
                 visit(stmt, active, inner, "other")
             return
-        if isinstance(node, (ast.While, ast.Try, ast.Match, ast.BoolOp)):
+        if isinstance(node, ast.Try):
+            # THE BODY KEEPS ITS OWN `if`. Only the handlers and the `else` are
+            # undecidable -- a skip in the body is guarded by whatever guards it,
+            # exactly as in a loop body. Sending every child to "other" made
+            # `try: ... if isinstance(out, Refusal): skip()` an S4 whose recorded
+            # `guard` field held the very `if` its `why` said did not exist, and
+            # wrapping any flagged skip in `try:` walked it out of the gated cell.
+            for stmt in node.body:
+                visit(stmt, active, inner, shape)
+            for handler in node.handlers:
+                for stmt in handler.body:
+                    visit(stmt, active, inner, "other")
+            for stmt in node.orelse + node.finalbody:
+                visit(stmt, active, inner, "other")
+            return
+        if isinstance(node, (ast.While, ast.Match, ast.BoolOp)):
             for child in ast.iter_child_nodes(node):
                 visit(child, active, inner, "other")
             return
@@ -649,8 +664,20 @@ def _capability_expr(node, cap_derived: set[str], observations: set[str]) -> boo
         base = base.func
     if isinstance(base, ast.Attribute) and base.attr in CAPABILITY_MARKERS:
         owner = base.value
-        while isinstance(owner, (ast.Attribute, ast.Subscript)):
-            owner = owner.value
+        # A `Call` in the chain must be unwrapped too. Without it
+        # `registry.retire(...).caps.stores_events is False` left `owner` a Call,
+        # `isinstance(owner, ast.Name)` was False, and the observation check was
+        # SKIPPED ENTIRELY -- so a capability read off a fresh result of the system
+        # under test was accepted, which is the class this check exists to refuse.
+        # A FRESH CALL TO THE SYSTEM IN THE OWNER CHAIN IS A RESULT, and no name
+        # holds it -- so a name-based check cannot see it.
+        # `registry.retire(...).caps.stores_events is False` walks down to the
+        # NAME `registry`, which is configuration, and the read was accepted. The
+        # capability is being read off the very refusal the guard is judging.
+        if _observes(base.value):
+            return False
+        while isinstance(owner, (ast.Attribute, ast.Subscript, ast.Call)):
+            owner = owner.func if isinstance(owner, ast.Call) else owner.value
         # `gone.caps.stores_events`, where `gone` is the result under test, is not a
         # fact about the environment however it is spelled.
         return not (isinstance(owner, ast.Name) and owner.id in observations)
@@ -693,9 +720,15 @@ def _is_false_constant(node) -> bool:
 
 
 def _string_constant(node) -> bool:
-    """A string literal, or a tuple/list/set of them -- `x.reason in ("a", "b")`."""
+    """A NON-EMPTY string literal, or a tuple/list/set of them.
+
+    Empty is excluded because it names nothing: `x.reason.startswith("")` is true
+    of every string, and it bought a narrowing while the gate printed "narrows on
+    a literal outcome". The stated rule is that every ambiguity resolves toward
+    S2, and a vacuous literal resolved toward S5.
+    """
     if isinstance(node, ast.Constant):
-        return isinstance(node.value, (str, bytes))
+        return isinstance(node.value, (str, bytes)) and bool(node.value)
     if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
         return bool(node.elts) and all(_string_constant(e) for e in node.elts)
     return False
@@ -755,16 +788,26 @@ def _positive_naming(test, observations: set[str], positive: bool = True) -> boo
         and isinstance(test.func, ast.Attribute)
         and test.func.attr in NARROWING_METHODS
         and any(_string_constant(a) for a in test.args)
+        # THE RECEIVER, not the whole call. With `_names_read(test)` an observation
+        # appearing in an ARGUMENT satisfied "over the observation", so
+        # `adapter.dsn.startswith("postgres://", len(gone.reason))` narrowed
+        # nothing about `gone` and printed that it did -- the very sentence the
+        # comment below says this check stopped printing.
+        and bool(_names_read(test.func.value) & observations)
     ):
         # A prefix names one marker -- but only over the OBSERVATION. Without that
         # check a lens laundered a bare `isinstance(gone, Refusal)` with `not
         # adapter.dsn.startswith("postgres://")`, which narrows nothing about
         # `gone`, while the `why` said "narrows on a literal outcome".
-        return bool(_names_read(test) & observations)
+        return True
     if (
         isinstance(test, ast.Call)
         and isinstance(test.func, ast.Name)
-        and test.func.id in {"any", "all"}
+        # `any` ONLY. `all(...)` over an EMPTY sequence is vacuously true, so the
+        # guard also admits the "nothing matched at all" case -- precisely the
+        # outcome the capability does not explain. It was accepted alongside `any`
+        # with no emptiness guard, and there is none available to an AST.
+        and test.func.id == "any"
         and len(test.args) == 1
         and isinstance(test.args[0], (ast.GeneratorExp, ast.ListComp, ast.SetComp))
     ):
@@ -812,7 +855,14 @@ def _establishes_not_that_type(test, observations: set[str]) -> bool:
         and isinstance(call.func, ast.Name)
         and call.func.id == "isinstance"
         and len(call.args) == 2
-        and bool(_names_read(call.args[0]) & observations)
+        # THE ARGUMENT MUST *BE* THE OBSERVATION, not merely mention it.
+        # `not isinstance(gone.reason, Refusal)` is a TAUTOLOGY -- a reason string
+        # is never a Refusal -- and it read an observation, so it bought the
+        # exemption and the skip fired on every outcome. F12's mechanism through
+        # the one exemption, and the printed sentence claimed `gone` had been
+        # type-tested when `gone.reason` had.
+        and isinstance(call.args[0], ast.Name)
+        and call.args[0].id in observations
     ):
         return False
     # THE TYPE IS THE ARGUMENT, and the first cut never looked at it -- a lens got
@@ -851,6 +901,45 @@ def _guard_narrows(pairs, observations: set[str]) -> str:
     if exempt and not family:
         return "establishes the value is NOT a refusal, so there is no reason to compare"
     return ""
+
+
+def _why_not_falsifying(test, cap_env, all_observations: set[str]) -> str:
+    """WHICH of the two causes refused this assertion. Both were reported as one.
+
+    `_falsifying` returns False for two unrelated reasons: the expression is not a
+    form this gate reads, OR it is exactly that form but read off the RESULT UNDER
+    TEST. The single message named only the first, so the gate told a contributor
+    that `gone.caps.stores_events is False` was "not a form this gate can verify"
+    -- while that string IS `<cap> is False`, character for character, in the
+    grammar the same sentence then goes on to list. It refused for the owner and
+    blamed the spelling.
+    """
+    if test is None:
+        return "this gate could not read the assertion"
+    owners = _capability_reads(test)
+    shared = owners & all_observations
+    if shared:
+        return (
+            "it reads the capability off " + ", ".join(sorted(shared))
+            + " -- THE RESULT UNDER TEST -- which is not a fact about the "
+            "environment however it is spelled. The FORM is fine; the OWNER is not"
+        )
+    if any(
+        isinstance(nd, ast.Attribute)
+        and nd.attr in CAPABILITY_MARKERS
+        and _observes(nd.value)
+        for nd in ast.walk(test)
+    ):
+        return (
+            "it reads the capability off a FRESH CALL to the system, so the owner "
+            "is a result under test that no name holds. The FORM is fine; the "
+            "OWNER is not"
+        )
+    return (
+        "that is not a form this gate can verify FAILS on a backend holding the "
+        "capability -- it reads `<cap> is False`, `not <cap>`, and `and`/`or` "
+        "combinations of those, and nothing else"
+    )
 
 
 def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
@@ -926,18 +1015,34 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
                 "sound and THIS GATE CANNOT VERIFY IT. A limit of the instrument, "
                 "not an established defect in the suite"
             )
+        present = [
+            stmt for stmt in before
+            if isinstance(stmt, ast.Assert) and _mentions_capability(stmt.test, cap_all)
+        ]
+        if present:
+            # A capability IS asserted -- it just does not survive `_falsifying`.
+            # "reads a capability at all" was false of the block, and it is the same
+            # sentence `_mentions_capability`'s docstring records as repaired:
+            # repaired in one branch and left standing in the other.
+            return "", (
+                base + ". NOTE THE KIND: the block DOES assert "
+                f"`{ast.unparse(present[0].test)}`, but "
+                + _why_not_falsifying(present[0].test, cap_env, all_observations)
+            )
         return "", (
             base + ". NOTE THE KIND: no assertion in the skip's own branch reads a "
             "capability at all, so there is no proof here to check"
         )
 
     found = ""
+    found_test = None
     for stmt in before:
         if not isinstance(stmt, ast.Assert):
             continue
         if not _mentions_capability(stmt.test, cap_all):
             continue
         found = ast.unparse(stmt.test)
+        found_test = stmt.test
         if _falsifying(stmt.test, cap_env, all_observations):
             return found, narrowing
     if found:
@@ -948,10 +1053,8 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
         # printing a false reason is F15 pointed the other way. So the text now
         # says what this gate READS, which is a claim about the gate.
         return "", (
-            f"the block asserts `{found}` before it skips, but that is not a form "
-            f"this gate can verify FAILS on a backend holding the capability -- it "
-            f"reads `<cap> is False`, `not <cap>`, and `and`/`or` combinations of "
-            f"those, and nothing else"
+            f"the block asserts `{found}` before it skips, but "
+            + _why_not_falsifying(found_test, cap_env, all_observations)
         )
     return "", "no assertion in the skip's own branch reads a capability before it skips"
 
@@ -1456,7 +1559,9 @@ def _tombstone_holding(registry, word="zzz_moved"):
 ''',
     ),
     (
-        "AXIS part 2 -- `reason !=` narrows as well as `reason ==`. MUST stay S5",
+        "AXIS part 2 -- a `reason !=` guard names NOTHING, and this case stays S5 on "
+        "the BRANCH-PIN `out.reason == 'predicate_merge'` above the skip. Strip that "
+        "assertion and it drops to S2, which is the point",
         PROVEN_ENV,
         '''
 import pytest
@@ -1635,6 +1740,108 @@ def test_alias_launder(registry):
         assert gone.caps.stores_events is False, detail
         pytest.skip("NOT REACHABLE")
     assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R4 -- a TAUTOLOGICAL isinstance buys the exemption. `gone.reason` is never a "
+        "Refusal, so the guard is always true and the skip fires on every outcome",
+        UNDER_TEST,
+        '''
+import pytest
+def test_tautological_exemption(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if not isinstance(gone.reason, Refusal):
+        assert registry.caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert gone.aliases
+''',
+    ),
+    (
+        "R4 -- a capability read off an INLINE CALL to the system. No name holds the "
+        "result, so a name-based owner check could not see it",
+        UNDER_TEST,
+        '''
+import pytest
+def test_inline_call_owner(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert registry.retire("beta", "gone", retired_by="user:sd").caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert gone.aliases
+''',
+    ),
+    (
+        "R4 -- an EMPTY literal names nothing. `startswith(\"\")` is true of every "
+        "string and it bought a narrowing",
+        UNDER_TEST,
+        '''
+import pytest
+def test_empty_literal(registry):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason.startswith(""):
+        assert registry.caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert gone.aliases
+''',
+    ),
+    (
+        "R4 -- `all(...)` is VACUOUSLY TRUE on an empty sequence, so it also admits "
+        "the outcome the capability does not explain. `any` has no such hole",
+        UNDER_TEST,
+        '''
+import pytest
+def test_all_is_vacuous(registry):
+    out = registry.import_types([{"name": "plaza"}], namespace="dpr", kind="entity")
+    assert out, out
+    warnings = tuple(out[0].warnings or ())
+    if all(w.startswith("import_refused:") for w in warnings):
+        assert registry.caps.stores_aliases is False, warnings
+        pytest.skip("NOT REACHABLE")
+    assert any(w.startswith("import_field_ignored:") for w in warnings), warnings
+''',
+    ),
+    (
+        "R4 -- the observation in an ARGUMENT is not the observation NARROWED. The "
+        "receiver has to carry it",
+        UNDER_TEST,
+        '''
+import pytest
+def test_observation_in_argument(registry, adapter):
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and adapter.dsn.startswith("postgres://", len(gone.reason)):
+        assert registry.caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE")
+    assert gone.aliases
+''',
+    ),
+    (
+        "R4 -- a `try` BODY keeps its own `if`. Sending every child to `other` made "
+        "wrapping a flagged skip in `try:` an exit from the gated cell",
+        UNDER_TEST,
+        '''
+import pytest
+def test_try_body(registry):
+    try:
+        out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+        if isinstance(out, Refusal):
+            pytest.skip("refused")
+    except ValueError:
+        raise
+    assert out.warnings
+''',
+    ),
+    (
+        "R4 -- and a skip in an EXCEPT handler is still UNDECIDABLE, so the `try` fix "
+        "did not weaken what LENS M5 pinned",
+        UNDECIDABLE,
+        '''
+import pytest
+def test_except_handler_still_undecidable(registry):
+    try:
+        out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    except ValueError:
+        pytest.skip("this backend raises here")
+    assert out.warnings
 ''',
     ),
     (
