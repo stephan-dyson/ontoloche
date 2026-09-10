@@ -267,13 +267,57 @@ written.
 The brief describes closing this as *"following values across call boundaries"*. That is the general
 interprocedural build and it has a defect the existing gate does not have.
 
-**`_skip_if_cannot_record` has FOUR call sites** — `test_c19_actions.py` lines 5013, 5065, 5152, 5225 — and
-they are four different enclosing tests with four different assertion sets. **The same helper site is
-therefore `S1` under one caller and potentially `S2` under another**, which breaks the thing that makes the
-current baseline stable: site identity is `(file, function, ordinal)`, deliberately not the line number,
-*"because a gate that fails for unrelated reasons is a gate somebody weakens"* — this checker's own
-sentence. A per-caller category needs a per-caller identity, and a per-caller identity means one helper
-appears in the baseline `N` times and renumbers whenever a caller is added.
+**AN EARLIER DRAFT OF THIS SECTION MADE A CLAIM IT HAD NOT MEASURED, AND THE CLAIM IS FALSE.** It said:
+*"`_skip_if_cannot_record` has FOUR call sites ... four different assertion sets. The same helper site is
+therefore `S1` under one caller and potentially `S2` under another"*, and rested the whole verdict on the
+baseline's `(file, function, ordinal)` identity being unable to express that.
+
+**[Observed — all four call sites read]** every caller asserts on the value it passes, identically:
+
+```
+test_c19_actions.py:5013  _skip_if_cannot_record(registry, out)          5014  assert not isinstance(out, Refusal)
+test_c19_actions.py:5065  _skip_if_cannot_record(registry, out)          5066  assert not isinstance(out, Refusal)
+test_c19_actions.py:5152  _skip_if_cannot_record(registry, respelt_out)  5153  assert not isinstance(respelt_out, Refusal)
+test_c19_actions.py:5225  _skip_if_cannot_record(registry, out)          5226  assert not isinstance(out, Refusal)
+```
+
+**Under the very rule this section proposes below — *does ANY caller assert on the value it passes* — all
+four classify IDENTICALLY.** The divergence was asserted, not measured, in a document whose whole subject
+is the difference.
+
+**And the cell has no instance of it at all**, measured across all six helper-parameter sites:
+
+| site | source-level callers |
+|---|---|
+| `conftest.py:142`, `conftest.py:198`, and both `aio` twins | **none** — pytest fixtures |
+| `test_c19_actions.py:4908` `_skip_if_cannot_record` | 4, all uniform |
+| `aio/test_c0_backend_local.py:120` `_run_the_race` | **1** (at line 180) |
+
+**And `_run_the_race` lives in a HAND-WRITTEN `aio` file** — `ontoloche/aio/contract/test_c0_backend_local.py`
+carries no `GENERATED FILE -- do not edit` banner, and row 6h named it as one of the two hand-written files
+in that tree. **So this `S4` cell spans BOTH trees and the six sites are not all mirrorable.** A checker
+built on the assumption that the async tree is wholly generated from the sync one would be wrong about this
+cell in particular. That matters to whoever builds it and neither the brief nor an earlier draft of this
+section said it.
+
+**ZERO of six have divergent callers.** Per-caller divergence is a real property of interprocedural
+analysis in general and it is a RISK here, not a demonstrated blocker. **This is the same defect as §0.3's
+H2 — a real citation that does not support the claim resting on it — committed by this row, against
+itself, two sections later.**
+
+**A THIRD OPTION, cheaper than either build, which this row missed and an adversarial lens found.**
+`_skip_if_cannot_record` lands in `S4` only because `out` is a **parameter**: parameters have no
+observation root, so `read_obs` is empty and the `guarded_params` branch fires before the `S5` path is ever
+reached. **Its body already carries the capability proof** — `assert registry.caps.stores_events is False`
+before the skip. Let a parameter proven safe *within its own function* participate in the root logic and
+that site classifies **`S5` with no call-boundary crossing at all.** That resolves the entire
+resolvable, result-carrying population of this cell — one site — locally.
+
+**IT IS NOT APPLIED HERE, and the reason is not that it arrived after the round.** It changes
+`check_skip_census.py`, and **the classifier is the instrument every number in this row rests on.** Change
+it and the census, the `S`-cell splits, the lowered baseline and `P2`'s hit all become measurements of a
+different instrument than the one that produced them. **That is not an amendment to this row, it is a new
+row that must re-measure from the top.** It is the follow-on's first item.
 
 **The cheaper build that gets the property without the identity problem.** The question item 3 actually
 needs answered is binary and does not need a category per caller:
@@ -291,6 +335,8 @@ stays `(file, helper, ordinal)`. **No new baseline shape, no renumbering, no cro
 **Its own row.** The build above is perhaps 120-180 lines plus calibration, which by itself would not
 justify a row. Three things do:
 
+0. **NOT the identity scheme.** That reason is withdrawn above. It was this row's load-bearing argument and
+   it did not survive its own adversarial round, so it does not survive into the verdict either.
 1. **It moves a whole cell.** Sites currently reported as `S4` — *"an honest refusal to answer, and it is
    never gated"* — become gateable. Changing what a category MEANS is not a change you land inside a row
    whose subject is four skip sites.
@@ -427,10 +473,16 @@ a better outcome than a repaired one with an invented cause.**
 **And ITEM 1's two are evidenced on three legs**, not on the one superseded leg the brief cited:
 
 ```
-sync, SQLite only      test_c10_merge_types.py:1337 / test_c4_propose_type.py:467   cannot_record_override
+sync, SQLite only      (6h's number, INHERITED -- this row did not re-run the pre-repair floor)
 sync, three backends   test_c10_merge_types.py:1337 / test_c4_propose_type.py:467   cannot_record_override
 async, three backends  aio/...:1321                 / aio/...:460                   cannot_record_override
 ```
+
+**The first cell is 6h's and is marked as such.** This row re-measured the two three-backend floors at
+`0fcac56` and did NOT re-run the pre-repair SQLite-only leg — only the post-repair one. The inherited
+number follows deductively from §2.2's same-collected-set argument, but **a row whose entire finding is
+that a neighbouring cell in that same 6h table was wrong does not get to present an inherited number and a
+re-measured one in the same framing.** Two legs are evidence this row took; the third is a derivation.
 
 ---
 
@@ -438,8 +490,18 @@ async, three backends  aio/...:1321                 / aio/...:460               
 
 ### §3.1 — What changed, and the shape it took
 
-Four sites, four sync files, plus the four generated mirrors. **All three `_tombstone_holding` copies now
-have byte-identical bodies**, which is R104 reading 1 applied in the direction R104 named: **UP**.
+Four sites, four sync files, plus the four generated mirrors.
+
+**All three `_tombstone_holding` copies now have a byte-identical OPERATIVE BLOCK** — everything from
+`gone = registry.retire(...)` through `return gone`, verified by extracting the three function bodies with
+`ast.get_source_segment` and comparing. That is R104 reading 1 applied in the direction R104 named: **UP**.
+
+**Their full bodies are NOT identical and an earlier draft of this sentence said they were.** The c4 copy
+carries a longer docstring — *"The kill row's FOURTEENTH trip's fixture: four ordinary, permitted calls..."*
+— which predates this row and which c9 and c12 never had. The three bodies reduce to **two** distinct
+strings, not one. The claim that failed verification is left here rather than deleted, because §3.5's
+3-line insertion asymmetry between c4 and its twins was already recorded a few paragraphs later and nothing
+reconciled the two: **the record contradicted itself and the stronger sentence was the wrong one.**
 
 ```python
 gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
@@ -467,23 +529,98 @@ R104's reading 1 was right about **a path the suite actually walks**, not about 
 c9 twin is silent on every leg; that does not weaken the reading, it means one of the three was reachable
 and unasserted rather than none of them.
 
-### §3.3 — The safety of the narrowing, MEASURED on the pre-repair code
+### §3.3 — The safety of the narrowing: PROVABLE at three sites, and correct-for-another-reason at the fourth
 
-**Every firing of these guards across the whole async leg — seven of them — is `cannot_record_override`.
-Zero other reasons, anywhere:**
+The narrowing makes a refusal that is NOT `cannot_record_override` FAIL where it used to skip. Whether that
+can hurt a conformant backend is not one question, it is two, and the two doors answer differently.
+
+**THE THREE `retire` SITES — provable by construction, for ANY backend.** `_tombstone_holding` calls
+`registry.retire("alpha", ..., force=True)` with **no `successor`**. `retire` (`registry.py:3414-4186`) has
+**twelve** `return Refusal(...)` statements and no indirect ones — every other return in it is a success
+path. Their enclosing guard chains, extracted from the AST:
+
+| refusals | gated behind | reachable here? |
+|---|---|---|
+| 9 of 12 | `successor is not None` | **no** — `successor` is never passed |
+| `live_consumers` | `report.gates_on and (not force)` | **no** — `force=True` |
+| `no_consumer_evidence` | `not report.gates_on and ... and (not force)` | **no** — `force=True` |
+| **`cannot_record_override`** | `force and (not self.caps.stores_events)` | **THE ONLY ONE LEFT** |
+
+**So at these three sites the fall-through has no possible victim, not merely no observed one.** This is
+stronger than the measurement it replaces and it does not depend on which backends happen to exist in this
+repository.
+
+**THE `merge_types` SITE — NOT provable, and this record does not claim it is.** `merge_types`
+(`registry.py:4956-5470`) has **ten** refusals and exactly one `cannot_record_override` producer. For
+`test_c10_24`'s call, `definitions_diverge` and `no_consumer_evidence` are excluded **by the `acknowledge`
+tuple the test passes**, and `retired_operand` and `cross_namespace_merge` by the fixture's own data. **The
+remaining five are identity guards whose reachability depends on data, not on structure.**
+
+**The narrowing is still right there, for a different reason.** If `merge_types` refuses this fixture with
+`alias_collision` or an identity breach, **that is a finding and it should FAIL** — which is precisely what
+R104 says the `S5` shape exists to produce. A door refusing for a reason no capability explains is not an
+environment this test should skip on.
+
+### §3.3.1 — The observed firings, and WHICH of them this row actually repaired
+
+An earlier draft of this section listed six firings under *"every firing of these guards"* to argue the
+narrowing was safe. **Three of the six are sites this row never touched**, and the text did not say so. A
+reader would reasonably have concluded all six were addressed. Separated properly:
+
+**Sites this row REPAIRED (3 of the 4 fired; the c9 twin fired nowhere):**
 
 ```
-aio/test_c10_merge_types.py:1266     cannot_record_override
-aio/test_c10_merge_types.py:1321     cannot_record_override
-aio/test_c12_foundry_import.py:1100  cannot_record_override   (2 ids)
-aio/test_c12_foundry_import.py:1275  cannot_record_override
-aio/test_c3_resolve_type.py:687      cannot_record_override
-aio/test_c4_propose_type.py:460      cannot_record_override
+aio/test_c10_merge_types.py:1321     1 id    cannot_record_override
+aio/test_c12_foundry_import.py:1100  2 ids   cannot_record_override
+aio/test_c4_propose_type.py:460      1 id    cannot_record_override
 ```
 
-So the fall-through would have fired on nothing across 979 passing ids. **That is a measurement on the
-PRE-repair code and the claim is about the POST-repair code**, so it predicts rather than proves; §4's legs
-are what prove it.
+**Sites this row did NOT touch, observed firing the same reason, NAMED here as deferred:**
+
+```
+aio/test_c10_merge_types.py:1266     test_c10_23_the_escape_is_evaluated_over_the_whole_holder_set
+aio/test_c12_foundry_import.py:1275  test_c12_26_the_import_name_door_holds_the_byte_identical_tombstone
+aio/test_c3_resolve_type.py:687      test_c3_17_a_tombstone_elsewhere_is_found_by_the_words_it_answers_to
+```
+
+**All three are `S1-SETUP-RESULT`, not `S2`** — the guarded value is not independently asserted later — so
+they are outside the gate entirely and outside this row's authorisation. **But nobody had written down a
+decision to defer them**, the way §2.4 names the four `S2` holdouts, and an undocumented deferral is
+indistinguishable from an oversight.
+
+**The full population, measured rather than estimated: 25 bare `isinstance(x, Refusal)` guards remain in
+the sync tree**, across `c3`, `c5`, `c9`, `c10` and `c12`. Two are item 2's baselined holdouts; the other
+23 are `S1`. **This row repaired four and named three more. It did not audit the remaining eighteen and
+does not claim to have.**
+
+**THE COUNTING COMMAND, published with the number so the next row reproduces it rather than re-derives it
+(rule 1q):**
+
+```python
+# over ontoloche/contract/test_c*.py, using the census's own classifier
+for f in sorted(pathlib.Path("ontoloche/contract").glob("test_c*.py")):
+    for s in classify_source(f.read_text(encoding="utf-8"), f.as_posix()):
+        if s.guard.startswith("isinstance(") and "Refusal" in s.guard and "reason" not in s.guard:
+            ...   # -> 25
+```
+
+**It counts SKIP SITES whose census guard text is an un-narrowed `isinstance`-on-`Refusal` test.** The
+supervisor's independent check counts something different and returns **23**:
+
+```
+grep -rn --include='*.py' 'if isinstance([a-z_]*, Refusal):' ontoloche/contract/ | grep -v __pycache__
+```
+
+**The two numbers reconcile exactly, with no residue**, and the difference is worth publishing because a
+reader meeting 23 and 25 in two documents would otherwise assume one is wrong:
+
+| | count |
+|---|---|
+| grep hits | **23** |
+| ...of which actually guard a `pytest.skip` | **22** — the regex counts source lines, not skip sites |
+| shapes the regex cannot match: `isinstance(pending, (Refusal, TypeEntry))` (a tuple) | +1 |
+| shapes the regex cannot match: `isinstance(gone2, Refusal)` x2 (`[a-z_]*` excludes the digit) | +2 |
+| **skip sites of this shape** | **25** |
 
 ### §3.4 — The census, the baseline, and `P2`
 
@@ -645,3 +782,69 @@ the same length on purpose.
 **Row 6g re-created this defect at three doors on 2026-09-07 while trying to honour the ruling against it.**
 Three near-misses in one row, in three different shapes, is not caution being rewarded — it is a defect that
 is genuinely easy to re-commit, and the thing that caught all three was measuring before naming.
+
+---
+
+## §6 — THE ADVERSARIAL ROUND
+
+**Four fresh lenses, none told the work had passed anything or who wrote it:** measurement correctness,
+code failure modes, gate and ratchet integrity, record consistency and the scope verdict.
+
+**Round 1 verdicts: three SHIP IT, one NOT YET. Five findings, all acted on.**
+
+### §6.1 — What the round found
+
+**`F1` MAJOR — §1.2's load-bearing reason was asserted, not measured, and is false.** The identity-scheme
+argument cited `_skip_if_cannot_record`'s four call sites; all four assert on the value they pass,
+identically. Zero of the six helper-parameter sites have divergent callers. **Corrected in §1.2 with the
+withdrawn claim left legible, and the verdict re-rested on the two reasons that survive.** The supervisor
+had accepted the scope verdict *on this reason specifically* and recorded it as a constraint outliving the
+row; that acceptance rested on an unevidenced claim and was reported back the moment the lens found it.
+
+**`F2` MAJOR — §3.1 claimed all three `_tombstone_holding` bodies were byte-identical. They are not.** The
+c4 copy's docstring predates this row; the three bodies reduce to two distinct strings. The **operative
+block** is byte-identical, which is the part R104 needs. **Corrected in §3.1**, and the record's own §3.5
+had already recorded the 3-line asymmetry that contradicted it without anything reconciling the two.
+
+**`F3` MAJOR — §3.3 commingled repaired sites with untouched ones.** Three of six cited firings belong to
+`test_c10_23`, `test_c12_26` and `test_c3_17`, which this row never touched. **Split in §3.3.1**, the three
+named as deferred, and the full population measured at **25** bare-shape guards rather than left vague.
+
+**`F4` MAJOR, ROUTED — `_capability_proof` accepts a capability assertion of the WRONG FLAG or the WRONG
+BOOLEAN SENSE as valid `S5` proof.** A lens constructed the exploit and confirmed it against the live
+classifier: `assert registry.caps.stores_events is True` — inverted, trivially true on every real backend —
+classifies as `S5-PROVEN-ENVIRONMENTAL`. **This row does not touch `check_skip_census.py` and neither
+creates nor worsens the hole**, and its own four instances are verified correct against `registry.py`.
+**But this row mints four more copies of a deliberately byte-identical shape**, which is what a future
+contributor copy-pastes with the wrong flag. **Routed, not fixed here** — fixing the gate is not this row's
+subject and would arrive after its own adversarial round.
+
+**`F5` MINOR — `registry.py:5319` is wrong; the guard is at `5317`.** See §6.2.
+
+Two further MINORs were acted on without being blocking: §2.4's SQLite-only cell now carries its `(6h)`
+attribution and is marked derived rather than re-measured, and the cheaper local fix a lens found for
+`_skip_if_cannot_record` is named in §1.2 so the follow-on picks from a full menu.
+
+**One thing the round made STRONGER rather than weaker.** A lens argued the narrowing is safe by
+construction and not merely by measurement. **This row did not take that on the lens's word** — it
+extracted every `return Refusal(...)` in `retire` and `merge_types` with their AST guard chains, and found
+the lens's framing too uniform: it holds at the three `retire` sites and **does not** hold at the
+`merge_types` site. §3.3 now records both, and the merge site's correctness rests on a different argument
+rather than a borrowed one.
+
+### §6.2 — `registry.py:5319` is wrong, and §0.3 is NOT edited
+
+**The guard is `ontoloche/registry.py:5317`.** `5319` is the line of the string literal `"cannot_record_override"`
+inside the `Refusal(...)` two lines below it. I took it from `grep -n` output and treated it as the guard
+line. **`3969` is correct**; only the merge-door citation is off.
+
+**§0.3 still says `5319` and stays that way. The pre-registration is not edited after measurement**, and
+`0fcac56`'s commit message is not amended, because the git-log order is the only thing that makes §0
+evidence. The wrong figure stays legible and this section carries the correction — the same discipline the
+supervisor is applying to `6H-RUN.md` and `R104`.
+
+**The defect shape is worth naming because it is the third time this row has met it.** `answers-2` recorded
+the supervisor's own version: *"I verified the quote and never checked that it was the line that site
+reaches. Running the instrument on the wrong subject is not running the instrument."* **I then did exactly
+that at the merge door, and again at §1.2 where the call sites I cited did not support the claim I rested
+on them.** H2 was right about the citation and wrong about who else would commit it.
