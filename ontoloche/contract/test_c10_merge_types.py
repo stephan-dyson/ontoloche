@@ -1333,8 +1333,29 @@ def test_c10_24_merge_states_a_skipped_identity_guard_too(adapter, make_registry
         "ent_a", "ent_b", "one and the same", merged_by="user:sd",
         acknowledge=("definitions_diverge", "no_consumer_evidence"),
     )
-    if isinstance(merged, Refusal):
-        pytest.skip(f"this backend refused for another reason ({merged.reason})")
+    if isinstance(merged, Refusal) and merged.reason == "cannot_record_override":
+        # NOT REACHABLE, never a pass. `merge_types`'s `if acknowledge and not
+        # self.caps.stores_events` refuses BEFORE the identity guard is consulted, and
+        # this call acknowledges two guards -- so on a store that records nothing there
+        # is no identity guard verdict to state. **Gated on the CAPABILITY**, so a store
+        # that CAN record and still refused this way is a finding and not a skip.
+        #
+        # NOT the `retire` guard. Row 6h and the 6i brief both explained this site with
+        # `if force and not self.caps.stores_events`, which lives in `retire`; this call
+        # never passes `force` and `merge_types` never calls `retire`. Same capability,
+        # different door, and a reader who follows the old cite here finds a `force`
+        # check in a function this test does not call.
+        assert degraded.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability",
+            merged.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the acknowledgement before the "
+            "identity guard is evaluated"
+        )
+    assert not isinstance(merged, Refusal), (
+        "the merge refused for a reason no capability explains", merged,
+    )
     assert any(
         w.startswith("identity_guard_skipped:different_consumer_sets:")
         for w in (merged.warnings or ())

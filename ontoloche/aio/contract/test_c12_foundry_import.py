@@ -1096,8 +1096,31 @@ async def _tombstone_holding(registry, word="zzz_moved"):
     if not written or word not in (written[0].aliases or ()):
         pytest.skip("this backend did not keep the alias the fixture is built on")
     gone = await registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
-    if isinstance(gone, Refusal):
-        pytest.skip(f"this backend cannot retire the holder ({gone.reason})")
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        # NOT REACHABLE, never a pass. `retire`'s `if force and not
+        # self.caps.stores_events` refuses a destructive override that cannot be
+        # written down, whichever guard it is overriding -- so on such a store this
+        # fixture cannot be built at all. **Gated on the CAPABILITY**, so a store that
+        # CAN record events and still refused this way is a finding and not a skip.
+        #
+        # The guard is narrowed to the ONE reason the capability explains, following the
+        # four-file precedent rather than asserting `stores_events` under a bare
+        # `isinstance(gone, Refusal)` -- which would tell a backend refusing for an
+        # unrelated reason, while recording events perfectly well, that it had failed.
+        # That is `C19-100`'s defect, a legal operation closed by a gate.
+        assert registry.caps.stores_events is False, (
+            "this backend records events, so the refusal is not a capability", gone.detail,
+        )
+        pytest.skip(
+            "NOT REACHABLE: stores_events=False refuses the forced retire before there "
+            "is a tombstone to hold the word"
+        )
+    assert not isinstance(gone, Refusal), (
+        "the fixture's forced retire refused for a reason no capability explains", gone,
+    )
+    assert word in (gone.aliases or ()), (
+        "INTERFACE.md 5.8 -- a tombstone keeps its words by design", gone.aliases
+    )
     return gone
 
 async def test_c12_22_the_import_name_door_holds_the_word_across_kinds(adapter, make_registry):
