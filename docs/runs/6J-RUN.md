@@ -689,11 +689,39 @@ different things.
 **Run one at a time, never in parallel**, by `6I-RUN.md` §0.7's own commands. **Zero drift on every cell.**
 
 **THESE LEGS WERE RUN AT `43d0dac` AND ARE STAMPED THERE. THEY ARE NOT RE-RUN AT THE LANDED TREE, AND THIS
-IS THE ARGUMENT THAT THEY STILL HOLD — a mechanical one rather than a judgement.** **[Observed —
-`git diff a9bb767 HEAD --name-only`]** every commit from `a9bb767` to the landed tree touches exactly three
-paths: `docs/runs/6J-RUN.md`, `docs/tools/check_skip_census.py`, and `docs/tools/skip_census_baseline.json`.
-**ZERO files under `ontoloche/` and ZERO non-`docs/` files have changed since the legs ran.** The suite
-cannot have moved, because nothing the suite executes has.
+IS THE ARGUMENT THAT THEY STILL HOLD.** **[Observed — `git diff --stat 43d0dac..HEAD -- ontoloche/`]**
+**EMPTY. Not one byte of the test tree has changed**, and every commit since touches only
+`docs/runs/6J-RUN.md`, `docs/tools/check_skip_census.py` and `docs/tools/skip_census_baseline.json`.
+
+> **`J84` — THAT ARGUMENT HAD A GAP AND THE SUPERVISOR CLOSED IT. This row wrote "the suite cannot have
+> moved, because nothing the suite executes has", and it was not true as stated.**
+> **[Observed — `ontoloche/contract/test_manifest.py:278-287`]** the suite **RUNS THE CHECKER**:
+>
+> ```python
+> checker = root / "docs" / "tools" / "check_skip_census.py"
+> done = subprocess.run([sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root))
+> assert done.returncode == 0, done.stdout + done.stderr
+> ```
+>
+> **And the checker has changed by `+1009 / -97` since `43d0dac`** — **[Observed —
+> `git diff --numstat 43d0dac..HEAD -- docs/tools/check_skip_census.py`]**. **So one id in those legs
+> exercised a file that has since been rewritten, and *"the test tree is unchanged"* is true without
+> carrying the conclusion.** It was an argument by omission.
+>
+> **WHAT CLOSES IT COMPLETELY, and it is a measurement rather than an inference:** that test asserts exactly
+> one thing — `done.returncode == 0` on that exact command. **[Observed — `py docs/tools/check_skip_census.py`
+> at the landed tree]** it prints `OK -- 5 result-conditioned skip(s), baseline 5, and the ratchet holds` and
+> **returns 0**, and the supervisor's own independent run of the same command returns 0 on the same tree.
+> **The one id whose input changed is re-established DIRECTLY, not assumed.**
+>
+> **So no re-run is needed, and this row's offer to re-run the legs anyway was declined on evidence rather
+> than on cost: it would be re-measuring a byte-identical input.**
+>
+> **One figure stated as this row measured it rather than as it was handed over:** the supervisor gave the
+> checker's change as `+1106 / -130`; **this row measures `+1009 / -97` for `43d0dac..HEAD`, and `+1374 /
+> -46` against the floor.** Neither figure changes the argument, and the discrepancy is recorded rather than
+> reconciled away — **his own standing rule is that a count in a ruling is checked, not carried, and `J47`
+> is what happens when it is carried.**
 
 **AND THE THREE-LEG SUITE WAS UNDER A SUPERVISOR HOLD at the time of landing, on two conditions he measured
 himself rather than relaying: the beacon land-lock was held by a live process with a 1.2-minute-old
