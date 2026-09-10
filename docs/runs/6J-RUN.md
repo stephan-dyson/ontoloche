@@ -1399,10 +1399,29 @@ It must not ship.**
 classifier cannot establish the proof, the sentence says what it could not check."* **No classifier changes
 — not the walrus predicate, not the receiver branches, not `_guard_narrows`.**
 
-**PROVEN, not asserted. [Observed — both modules parsed, every string constant normalised to a single
-placeholder, the ASTs compared]** the AST of `check_skip_census.py` at `adddae8` and at the landed commit
-are **IDENTICAL**. **No control flow, no predicate, no name, no default argument differs. The only change is
-string content.**
+**PROVEN, not asserted — and the proof had to be re-stated at the right grain, which is `J83`.**
+
+**[Observed — both modules parsed, every string constant normalised to one placeholder, then compared]**
+
+| comparison | result |
+|---|---|
+| **every FUNCTION body, strings normalised** | **IDENTICAL — 0 of them differ** |
+| functions added or removed | **none** |
+| the module with the `ROUTED` tuple excluded | **IDENTICAL** |
+| the whole module including `ROUTED` | differs — four entries added |
+
+**No control flow, no predicate, no name, no default argument differs anywhere in the classifier. The only
+non-string change in the file is four new entries in the `ROUTED` data tuple, which the ruling itself
+required** — `answers-11` §4, *"All four classifications are ROUTED."*
+
+> **`J83`: the first version of this paragraph said the whole-module ASTs were IDENTICAL. That was TRUE when
+> measured and FALSE twenty minutes later, because the `ROUTED` entries the same ruling ordered were added
+> after the measurement — by me, in the same working session, and the commit message carrying the claim was
+> already written.** **[Observed]** whole-module comparison now returns `False`; per-function comparison
+> returns identical. **It is §4.3's pattern committed inside the section that reports §4.3's pattern being
+> ruled on, and it is the NINTH instance.** The lesson is the grain: *"the ASTs are identical"* was a
+> claim about a file, when the property being ruled on was a claim about the CLASSIFIER. **The per-function
+> comparison is the one that means what the ruling meant, and it is the one that survived.**
 
 | the sentence that stood | what it asserted that was not established |
 |---|---|
@@ -1413,6 +1432,12 @@ string content.**
 
 **Each now reports what THIS CHECKER could not do, names the known shapes it cannot read, points at §5, and
 — the operative half — TELLS THE READER TO BASELINE THE SITE RATHER THAN REWRITE THE TEST.**
+
+**[Observed]** that advice reaches **4 of the 5** baselined sites. **The fifth, `test_c12_24`, does not get
+it and must not:** its branch carries no capability assertion at all, so there is no proof for the
+instrument to have missed, and telling that reader to baseline would be advising them past a site that may
+genuinely be result-conditioned. **The advice appears only on the paths where the gate could not ESTABLISH a
+proof it can see evidence of — never on the path where there is nothing to see.**
 
 **So the walrus and plain-function shapes are STILL REFUSED. They are refused HONESTLY**, and they land in
 the baseline as `Q1`'s category — ***proof exists, the instrument cannot see it.*** **That is the harm
