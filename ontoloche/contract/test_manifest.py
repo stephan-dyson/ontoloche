@@ -249,3 +249,39 @@ def test_stacked_requires_capability_markers_are_all_honoured():
             "conftest and this one was fixed by hand"
         )
         assert "get_closest_marker(\"requires_capability\")" not in mirror
+def test_no_test_skips_on_the_result_it_exists_to_assert():
+    """Row 6h's gate, run here for the reason ``check_merge_guard.py`` is run here:
+    *a guard that is only verified when somebody remembers to run a script is a guard
+    nobody is verifying.*
+
+    ``docs/tools/check_skip_census.py`` censuses every ``pytest.skip`` call site in
+    both contract trees and RATCHETS the ones whose guard reads the result the test's
+    own assertions are about. That shape has been written into this suite three times
+    -- ``C3-14`` (row 4d, by mutation), ``C10-16`` (row 6f round 1) and ``C3-26``,
+    which row 6f wrote **in the very round whose finding was this exact shape** -- and
+    each was fixed one at a time while the mechanism that produces them went untouched.
+    A skip decided by the ENVIRONMENT is legitimate; a skip decided by the RESULT is
+    not, because the result is the thing under test, and an id that skips instead of
+    failing reads as coverage while asserting nothing.
+
+    The baseline may only go DOWN. Adding a result-conditioned skip fails here, on the
+    commit that adds it.
+
+    Skipped rather than failed when the checked-in tools are not on disk, since an
+    installed wheel does not ship ``docs/``.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    checker = root / "docs" / "tools" / "check_skip_census.py"
+    if not checker.exists():  # pragma: no cover - an installed wheel has no docs/
+        import pytest
+
+        pytest.skip("PENDING -- docs/tools/check_skip_census.py is not in this install")
+
+    done = subprocess.run(
+        [sys.executable, str(checker)], capture_output=True, text=True, cwd=str(root)
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
