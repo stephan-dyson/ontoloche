@@ -107,6 +107,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import collections
 import json
 import sys
 from pathlib import Path
@@ -832,10 +833,34 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str], cap_de
                 "every other outcome"
             )
     if not narrowing:
-        return "", (
+        # WHICH KIND OF FLAG IS THIS? The baseline conflates two different pieces
+        # of news and the supervisor's ruling on raising it requires the
+        # difference to be legible in the entry itself. A site with NO capability
+        # assertion has no proof to check. A site that HAS one, in the falsifying
+        # sense, has a proof this gate cannot verify -- which is a limit of the
+        # instrument, not a defect in the suite. Reporting only the first failure
+        # made those two read the same.
+        held = ""
+        for stmt in before:
+            if isinstance(stmt, ast.Assert) and _mentions_capability(stmt.test):
+                if _falsifying(stmt.test, cap_derived, observations):
+                    held = ast.unparse(stmt.test)
+                    break
+        base = (
             "the guard tests the observation without naming WHICH outcome the "
             "capability explains, so an assertion under it fires on every other "
             "outcome too"
+        )
+        if held:
+            return "", (
+                base + f". NOTE THE KIND: the block DOES assert `{held}`, which fails "
+                "on a backend holding the capability -- so the proof may well be "
+                "sound and THIS GATE CANNOT VERIFY IT. A limit of the instrument, "
+                "not an established defect in the suite"
+            )
+        return "", (
+            base + ". NOTE THE KIND: no assertion in the skip's own branch reads a "
+            "capability at all, so there is no proof here to check"
         )
 
     found = ""
@@ -1581,8 +1606,16 @@ def load_baseline():
 
 
 def _entries(sites) -> list[dict]:
+    # `why` rides along because THE BASELINE CONFLATES TWO DIFFERENT THINGS and a
+    # reader counting entries would read every one as a defect. Most mean *this
+    # site's proof is MISSING*. At least one means *this site's proof EXISTS and
+    # this instrument cannot see it* -- `test_c12_27` asserts a capability that a
+    # capable backend would fail, under a guard whose refusal-evidence marker no
+    # AST can recognise as refusal evidence. Both are correctly flagged and they
+    # are not the same news. The supervisor's ruling on raising this baseline
+    # required the distinction to be legible HERE, without reading `6J-RUN.md`.
     return [
-        {"site": s.ident, "asserts": s.asserts, "guard": s.guard}
+        {"site": s.ident, "asserts": s.asserts, "guard": s.guard, "why": s.why}
         for s in sorted(
             (s for s in sites if s.category == UNDER_TEST), key=lambda s: s.ident
         )
@@ -1704,7 +1737,13 @@ def write_baseline(sites, allow_deassertion: bool = False) -> int:
             "count, carried so that DELETING the assertion -- the cheapest way to "
             "make this gate green, and strictly worse for the suite -- is refused "
             "rather than rewarded. RAISING the list requires the ontoloche "
-            "supervisor's ruling. The gate fails if `count` disagrees with `sites`."
+            "supervisor's ruling. The gate fails if `count` disagrees with `sites`. "
+            "READ `why` BEFORE COUNTING DEFECTS: an entry saying the guard names no "
+            "outcome, or that no assertion reads a capability, is a site whose proof "
+            "is MISSING. An entry saying the guard is a complemented marker test is a "
+            "site whose proof EXISTS and which this instrument cannot verify -- a "
+            "limit of the checker, not a defect in the suite. A ratchet baseline "
+            "records what the instrument can PROVE, not what the author believes."
         ),
         "count": len(entries),
         "sites": entries,
@@ -1758,11 +1797,43 @@ def run_gate() -> int:
         failures.append("the baseline holds DUPLICATE sites, so its count overstates "
                         "what it actually pins")
 
-    new = [i for i in found if i not in set(declared)]
+    # COUNTED, not set-tested, and that is the INTERIM MITIGATION for J19.
+    #
+    # `Site.ident` is `file::func#ordinal` and ordinals are per (function, GUARD
+    # TEXT), so two skips in one function with different guards BOTH carry `#0`.
+    # A set test therefore absorbs the second one: add a result-conditioned skip
+    # to a function that already holds a baselined one and `[i for i in found if i
+    # not in set(declared)]` returns nothing. Demonstrated in `6J-RUN.md` §3.3 --
+    # two flagged skips, zero reported, the ratchet not turning.
+    #
+    # The real fix puts the guard into the ident and rewrites every entry in the
+    # baseline, which is routed to its own row. This costs nothing and closes the
+    # reachable half: `found` and `declared` are LISTS, one element per flagged
+    # site, so comparing them as MULTISETS catches an addition that collides.
+    # It reads only the baseline's existing `sites` list and changes no
+    # classification.
+    #
+    # ITS LIMIT, NAMED RATHER THAN LEFT: it cannot catch a SWAP -- one flagged
+    # site removed and another added inside the same function, where the count
+    # holds. Only a real identity closes that, which is why the routing stands.
+    found_counts = collections.Counter(found)
+    declared_counts = collections.Counter(declared)
+    new = sorted(
+        i for i in found_counts if found_counts[i] > declared_counts.get(i, 0)
+    )
     if new:
         failures.append(
             "RESULT-CONDITIONED SKIPS ADDED -- the ratchet only turns one way:\n"
-            + "\n".join(f"    + {i}" for i in new)
+            + "\n".join(
+                f"    + {i}"
+                + (
+                    f"   ({found_counts[i]} sites now carry this ident, "
+                    f"{declared_counts.get(i, 0)} baselined -- see J19)"
+                    if found_counts[i] > 1
+                    else ""
+                )
+                for i in new
+            )
         )
 
     current_by_ident = {s.ident: s for s in sites}
