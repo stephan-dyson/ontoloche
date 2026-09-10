@@ -756,7 +756,26 @@ not reasoned:
 | leg | sites that fired | reason |
 |---|---|---|
 | sync, SQLite only | **2** — `test_c10_24#0`, `_tombstone_holding#0` | `cannot_record_override` on both |
-| sync, three backends | **0** | — |
+| sync, three backends | **2** — `test_c10_24#0`, `_tombstone_holding#0` | `cannot_record_override` on both |
+
+> **CORRECTION, 2026-09-10 03:35, by the ontoloche supervisor. This cell said `0`. It is `2`.**
+> Row 6i's control run at this same floor reproduced this row's totals **exactly** — 943 passed, 316
+> skipped, 0 failed — and contradicted this cell. **Same leg, same floor, same totals, different
+> cell**, so it cannot be attributed to a different run.
+>
+> **And the cell was impossible independent of any re-run.** `ontoloche/contract/conftest.py:35` is
+> `BACKENDS = ("sqlite", "postgres", "sqlite_minimal")`, parametrised at line 100, and the postgres
+> skip is **inside `adapter_factory`** at line 141 under `if not POSTGRES_DSN`. **Both legs collect the
+> same cases**; the SQLite-only leg differs only in the postgres third skipping at fixture setup. The
+> `sqlite_minimal` cases are **bit-identical between legs**, so it is the same parametrised case firing
+> **in both or neither**. `2`-and-`0` was inconsistent by construction.
+>
+> **THIS IS A DEFECT IN A MEASUREMENT, NOT IN THIS ROW'S JUDGEMENT.** Row 6h declined to repair four
+> sites on the strength of a table that was wrong **in the direction that would have made repairing
+> more tempting** — and it still declined. **The restraint was correct then and is more correct now.**
+>
+> This row is closed; the correction is recorded here rather than by reopening it. See
+> [`6I-RUN.md`](6I-RUN.md).
 
 `cannot_record_override` is precisely what the seven S5 sites assert
 `caps.stores_events is False` for before they skip. **The repair for those two is not
@@ -1011,7 +1030,17 @@ test_c4_propose_type.py:467    this backend cannot retire the holder (cannot_rec
 `registry.py:3969` is `if force and not self.caps.stores_events:` — so
 `cannot_record_override` on a forced retire is **exactly** a `stores_events` fact, which is
 what the seven S5 sites already assert. **The repair is one line each and it has precedent
-in four files.** It is a small, safe, well-evidenced change and it is still not mine to make
+in four files.**
+
+> **CORRECTION, 2026-09-10 03:35, by the supervisor — this passage is a CARRIER of a propagated
+> citation defect, and the subtle one.** Its premise is correctly scoped (*"on a forced retire"*) and
+> **its conclusion is not** (*"the repair is one line each"*, covering **both** sites).
+> **`registry.py:3969` explains `test_c4_propose_type.py:467` only.** `test_c10_merge_types.py:1337`
+> calls `merge_types(..., acknowledge=(...))` and **never passes `force`**; its producer is
+> **`registry.py:5317`**, `if acknowledge and not self.caps.stores_events:`, returning the same
+> `cannot_record_override`. **Same capability, so the repair itself is unaffected.**
+> **A correctly-scoped premise with an over-scoped conclusion is harder to spot than a wrong
+> citation** — which is why this carrier went unnamed while two others were routed. It is a small, safe, well-evidenced change and it is still not mine to make
 unilaterally on a family whose other four members I cannot yet evidence.
 
 ### §3.3 — ROUTED: the largest remaining hole in the gate

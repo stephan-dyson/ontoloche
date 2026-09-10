@@ -74,10 +74,29 @@ refusal never observed is inventing the explanation.
 **That is `C19-100`'s defect — it closed a legal operation — which row 6g re-created at three doors two days
 ago while trying to honour the ruling against it. Twice in two days is a pattern, not bad luck.**
 
-**The two evidenced repairs are AUTHORISED and are NOT row 6h's to make.** `registry.py:3969` is
-`if force and not self.caps.stores_events:` returning `cannot_record_override` — verified by the supervisor —
-so the repair at `test_c10_merge_types.py:1337` and `test_c4_propose_type.py:467` is one line each and well
-evidenced.
+**The two evidenced repairs are AUTHORISED and are NOT row 6h's to make.**
+**`registry.py:3969` is `if force and not self.caps.stores_events:`, which explains
+`test_c4_propose_type.py:467`; `registry.py:5317` is `if acknowledge and not self.caps.stores_events:`,
+which explains `test_c10_merge_types.py:1337`.** Both return `cannot_record_override` and both are a
+`stores_events` fact, so the repair is one line each and well evidenced.
+
+> **CORRECTION, 2026-09-10 03:35. This paragraph cited `3969` for BOTH sites and stamped it *"verified by
+> the supervisor"*. It explains ONE.** `test_c10_merge_types.py:1337` calls `merge_types` with
+> `acknowledge=` and never passes `force`. Found by row 6i's adversarial round, which named this ruling
+> as the **third carrier** of the defect while the record it was correcting had named only two.
+>
+> **THIS WAS THE WORST OF THE THREE CARRIERS, and not because it is a ruling.** It is the worst because
+> it says *verified by the supervisor* next to a claim the supervisor had not verified. **That phrase is
+> load-bearing in every record in this project**, and a reader who checks nothing else trusts this line
+> **because a supervisor signed it.**
+>
+> **What the supervisor actually did wrong is not the obvious thing.** The line at `3969` was opened and
+> confirmed to say what was quoted. **The quote was verified and never the applicability — whether it
+> was the line that site reaches. Running the instrument on the wrong subject is not running the
+> instrument.**
+>
+> **Nothing in the ruling changes.** The capability is the same, the repair is the same, and row 6h's
+> restraint is upheld as before.
 
 **They still do not go into this row, and the reason is what this row proved most expensively.** Its
 adversarial round found **five BLOCKING, two of them defects in fixes made an hour earlier**, one invisible
