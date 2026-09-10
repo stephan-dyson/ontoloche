@@ -487,6 +487,22 @@ def _guard_chain(func: ast.AST, skip_node: ast.AST):
             for stmt in node.orelse:
                 visit(stmt, active + [(node.test, False)], node, shape or "if")
             return
+        # A LOOP'S `else` IS UNDECIDABLE; ITS BODY IS NOT. `for ... else: <skip>`
+        # runs only when the loop completed without `break`, which is a condition
+        # this checker cannot read -- it was landing in S3-UNCONDITIONAL with the
+        # sentence "no enclosing conditional", an UNGATED cell and a false
+        # sentence. But a skip inside the loop BODY is governed by its own `if`
+        # and must keep that reading: the first cut of this fix put the whole
+        # loop in "other" and dropped THIS ROW'S OWN REPAIR at
+        # `test_c10_merge_types.py:1297` from S5 to S4, because `test_c10_23`
+        # runs its fixture inside `for i, order in enumerate(...)`. Measured, not
+        # noticed later.
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            for stmt in node.body:
+                visit(stmt, active, inner, shape)
+            for stmt in node.orelse:
+                visit(stmt, active, inner, "other")
+            return
         if isinstance(node, (ast.While, ast.Try, ast.Match, ast.BoolOp)):
             for child in ast.iter_child_nodes(node):
                 visit(child, active, inner, "other")
@@ -505,8 +521,15 @@ def _guard_inline_calls(chain, driving: set[str], local: set[str]) -> set[str]:
     """Calls made from inside the guard itself, binding no name."""
     out: set[str] = set()
     for t in chain:
+        # A walrus binds the call's result to a name, so `if (out :=
+        # registry.merge_types(...)).reason == "x":` is NOT "binding no name".
+        # It was landing in S4 with that sentence printed about it -- an ungated
+        # escape, and false of the guard it quoted.
+        walrus_bound = {id(n.value) for n in ast.walk(t) if isinstance(n, ast.NamedExpr)}
         for n in ast.walk(t):
             if not isinstance(n, ast.Call):
+                continue
+            if id(n) in walrus_bound:
                 continue
             f = n.func
             if isinstance(f, ast.Name):
@@ -559,15 +582,24 @@ NARROWING_METHODS = frozenset({"startswith", "endswith"})
 FAMILY_TYPES = frozenset({"Refusal"})
 
 
-def _mentions_capability(node) -> bool:
-    """Does `x.caps.<flag>` or `x.capabilities()` appear ANYWHERE in this tree?
+def _mentions_capability(node, cap_derived: set[str] = frozenset()) -> bool:
+    """Does this tree mention a capability AT ALL -- spelled out, or via a bound name?
+
+    `cap_derived` matters and its absence was a live defect: a site writing the
+    suite's own `caps = adapter.capabilities()` then `assert caps.stores_events is
+    False` was refused with *"no assertion in the skip's own branch reads a
+    capability"*, which is FALSE of that block. The gate refused a correct proof
+    AND printed a false reason for refusing it -- F15 pointed the other way, in
+    the row that closed F15. `test_c15_09` in the calibration set writes exactly
+    that shape.
 
     Deliberately loose, and used only to decide whether a site was TRYING to prove
     a capability -- which is what the `why` text needs in order to say something
     useful about a near miss. It is NOT what grants S5; `_capability_expr` is.
     """
     return any(
-        isinstance(n, ast.Attribute) and n.attr in CAPABILITY_MARKERS
+        (isinstance(n, ast.Attribute) and n.attr in CAPABILITY_MARKERS)
+        or (isinstance(n, ast.Name) and n.id in cap_derived)
         for n in ast.walk(node)
     )
 
@@ -714,7 +746,17 @@ def _positive_naming(test, observations: set[str], positive: bool = True) -> boo
         comp = test.args[0]
         if not any(bool(_names_read(g.iter) & observations) for g in comp.generators):
             return False
-        return _positive_naming(comp.elt, observations, positive)
+        # THE TARGET CARRIES THE OBSERVATION. `w` in `for w in warnings` has no
+        # root of its own, so without this the element expression reads nothing
+        # observed and `any(w.startswith("import_refused:") for w in warnings)`
+        # named no outcome -- while the gate printed "without naming WHICH
+        # outcome" about a guard that names one. The same prefix written
+        # `out.reason.startswith(...)` was accepted, so the refusal was
+        # inconsistent rather than conservative.
+        bound = set(observations)
+        for g in comp.generators:
+            bound |= {t.id for t in ast.walk(g.target) if isinstance(t, ast.Name)}
+        return _positive_naming(comp.elt, bound, positive)
     return False
 
 
@@ -786,7 +828,8 @@ def _guard_narrows(pairs, observations: set[str]) -> str:
     return ""
 
 
-def _capability_proof(pairs, inner_if, skip_node, observations: set[str], cap_derived):
+def _capability_proof(pairs, inner_if, skip_node, observations: set[str],
+                      all_observations: set[str], cap_derived):
     """``(proof source, how it narrows)`` when S5 holds; ``("", why not)`` when not.
 
     Two narrowings a fresh lens made necessary in row 6h and both still stand: the
@@ -842,8 +885,8 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str], cap_de
         # made those two read the same.
         held = ""
         for stmt in before:
-            if isinstance(stmt, ast.Assert) and _mentions_capability(stmt.test):
-                if _falsifying(stmt.test, cap_derived, observations):
+            if isinstance(stmt, ast.Assert) and _mentions_capability(stmt.test, cap_derived):
+                if _falsifying(stmt.test, cap_derived, all_observations):
                     held = ast.unparse(stmt.test)
                     break
         base = (
@@ -867,10 +910,10 @@ def _capability_proof(pairs, inner_if, skip_node, observations: set[str], cap_de
     for stmt in before:
         if not isinstance(stmt, ast.Assert):
             continue
-        if not _mentions_capability(stmt.test):
+        if not _mentions_capability(stmt.test, cap_derived):
             continue
         found = ast.unparse(stmt.test)
-        if _falsifying(stmt.test, cap_derived, observations):
+        if _falsifying(stmt.test, cap_derived, all_observations):
             return found, narrowing
     if found:
         # NOT "cannot fail". A lens fed three expressions that DO fail on a capable
@@ -950,13 +993,16 @@ def classify_source(src: str, rel: str) -> list[Site]:
         pairs, inner_if, shape = _guard_chain(func, node)
         chain = [t for t, _ in pairs]
 
+        polar = " and ".join(
+            ast.unparse(t) if taken else f"not ({ast.unparse(t)})" for t, taken in pairs
+        )
+
         if shape == "other":
             sites.append(
-                Site(rel, fname, ordinal, node.lineno, UNDECIDABLE,
-                     " and ".join(ast.unparse(t) for t in chain),
-                     "the guard is not an `if` -- a while, an except handler, a match "
-                     "arm or a boolean short-circuit -- so this checker cannot say "
-                     "what it reads", n_asserts)
+                Site(rel, fname, ordinal, node.lineno, UNDECIDABLE, polar,
+                     "the guard is not an `if` -- a while, a `for`/`while` ELSE, an "
+                     "except handler, a match arm or a boolean short-circuit -- so "
+                     "this checker cannot say what it reads", n_asserts)
             )
             continue
 
@@ -967,11 +1013,29 @@ def classify_source(src: str, rel: str) -> list[Site]:
             )
             continue
 
-        guard_src = " and ".join(ast.unparse(t) for t in chain)
+        # THE RECORDED TEXT CARRIES POLARITY. Without it an else-branch guard was
+        # written down as its own negation: `ontoloche/contract/conftest.py:149`
+        # recorded `backend == 'external' and backend == 'sqlite' and backend ==
+        # 'sqlite_minimal' and backend == 'postgres'` -- four mutually exclusive
+        # equalities ANDed, a literal contradiction, as the guard of a REACHABLE
+        # skip. That text goes into the census, into the baseline, and into the
+        # ordinal key. **[Measured before changing it]** 16 sites' text moves and
+        # NONE is in a baselined function, so no ident in the ratchet changes.
+        guard_src = polar
         guard_names: set[str] = set()
         cap_read: set[str] = set()
         for t in chain:
             guard_names |= _names_read(t)
+            # A walrus TARGET is a Store context, so `_names_read` does not see it --
+            # yet `if (out := registry.merge_types(...)).reason == "x":` plainly reads
+            # `out`. Without this the guard read nothing observed and the site landed
+            # in S0-ENVIRONMENT, the most ungated cell there is, for a skip decided by
+            # the result under test.
+            guard_names |= {
+                w.id
+                for n in ast.walk(t) if isinstance(n, ast.NamedExpr)
+                for w in ast.walk(n.target) if isinstance(w, ast.Name)
+            }
             cap_read |= _capability_reads(t)
 
         read_obs = (guard_names - cap_read - cap_derived) & observations
@@ -988,7 +1052,7 @@ def classify_source(src: str, rel: str) -> list[Site]:
             shared = guard_roots & assert_roots
             if shared:
                 proof, detail = _capability_proof(
-                    pairs, inner_if, node, read_obs, cap_derived
+                    pairs, inner_if, node, read_obs, observations, cap_derived
                 )
                 if proof:
                     # The `why` says WHAT WAS CHECKED and what was not. F15: the old
@@ -1517,6 +1581,99 @@ def test_f15_verbatim(registry):
     assert not isinstance(gone, Refusal), gone
 ''',
     ),
+    # -----------------------------------------------------------------------
+    # ROUND 2. Six shapes three fresh lenses broke the axis with, pinned so the
+    # breakage cannot come back. Two lenses found the first one independently.
+    # -----------------------------------------------------------------------
+    (
+        "R2 -- ONE ALIAS LINE must not launder the capability off the RESULT. "
+        "`gone.caps` is not a fact about the environment however it is spelled",
+        UNDER_TEST,
+        '''
+import pytest
+def test_alias_launder(registry):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    why, detail = gone.reason, gone.detail
+    if why == "cannot_record_override":
+        assert gone.caps.stores_events is False, detail
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R2 -- the SAME aliased guard with a real environment proof MUST stay S5, so "
+        "the fix above is not a blanket refusal of aliased guards",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_alias_ok(registry):
+    gone = registry.retire("alpha", "no longer used", retired_by="user:sd", force=True)
+    why, detail = gone.reason, gone.detail
+    if why == "cannot_record_override":
+        assert registry.caps.stores_events is False, detail
+        pytest.skip("NOT REACHABLE")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R2 -- `caps = adapter.capabilities()` IS a capability proof. Refusing it "
+        "printed `no assertion ... reads a capability`, which was false of the block",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_caps_bound(adapter, registry):
+    caps = adapter.capabilities()
+    gone = registry.retire("alpha", "gone", retired_by="user:sd", force=True)
+    if isinstance(gone, Refusal) and gone.reason == "cannot_record_override":
+        assert caps.stores_events is False, gone
+        pytest.skip("NOT REACHABLE: stores_events=False refuses the forced retire")
+    assert not isinstance(gone, Refusal), gone
+''',
+    ),
+    (
+        "R2 -- a POSITIVE `any(w.startswith(...))` over an observed collection NAMES "
+        "an outcome. The comprehension target carries the observation it iterates",
+        PROVEN_ENV,
+        '''
+import pytest
+def test_any_positive(registry):
+    out = registry.import_types([{"name": "plaza"}], namespace="dpr", kind="entity")
+    assert out, out
+    warnings = tuple(out[0].warnings or ())
+    if any(w.startswith("import_refused:") for w in warnings):
+        assert registry.caps.stores_aliases is False, warnings
+        pytest.skip("NOT REACHABLE: stores_aliases=False drops the alias")
+    assert any(w.startswith("import_field_ignored:") for w in warnings), warnings
+''',
+    ),
+    (
+        "R2 -- a skip in a `for ... else` is UNDECIDABLE, never `unconditional`. The "
+        "loop BODY keeps its own `if`, which is how this row's own repair stayed S5",
+        UNDECIDABLE,
+        '''
+import pytest
+def test_for_else(registry):
+    out = registry.merge_types("a", "b", "one", merged_by="user:sd")
+    for w in out.warnings:
+        if w.startswith("identity_guard_skipped:"):
+            break
+    else:
+        pytest.skip("no guard note on this backend")
+    assert out.warnings
+''',
+    ),
+    (
+        "R2 -- a WALRUS binds a name, so the guard is not an unbindable inline call. "
+        "It was landing in S4 with that sentence printed about it",
+        UNDER_TEST,
+        '''
+import pytest
+def test_walrus(registry):
+    if (out := registry.merge_types("a", "b", "one", merged_by="user:sd")).reason == "cannot_record_override":
+        pytest.skip("nothing to assert")
+    assert out.warnings
+''',
+    ),
     (
         "AXIS part 3 (F15) -- the same vacuity NOT spelled `True or`, so the pin is on "
         "the property rather than on the wording",
@@ -1761,10 +1918,16 @@ def run_gate() -> int:
             print("    " + f, file=sys.stderr)
         return 1
 
-    if not CONTRACT_DIR.is_dir():
-        print(f"FAIL: {CONTRACT_DIR} is not a directory. A census of nothing is not a "
-              f"pass.", file=sys.stderr)
-        return 1
+    for required in SCAN_DIRS:
+        if not required.is_dir():
+            # BOTH trees, not just the sync one. The module docstring records that
+            # scanning only the sync tree left two hand-written async files
+            # permanently unwatched, and a fresh lens found it. Checking only
+            # CONTRACT_DIR here left the same hole one rename away: 18 of 139
+            # sites would vanish and the gate would still pass.
+            print(f"FAIL: {required} is not a directory. A census of nothing is not "
+                  f"a pass.", file=sys.stderr)
+            return 1
 
     sites = census()
     if not sites:
