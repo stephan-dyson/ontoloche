@@ -2000,7 +2000,7 @@ complete."*
 **What the axis now does that it did not:** it reads the guard, tracks its polarity, requires a positive
 naming of the outcome, requires the capability assertion to fail on a capable backend, refuses a capability
 read off the result under test however it is spelled, and refuses to print a justification it cannot
-support. **Four rounds and twenty-two in-scope code MAJORs went into that.**
+support. **FIVE rounds and TWENTY-SIX in-scope code MAJORs went into that — 6, 7, 2, 7, 4 by round.** **(`J85`: this said "four rounds and twenty-two", written before round 5 returned and never re-taken. Found while re-measuring every figure for the `docs/README.md` index row, which is the tenth instance of §4.3's pattern and the first one caught by the landing checklist rather than by a lens.)**
 
 **What it still cannot do, and the seven shapes are PINNED IN THE GATE as `ROUTED`, not described here:**
 the observation-root machinery — `_driving_receivers`, the `- cap_read - cap_derived` subtraction, and loop
