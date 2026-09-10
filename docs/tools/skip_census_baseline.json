@@ -18,7 +18,7 @@
       "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_24_a_skipped_identity_guard_says_so#0",
       "asserts": 2,
       "guard": "any((w.startswith('import_refused:') for w in warnings))",
-      "why": "guard reads warnings -- an observation this test's own assertions also reach (via rows); NOT proven-environmental because the guard tests the observation without naming WHICH outcome the capability explains, so an assertion under it fires on every other outcome too. NOTE THE KIND: no assertion in the skip's own branch reads a capability at all, so there is no proof here to check"
+      "why": "guard reads warnings -- an observation this test's own assertions also reach (via rows); NOT proven-environmental because no assertion in the skip's own branch reads a capability before it skips"
     },
     {
       "site": "ontoloche/contract/test_c12_foundry_import.py::test_c12_27_a_declined_row_still_carries_what_the_call_could_not_check#0",
