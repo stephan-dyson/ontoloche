@@ -417,8 +417,16 @@ because its `startswith` prefix narrows on a constant anyway and it never needed
 > corrects this record for exactly that shape.** The table below is the nine as they stood at `9b00bcc` and
 > is left as a record of that state.
 
-**FOURTEEN of the twenty new calibration cases are classified WRONG by the classifier at `16becf6` and right
-by this one. NINE of them, listed below, were the round-1 set.** Measured by loading both modules — `git show 16becf6:docs/tools/check_skip_census.py` into
+> **`J64`: AND IT WENT STALE A THIRD AND A FOURTH TIME.** This read *"FOURTEEN of the twenty new
+> calibration cases"*. **[Observed at `a1ce09d`, both modules side by side, every case string through
+> `classify_source()` on each]** it is **21 of the 30 new cases**: 17 at `16becf6`, **47** now, 30
+> new-only, 21 classified differently, remainder 9. The split was 9-of-14, then 10-of-14, then 14-of-20,
+> then 15-of-23, now 21-of-30 — **it has moved once per round, because it is a measurement OF an artefact
+> this row keeps changing.** That is §4.3's finding applied to its own evidence, which is why the line is
+> now STAMPED rather than written in the present tense.
+
+**AT `a1ce09d`: TWENTY-ONE of the thirty new calibration cases are classified WRONG by the classifier at
+`16becf6` and right by this one. NINE of them, listed below, were the round-1 set.** Measured by loading both modules — `git show 16becf6:docs/tools/check_skip_census.py` into
 memory beside the working one — and classifying each case with both. **[Observed — each case string
 through `classify_source()` on both modules, compared category by category]**
 
@@ -442,7 +450,8 @@ through `classify_source()` on both modules, compared category by category]**
 > case.** *"An inverse guard with NO capability proof is still FLAGGED"* expects `S2`, and the old classifier
 > already got it right. **Four accept cases and one refuse case the old classifier already refused** — found
 > by two lenses independently. **`J24`: that remainder was five at `9b00bcc` and four from `ace7081`
-> onward, and is six of twenty at HEAD. The accept/refuse split is restated with the count in `J24`.**
+> onward, and is **nine of thirty at `a1ce09d`** — see `J64`, which stamps it. The accept/refuse split is
+> the count in `J64`.**
 
 > **`J11.1`, and it is not a wording fix: two of those four "accept" cases were accepted for the WRONG
 > REASON, and round 1 proved it.** The `reason !=` case passes only because of a second assertion the first
@@ -1113,8 +1122,10 @@ five entries read alike. **The refusal text now names the kind in both direction
 ### §3.5.2 — The extension is its own row. A RULING now, not an inclination.
 
 `answers-4` §3 said the supervisor was inclined and told this row not to treat it as a decision. **§3.4's
-measurement settled it:** eight sites move and **three go the wrong way, as new flagged entries at the three
-sites row 6i had just repaired.** **One promotion bought at the price of three new baseline entries on
+measurement settled it:** eight sites move and **three go the wrong way, as new flagged entries in the three
+helper FUNCTIONS row 6i repaired — different SITES, seventeen lines above the repairs, per `J29`.**
+**(`J65`: this stood with the imprecise version `J29` had already corrected a hundred lines above — in the
+section recording the RULING that rests on the measurement, which is the very propagation `J29` names.)** **One promotion bought at the price of three new baseline entries on
 freshly-repaired code is a bad trade, and it is now a measured one rather than an argued one.** Recorded
 with the table, not the conclusion.
 
@@ -1390,8 +1401,15 @@ of being written.
 | 2 | row 6h's per-guard ordinal | a gate failing on unrelated commits | made two sites indistinguishable | this row, as `J19` |
 | 3 | this row's `J1` fix — branch polarity | the else-branch exemption | the owner check saw only the guard's names | round 2, as `J31` |
 | 4 | this row's `J36` fix — loops | a `for … else` in the ungated cell | put whole loop bodies in `S4` | this row, measuring |
+| 5 | this row's `J32` fix — bound capability names | a gratuitous refusal with a false reason | the new branch carried no observation check | round 3, as `J38` |
+| 6 | this row's `J33` fix — `any`/`all` naming | a positive prefix test refused | `all()` is vacuously true on an empty sequence | round 4 |
 
-**SIX INSTANCES ACROSS FOUR ROWS, AND THREE OF THEM ARE THIS ROW'S OWN.** Row 6h's fix carried row 6i's
+**SIX INSTANCES, IN TWO ROWS, AND FOUR OF THEM ARE THIS ROW'S OWN.** **(`J66`: this heading counted six
+over a table of FOUR and said three of the six were "below" when only two were — the `J32`->`J38` handoff
+lived in the prose and was never added, and `J33`->round 4's `all()` had not been counted at all. Both are
+rows 5 and 6 now. The rows in which a fix carried the next defect are **6h** and **6j**; §3.3's "four
+consecutive rows" is `6I-RUN.md`'s own streak measure, which counts differently and is stated separately
+there.)** Row 6h's fix carried row 6i's
 finding; row 6i's routed finding became this row; this row's `J1` fix carried round 2's `J31`; this row's
 `J36` fix carried its own regression within the hour; **and this row's `J32` fix carried round 3's `J38`,
 which defeated the very calibration case `J31` was pinned with.**
@@ -1450,6 +1468,45 @@ row keeps changing, and a round that produces MAJORs guarantees the artefact cha
 **THE RULE THIS ROW DRAWS FROM IT, offered to the supervisor rather than minted:** *a measurement of the
 instrument is stamped with the commit it was taken at, and every such measurement is RE-TAKEN after the last
 round.* **§1.4.1 is that re-take** — **`J52`: this pointed at "§6", which does not exist. This document runs §0 to §5. The number was carried from `answers-7` §3's *"Say so in §6 if it applies"*, which is `6I-RUN.md`'s numbering, and imported without remapping.** `P2` and `P3` survived the re-take; `P1` did not.
+
+### §4.3.1 — `J71`: THIS ROW CLAIMED CORRECTIONS IN COMMIT MESSAGES THAT WERE NOT IN THE TREE
+
+**Found by a round-4 lens re-reading the file after the commit that claimed the fixes, and it is a worse
+defect than any single finding in this record.**
+
+**[Observed]** commit `710f732`'s message claims `J64`, `J65` and `J66`. **None of the three was in the
+tree.** The mechanism: corrections were applied by multi-edit scripts that assert each anchor before
+replacing it and write the file ONCE at the end — so **a single failed anchor late in the script discarded
+every edit before it**, and the failure was read as "that one anchor moved" rather than "nothing was
+written". Later scripts then applied a different subset successfully, which made the file look edited.
+
+**THE COMMIT MESSAGE IS THE RECORD OF WHAT LANDED, AND IT DESCRIBED WORK THAT DID NOT.** Every other defect
+in this row is a claim in a document that outran its evidence; this is a claim in a COMMIT that outran its
+own diff, which is the same class one layer down and harder for a reader to catch, because a commit message
+looks like testimony from the machine.
+
+**THE FIX, applied from here on:** every correction is written and then **re-read from disk and asserted
+present** before the next one, and the commit message is checked against `git diff` rather than against the
+intent. `J64`, `J65` and `J66` are in the tree as of this section, verified by re-read.
+
+**AND IT IS THE EIGHTH INSTANCE OF §4.3's PATTERN, in the sharpest form yet:** not a measurement that went
+stale under a moving artefact, but a measurement of *whether the work happened* taken from intent instead of
+from the artefact.
+
+### §4.3.2 — A LENS AUDITED A TREE THIS ROW WAS EDITING UNDER IT
+
+**Also worth recording, because it is this row's process and not the lens's.** Round 4's numbers lens
+reported: *"The repository moved out from under the audit while that gate was running, and it was not me"*
+— `HEAD` went from `11c4046` to `710f732` mid-run, and it re-checked its own `git status` to prove it had
+touched nothing.
+
+**It was right, and the edits were this row's.** Round 3 was run against a frozen tree on purpose; round 4's
+tail was not, because the fixes for the first two lenses were applied while the third was still reading.
+**The lens handled it correctly — it re-measured, marked which findings survived, and said explicitly which
+of its MINORs it had not re-checked against the moved tree.** The defect is the row's: **a round is
+evidence about a COMMIT, and editing the commit under the round makes the evidence partly unattributable.**
+
+**Standing from here: no edits to the reviewed artefact while any lens of the round is still running.**
 
 ### §4.4 — Standing practice the supervisor ruled from this row
 
