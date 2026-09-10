@@ -337,6 +337,14 @@ justify a row. Three things do:
 
 0. **NOT the identity scheme.** That reason is withdrawn above. It was this row's load-bearing argument and
    it did not survive its own adversarial round, so it does not survive into the verdict either.
+0b. **THE ONE STRUCTURAL REASON, and it is the supervisor's rather than this row's.** The extension changes
+   `check_skip_census.py`, and **the classifier is the instrument every number in this row rests on** — the
+   census, the `S`-cell splits, the lowered baseline, `P2`'s hit. Build it here and all of them become
+   measurements of a different instrument than the one that produced them. **That is not an amendment, it
+   is a new row that must re-measure from the top.** An adversarial lens correctly noted that reasons 1 and
+   2 below are sequencing choices this row made rather than structural bars — *nothing stops a row from
+   building a change early and putting it through the same round.* **This one is not a sequencing choice**,
+   and it is the reason the verdict actually rests on.
 1. **It moves a whole cell.** Sites currently reported as `S4` — *"an honest refusal to answer, and it is
    never gated"* — become gateable. Changing what a category MEANS is not a change you land inside a row
    whose subject is four skip sites.
@@ -488,6 +496,44 @@ re-measured one in the same framing.** Two legs are evidence this row took; the 
 
 ## §3 — ITEMS 1 AND 4, APPLIED AS ONE CHANGE
 
+### §3.0 — THE TWO PRE-REGISTERED HYPOTHESES, CLOSED AGAINST THEIR OWN FALSIFIERS
+
+§0.2 and §0.3 each committed to a falsifier and then to a check. **Neither check's RESULT was written into
+this record until an adversarial lens pointed out that the record used both hypotheses as settled from §3
+onward without ever showing the work.** `docs/README.md` even carried a granular breakdown that appeared
+nowhere here. Closed properly now.
+
+**H1's falsifier:** *"if any of the seven existing `S5` sites asserts a capability under an unnarrowed
+`isinstance(x, Refusal)` guard, then the unnarrowed form IS the suite's pattern and H1 is wrong."*
+
+**All seven read, at `d3f9a79`, via `classify_source` over `git show d3f9a79:<file>`:**
+
+| site (at `d3f9a79`) | guard | shape |
+|---|---|---|
+| `test_c19_actions.py:4708` | `isinstance(out, Refusal) and out.reason == 'cannot_record_override'` | narrowed, `reason ==` |
+| `test_c19_actions.py:4749` | `isinstance(out, Refusal) and out.reason == 'cannot_record_override'` | narrowed, `reason ==` |
+| `test_c9_retire.py:1868` | `back.reason == 'cannot_record_override'` | narrowed, `reason ==` |
+| `test_c9_retire.py:1911` | `isinstance(back, Refusal) and back.reason == 'cannot_record_override'` | narrowed, `reason ==` |
+| `test_c10_merge_types.py:1401` | `out.reason != 'alias_collision'` | narrowed, `reason !=` |
+| `test_c10_merge_types.py:1499` | `not isinstance(refused, Refusal)` | inverse — skip when it did NOT refuse |
+| `test_c12_foundry_import.py:1360` | `not any(w.startswith('import_refused:') for w in warnings)` | inverse — skip when it did NOT refuse |
+
+**Four narrow on `reason ==`, one on `reason !=`, two are the inverse shape where a reason narrow has no
+meaning. ZERO are unnarrowed. THE FALSIFIER DID NOT FIRE.**
+
+**The two inverse sites are the closest thing to a counterexample and are named as such rather than quietly
+excluded.** `not isinstance(refused, Refusal)` IS an un-narrowed `isinstance` test — negated. It asserts
+`stores_aliases is False` on the branch where the call did NOT refuse, and there the capability is the sole
+explanation of that branch, so the principle holds while the literal wording of the falsifier is a near
+miss. **Stated so a later reader can disagree with the judgement rather than discover the case.**
+
+**H2's falsifier:** *"a path exists by which `merge_types` reaches `registry.py:3969`."*
+
+**Checked and it does not.** `merge_types` spans `registry.py:4956-5470`, contains **zero** calls to
+`self.retire`, and holds exactly **one** `cannot_record_override` producer, at **`5317`**. The result had
+been recorded only as an inline comment in `test_c10_merge_types.py` and never in this record's own words.
+**THE FALSIFIER DID NOT FIRE.**
+
 ### §3.1 — What changed, and the shape it took
 
 Four sites, four sync files, plus the four generated mirrors.
@@ -583,15 +629,37 @@ aio/test_c12_foundry_import.py:1275  test_c12_26_the_import_name_door_holds_the_
 aio/test_c3_resolve_type.py:687      test_c3_17_a_tombstone_elsewhere_is_found_by_the_words_it_answers_to
 ```
 
-**All three are `S1-SETUP-RESULT`, not `S2`** — the guarded value is not independently asserted later — so
-they are outside the gate entirely and outside this row's authorisation. **But nobody had written down a
-decision to defer them**, the way §2.4 names the four `S2` holdouts, and an undocumented deferral is
-indistinguishable from an oversight.
+**Why they are deferred, stated as what it actually is.** The brief named specific sites; it did not name
+these. **That is the whole reason, and it is an authorisation call, not a measurement.**
+
+An earlier draft said instead that they are *"outside the gate entirely and outside this row's
+authorisation"* because they classify `S1` rather than `S2`. **That reached for a category label to do a
+governance job it was never built for.** `check_skip_census.py`'s own docstring defines `S1` as *"probably
+legitimate; NOT ruled here"* — a rule about **what an automated gate should stay silent on**, not about what
+a human row may repair. `S1`-ness correlates with brief-naming here and does not cause it, and by §3.3's own
+structural argument at least some of these three would likely be provably safe to repair. **Dressing an
+authorisation call in a measurement's clothing is a milder form of the same defect as citing a line that
+does not carry the weight put on it**, which makes it the row's own error class again, in a section written
+to fix an instance of it.
+
+**But nobody had written down a decision to defer them**, the way §2.4 names the four `S2` holdouts, and an
+undocumented deferral is indistinguishable from an oversight.
 
 **The full population, measured rather than estimated: 25 bare `isinstance(x, Refusal)` guards remain in
 the sync tree**, across `c3`, `c5`, `c9`, `c10` and `c12`. Two are item 2's baselined holdouts; the other
-23 are `S1`. **This row repaired four and named three more. It did not audit the remaining eighteen and
-does not claim to have.**
+23 are `S1`. **This row repaired four and named three more. It did not audit the rest and does not claim
+to have.**
+
+**THE REST IS 20 GUARD OCCURRENCES ACROSS 16 UNIQUE TEST FUNCTIONS, NOT "EIGHTEEN".** An earlier draft of
+this sentence said eighteen, arrived at as `25 - 4 repaired - 3 named`. **That subtracts the four repaired
+sites from a population they had already left**: their guards now carry `reason`, so the filter that
+produces 25 excludes them. `23 S1 - 3 named = 20`.
+
+**The placement is the finding, not the arithmetic.** The wrong number sat in the same paragraph as the
+phrase *"measured rather than estimated"*, immediately below the counting command published under rule 1q —
+**and it is the one figure in that paragraph nobody ran the command for.** It was introduced by the fix for
+`F3` and survived that fix's own commit. **This row's demonstrated pattern is introducing new errors while
+correcting old ones**, and this is the clearest instance of it.
 
 **THE COUNTING COMMAND, published with the number so the next row reproduces it rather than re-derives it
 (rule 1q):**
@@ -843,8 +911,82 @@ line. **`3969` is correct**; only the merge-door citation is off.
 evidence. The wrong figure stays legible and this section carries the correction — the same discipline the
 supervisor is applying to `6H-RUN.md` and `R104`.
 
+### §6.2.1 — `R104` IS A THIRD CARRIER OF THE `3969` DEFECT AND THIS RECORD DID NOT NAME IT
+
+§0.3 and §6.2 name two carriers of *"`3969` explains both sites"*: the brief, and `6H-RUN.md` §3.2.
+**There is a third, and it is the ruling on this row's own front matter.**
+
+**[Observed — `docs/decisions/2026-09-09-supervisor-ruling-R104.md:77`]:**
+
+> **The two evidenced repairs are AUTHORISED and are NOT row 6h's to make.** `registry.py:3969` is
+> `if force and not self.caps.stores_events:` returning `cannot_record_override` — **verified by the
+> supervisor** — so the repair at `test_c10_merge_types.py:1337` and `test_c4_propose_type.py:467` is one
+> line each and well evidenced.
+
+**One citation offered as covering both the merge site and the retire site, marked verified.** That is H2's
+exact defect, in the landed ruling this row operates under. **This repository's norm is to name every
+carrier of a propagated defect** — `R104`'s own correction box counts them — **and this row applied that
+norm to the brief and to `6H-RUN.md` and not to `R104`.** The supervisor already holds `R104`'s correction
+and had identified it independently; **the gap is that this record routed two carriers and named a third
+nowhere.** Found by an adversarial lens, not by me.
+
 **The defect shape is worth naming because it is the third time this row has met it.** `answers-2` recorded
 the supervisor's own version: *"I verified the quote and never checked that it was the line that site
 reaches. Running the instrument on the wrong subject is not running the instrument."* **I then did exactly
 that at the merge door, and again at §1.2 where the call sites I cited did not support the claim I rested
 on them.** H2 was right about the citation and wrong about who else would commit it.
+
+### §6.3 — ROUND 2: a fresh panel of three, and the round found what round 1 introduced
+
+**§0.8 committed to "an adversarial round". It became a LOOP, and the loop is why this section exists** —
+convergence is two consecutive panels with no `BLOCKING` or `MAJOR` finding, each panel fresh, and round 1
+did not qualify.
+
+**Round 2 verdicts: two `SHIP IT`, one `NOT YET`. Six findings. ZERO were code defects** — the code-lens
+re-derived the `retire` structural argument by hand, chased the one worry it raises (would
+`different_consumer_sets` fire on `test_c10_24`'s fixture, since `ent_a` declares a predicate and `ent_b`
+does not?) down into `DegradedAdapter._degrade_type`, and confirmed it zeroes `predicates` to `()` whenever
+`indexes_membership=False`, **so both operands really do come back blank and the guard is genuinely vacuous
+on this fixture.** The merge site's argument is sound rather than a rationalisation, and it was checked
+rather than accepted.
+
+**`F6` MAJOR — "the remaining eighteen" is 20, and round 1's own fix introduced it.** Corrected in §3.3.1.
+**This is the finding that matters most in round 2**, because it is the row's own error class appearing for
+the seventh time, in the paragraph that says *"measured rather than estimated"*, in text written to repair
+the third instance. **A single round would have shipped it.**
+
+**`F7` MAJOR — `S1` was made to do a governance job.** Corrected in §3.3.1: the three sites are deferred
+because the brief did not name them, which is an authorisation call, and not because a census cell says
+`S1`.
+
+**`F8` MAJOR — H1's and H2's falsifiers were never closed in this record's body**, and `docs/README.md`
+carried a granular breakdown of H1's check that appeared nowhere here. **Closed in §3.0**, with the two
+inverse `S5` sites named as the near-miss rather than quietly excluded.
+
+**`F9` MAJOR — `R104` is a third carrier of the `3969` defect and this record named two.** Added as §6.2.1.
+
+**`F10` MINOR — the "its own row" verdict's stated reasons were sequencing choices.** The one structural
+reason is now stated first, as §1.3's item 0b.
+
+**`F11` MINOR — two sites carry no empirical backing and the record now says so plainly.** The
+`test_c9_retire.py` copy of the repaired branch fired **0 ids on all three legs, before and after**: its new
+assertions are validated by static AST proof alone. And the `merge_types` site is the one place *"safe by
+construction"* is **not literally true** — if a future backend or a future guard reordering makes an
+identity guard fire on that fixture, the id will FAIL rather than skip, and **that failure will look like a
+suite regression when it is the guard doing its job.** A later investigator must re-derive the argument
+there rather than assume it is structural.
+
+### §6.4 — What the loop cost and what it bought
+
+| round | panel | verdicts | findings |
+|---|---|---|---|
+| 1 | 4 lenses | 3 `SHIP IT`, 1 `NOT YET` | `F1`-`F5` |
+| 2 | 3 lenses | 2 `SHIP IT`, 1 `NOT YET` | `F6`-`F11` |
+
+**Eleven findings. Not one was a code defect.** Every single one was a claim in the record that outran its
+evidence — a citation that did not carry its weight, a number nobody ran the command for, a falsifier
+promised and never closed, a category label doing a governance job, a carrier left unnamed.
+
+**That is the row's own subject, turned on the row.** §5.3 records `C19-100` waiting in three plausible next
+steps; §6 records the citation defect in five more, three of them mine. **The instrument this row built for
+skip sites had no equivalent for its own prose, and the loop was it.**
