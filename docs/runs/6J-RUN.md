@@ -804,11 +804,28 @@ record.** Verdicts: **three `NOT YET`, one `SHIP IT`.** Eighteen consolidated fi
 | **the CLASSIFIER — code** | **6** (`J1`-`J6`) | 0 |
 | the RECORD — prose and numbers | 3 (`J7`-`J9`) | 9 (`J10`-`J18`) |
 
-**THAT SPLIT IS THE RESULT, not the total.** `6I-RUN.md` §6.6 records fifteen findings across four rounds
-and thirteen lens-passes, and **NOT ONE WAS A CODE DEFECT** — every one was a claim in a record that outran
-its evidence. **This round found six defects in the CODE, in a single pass, and every one of them was in
-the fix written to close the last row's routed finding.** The first round in three rows to break that
-pattern.
+**THAT SPLIT IS THE RESULT, not the total.**
+
+> **`J63`, CORRECTED IN PLACE. THE ROW'S HEADLINE BOAST RESTED ON A MISQUOTED, SCOPE-WIDENED CITATION, AND
+> IT IS THE `R104` DEFECT CLASS THE BRIEF EXISTS TO NAME.** This read: *"`6I-RUN.md` §6.6 records fifteen
+> findings across four rounds and thirteen lens-passes, and NOT ONE WAS A CODE DEFECT … The first round in
+> three rows to break that pattern."*
+>
+> **Three things wrong. [Observed]** The sentence is **not** in §6.6 — it is `6I-RUN.md:1017`, in **§6.4**,
+> and it reads *"**Eleven findings. Not one was a code defect.**"* **Eleven, across that row's rounds 1 and
+> 2.** This record widened it to fifteen across four rounds — **and the widening sweeps in `F12`, which
+> `6I-RUN.md` §6.5 describes as a hole in `_capability_proof` at `check_skip_census.py:516`, "reproduced
+> twice, both by the lens and independently here". `F12` IS a code defect. So is `F4`.**
+>
+> **`F12` being a code defect is the entire premise of this row.** So the boast contradicted §4.2's own
+> table, which lists `row 6h's _capability_proof` -> *"never looked at the GUARD"* -> *"found by row 6i, as
+> `F12`"*. **Two sentences that could not both be true, five hundred lines apart, and the false one was the
+> flattering one.** Found by a round-4 lens.
+
+**`6I-RUN.md` §6.4 records ELEVEN findings across its rounds 1 and 2 with not one a code defect** — every
+one was a claim in a record that outran its evidence. **Its round 1 found `F4` and its round 3 found `F12`,
+both defects in `check_skip_census.py`, and `F12` is the finding routed to this row.** What round 1 here
+changed is the RATE: **six code defects in a single pass, all six in the fix written to close `F12`.**
 
 **Every finding was reproduced HERE before being accepted.** A lens's report is a hypothesis; eleven
 exploit sources were fed to the live `classify_source()` and the categories pasted into the working notes
@@ -1165,7 +1182,7 @@ if why == "cannot_record_override":
 
 **That classified `S5`. Delete the alias line and the identical code classifies `S2`.**
 `_capability_proof` was handed `read_obs` — only the names the GUARD reads — so `_capability_expr`'s own
-docstring defence, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
+in-function comment defence, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
 the environment however it is spelled"*, never fired. **It now gets the function's full observation set.**
 
 **`J32` and `J33` are `F15` pointed the other way, twice.** A `caps = adapter.capabilities()` proof — a
@@ -1274,9 +1291,18 @@ the requirement for round 4.
 |---|---|---|---|---|---|
 | 1 | 4 lenses | `a9bb767` | 1 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 22 MINOR | `J1`-`J18` |
 | 2 | 3 lenses | `d33ccce` | 0 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 20 MINOR | `J20`-`J37` |
-| 3 | 3 lenses | `5ac5ec0` | 0 `SHIP IT`, 3 `NOT YET` | 19 MAJOR, 21 MINOR | `J38`-`J57` |
-| **4** | **OWED, NOT RUN** | **the final text** | **—** | **—** | **—** |
-| | **10 lens-passes so far** | | **1 `SHIP IT`, 9 `NOT YET`** | | **`J1`-`J57`, plus `J19`** |
+| 3 | 3 lenses | `5ac5ec0` | 0 `SHIP IT`, 3 `NOT YET` | 19 MAJOR, 21 MINOR | `J38`-`J61` |
+| 4 | 3 lenses | `11c4046` | 0 `SHIP IT`, 3 `NOT YET` (2 of 3 reported) | 14 MAJOR, 15 MINOR so far | `J62`-`J66` |
+| | **13 lens-passes so far** | | **1 `SHIP IT`, 12 `NOT YET`** | | **`J1`-`J66`, plus `J19`** |
+
+**`J39`-`J45` ARE THE SEVEN `Q4` ROUTINGS**, carried in §5 item 8 and pinned in the gate as `ROUTED[0..6]`
+rather than written as prose findings. **`J51` is the round-3 blocker — the record not saying a round 3
+existed — which §3.8 records.** **(`J67`: the totals row previously closed on `J1`-`J57` while `J58`, `J59`,
+`J60` and `J61` sat in the document outside it, and `J39`-`J45` were declared in a range with nothing
+saying where they lived. A register that closes four findings short is the same defect as a register that
+closes a round short, which is what blocked the previous round.)**
+
+**ROUND 4 IS REQUIRED AND HAS NOT RUN.**
 
 **THE LOOP'S STOPPING CRITERION, ruled so this does not run forever:**
 
@@ -1288,7 +1314,7 @@ the requirement for round 4.
 fixes made during round 3, that is the finding, not the individual defects — and it is the seventh
 instance."* **§4.2 carries that at its top rather than in its table.**
 
-**ROUND 4 IS REQUIRED AND HAS NOT RUN.** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
+**ROUND 5's STATUS IS `Q5`, NOT ASSUMED.** `6I-RUN.md` §6.6: *"A round producing a MAJOR or BLOCKING fix must
 be followed by a full round that sees it"*, and *"the last round must see the final text"*. **Round 3
 produced nineteen MAJORs, so round 4 is owed and this table says so rather than closing on a totals row.**
 Nothing goes in after the last round, and round 3 was not it.
@@ -1297,13 +1323,15 @@ Nothing goes in after the last round, and round 3 was not it.
 
 **THE RATIO IS THE RESULT AND THE TOTAL IS NOT:**
 
-| | round 1 | round 2 |
-|---|---|---|
-| **MAJOR in the CLASSIFIER — code** | 6 | **7** |
-| MAJOR in the RECORD | 3 | 8 |
+| | round 1 | round 2 | round 3 | round 4 |
+|---|---|---|---|---|
+| **MAJOR in the CLASSIFIER — code, IN SCOPE** | 6 | **7** | **2** | **7** |
+| MAJOR in the CLASSIFIER — pre-existing, ROUTED | 0 | 0 | **7** | 0 |
+| MAJOR in the RECORD | 3 | 8 | 10 | 7+ |
 
-**`6I-RUN.md` §6.6 records fifteen findings across four rounds and thirteen lens-passes with NOT ONE code
-defect.** This row's two rounds found **thirteen**.
+**`6I-RUN.md` §6.4 records eleven findings across its first two rounds with not one a code defect — and its
+rounds 1 and 3 found `F4` and `F12`, both code defects. See `J63`.** This row's rounds found **fifteen
+in-scope code MAJORs** — 6 + 7 + 2 — plus seven pre-existing defects routed as `Q4`, plus round 4's seven.
 
 **A SECOND ROUND THAT FINDS MORE MAJORS THAN THE FIRST IS NOT A FAILING ROW — IT IS A ROW WHOSE FIRST ROUND
 WAS NOT DEEP ENOUGH.** The supervisor's sentence, and the evidence for it is specific: round 1's classifier
@@ -1412,10 +1440,17 @@ and it carried `Q1`, `Q2` and `Q3`.
 **1. `Q4-1` — THE PINNED `C10-16` SHAPE IS DEFEATED BY ONE ADDED LINE, AND IT IS WORSE THAN `F12`.**
 **Ruled first in this list by the supervisor, ahead of `J19`, and the reason goes in terms:**
 
-> **`F12` required someone to REMOVE a clause. THIS REQUIRES SOMEONE TO ADD AN ORDINARY LINE** —
+> **`F12` required someone to REMOVE a clause. This requires someone to ADD an ordinary line** —
 > `detail = merged.detail.get("overridable")` is a thing a contributor writes without thinking — **and the
-> result lands in `S0`, the most ungated cell there is, with the gate printing "guard reads no
-> observation."**
+> result lands in `S0`, the most ungated cell, with the gate printing "guard reads no observation."**
+
+> **`J62`, CORRECTED IN PLACE, AND IT IS `J26`'s DEFECT COMMITTED AGAINST THE NEWEST RULING, IN THE
+> PARAGRAPH THE SUPERVISOR PERSONALLY ORDERED.** The blockquote above stood with two edits to
+> `answers-8` §1: *"This requires someone to ADD an ordinary line"* was UPPER-CASED — exactly what `J28`
+> stops this record to correct — and the words **"there is"** were INSERTED after *"the most ungated
+> cell"*. **Both edits strengthen the sentence, which `J26` records as the direction these edits always
+> run.** Restored character for character. A round-4 lens checked every other quoted ruling against
+> `answers-1`..`-8` and found them all exact; this one, added in the most recent commit, was not.
 
 ```python
 merged = registry.merge_types("commentable", "searchable", "same", merged_by="user:sd")
@@ -1513,11 +1548,10 @@ outcome that stays open.
 `S3-UNCONDITIONAL`, *"no enclosing conditional"*; the same loop with an inner `if` -> `S0`. `_positive_naming`
 was taught that a comprehension target carries its observation; `classify_source`'s `read_obs` was not.
 
-**9. TWO TOOLING DEFECTS THAT RIDE WITH `J19`.** `--write-baseline` can emit a file the gate immediately
-rejects, when two flagged skips in one function share an ident — it writes duplicates and `run_gate` fails
-them as DUPLICATE, with no invocation that clears it. And **deleting the `asserts` key from a baseline entry
-silently disables the de-assertion ratchet**, which the code's own docstring calls *"the sharpest thing said
-about this gate"*.
+**9. ONE TOOLING DEFECT NOT ALREADY IN ITEM 7.** **Deleting the `asserts` key from a baseline entry silently
+disables the de-assertion ratchet**, which the code's own docstring calls *"the sharpest thing said about
+this gate"*. **(This item read "TWO TOOLING DEFECTS" and its first was already item 7's second bullet —
+counted twice, in a section whose unit of count is the point.)**
 
 **10. OPEN WITH THE SUPERVISOR, NOT WITH THE NEXT ROW.** `Q1`, `Q2`, `Q3` and `Q4` are all RULED.
 **§4.3's proposed rule — *a
@@ -1538,6 +1572,16 @@ right and must not change*. A **`ROUTED`** case says *this answer is WRONG, here
 it, and a change here is NEWS rather than a regression.* **[Observed — `--selftest` at HEAD]** all seven
 print as `ROUTED (known-wrong, still <category>)`, and a move prints a `NOTICE` that does **not** fail the
 gate.
+
+**10b. ROUND 3 AND ROUND 4 MINORS THIS ROW DID NOT FIX**, named for the same reason item 7 names round 2's.
+`FAMILY_TYPES` is matched by bare NAME, so `from x import Success as Refusal` defeats the exemption while
+`types.Refusal` and a tuple `(Refusal,)` are refused — asymmetric, and this file already defends the
+analogous alias attack for `pytest`. `write_baseline`'s `why` guard runs only at write time, so adding a
+capability assertion to a flagged site leaves the stored `why` false of the source with the ratchet green.
+A hand-edited baseline entry missing `site` raises `KeyError` rather than the file's usual malformed
+failure. And several correct shapes are refused fail-closed with honest text — `caps.f is not True`,
+`caps.f == 0`, `bool(caps.f) is False`, `getattr(caps, "f") is False`, an f-string or concatenated
+constant, and a capability assertion nested one `if` deeper in the branch.
 
 **11. LANDING TASKS THIS ROW HAS NOT DONE.** `docs/README.md` carries no row for 6j — **[Observed —
 `git log -S`]** row 6i added its README row mid-row at `ba71288`, so by that precedent it is overdue rather
