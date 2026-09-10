@@ -1887,6 +1887,19 @@ def write_baseline(sites, allow_deassertion: bool = False) -> int:
                   file=sys.stderr)
             return 1
 
+    # AN INERT FIELD IN A DATA FILE IS A CLAIM NOBODY VALIDATES, and it drifts from
+    # the truth silently -- this project's entire failure mode wearing a JSON key.
+    # `why` is written here and read nowhere, so it is checked HERE, at the only
+    # moment it is produced. The supervisor's ruling on Q3 asked for exactly this.
+    thin = [e["site"] for e in entries if not (e.get("why") or "").strip()]
+    if thin:
+        print("REFUSED to write a baseline whose entries carry no `why`. The field is "
+              "how a reader tells a MISSING proof from one this gate cannot verify:",
+              file=sys.stderr)
+        for t in thin:
+            print("    " + t, file=sys.stderr)
+        return 1
+
     payload = {
         "_comment": (
             "RATCHET BASELINE for check_skip_census.py. A site may only leave this "

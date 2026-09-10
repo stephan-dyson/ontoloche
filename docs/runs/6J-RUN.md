@@ -87,7 +87,10 @@ each hit's branch opened by hand]** there are **TWELVE** such assertions sitting
 > **`J12` — THE LINE-NUMBER CONVENTION, stated because this table does not share it with the rest of
 > the record.** Every line above is the **capability-assertion** line, which is where the `grep` that
 > found it hit. The census, §1.5, §2.1 and §2.3 all cite the **`pytest.skip(`** line, three or four
-> lines below — 478 against 481, 1516 against 1520, and so on for all eleven — and §1.2 cites a
+> lines below — 478 against 481, 1516 against 1520, and so on for all eleven **(`J27`: the deltas are 3, 4
+> and once **5** — site 9, `test_c10_25`, is 1417 against 1422, because a second assertion sits between, as
+> row 9 of that same table says. "Three or four" was measured on a sample and written as if on all eleven)**
+> — and §1.2 cites a
 > **guard** line. Nothing here is false and none of it was consistent. **In a record that stops in
 > §2.2 to write a citation note about `3969` against `3970`, this one was owed the same sentence, and
 > two lenses said so.**
@@ -126,7 +129,15 @@ cover. **The negation admits no family**: it names the complement of that class,
 it to narrow among.
 
 **So the implemented rule is: a positive type-or-truthiness test over the observation requires a
-discriminator; a NEGATED one does not.** Site 10 is the useful control — it is also a negation, and it
+discriminator; a NEGATED one does not.**
+
+> **`J30`, CORRECTED IN PLACE.** That sentence is **not** what was implemented, and §1.2 says so four pages
+> later without anything reconciling the two: **`not x.ok` IS required to narrow.** A negated TRUTHINESS
+> test admits a family exactly as a positive one does, because `x.reason` is right there to compare against
+> — the requirement CAN be met, so it is not waived. **The exemption is for a negated TYPE test alone**, and
+> round 2 narrowed it further to a type in `FAMILY_TYPES`, because `not isinstance(gone, Success)` names the
+> refusal family exactly. **§0 is a pre-registration and its predictions are left standing; this is a
+> statement about the implementation, and it was wrong.** Site 10 is the useful control — it is also a negation, and it
 carries a constant anyway, so it passes under either reading and cannot tell the two apart. **Site 11 is the
 only site in the suite that can**, which is what makes `P2` worth measuring rather than asserting.
 
@@ -232,7 +243,9 @@ absolute path. The supervisor is told before this row pushes.**
 
 ---
 
-## §1 — THE CHECKER FIX, AND BOTH INTEGERS HIT
+## §1 — THE CHECKER FIX, AND THE TWO INTEGERS AS THEY WERE FIRST SCORED
+
+**Both were scored HIT against the FIRST CUT of the fix. `P1` was re-scored a MISS against the classifier that landed — §1.4.1. `P2` holds.** The first-cut scorings are left standing below with their state named, because a prediction re-scored is evidence and a prediction quietly re-graded is not.
 
 **Applied to `docs/tools/check_skip_census.py` only. 434 insertions, 18 deletions, one file.** No test file
 was opened in this step and no repair was made — that is step 3, and the brief's §1 ruling is why.
@@ -307,11 +320,16 @@ why: guard reads gone -- the result under test -- but it narrows on a literal
 `cannot_record_override` — is not decidable from an AST, and the gate now says so instead of implying it
 proved it.
 
-**And an `S2` line now says WHY the promotion was refused**, which the old text never did. All four
-baselined sites carry one: two are refused by part 2, and two because no assertion in the skip's own branch
-reads a capability at all.
+**And an `S2` line now says WHY the promotion was refused**, which the old text never did.
 
-### §1.4 — `P1` PREDICTED **0**. THE CENSUS MOVED **0**. HIT.
+> **`J23`, CORRECTED IN PLACE.** This read *"All four baselined sites carry one: two are refused by part 2,
+> and two because no assertion in the skip's own branch reads a capability at all."* **[Observed at HEAD]**
+> there are **FIVE** baselined sites, and after round 2 taught the checker to read a positive
+> `any(w.startswith(...))`, the split is **four whose proof is MISSING and one whose proof EXISTS and which
+> this gate cannot verify** — which is the distinction `Q1` required and §3.5.1 records. **The sentence was
+> right for the tree it was written against and the tree moved twice under it.**
+
+### §1.4 — `P1` PREDICTED **0**. SCORED A HIT AT `9b00bcc`, AND RE-SCORED A **MISS** AT THE LANDED CLASSIFIER.
 
 ```
 S0-ENVIRONMENT             60        S3-UNCONDITIONAL            1
@@ -326,6 +344,39 @@ nothing was written.
 
 **§0.3's derivation was a `grep` and eleven hand-reads and it was right** — worth saying because §0.5 named
 it as the prediction most likely to be wrong.
+
+#### §1.4.1 — `P1` RE-SCORED. **BOTH SCORINGS STAND, AND THE SECOND ONE IS A MISS.**
+
+**Everything above is the scoring against `9b00bcc`, the first cut of the fix. It was correct against that
+state.** Round 1 then found six MAJORs in that classifier and it was rebuilt; round 2 found three more and
+it was rebuilt again. **§0.5's falsifier — *"any site printing a different category after the fix than the
+landed census recorded for it"* — FIRES against the classifier that actually landed.**
+
+**[Observed — the classifier at `16becf6` and the classifier at HEAD, both censusing both trees with
+directories passed explicitly, keyed by `(file, func, line)`]**
+
+| site | at `16becf6` | landed | why it moved |
+|---|---|---|---|
+| `test_c12_foundry_import.py:1402` `test_c12_27` | `S5` | **`S2`** | the corrected axis refuses a complemented marker test — this is `Q1` |
+| `test_c19_actions.py:3488` `test_c19_77` | `S4` | **`S0`** | its guard is `if not (registry := make_registry(adapter)).caps.stores_invocations:` — a walrus, which round 2 taught the checker to read |
+
+> **`P1` PREDICTED 0. THE LANDED CLASSIFIER MOVES 2. MISS.**
+
+**The second mover has not been counted anywhere before this line.** It arrived with round 2's walrus fix
+and is a canonical environment guard leaving the undecidable cell for the right one — **a good movement, and
+still a movement `P1` said would not happen.**
+
+**THE SCORING IS NOT FLIPPED AND THE FIRST ONE IS NOT DELETED**, on the supervisor's ruling:
+
+> *"Do not flip it. Record: the original scoring, the state it was scored against, the falsifier firing,
+> the re-scoring against the landed classifier, and the verdict that survives. A prediction re-scored is
+> evidence; a prediction quietly re-graded is not."*
+
+**`P2` and `P3` were re-scored against the same landed classifier and BOTH HOLD.** **[Observed]** `P2` is
+still exactly one site decided by the negation exemption, still `test_c10_27` (now at line 1542). `P3`'s
+three repairs are all still `S5`. **So the miss is `P1`'s alone and it is not a systemic scoring failure —
+which is a claim this row can now make because it measured all three rather than the one it was asked
+about.**
 
 ### §1.5 — `P2` PREDICTED **1**, AND NAMED THE SITE. MEASURED **1**, AT THAT SITE. HIT.
 
@@ -346,8 +397,19 @@ because its `startswith` prefix narrows on a constant anyway and it never needed
 
 ### §1.6 — WHAT THE FIX ACTUALLY DOES, since §0.7 said the census would not show it
 
-**NINE of the fourteen new calibration cases are classified WRONG by the classifier at `16becf6` and right
-by this one.** Measured by loading both modules — `git show 16becf6:docs/tools/check_skip_census.py` into
+> **`J24`, CORRECTED IN PLACE, AND IT WENT STALE TWICE.** This read **"NINE of the fourteen new calibration
+> cases"**. It was right at `9b00bcc`. It became **10 of 14** at `ace7081`, when round 1 re-pinned the
+> `startswith` accept case — which `J11.1`, a few paragraphs below, announces without anyone updating the
+> number above it. It is now **14 of 20**, because round 2 added six more cases and taught the checker to
+> read three shapes it had been refusing. **[Observed — both modules loaded side by side, every case string
+> through `classify_source()` on each: 17 cases at `16becf6`, 37 now, 20 new, 14 classified differently.]**
+>
+> **9 + 5 = 14 and 10 + 4 = 14, so the wrong split summed correctly — in the same section where `J7`
+> corrects this record for exactly that shape.** The table below is the nine as they stood at `9b00bcc` and
+> is left as a record of that state.
+
+**FOURTEEN of the twenty new calibration cases are classified WRONG by the classifier at `16becf6` and right
+by this one. NINE of them, listed below, were the round-1 set.** Measured by loading both modules — `git show 16becf6:docs/tools/check_skip_census.py` into
 memory beside the working one — and classifying each case with both. **[Observed — each case string
 through `classify_source()` on both modules, compared category by category]**
 
@@ -370,7 +432,8 @@ through `classify_source()` on both modules, compared category by category]**
 > — and all five classify the same in both, which is what an accept case is for."* **The fifth is a REFUSE
 > case.** *"An inverse guard with NO capability proof is still FLAGGED"* expects `S2`, and the old classifier
 > already got it right. **Four accept cases and one refuse case the old classifier already refused** — found
-> by two lenses independently.
+> by two lenses independently. **`J24`: that remainder was five at `9b00bcc` and four from `ace7081`
+> onward, and is six of twenty at HEAD. The accept/refuse split is restated with the count in `J24`.**
 
 > **`J11.1`, and it is not a wording fix: two of those four "accept" cases were accepted for the WRONG
 > REASON, and round 1 proved it.** The `reason !=` case passes only because of a second assertion the first
@@ -421,12 +484,35 @@ tree.** Its satisfaction condition was a defect — either row 6i had landed a b
 long-standing pattern was wrong.
 
 **AND THE RESULT IS STRONGER THAN A MOVED CELL WOULD HAVE BEEN, which is the part not to soften into "no
-change".** **All ELEVEN `S5` sites survive the full three-part axis** — row 6i's four repairs and the
-suite's seven pre-existing ones, every one carrying a narrowed guard or the legitimate inverse shape, the
-correct flag in the falsifying sense, and a defeasible assertion.
+change".**
+
+> **`J20`, CORRECTED IN PLACE — AND THE SENTENCE IS THE SUPERVISOR'S, NOT THIS ROW'S.** It read: **"All
+> ELEVEN `S5` sites survive the full three-part axis"**, which is `answers-3` §3 verbatim:
+>
+> > *"**All ELEVEN `S5` sites survive the full three-part axis** — row 6i's four repairs and the suite's
+> > seven pre-existing ones, every one carrying a narrowed guard (or the legitimate inverse shape), the
+> > correct flag, and a defeasible assertion."*
+>
+> **It was TRUE when he wrote it, at 2026-09-10 cycle 70**, against the classifier that existed then — the
+> census had not moved. **It went FALSE when the rebuilt classifier landed**, because the corrected axis
+> refuses `test_c12_27`'s complemented marker test. **[Verified — the supervisor's own run:
+> `61 / 44 / 5 / 1 / 15 / 13 = 139`, `check_skip_census` exit 0, tree byte-identical before and after]**
+>
+> **It is `R100`'s clause-table species: a present-tense claim about a live state, which expires when the
+> fix it describes arrives.** He named it himself — he had corrected the founder's page for this same shape
+> the day before and then wrote it into this record. **Recorded rather than quietly decremented, because a
+> bare "ten" implies the eleventh was defective and it is not.**
+
+**TEN of the eleven survive the full three-part axis. The eleventh, `test_c12_27`, is not a defect — its
+`S5` property holds in fact and the corrected classifier honestly cannot prove it, which is why it sits in
+the gated cell with a `why` that says so.** The other ten — row 6i's four repairs and six of the suite's
+seven pre-existing sites — each carry a narrowed guard or the legitimate inverse shape, the correct flag in
+the falsifying sense, and a defeasible assertion.
 
 **A moved cell would have told us one site was wrong. An unmoved census under a strictly stronger checker
-tells us all eleven were right for reasons the old checker never checked.** The old gate validated one part
+tells us all eleven were right for reasons the old checker never checked.** **[`J20`: that held against the
+classifier of §1.4 and does not hold against the one that landed. The honest form is that TEN were right
+for reasons the old checker never checked, and the eleventh is right for a reason no checker can read.]** The old gate validated one part
 of three and got the right answer anyway. **It now gets the right answer for the right reason, and the
 difference is invisible in the counts and enormous in what it will catch tomorrow.**
 
@@ -439,8 +525,8 @@ difference is invisible in the counts and enormous in what it will catch tomorro
 **The repairs are written and the mirror is regenerated. The census has NOT been run since.** This
 sub-section is committed **before the census that scores it**, so `git log` carries the order.
 
-> **`J13`, CORRECTED IN PLACE. This originally read *"committed alone … exactly as §0 was", and it was
-> not.*** **[Observed — `git show --stat`]** `265aafc` touched **one** file. `43d0dac` touched **seven** —
+> **`J13`, CORRECTED IN PLACE.** It originally read *"committed alone … exactly as §0 was"*, **and it was
+> not.** **[Observed — `git show --stat`]** `265aafc` touched **one** file. `43d0dac` touched **seven** —
 > this record plus all six repaired test files. **The prose was alone in the commit; the commit was not
 > alone.** The word "alone" is load-bearing in §0 precisely because it is provable there, and borrowing it
 > here spent that credit on something that does not have it. The commit message itself was more careful and
@@ -638,6 +724,13 @@ to verify anything.** The verification is two independent things:
 | `check_capability_matrix.py` | **exit 0**, run to completion with the Postgres DSN |
 | `check_skip_census.py` | **exit 0** — 4 result-conditioned skips, baseline 4, the ratchet holds |
 
+> **`J22`, CORRECTED IN PLACE. THAT TABLE IS THE GATES AS OF `a9bb767` AND IT IS NOT THE LANDED STATE.**
+> Two commits later the classifier was rebuilt and the baseline rose under `Q1`. **[Observed — all five
+> re-run at HEAD]** `check_links` **0**, `check_spec_drift` **0**, `check_merge_guard` **0**,
+> `check_capability_matrix` **0**, and `check_skip_census` **0** printing **`5 result-conditioned
+> skip(s), baseline 5`**. **The verdicts survived the rebuild; the figures in the table did not, and
+> nothing in this record established that anyone had run them at the landed tree until this line.**
+
 **The set stays FIVE.** The checker fix repaired an existing gate rather than adding one, which is the
 supervisor's answer 1, and this row proposed no separate executable.
 
@@ -683,7 +776,7 @@ explicitly and keys on `(file, func, line)`.
 ### §3.1 — Round 1, and the ratio is the interesting number
 
 **Four fresh lenses, one artefact, four separate briefs: the classifier, the numbers, the repair, the
-record.** Verdicts: **three `NOT YET`, one `SHIP IT`.** Eighteen consolidated findings, `J1`-`J18`.
+record.** Verdicts: **three `NOT YET`, one `SHIP IT`.** Eighteen consolidated findings, `J1`-`J18` — **`J18` being the bare `[Observed]` markers that named no producer, acted on in §1.5 and §1.6 and carrying no label until a lens counted the range against the written findings and got seventeen.**
 
 | | MAJOR | MINOR |
 |---|---|---|
@@ -769,7 +862,19 @@ in one function with different guards both carry `#0`, so
 
 **On the live tree: 139 sites collapse to 93 distinct idents, 36 idents carry more than one site, and FOUR
 non-`S2` sites already share an ident with a baselined `S2` site** — `test_c10_22`, `test_c12_21`, and two
-in `test_c12_24`. **One guard-edit at any of those four and a new result-conditioned skip is invisible.**
+in `test_c12_24`.
+
+> **`J25`, CORRECTED IN PLACE.** This read **"One guard-edit at any of those four and a new
+> result-conditioned skip is invisible"**, and the paragraph above quotes
+> `new = [i for i in found if i not in set(declared)]` as the gate's computation. **Neither is true at
+> HEAD.** `d33ccce` landed §3.6's interim in the same commit that carried this section, and the interim
+> compares `found` and `declared` as MULTISETS. **[Observed — a lens turned
+> `test_c12_foundry_import.py:1236` into an `S2` site: the set test reports `[]`, HEAD reports it.]**
+> **So this section asserted a reachable hole that its own §3.6 had already closed, in the same commit.**
+>
+> **What remains true, and it is why the routing stands:** the ident is still not an identity, 139 sites
+> still collapse to 93, and **a SWAP inside one function — one flagged site removed and a different one
+> added — is still invisible.** The interim closes the addition, not the identity.
 
 **PROVENANCE, AND IT IS THE STREAK AGAIN.** The per-guard ordinal is **row 6h's own adversarial-round fix**,
 and the code says so in its own comment: a plain per-function counter renumbered a flagged site whenever an
@@ -820,19 +925,27 @@ three go the wrong way:**
 |---|---|---|
 | `_skip_if_cannot_record` `S4` -> `S5` | 1 | the intended win, and it does work |
 | four `conftest.py` sites `S4` -> `S1` | 4 | harmless reclassification |
-| **three `_tombstone_holding` copies `S1` -> `S2`** | **3** | **NEW flagged sites, on row 6i's own repairs** |
+| **three `_tombstone_holding` copies `S1` -> `S2`** | **3** | **NEW flagged sites, in the three helpers row 6i repaired** |
 
 **The three helpers guard on `word`, a parameter, and assert `word in (gone.aliases or ())`.** Make the
 parameter an observation root and the guard reads an observation the assertions reach, which is `S2` by
-definition. **So the cheap local option buys one promotion and costs three new baseline entries at the
-three sites row 6i repaired last night.**
+definition. **So the cheap local option buys one promotion and costs three new baseline entries in the
+three helper functions row 6i repaired last night.**
+
+> **`J29`, CORRECTED IN PLACE.** This said the three land **"at the three SITES row 6i just repaired"**, and
+> the supervisor repeated the phrasing back in `answers-5` §3, so the imprecision propagated into a ruling.
+> **[Observed]** the movers are `test_c12_foundry_import.py:1111`, `test_c4_propose_type.py:464` and
+> `test_c9_retire.py:1734` — the `word not in (written[0].aliases or ())` skip. **Row 6i's repairs are the
+> `cannot_record_override` skips at 1128, 481 and 1751, seventeen lines lower.** Same three FUNCTIONS,
+> different SITES — and "site" is this record's own unit of count. **The trade is unchanged and the
+> sentence describing it was not precise.**
 
 **Recommendation: it stays its own row**, which is `6I-RUN.md` §1's own verdict and `R104`'s scoping.
 **This is the measured argument the supervisor asked for rather than the conclusion he was offered before.**
 
 ### §3.5 — What is open, and where it is written down
 
-**Two items are with the supervisor in
+**THREE items are with the supervisor in
 `C:\Users\steph\.claude\fleet-supervisor\briefs\2026-09-10-oo-6j-questions.md`**, each with the options,
 this row's recommendation, and what it blocks:
 
@@ -849,7 +962,11 @@ repairs take it to **14**, this reclassification takes it to **13**.
 
 ### §3.5.1 — `Q1` GRANTED, and the principle it turns on
 
-> **A RATCHET BASELINE RECORDS WHAT THE INSTRUMENT CAN PROVE, NOT WHAT THE AUTHOR BELIEVES.**
+> *"A ratchet baseline records what the instrument can PROVE, not what the author believes."*
+>
+> **`J28`: quoted verbatim here. It stood in this record in SMALL-CAPS paraphrase — a trivial edit on
+> its own, except that `J10` stops this same document to correct itself for saying "in bold" over a
+> quote where only half was bold, and `J26` is the same act with consequences.**
 
 **The supervisor's sentence, and it is why the baseline rose rather than the rule bending.** `test_c12_27`
 is semantically sound: a backend that CAN hold aliases and declined the row anyway fails
@@ -865,8 +982,45 @@ reason:** `not gone.reason.startswith("cannot_")` has the identical shape and ad
 WEAKENED. THIS ONE ROSE BECAUSE THE GATE GOT STRICTER**, which is the opposite fact, and the record says so
 in those terms so that a later reader counting five flagged sites does not read five defects.
 
-**THE RECORDING REQUIREMENT, and it took a second pass to actually meet.** The ruling required the fifth
-entry's `why` to say *which kind* it is, legibly in the baseline file and without reading this record. The
+**THE RECORDING REQUIREMENT. THE CONDITION VERBATIM, BECAUSE THIS ROW PARAPHRASED IT AND THE PARAPHRASE IS
+THE MOST SERIOUS THING IN THE ROW.**
+
+> *"**Make the `why` for this entry say which kind it is, in terms.** I am not asking for a schema change —
+> `why` text is enough — but the distinction must be legible without reading `6J-RUN.md`."*
+
+> **`J26`, CORRECTED IN PLACE.** This section originally restated that condition as: *"The ruling required
+> the fifth entry's `why` to say which kind it is, legibly **in the baseline file** and without reading this
+> record."* **Two edits in one sentence, both running in this row's favour: *"I am not asking for a schema
+> change"* was DROPPED, and *"in the baseline file"* — which the supervisor never wrote — was INSERTED.**
+> Then a `why` KEY was added to every entry, which is a schema change. **A lens found both edits; this row
+> raised it as `Q3` before the lens report was consolidated, and the supervisor's answer makes the
+> paraphrase the finding rather than the field.**
+>
+> **HIS RULING, and it is now standing practice for this project:**
+>
+> > *"When you disagree with a ruling, CONTRADICT it in the questions file. Never RESTATE it. … A
+> > restatement that differs from the original is indistinguishable from a misreading, and the record then
+> > shows compliance with a ruling I never made. I cannot audit my own words against a paraphrase; I would
+> > have to remember them, and I have already demonstrated I do not."*
+>
+> **And the condition itself could not be obeyed as written, which he verified and recorded against
+> himself.** **[Verified — `git show 16becf6:docs/tools/skip_census_baseline.json`]** entries carried
+> `site`, `asserts`, `guard` and **no `why` field at all**, so *"make the `why` for this entry say…"* and
+> *"I am not asking for a schema change"* cannot both be satisfied. **His words: *"You did not override a
+> coherent ruling; you resolved an incoherent one, and you resolved it the right way."*** He logs it as a
+> new species — not a stale fact or a wrong citation, but **an instruction whose two halves contradicted
+> each other, written confidently enough that the row assumed the fault was in its reading.**
+
+**`Q3` RULED: keep the `why` key.** The reader who miscounts defects has the JSON open, not a census
+running, so the distinction has to live where the counting happens.
+
+**AND THE RULING CARRIED A PROPERTY THIS ROW HAD TO MEASURE: *"`--write-baseline` should not be able to emit
+an entry whose `why` is missing or empty."*** His reason is the one to keep: **an inert field in a data file
+is a claim nobody validates, and it will drift from the truth silently — this project's entire failure mode
+wearing a JSON key.** **[Observed — bite-tested by handing `write_baseline` a site list with every `why`
+blanked]** it returns `1` and names the entries. Cheap, so it is in rather than routed.
+
+**It took a second pass to meet the ruling at all.** The
 first write did not: the rebuilt `_capability_proof` reported the narrowing failure and stopped, so all
 five entries read alike. **The refusal text now names the kind in both directions.** **[Observed —
 `docs/tools/skip_census_baseline.json` at `count: 5`]**
@@ -901,8 +1055,24 @@ list rather than storing them.
 
 **Condition 1.** **[Observed — the classifier at `ace7081` and the classifier now, both censusing the same
 two directories passed explicitly, keyed by `(file, func, line)`]** 139 sites before, 139 after, **sites
-whose category changed: 0. Sites whose `why` text changed: 0.** The change lives entirely inside
-`run_gate`, which neither `census()` nor `classify_source()` calls.
+whose category changed: 0.**
+
+> **`J21`, CORRECTED IN PLACE.** This read *"**Sites whose `why` text changed: 0.** The change lives
+> entirely inside `run_gate`, which neither `census()` nor `classify_source()` calls."* **Both halves are
+> wrong at the commit they describe.** **[Observed — re-run]** `why` changed on **5** sites, all five `S2`
+> entries, because the SAME commit also rewrote `_capability_proof` to add the "NOTE THE KIND" clause under
+> `Q1` — and `classify_source()` calls it directly.
+>
+> **The mechanism is the one this row keeps meeting: condition 1 was measured, then `_capability_proof` was
+> edited in the "second pass" §3.5.1 describes, and condition 1 was never re-run.** A measurement stated in
+> the present tense about a tree that moved under it. **Found by two lenses independently.**
+>
+> **The condition's SUBSTANCE survives and was re-measured: no site's cell changes.** What failed was the
+> evidence offered for it.
+
+**Corrected: the INTERIM's change lives entirely inside `run_gate`, and it moves no cell and no `why`. The
+same commit separately changes `_capability_proof` under `Q1`, which moves five `why` texts and no cell.
+Condition 1 is met by the interim; the `why` movement belongs to `Q1` and is measured as its own thing.**
 
 **Condition 2.** **[Observed — the interim run against a baseline object with the `why` key stripped]** it
 reads `site` and nothing else, and returns the same answer. **The `why` field is `Q1`'s recording
@@ -932,3 +1102,204 @@ question neither row 6h's fix nor `F12`'s asked of itself.
 holds **nineteen** non-blank lines, so a question not acted on within one supervision cycle is
 unrecoverable. **He sends prose by file for the same reason and had not noticed the return channel carried
 the same defect.**
+
+### §3.7 — ROUND 2: THREE FRESH LENSES, THREE `NOT YET`, AND MORE MAJORS THAN ROUND 1
+
+**Briefed separately on the classifier, the numbers, and scope-and-rulings. Each was given the two
+measurement traps round 1 fell into** — a module imported from a copy resolves `REPO_ROOT` to the wrong
+place and censuses silently short, and `Site.ident` is not unique so an ident-keyed dict loses 46 of 139
+sites — **and told to state the site count of every census it ran.** All three did. All three ran 139.
+
+| lens | subject | verdict | raw findings |
+|---|---|---|---|
+| E | the rebuilt classifier | `NOT YET` | 3 MAJOR, 11 MINOR |
+| F | every number and citation | `NOT YET` | 6 MAJOR, 4 MINOR |
+| G | scope, rulings, promises | `NOT YET` | 6 MAJOR, 5 MINOR |
+
+**Consolidated into `J20`-`J37`: eleven in the record and SEVEN IN THE CLASSIFIER.**
+
+**THE SHARPEST, AND TWO LENSES FOUND IT INDEPENDENTLY —`J31`:**
+
+```python
+why, detail = gone.reason, gone.detail      # <- the whole exploit
+if why == "cannot_record_override":
+    assert gone.caps.stores_events is False, detail
+    pytest.skip("NOT REACHABLE")
+```
+
+**That classified `S5`. Delete the alias line and the identical code classifies `S2`.**
+`_capability_proof` was handed `read_obs` — only the names the GUARD reads — so `_capability_expr`'s own
+docstring defence, *"`gone.caps.stores_events`, where `gone` is the result under test, is not a fact about
+the environment however it is spelled"*, never fired. **It now gets the function's full observation set.**
+
+**`J32` and `J33` are `F15` pointed the other way, twice.** A `caps = adapter.capabilities()` proof — a
+shape the suite writes, and which `test_c15_09` pins in this very calibration set — was refused with *"no
+assertion in the skip's own branch reads a capability"*, which is false of that block. A **positive**
+`any(w.startswith("import_refused:") for w in warnings)` was refused with *"without naming WHICH outcome"*,
+while the same prefix spelled `out.reason.startswith(...)` was accepted. **Inconsistent, not conservative,
+and each printed a sentence false of the code it quoted.**
+
+**`J34` — the recorded guard TEXT was false on every else-branch, and that text feeds the baseline.**
+**[Observed]** `ontoloche/contract/conftest.py:149` was written down as `backend == 'external' and backend
+== 'sqlite' and backend == 'sqlite_minimal' and backend == 'postgres'` — **four mutually exclusive
+equalities ANDed, a literal contradiction, as the guard of a REACHABLE skip.** The text goes into the
+census, into the baseline, and into the ordinal key. **Measured before changing it: 16 texts move and NONE
+is in a baselined function, so no ratchet ident changed.**
+
+**`J35` and `J36` are ungated escapes with false reasons.** A walrus guard landed in `S4` with *"binding no
+name"* printed about a guard that binds a name; a skip in a `for … else` landed in **`S3-UNCONDITIONAL`**
+with *"no enclosing conditional"*. **`J37`:** `run_gate` checked only `CONTRACT_DIR` for existence, leaving
+the async tree one rename away from vanishing — 18 of 139 sites, silently, with the gate still green. The
+module's own docstring records a fresh lens finding that exact hole once already.
+
+**AND THE FIRST CUT OF `J36`'s FIX BROKE THIS ROW'S OWN REPAIR.** Putting the whole `for` statement in the
+undecidable bucket dropped **`test_c10_merge_types.py:1297` — one of this row's three repairs — from `S5` to
+`S4`**, because `test_c10_23` runs its fixture inside `for i, order in enumerate(...)`. **Caught by
+measuring the census after the fix rather than by reading it, and narrowed to the loop's `else`.** That is
+§4.2's pattern, committed by this row, against itself, in the fix for a finding about that pattern.
+
+**Six calibration cases pin all of it, in both directions.** 37 of 37 pass.
+
+---
+
+## §4 — WHAT THE ROUNDS SAY ABOUT THE ROUNDS
+
+### §4.1 — Which round saw which text, and the ratio the supervisor asked for
+
+| round | panel | reviewed | verdicts | raw lens findings | consolidated |
+|---|---|---|---|---|---|
+| 1 | 4 lenses | `a9bb767` | 1 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 22 MINOR | `J1`-`J18` |
+| 2 | 3 lenses | `d33ccce` | 0 `SHIP IT`, 3 `NOT YET` | 15 MAJOR, 20 MINOR | `J20`-`J37` |
+| | **7 lens-passes** | | **1 `SHIP IT`, 6 `NOT YET`** | | **`J1`-`J37`, plus `J19`** |
+
+**`J19` carries no round.** It is the ident defect, and **no lens found it** — §3.0.
+
+**THE RATIO IS THE RESULT AND THE TOTAL IS NOT:**
+
+| | round 1 | round 2 |
+|---|---|---|
+| **MAJOR in the CLASSIFIER — code** | 6 | **7** |
+| MAJOR in the RECORD | 3 | 8 |
+
+**`6I-RUN.md` §6.6 records fifteen findings across four rounds and thirteen lens-passes with NOT ONE code
+defect.** This row's two rounds found **thirteen**.
+
+**A SECOND ROUND THAT FINDS MORE MAJORS THAN THE FIRST IS NOT A FAILING ROW — IT IS A ROW WHOSE FIRST ROUND
+WAS NOT DEEP ENOUGH.** The supervisor's sentence, and the evidence for it is specific: round 1's classifier
+lens ran its confirming census over **93 sites of a 139-site tree** and reported it as the whole. Round 2's
+three lenses were briefed against that trap by name and all three ran 139. **The instrument that reviews
+this project got better between rounds, and that is why round 2 found more.**
+
+### §4.2 — THE PATTERN, NAMED, AND THE STREAK COUNTED
+
+> **A FIX THAT REMOVES A SYMPTOM BY WEAKENING THE THING THAT DETECTS IT.**
+
+**Counted, not remarked on:**
+
+| # | the fix | the symptom it removed | what it weakened | found by |
+|---|---|---|---|---|
+| 1 | row 6h's `_capability_proof`, tightened twice by a lens | assertions laundering an `S2` | never looked at the GUARD | row 6i, as `F12` |
+| 2 | row 6h's per-guard ordinal | a gate failing on unrelated commits | made two sites indistinguishable | this row, as `J19` |
+| 3 | this row's `J1` fix — branch polarity | the else-branch exemption | the owner check saw only the guard's names | round 2, as `J31` |
+| 4 | this row's `J36` fix — loops | a `for … else` in the ungated cell | put whole loop bodies in `S4` | this row, measuring |
+
+**FIVE ROWS, AND TWICE INTO THIS ONE INSTRUMENT.** Row 6h's fix carried row 6i's finding; row 6i's routed
+finding became this row; this row's `J1` fix carried round 2's `J31`; this row's `J36` fix carried its own
+regression within the hour.
+
+**THE TEST THAT WOULD HAVE CAUGHT ALL FOUR, and no row has asked it: *after a fix, can the instrument still
+distinguish the cases it could distinguish before?*** Instances 2 and 4 fail it outright. Instances 1 and 3
+fail a variant of it — *did the fix's own reach shrink where nobody was looking?*
+
+### §4.3 — A PREDICTION SCORED BEFORE THE ARTEFACT SETTLED, FOUR TIMES
+
+**The supervisor flagged two instances and asked whether a third would make it systemic. There are four.**
+
+| claim | scored at | went false at | corrected as |
+|---|---|---|---|
+| `P1` — "the census moved 0" | `9b00bcc` | `ace7081` and again at HEAD | `J20` / §1.4.1 |
+| §3.6's condition 1 — "`why` changed: 0" | mid-`d33ccce` | later in `d33ccce` | `J21` |
+| §1.6's "NINE of the fourteen" | `9b00bcc` | `ace7081`, then round 2 | `J24` |
+| §3.3's "one guard-edit and it is invisible" | when written | the same commit that carried it | `J25` |
+
+**IT IS SYSTEMIC AND IT IS NOT CARELESSNESS. It is a structural property of a row that fixes its own
+instrument between measurements:** every number about the classifier is a measurement OF an artefact this
+row keeps changing, and a round that produces MAJORs guarantees the artefact changes again.
+
+**THE RULE THIS ROW DRAWS FROM IT, offered to the supervisor rather than minted:** *a measurement of the
+instrument is stamped with the commit it was taken at, and every such measurement is RE-TAKEN after the last
+round.* **§6 is that re-take.** `P2` and `P3` survived it; `P1` did not.
+
+### §4.4 — Standing practice the supervisor ruled from this row
+
+> **"When you disagree with a ruling, CONTRADICT it in the questions file. Never RESTATE it."**
+
+**Because the two are not the same act and only one is auditable.** `J26` is this row committing the
+restatement, and it is the most serious finding in the row: a paraphrase that differs from the original is
+indistinguishable from a misreading, **and the record then shows compliance with a ruling the supervisor
+never made.** Rulings are now quoted verbatim in this record with disagreement placed beside the quote.
+
+> **Questions to the supervisor go in a FILE, not only in the pane.**
+
+**[Observed — his `tmux capture-pane -p -S -`]** the pane holds **nineteen** non-blank lines, so a question
+not acted on within one supervision cycle is unrecoverable. **He sends prose by file for the same reason and
+had not noticed the return channel carried the same defect.** `2026-09-10-oo-6j-questions.md` is that file
+and it carried `Q1`, `Q2` and `Q3`.
+
+---
+
+## §5 — WHAT THE FOLLOW-ON ROW INHERITS
+
+**Collected here because everything below is real, live, and would otherwise exist only as a paragraph
+inside a long document — which is `6I-RUN.md` §7's own reason, and the reason this row exists.** Nothing
+here goes in the governance register. The kill row stays **TWENTY-THREE** and the register stays **ONE**.
+
+**1. `J19` — THE SITE IDENT IS NOT AN IDENTITY, AND IT IS THE FIRST THING TO FIX.** §3.3 has the
+demonstration and §3.6 has the interim. **The interim closes the ADDITION and not the identity: a SWAP
+inside one function — one flagged site removed and a different one added — is still invisible, measured
+rather than assumed.** The fix puts the guard into the ident and **rewrites every entry in
+`skip_census_baseline.json`**, which is why it was routed rather than done here.
+
+**2. §7 item 2's extension is its own row, and that is now a RULING** — `answers-5` §3, on §3.4's
+measurement. **Its cost is measured and it is not cheap: eight sites move and three go the wrong way**,
+adding new flagged entries in the three helper functions row 6i repaired.
+
+**3. THREE LATENT SITES, and this row found them rather than inheriting them — `J14`.** Of the five
+untouched sites carrying `pytest.skip(f"this backend cannot retire the holder ({gone.reason})")`,
+**`test_c12_21` and `test_c5_13` declare `stores_events` in `requires_capability`, so their bare skip is
+structurally DEAD.** The other three do not:
+
+```
+ontoloche/contract/test_c10_merge_types.py:1135    test_c10_21   declares only indexes_membership
+ontoloche/contract/test_c5_approve_reject.py:321   test_c5_14    declares nothing
+ontoloche/contract/test_c5_approve_reject.py:356   test_c5_15    declares nothing
+```
+
+**On a backend legal under `PACKAGE.md` §3.2 — `indexes_membership=True`, `stores_proposals=True`,
+`stores_events=False` — all three reach the retire and hit the bare skip.** They are item 5's population and
+this row was not authorised to repair them. **They are LATENT, not dead, and that is new evidence.**
+
+**4. §7 item 4's four baselined sites stay.** Unobserved on three legs across two rows. Naming a capability
+for a refusal never seen fire is `C19-100` closing a legal operation.
+
+**5. §7 item 5's remaining occurrences are still unaudited and are not claimed to be.**
+
+**6. ROUND 2 MINORS THIS ROW DID NOT FIX, named rather than absorbed.** A quietly half-audited population is
+worse than an unaudited one, so:
+
+- **`_leaving_verdict` and `_print_detail` look up by `ident`**, which `J19` shows is not unique — so a
+  repair verdict can describe a different site in the same function. **A lens reproduced it.** It closes
+  with `J19` and not before.
+- **`--write-baseline` can emit a file the gate immediately rejects**, when two flagged skips in one
+  function carry the same ident: `_entries` writes two identical `site` values and `run_gate` fails them as
+  DUPLICATE. Also `J19`.
+- **`FAMILY_TYPES` is matched by NAME**, so `from mod import Success as Refusal` defeats the exemption, and
+  `types.Refusal` or a tuple `(Refusal,)` is refused. Fail-closed in the second direction, not the first.
+- **A capability assertion nested inside a `for`/`with` in the skip's own branch is invisible**, and the
+  gate then prints *"no assertion in the skip's own branch reads a capability at all"* — false of the
+  block, `F15`'s shape once more.
+- **`declared = [e["site"] for e in entries]` raises `KeyError` on a hand-edited entry** instead of the
+  clean FAIL the neighbouring check produces.
+- **Two calibration cases do not isolate the property their label names** — the numeric case still refuses
+  with its numeric clause deleted, and `test_c10_25`'s label says the guard carries it when the docstring
+  says the branch assertion does.
