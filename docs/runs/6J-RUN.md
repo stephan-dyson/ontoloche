@@ -654,6 +654,32 @@ barred from running the suites.
 
 ## §3 — THE ADVERSARIAL ROUND
 
+### §3.0 — THE ROUND'S OWN DEFECT CLASS, FIRST, BECAUSE IT IS THE FINDING ABOUT THE INSTRUMENT
+
+**NO LENS FOUND `J19`.** Four fresh lenses, one of them briefed on nothing but the classifier, and the
+hole that lets an ordinary commit walk past the ratchet was found **here** — because a measurement script
+written in this row keyed a dict by `Site.ident` and silently lost 46 of 139 sites. **The instrument error
+was this row's. Chasing it is what exposed the gate's.**
+
+**And the lens briefed on the classifier fell into the same hole and did not notice.** Lens A ran a
+cell-by-cell census comparison to confirm this row's "0 sites moved" and reported
+`S0 47 / S1 18 / S2 4 / S3 1 / S4 9 / S5 14` — **93 sites, against a tree of 139** — as though it were the
+whole census. Its conclusion was correct. **Its measurement was not, and nothing in its own report would
+have told it.**
+
+> **A LENS THAT REACHES THE RIGHT ANSWER FROM AN INCOMPLETE MEASUREMENT IS NOT A PASSING LENS.** It is
+> `F14`'s shape moved up one layer: a true statement standing on evidence that does not carry it. **The
+> adversarial round is this project's strongest instrument and it has just been shown to carry the same
+> defect class it exists to catch.**
+
+**This row hit the identical trap twice more while measuring the answers-5 conditions, and both are worth
+the sentence.** A classifier loaded from the scratchpad resolves `REPO_ROOT` to the scratchpad's
+grandparent, so its `SCAN_DIRS` do not exist and `census()` returns **zero sites in silence**; and
+reassigning `SCAN_DIRS` afterwards does nothing, because `census(directories=SCAN_DIRS)` binds its default
+at definition time. **Both failures return a clean, plausible, empty answer.** That is how lens A got 93
+and how this row got 0 — and it is why every measurement in §3.4 and §3.6 passes its directories
+explicitly and keys on `(file, func, line)`.
+
 ### §3.1 — Round 1, and the ratio is the interesting number
 
 **Four fresh lenses, one artefact, four separate briefs: the classifier, the numbers, the repair, the
@@ -752,6 +778,18 @@ weakens"*. **That remedy traded a false failure for an identity that is not an i
 consecutive row in which an adversarial round's own fix carried the next defect, and **the second time into
 this instrument** — `F12` was the first.
 
+> **NAME THE PATTERN, because four rows of instances have not produced one and the supervisor asked for
+> it: A FIX THAT REMOVES A SYMPTOM BY WEAKENING THE THING THAT DETECTS IT.**
+>
+> The per-function ordinal produced false failures. The remedy made the ordinal per-guard, which stopped
+> the false failures **by making two different sites indistinguishable to the detector**. `F12` is the
+> same shape: `_capability_proof` was tightened twice by a lens, and neither tightening was *look at the
+> guard*, so the check kept its name and lost its reach. **Both fixes were correct about the symptom and
+> both narrowed what the instrument could see.**
+>
+> **The test that would have caught both: after a fix, can the instrument still distinguish the cases it
+> could distinguish before?** Neither row asked it. This row asks it of its own fix in §3.6.
+
 **AND IT IS WORSE THAN `F12` IN ONE RESPECT, WHICH IS WHY IT IS NOT BEING QUIETLY ROUTED.** `F12` needed
 someone to strip a clause from a working repair. **This needs nothing but an ordinary contributor adding an
 ordinary skip to one of four named functions.**
@@ -799,10 +837,95 @@ three sites row 6i repaired last night.**
 this row's recommendation, and what it blocks:
 
 - **`Q1`** — `test_c12_27` reclassifies `S5` -> `S2` under the corrected axis, so the ratchet baseline must
-  go from **4 to 5**. `--write-baseline` has NOT been run and the fifth gate exits **1** until this is
-  ruled. Recommendation: raise it, and leave the site alone.
+  go from **4 to 5**. Recommendation: raise it, and leave the site alone. **GRANTED.**
 - **`Q2`** — `J19`, above. Recommendation: route it, with the live-exploitability caveat named rather than
-  buried.
+  buried. **ROUTED, with one condition on an interim.**
+
+**Both rulings are in `2026-09-10-oo-6j-supervisor-answers-5.md` and both were decided on the evidence
+rather than around it, which is what the file was for.** The supervisor verified before ruling that
+`git diff` across row 6i's range touches `test_c12_27` **zero** times, so his STOP condition correctly did
+not fire, and that the arithmetic reconciles with his own cycle-70 run: `S5` **11**, this row's three
+repairs take it to **14**, this reclassification takes it to **13**.
+
+### §3.5.1 — `Q1` GRANTED, and the principle it turns on
+
+> **A RATCHET BASELINE RECORDS WHAT THE INSTRUMENT CAN PROVE, NOT WHAT THE AUTHOR BELIEVES.**
+
+**The supervisor's sentence, and it is why the baseline rose rather than the rule bending.** `test_c12_27`
+is semantically sound: a backend that CAN hold aliases and declined the row anyway fails
+`assert registry.caps.stores_aliases is False` rather than skipping. **What the gate cannot do is know that
+`"import_refused:"` is evidence of a refusal — that is domain knowledge no AST carries, and a gate that
+pretended otherwise would be asserting something it has not established.**
+
+**Option 3 — widening the exemption to admit a complemented predicate — was refused for the decisive
+reason:** `not gone.reason.startswith("cannot_")` has the identical shape and admits a whole family.
+**Taking it would have traded a false negative for exactly the false positive this row exists to close.**
+
+**RAISING A BASELINE IS NORMALLY THE MOVE THAT NEEDS A RULING BECAUSE IT IS HOW A GATE GETS QUIETLY
+WEAKENED. THIS ONE ROSE BECAUSE THE GATE GOT STRICTER**, which is the opposite fact, and the record says so
+in those terms so that a later reader counting five flagged sites does not read five defects.
+
+**THE RECORDING REQUIREMENT, and it took a second pass to actually meet.** The ruling required the fifth
+entry's `why` to say *which kind* it is, legibly in the baseline file and without reading this record. The
+first write did not: the rebuilt `_capability_proof` reported the narrowing failure and stopped, so all
+five entries read alike. **The refusal text now names the kind in both directions.** **[Observed —
+`docs/tools/skip_census_baseline.json` at `count: 5`]**
+
+| entry | kind |
+|---|---|
+| `test_c10_22`, `test_c12_21`, `test_c12_24`, `test_c3_27` | *no assertion in the skip's own branch reads a capability at all, so there is no proof here to check* |
+| **`test_c12_27`** | ***the block DOES assert `registry.caps.stores_aliases is False`, which fails on a backend holding the capability — so the proof may well be sound and THIS GATE CANNOT VERIFY IT. A limit of the instrument, not an established defect in the suite*** |
+
+### §3.5.2 — The extension is its own row. A RULING now, not an inclination.
+
+`answers-4` §3 said the supervisor was inclined and told this row not to treat it as a decision. **§3.4's
+measurement settled it:** eight sites move and **three go the wrong way, as new flagged entries at the three
+sites row 6i had just repaired.** **One promotion bought at the price of three new baseline entries on
+freshly-repaired code is a bad trade, and it is now a measured one rather than an argued one.** Recorded
+with the table, not the conclusion.
+
+### §3.6 — `Q2` ROUTED, AND THE INTERIM ITS CONDITION ALLOWED
+
+**`J19` goes to its own row with the demonstration in §3.3, the way row 6i routed `F12` here.** The
+supervisor took this row's third reason as decisive: **a second structural change to the same instrument,
+in the same row, after a round that found six MAJORs in the first one, is how the streak continues rather
+than ends.**
+
+**But the caveat was not left unmitigated, and the mitigation was specified as a PROPERTY rather than as an
+observation — the supervisor's own lesson from the rule he withdrew this morning.** Option 3 was permitted
+**if and only if** this row could measure that it (1) touches no classification and (2) needs no change to
+`skip_census_baseline.json`'s schema or contents, deriving per-function counts from the existing `sites`
+list rather than storing them.
+
+**BOTH CONDITIONS MEASURED AND MET.**
+
+**Condition 1.** **[Observed — the classifier at `ace7081` and the classifier now, both censusing the same
+two directories passed explicitly, keyed by `(file, func, line)`]** 139 sites before, 139 after, **sites
+whose category changed: 0. Sites whose `why` text changed: 0.** The change lives entirely inside
+`run_gate`, which neither `census()` nor `classify_source()` calls.
+
+**Condition 2.** **[Observed — the interim run against a baseline object with the `why` key stripped]** it
+reads `site` and nothing else, and returns the same answer. **The `why` field is `Q1`'s recording
+requirement and the interim neither needs it nor notices it.**
+
+**WHAT THE INTERIM IS.** `found` and `declared` are lists with one element per flagged site, so comparing
+them as **multisets** instead of sets catches an addition whose ident collides:
+
+```
+baselined: 1 entry     now flagged: 2 sites
+  set test  (before): reports 0  -> []
+  multiset  (after):  reports 1  -> ['t.py::test_one_flagged#0']
+```
+
+**ITS LIMIT, MEASURED RATHER THAN ASSERTED, because a mitigation whose edges are not stated is how the next
+row inherits a false sense of cover.** **[Observed — one flagged site removed from a function and a
+different one added]** the counts hold and **the swap is INVISIBLE**. Only a real identity closes that,
+which is why the routing stands rather than being quietly cancelled by the interim.
+
+**And the interim answers §3.3's own test — *after a fix, can the instrument still distinguish the cases it
+could distinguish before?*** It can distinguish strictly more: every case the set test caught, plus the
+colliding addition. **It distinguishes strictly fewer than nothing it previously could.** That is the
+question neither row 6h's fix nor `F12`'s asked of itself.
 
 **A standing change to how this row talks to the supervisor, and it is his ruling:** questions go in a
 **file** from now on, not only into the pane. **[Observed — his `tmux capture-pane -p -S -`]** the pane
