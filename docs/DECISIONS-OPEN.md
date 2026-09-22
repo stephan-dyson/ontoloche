@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**3 open · 11 ruled · 7 FYI** *(2026-09-22: item 18 added. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**2 open · 12 ruled · 7 FYI** *(2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,23 +12,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 3 items
-
-### 18 · `Q102` — should entity properties be governed as vocabulary (option B)?
-
-*New 2026-09-22. It answers your `recommend` on properties (R105), in light of your `full replacement` (R107).*
-
-**TL;DR.** Declare local properties on the entity that owns them, make shared properties a new `kind="property"`, and never store or check property values. That mirrors Foundry's own split between local and shared properties. It gives a departing Foundry customer governed definitions to build their tables from, and it closes contortion 10, open since 2026-08-28, where `latitude` becomes a type proposal.
-
-**Why not the other two.** `carry` leaves properties ungoverned, which cannot support full replacement and lets them rot the way Foundry's do. A schema store that validates data is the object model `VISION.md` §3 says not to build, and it collides with R78.
-
-**The cost.** There is no call today that amends an approved entity, so adding a property to a live type needs a new governed call or a supersede pattern. A new `kind` is also a new door for every guard, and new doors have produced kill-row trips before (rows 6b and 6d).
-
-- **`adopt B`**: a spec row opens under it, and `INTERFACE.md` §0's *"not a schema store"* becomes *"not a store of values"*.
-- **`adopt A`**: stay at `carry` indefinitely, and full replacement ships without governed properties.
-- **`discuss`**.
-
-**Ask: `adopt B`, `adopt A`, or `discuss`.** Default in force: `carry` (R105's interim). Full write-up: [`PROPERTIES-OPTIONS.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/findings/PROPERTIES-OPTIONS.md).
+## A. Decide when you want to — 2 items
 
 ### 17 · The stop you armed has STOOD DOWN — `A3` is closed and the ACTIONS surface is reopen
 
@@ -100,7 +84,26 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## E. Ruled — 8 items
+## E. Ruled — 12 items
+
+### 18 · Q102 — govern entity properties as vocabulary (option B) → **RULED: `adopt B`** *(2026-09-22)*
+
+**Recorded as [R108](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-ruling-R108.md).** Row 8b opens as a spec row ([brief](https://github.com/stephan-dyson/ontoloche/blob/main/docs/handoffs/2026-09-22-row-8b-properties-spec-brief.md)) and amends `INTERFACE.md` §0 before anything else. How an approved entity is amended is left open, and it will come back to you if it decides what the registry refuses. The item as it was asked:
+
+*New 2026-09-22. It answers your `recommend` on properties (R105), in light of your `full replacement` (R107).*
+
+**TL;DR.** Declare local properties on the entity that owns them, make shared properties a new `kind="property"`, and never store or check property values. That mirrors Foundry's own split between local and shared properties. It gives a departing Foundry customer governed definitions to build their tables from, and it closes contortion 10, open since 2026-08-28, where `latitude` becomes a type proposal.
+
+**Why not the other two.** `carry` leaves properties ungoverned, which cannot support full replacement and lets them rot the way Foundry's do. A schema store that validates data is the object model `VISION.md` §3 says not to build, and it collides with R78.
+
+**The cost.** There is no call today that amends an approved entity, so adding a property to a live type needs a new governed call or a supersede pattern. A new `kind` is also a new door for every guard, and new doors have produced kill-row trips before (rows 6b and 6d).
+
+- **`adopt B`**: a spec row opens under it, and `INTERFACE.md` §0's *"not a schema store"* becomes *"not a store of values"*.
+- **`adopt A`**: stay at `carry` indefinitely, and full replacement ships without governed properties.
+- **`discuss`**.
+
+**Ask: `adopt B`, `adopt A`, or `discuss`.** Default in force: `carry` (R105's interim). Full write-up: [`PROPERTIES-OPTIONS.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/findings/PROPERTIES-OPTIONS.md).
+
 
 ### 12 · Q99 — which of the eight declared keys are governance → **RULED: `all eight`** *(2026-09-09)*
 

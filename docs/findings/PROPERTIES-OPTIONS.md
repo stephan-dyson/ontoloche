@@ -1,6 +1,6 @@
 # PROPERTIES-OPTIONS — how entity properties should come into the registry
 
-**Status:** recommendation, 2026-09-22, written under founder ruling [R105](../decisions/2026-09-22-founder-rulings-R105-R107.md) (`recommend`). Not a spec. The recommendation goes back to the founder as `Q102`.
+**Status:** recommendation, 2026-09-22, written under founder ruling [R105](../decisions/2026-09-22-founder-rulings-R105-R107.md) (`recommend`). Not a spec. The recommendation went back to the founder as `Q102`, and **he ruled `adopt B` on 2026-09-22, recorded as [R108](../decisions/2026-09-22-founder-ruling-R108.md).** Row 8b specifies it.
 
 **Claim tags:** **[Observed]** seen directly in this repo or on a page opened on 2026-09-22 · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
 

@@ -16,13 +16,13 @@ A way for a Foundry customer to bring their ontology definitions into ontoloche 
    3. A name that does not fit `^[a-z][a-z0-9_]{0,63}$` is converted, or refused with an `import_refused` reason. It never raises a backend exception.
    4. An empty description imports as `proposed` with a warning, never as `active` with a placeholder definition.
 
-Field mapping: `FOUNDRY-PARITY.md` §3.1. Properties follow **R105's interim `carry`**: verbatim in `attributes`, marked not validated, until `Q102` is ruled.
+Field mapping: `FOUNDRY-PARITY.md` §3.1. Properties follow **R105's interim `carry`**: verbatim in `attributes`, marked not validated. `Q102` was ruled `adopt B` ([R108](../decisions/2026-09-22-founder-ruling-R108.md)), so `carry` holds only until row 8b's spec lands, and the dry run reports every carried property so the later mapping loses nothing.
 
 ## 2. Out of scope
 
 - A round trip back into Foundry (R107: one-way).
 - Instance data, action execution, Functions and apps. R107 records these as gaps for later rows.
-- Governed properties. That waits on `Q102`.
+- Governed properties. Row 8b specifies them under R108.
 - The Ontology Manager JSON export. Palantir: *"You should not depend on the exported JSON schema as it may change over time."* (https://www.palantir.com/docs/foundry/ontology-manager/export-import/)
 
 ## 3. Fixtures (R106: no customer export)
