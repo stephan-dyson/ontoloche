@@ -1,0 +1,2772 @@
+{
+  "actionTypes": {
+    "promoteEmployee": {
+      "apiName": "promoteEmployee",
+      "description": "Update an employee's title and compensation",
+      "parameters": {
+        "employeeId": {
+          "displayName": "Employee ID",
+          "dataType": {
+            "type": "integer"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "newTitle": {
+          "displayName": "New Title",
+          "dataType": {
+            "type": "string"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "newCompensation": {
+          "displayName": "New Compensation",
+          "dataType": {
+            "type": "double"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.7ed72754-7491-428a-bb18-4d7296eb2167",
+      "operations": [
+        {
+          "type": "modifyObject",
+          "objectTypeApiName": "Employee"
+        }
+      ],
+      "status": "ACTIVE"
+    },
+    "delete-bar-interface": {
+      "apiName": "delete-bar-interface",
+      "displayName": "Delete Bar Interface",
+      "status": "EXPERIMENTAL",
+      "parameters": {
+        "deletedInterface": {
+          "displayName": "Deleted Interface",
+          "dataType": {
+            "type": "interfaceObject",
+            "interfaceTypeApiName": "BarInterface"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.actions.main.action-type.3828bab4-4ac7-4fdf-a780-6ccbc359d817",
+      "operations": [
+        {
+          "type": "deleteInterfaceObject",
+          "interfaceTypeApiName": "BarInterface"
+        }
+      ]
+    },
+    "promoteEmployeeObject": {
+      "apiName": "promoteEmployeeObject",
+      "description": "Update an employee's title and compensation",
+      "parameters": {
+        "employee": {
+          "displayName": "Employee",
+          "dataType": {
+            "type": "object",
+            "objectApiName": "Employee",
+            "objectTypeApiName": "Employee"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "newTitle": {
+          "displayName": "New Title",
+          "dataType": {
+            "type": "string"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "newCompensation": {
+          "displayName": "New Compensation",
+          "dataType": {
+            "type": "double"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.7ed72754-7491-428a-bb18-4d7296eb2168",
+      "operations": [
+        {
+          "type": "modifyObject",
+          "objectTypeApiName": "Employee"
+        }
+      ],
+      "status": "ACTIVE"
+    },
+    "actionTakesDecimal": {
+      "apiName": "actionTakesDecimal",
+      "parameters": {
+        "amount": {
+          "displayName": "Amount",
+          "dataType": {
+            "type": "decimal",
+            "precision": 38,
+            "scale": 18
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "optionalAmount": {
+          "displayName": "Optional Amount",
+          "dataType": {
+            "type": "decimal",
+            "precision": 38,
+            "scale": 18
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "amounts": {
+          "displayName": "Amounts",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "decimal",
+              "precision": 38,
+              "scale": 18
+            }
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f4",
+      "operations": [],
+      "status": "ACTIVE"
+    },
+    "createOffice": {
+      "apiName": "createOffice",
+      "description": "Create an office's",
+      "parameters": {
+        "officeId": {
+          "displayName": "Office ID",
+          "dataType": {
+            "type": "string"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "address": {
+          "displayName": "Address",
+          "description": "The office's physical address (not necessarily shipping address)",
+          "dataType": {
+            "type": "string"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "capacity": {
+          "displayName": "Capacity",
+          "description": "The maximum seated-at-desk capacity of the office (maximum fire-safe capacity may be higher)",
+          "dataType": {
+            "type": "integer"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "officeNames": {
+          "displayName": "Office Names",
+          "description": "A list of all office names",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "string"
+            }
+          },
+          "required": false,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f1",
+      "operations": [
+        {
+          "type": "createObject",
+          "objectTypeApiName": "Office"
+        }
+      ],
+      "status": "ACTIVE"
+    },
+    "moveOffice": {
+      "apiName": "moveOffice",
+      "description": "Update an office's physical location",
+      "displayName": "move-office",
+      "parameters": {
+        "officeId": {
+          "displayName": "Office ID",
+          "dataType": {
+            "type": "string"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "newAddress": {
+          "displayName": "New Address",
+          "description": "The office's new physical address (not necessarily shipping address)",
+          "dataType": {
+            "type": "string"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "newCapacity": {
+          "displayName": "New Capacity",
+          "description": "The maximum seated-at-desk capacity of the new office (maximum fire-safe capacity may be higher)",
+          "dataType": {
+            "type": "integer"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "officeNames": {
+          "displayName": "Office Names",
+          "description": "A list of all office names",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "integer"
+            }
+          },
+          "required": false,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f2",
+      "operations": [
+        {
+          "type": "modifyObject",
+          "objectTypeApiName": "Office"
+        }
+      ],
+      "status": "ACTIVE"
+    },
+    "createOfficeAndEmployee": {
+      "apiName": "createOfficeAndEmployee",
+      "description": "Create an office and employee",
+      "parameters": {
+        "officeId": {
+          "displayName": "Office ID",
+          "dataType": {
+            "type": "string"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "address": {
+          "displayName": "Address",
+          "description": "The office's physical address (not necessarily shipping address)",
+          "dataType": {
+            "type": "string"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "capacity": {
+          "displayName": "Capacity",
+          "description": "The maximum seated-at-desk capacity of the office (maximum fire-safe capacity may be higher)",
+          "dataType": {
+            "type": "integer"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "officeNames": {
+          "displayName": "Office Names",
+          "description": "A list of all office names",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "string"
+            }
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "employeeId": {
+          "displayName": "Employee ID",
+          "description": "New employee Id",
+          "dataType": {
+            "type": "integer"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f2",
+      "operations": [
+        {
+          "type": "createObject",
+          "objectTypeApiName": "Office"
+        },
+        {
+          "type": "createObject",
+          "objectTypeApiName": "Employee"
+        }
+      ],
+      "status": "ACTIVE"
+    },
+    "addGeoshape": {
+      "apiName": "addGeoshape",
+      "displayName": "Add Geoshape",
+      "status": "EXPERIMENTAL",
+      "parameters": {
+        "geoshapeParam": {
+          "displayName": "Geoshape Param",
+          "dataType": {
+            "type": "geoshape"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "geohashParam": {
+          "displayName": "Geohash Param",
+          "dataType": {
+            "type": "geohash"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.actions.main.action-type.5828bab4-49c7-4fdf-a780-6ccbc359d817",
+      "operations": []
+    },
+    "actionTakesObjectSet": {
+      "apiName": "actionTakesObjectSet",
+      "description": "An action which takes an Object Set",
+      "parameters": {
+        "employees": {
+          "displayName": "Employees",
+          "dataType": {
+            "type": "objectSet",
+            "objectTypeApiName": "Employee",
+            "objectApiName": "Employee"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f2",
+      "operations": [],
+      "status": "ACTIVE"
+    },
+    "actionTakesAttachment": {
+      "apiName": "actionTakesAttachment",
+      "description": "An action which takes an attachment",
+      "parameters": {
+        "attachment": {
+          "displayName": "Attachment",
+          "dataType": {
+            "type": "attachment"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f3",
+      "operations": [],
+      "status": "ACTIVE"
+    },
+    "actionTakesMedia": {
+      "apiName": "actionTakesMedia",
+      "description": "An action which takes a mediaReference parameter",
+      "parameters": {
+        "media_reference": {
+          "displayName": "Media Reference",
+          "dataType": {
+            "type": "mediaReference"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f3",
+      "operations": [],
+      "status": "ACTIVE"
+    },
+    "deleteFooInterface": {
+      "apiName": "deleteFooInterface",
+      "displayName": "Delete Foo Interface",
+      "status": "EXPERIMENTAL",
+      "parameters": {
+        "deletedInterface": {
+          "displayName": "Deleted Interface",
+          "dataType": {
+            "type": "interfaceObject",
+            "interfaceTypeApiName": "FooInterface"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.actions.main.action-type.3828bab4-49c7-4fdf-a780-6ccbc359d817",
+      "operations": [
+        {
+          "type": "deleteInterfaceObject",
+          "interfaceTypeApiName": "FooInterface"
+        }
+      ]
+    },
+    "createStructPerson": {
+      "apiName": "createStructPerson",
+      "description": "Create a struct",
+      "parameters": {
+        "name": {
+          "displayName": "Name",
+          "dataType": {
+            "type": "string"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "address": {
+          "displayName": "Address",
+          "dataType": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "city",
+                "fieldType": {
+                  "type": "string"
+                },
+                "required": true
+              },
+              {
+                "name": "state",
+                "fieldType": {
+                  "type": "string"
+                },
+                "required": true
+              },
+              {
+                "name": "zipcode",
+                "fieldType": {
+                  "type": "integer"
+                },
+                "required": false
+              }
+            ]
+          },
+          "required": false,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f24017d-cf17-4fa8-84c3-8e01e5d594f2",
+      "operations": [],
+      "status": "ACTIVE"
+    },
+    "createFooInterface": {
+      "apiName": "createFooInterface",
+      "displayName": "Create Foo Interface",
+      "status": "EXPERIMENTAL",
+      "parameters": {
+        "createdInterface": {
+          "displayName": "Created Interface",
+          "dataType": {
+            "type": "objectType"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.actions.main.action-type.3828bab4-49c7-4fdf-a780-6ccbc359d817",
+      "operations": [
+        {
+          "type": "createInterfaceObject",
+          "interfaceTypeApiName": "FooInterface"
+        }
+      ]
+    },
+    "unsupportedAction": {
+      "apiName": "unsupportedAction",
+      "description": "An unsupported action type",
+      "parameters": {
+        "unsupportedProperty": {
+          "displayName": "Unsupported Property",
+          "dataType": {
+            "type": "unsupportedType"
+          },
+          "required": false,
+          "typeClasses": []
+        },
+        "unsupportedObject": {
+          "displayName": "Unsupported Object",
+          "dataType": {
+            "type": "object",
+            "objectApiName": "unsupported",
+            "objectTypeApiName": "unsupported"
+          },
+          "required": false,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9f84017d-cf17-4fa8-84c3-8e01e5d594f2",
+      "operations": [],
+      "status": "ACTIVE"
+    },
+    "editTodo": {
+      "apiName": "editTodo",
+      "parameters": {
+        "id": {
+          "dataType": {
+            "type": "integer"
+          },
+          "required": true
+        },
+        "text": {
+          "dataType": {
+            "type": "string"
+          },
+          "required": false
+        },
+        "completed": {
+          "dataType": {
+            "type": "string"
+          },
+          "required": false
+        }
+      },
+      "rid": "ri.ontology.main.action-type.9d2f1581-ed4e-4321-ac8d-2e5d3a1bf0d2",
+      "operations": [],
+      "status": "ACTIVE",
+      "description": "Action editTodo"
+    }
+  },
+  "actionTypesFullMetadata": {},
+  "interfaceTypes": {
+    "BarInterface": {
+      "apiName": "BarInterface",
+      "description": "Interface for Bar",
+      "displayName": "Bar Interface",
+      "rid": "ri.interface.main.interface.2",
+      "extendsInterfaces": [],
+      "properties": {},
+      "allProperties": {},
+      "propertiesV2": {},
+      "allPropertiesV2": {},
+      "links": {
+        "toFoo": {
+          "rid": "ri.interface.link.main.1",
+          "apiName": "toFoo",
+          "linkedEntityApiName": {
+            "type": "interfaceTypeApiName",
+            "apiName": "FooInterface"
+          },
+          "displayName": "foos",
+          "cardinality": "MANY",
+          "required": true
+        }
+      },
+      "implementedByObjectTypes": [],
+      "allExtendsInterfaces": [],
+      "allLinks": {
+        "toFoo": {
+          "rid": "ri.interface.link.main.1",
+          "apiName": "toFoo",
+          "linkedEntityApiName": {
+            "type": "interfaceTypeApiName",
+            "apiName": "FooInterface"
+          },
+          "displayName": "foos",
+          "cardinality": "MANY",
+          "required": true
+        }
+      }
+    },
+    "ComplexImplementationInterface": {
+      "apiName": "ComplexImplementationInterface",
+      "displayName": "Complex Implementation Interface",
+      "description": "Interface with one property per implementation kind",
+      "rid": "ri.interface.main.interface.complex-implementation",
+      "extendsInterfaces": [],
+      "allExtendsInterfaces": [],
+      "implementedByObjectTypes": [
+        "ComplexImplementationObject"
+      ],
+      "links": {},
+      "allLinks": {},
+      "properties": {},
+      "allProperties": {},
+      "propertiesV2": {
+        "iLocal": {
+          "type": "interfaceDefinedPropertyType",
+          "rid": "ri.interfacePropertyType.main.iLocal",
+          "apiName": "iLocal",
+          "displayName": "i Local",
+          "dataType": {
+            "type": "string"
+          },
+          "requireImplementation": true,
+          "typeClasses": []
+        },
+        "iStructField": {
+          "type": "interfaceDefinedPropertyType",
+          "rid": "ri.interfacePropertyType.main.iStructField",
+          "apiName": "iStructField",
+          "displayName": "i Struct Field",
+          "dataType": {
+            "type": "string"
+          },
+          "requireImplementation": true,
+          "typeClasses": []
+        },
+        "iStruct": {
+          "type": "interfaceDefinedPropertyType",
+          "rid": "ri.interfacePropertyType.main.iStruct",
+          "apiName": "iStruct",
+          "displayName": "i Struct",
+          "dataType": {
+            "type": "struct",
+            "structFieldTypes": [
+              {
+                "apiName": "theAlpha",
+                "dataType": {
+                  "type": "string"
+                },
+                "rid": "ri.iface.struct.theAlpha",
+                "typeClasses": []
+              },
+              {
+                "apiName": "theBeta",
+                "dataType": {
+                  "type": "integer"
+                },
+                "rid": "ri.iface.struct.theBeta",
+                "typeClasses": []
+              }
+            ]
+          },
+          "requireImplementation": true,
+          "typeClasses": []
+        },
+        "iStructArray": {
+          "type": "interfaceDefinedPropertyType",
+          "rid": "ri.interfacePropertyType.main.iStructArray",
+          "apiName": "iStructArray",
+          "displayName": "i Struct Array",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "struct",
+              "structFieldTypes": [
+                {
+                  "apiName": "theAlpha",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.iface.array.struct.theAlpha",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "theBeta",
+                  "dataType": {
+                    "type": "integer"
+                  },
+                  "rid": "ri.iface.array.struct.theBeta",
+                  "typeClasses": []
+                }
+              ]
+            },
+            "reducers": []
+          },
+          "requireImplementation": true,
+          "typeClasses": []
+        },
+        "iReduced": {
+          "type": "interfaceDefinedPropertyType",
+          "rid": "ri.interfacePropertyType.main.iReduced",
+          "apiName": "iReduced",
+          "displayName": "i Reduced",
+          "dataType": {
+            "type": "integer"
+          },
+          "requireImplementation": true,
+          "typeClasses": []
+        }
+      },
+      "allPropertiesV2": {
+        "iLocal": {
+          "rid": "ri.interfacePropertyType.main.iLocal",
+          "apiName": "iLocal",
+          "displayName": "i Local",
+          "dataType": {
+            "type": "string"
+          },
+          "requireImplementation": true
+        },
+        "iStructField": {
+          "rid": "ri.interfacePropertyType.main.iStructField",
+          "apiName": "iStructField",
+          "displayName": "i Struct Field",
+          "dataType": {
+            "type": "string"
+          },
+          "requireImplementation": true
+        },
+        "iStruct": {
+          "rid": "ri.interfacePropertyType.main.iStruct",
+          "apiName": "iStruct",
+          "displayName": "i Struct",
+          "dataType": {
+            "type": "struct",
+            "structFieldTypes": [
+              {
+                "apiName": "theAlpha",
+                "dataType": {
+                  "type": "string"
+                },
+                "rid": "ri.iface.struct.theAlpha",
+                "typeClasses": []
+              },
+              {
+                "apiName": "theBeta",
+                "dataType": {
+                  "type": "integer"
+                },
+                "rid": "ri.iface.struct.theBeta",
+                "typeClasses": []
+              }
+            ]
+          },
+          "requireImplementation": true
+        },
+        "iStructArray": {
+          "rid": "ri.interfacePropertyType.main.iStructArray",
+          "apiName": "iStructArray",
+          "displayName": "i Struct Array",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "struct",
+              "structFieldTypes": [
+                {
+                  "apiName": "theAlpha",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.iface.array.struct.theAlpha",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "theBeta",
+                  "dataType": {
+                    "type": "integer"
+                  },
+                  "rid": "ri.iface.array.struct.theBeta",
+                  "typeClasses": []
+                }
+              ]
+            },
+            "reducers": []
+          },
+          "requireImplementation": true
+        },
+        "iReduced": {
+          "rid": "ri.interfacePropertyType.main.iReduced",
+          "apiName": "iReduced",
+          "displayName": "i Reduced",
+          "dataType": {
+            "type": "integer"
+          },
+          "requireImplementation": true
+        }
+      }
+    },
+    "FooInterface": {
+      "apiName": "FooInterface",
+      "description": "Interface for Foo",
+      "displayName": "Foo Interface",
+      "rid": "ri.interface.main.interface.1",
+      "extendsInterfaces": [],
+      "properties": {
+        "fooSpt": {
+          "rid": "ri.sharedPropertyType.main.sharedPropertyType.1",
+          "apiName": "fooSpt",
+          "dataType": {
+            "type": "string"
+          },
+          "displayName": "Foo",
+          "description": "A foo",
+          "typeClasses": [],
+          "required": true
+        }
+      },
+      "propertiesV2": {
+        "fooSpt": {
+          "rid": "ri.sharedPropertyType.main.sharedPropertyType.1",
+          "apiName": "fooSpt",
+          "dataType": {
+            "type": "string"
+          },
+          "displayName": "Foo",
+          "description": "A foo",
+          "typeClasses": [],
+          "type": "interfaceSharedPropertyType",
+          "required": true
+        },
+        "fooIdp": {
+          "rid": "ri.interfacePropertyType.main.interfacePropertyType.1",
+          "apiName": "fooIdp",
+          "displayName": "Foo IDP",
+          "description": "A Foo IDP",
+          "dataType": {
+            "type": "string"
+          },
+          "requireImplementation": true,
+          "typeClasses": [],
+          "type": "interfaceDefinedPropertyType"
+        },
+        "fooArray": {
+          "rid": "ri.interfacePropertyType.main.interfacePropertyType.2",
+          "apiName": "fooArray",
+          "displayName": "Foo Array",
+          "description": "An array-valued Foo property",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "string"
+            },
+            "reducers": []
+          },
+          "requireImplementation": false,
+          "typeClasses": [],
+          "type": "interfaceDefinedPropertyType"
+        }
+      },
+      "links": {
+        "toBar": {
+          "rid": "ri.interface.link.main.2",
+          "apiName": "toBar",
+          "linkedEntityApiName": {
+            "type": "interfaceTypeApiName",
+            "apiName": "BarInterface"
+          },
+          "displayName": "bars",
+          "cardinality": "MANY",
+          "required": true
+        }
+      },
+      "implementedByObjectTypes": [
+        "Employee",
+        "Person"
+      ],
+      "allProperties": {
+        "fooSpt": {
+          "rid": "ri.sharedPropertyType.main.sharedPropertyType.1",
+          "apiName": "fooSpt",
+          "dataType": {
+            "type": "string"
+          },
+          "displayName": "Foo",
+          "description": "A foo",
+          "typeClasses": [],
+          "required": true
+        }
+      },
+      "allPropertiesV2": {
+        "fooSpt": {
+          "rid": "ri.sharedPropertyType.main.sharedPropertyType.1",
+          "apiName": "fooSpt",
+          "dataType": {
+            "type": "string"
+          },
+          "displayName": "Foo",
+          "description": "A foo",
+          "typeClasses": [],
+          "requireImplementation": true
+        },
+        "fooIdp": {
+          "rid": "ri.interfacePropertyType.main.interfacePropertyType.1",
+          "apiName": "fooIdp",
+          "displayName": "Foo IDP",
+          "description": "A Foo IDP",
+          "dataType": {
+            "type": "string"
+          },
+          "requireImplementation": true,
+          "typeClasses": []
+        },
+        "fooArray": {
+          "rid": "ri.interfacePropertyType.main.interfacePropertyType.2",
+          "apiName": "fooArray",
+          "displayName": "Foo Array",
+          "description": "An array-valued Foo property",
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "string"
+            },
+            "reducers": []
+          },
+          "requireImplementation": false,
+          "typeClasses": []
+        }
+      },
+      "allExtendsInterfaces": [],
+      "allLinks": {
+        "toBar": {
+          "rid": "ri.interface.link.main.2",
+          "apiName": "toBar",
+          "linkedEntityApiName": {
+            "type": "interfaceTypeApiName",
+            "apiName": "BarInterface"
+          },
+          "displayName": "bars",
+          "cardinality": "MANY",
+          "required": true
+        }
+      }
+    }
+  },
+  "objectTypes": {
+    "Employee": {
+      "objectType": {
+        "apiName": "Employee",
+        "displayName": "Employee",
+        "pluralDisplayName": "Employees",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "person"
+        },
+        "description": "A full-time or part-time \n\n employee of our firm",
+        "primaryKey": "employeeId",
+        "titleProperty": "fullName",
+        "visibility": "NORMAL",
+        "properties": {
+          "employeeId": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "fullName": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "office": {
+            "description": "The unique \"ID\" of the employee's \\\"primary\\\" assigned office.\n This is some more text.",
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "class": {
+            "description": "",
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "startDate": {
+            "description": "The date the employee was hired (most recently, if they were re-hired)",
+            "dataType": {
+              "type": "date"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "employeeStatus": {
+            "description": "TimeSeries of the status of the employee",
+            "dataType": {
+              "type": "timeseries",
+              "itemType": {
+                "type": "string"
+              }
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "employeeSensor": {
+            "description": "TimeSeries sensor of the status of the employee",
+            "dataType": {
+              "type": "timeseries",
+              "itemType": {
+                "type": "string"
+              }
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "employeeLocation": {
+            "description": "Geotime series reference of the location of the employee",
+            "dataType": {
+              "type": "geotimeSeriesReference"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "skillSet": {
+            "description": "The skills of the employee",
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "skillSetEmbedding": {
+            "description": "Vectorized skill set",
+            "dataType": {
+              "type": "vector",
+              "dimension": 1536,
+              "supportsSearchWith": [
+                {
+                  "value": "COSINE_SIMILARITY"
+                }
+              ],
+              "embeddingModel": {
+                "type": "lms",
+                "value": "OPENAI_TEXT_EMBEDDING_ADA_002"
+              }
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "favoriteRestaurants": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "string"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "employeeProfile": {
+            "description": "Employee profile with main value being the bio",
+            "dataType": {
+              "type": "struct",
+              "structFieldTypes": [
+                {
+                  "apiName": "bio",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.struct.bio",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "yearsExperience",
+                  "dataType": {
+                    "type": "integer"
+                  },
+                  "rid": "ri.struct.yearsExperience",
+                  "typeClasses": []
+                }
+              ],
+              "mainValue": {
+                "mainValueType": {
+                  "type": "string"
+                },
+                "fields": [
+                  "bio"
+                ]
+              }
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "performanceScores": {
+            "description": "Array of performance scores with reducers",
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "double"
+              },
+              "reducers": [
+                {
+                  "direction": "DESCENDING_NULLS_LAST"
+                }
+              ]
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "bonusHistory": {
+            "description": "Bonus history with the latest amount as its main value",
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "struct",
+                "structFieldTypes": [
+                  {
+                    "apiName": "year",
+                    "dataType": {
+                      "type": "integer"
+                    },
+                    "rid": "ri.struct.year",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "amount",
+                    "dataType": {
+                      "type": "integer"
+                    },
+                    "rid": "ri.struct.amount",
+                    "typeClasses": []
+                  }
+                ],
+                "mainValue": {
+                  "mainValueType": {
+                    "type": "integer"
+                  },
+                  "fields": [
+                    "amount"
+                  ]
+                }
+              },
+              "reducers": [
+                {
+                  "direction": "DESCENDING_NULLS_LAST",
+                  "field": "year"
+                }
+              ]
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.401ac022-89eb-4591-8b7e-0a912b9efb44",
+        "status": "ACTIVE"
+      },
+      "linkTypes": [
+        {
+          "apiName": "peeps",
+          "status": "EXPERIMENTAL",
+          "objectTypeApiName": "Employee",
+          "cardinality": "MANY",
+          "displayName": "Peeps",
+          "linkTypeRid": "rid.link-type.327"
+        },
+        {
+          "apiName": "lead",
+          "status": "EXPERIMENTAL",
+          "objectTypeApiName": "Employee",
+          "cardinality": "ONE",
+          "displayName": "Lead",
+          "linkTypeRid": "rid.link-type.327",
+          "foreignKeyPropertyApiName": "leadId"
+        },
+        {
+          "apiName": "officeLink",
+          "status": "EXPERIMENTAL",
+          "objectTypeApiName": "Office",
+          "cardinality": "ONE",
+          "displayName": "Office",
+          "linkTypeRid": "rid.link-type.324",
+          "foreignKeyPropertyApiName": "office"
+        },
+        {
+          "apiName": "visitedOffices",
+          "status": "EXPERIMENTAL",
+          "objectTypeApiName": "Office",
+          "cardinality": "MANY",
+          "displayName": "Visited Offices",
+          "linkTypeRid": "ri.a.b.c.visitedOffices"
+        }
+      ],
+      "implementsInterfaces": [
+        "FooInterface"
+      ],
+      "implementsInterfaces2": {
+        "FooInterface": {
+          "properties": {
+            "fooSpt": "fullName"
+          },
+          "propertiesV2": {
+            "fooSpt": {
+              "type": "localPropertyImplementation",
+              "propertyApiName": "fullName"
+            },
+            "fooIdp": {
+              "type": "localPropertyImplementation",
+              "propertyApiName": "office"
+            }
+          },
+          "links": {},
+          "actionTypes": {}
+        }
+      },
+      "sharedPropertyTypeMapping": {
+        "fooSpt": "fullName"
+      }
+    },
+    "Office": {
+      "objectType": {
+        "apiName": "Office",
+        "displayName": "Office",
+        "pluralDisplayName": "Office",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "office"
+        },
+        "description": "A office in our Company",
+        "primaryKey": "officeId",
+        "titleProperty": "officeId",
+        "properties": {
+          "officeId": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "entrance": {
+            "dataType": {
+              "type": "geopoint"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "occupiedArea": {
+            "description": "The occupied area of the Office",
+            "dataType": {
+              "type": "geoshape"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "name": {
+            "description": "The Name of the Office",
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "capacity": {
+            "description": "The capacity of the Office",
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.404ac022-89eb-4591-8b7e-1a912b9efb45",
+        "status": "ACTIVE"
+      },
+      "linkTypes": [
+        {
+          "apiName": "occupants",
+          "status": "EXPERIMENTAL",
+          "objectTypeApiName": "Employee",
+          "cardinality": "MANY",
+          "displayName": "Office Occupants",
+          "linkTypeRid": "rid.link-type.324"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "objectTypeWithAllPropertyTypes": {
+      "objectType": {
+        "apiName": "objectTypeWithAllPropertyTypes",
+        "displayName": "objectTypeWithAllPropertyType",
+        "pluralDisplayName": "objectTypeWithAllPropertyTypes",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "person"
+        },
+        "description": "An object type with all property types",
+        "primaryKey": "id",
+        "titleProperty": "string",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "string": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "boolean": {
+            "dataType": {
+              "type": "boolean"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "date": {
+            "dataType": {
+              "type": "date"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "dateTime": {
+            "dataType": {
+              "type": "timestamp"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "decimal": {
+            "dataType": {
+              "type": "decimal"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "integer": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "long": {
+            "dataType": {
+              "type": "long"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "short": {
+            "dataType": {
+              "type": "short"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "float": {
+            "dataType": {
+              "type": "float"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "double": {
+            "dataType": {
+              "type": "double"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "byte": {
+            "dataType": {
+              "type": "byte"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "attachment": {
+            "dataType": {
+              "type": "attachment"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "attachment2": {
+            "dataType": {
+              "type": "attachment"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "geoPoint": {
+            "dataType": {
+              "type": "geopoint"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "geoShape": {
+            "dataType": {
+              "type": "geoshape"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "stringArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "string"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "booleanArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "boolean"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "dateArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "date"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "dateTimeArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "timestamp"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "decimalArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "decimal"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "integerArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "integer"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "longArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "long"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "shortArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "short"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "floatArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "float"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "doubleArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "double"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "byteArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "byte"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "attachmentArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "attachment"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "geoPointArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "geopoint"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "geoShapeArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "geoshape"
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "mediaReference": {
+            "dataType": {
+              "type": "mediaReference"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "vector": {
+            "dataType": {
+              "type": "vector",
+              "dimension": 100,
+              "supportsSearchWith": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "cipherText": {
+            "dataType": {
+              "type": "cipherText"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.401ac022-89eb-4591-8b7e-0a912b9efb44",
+        "status": "ACTIVE"
+      },
+      "linkTypes": [
+        {
+          "apiName": "linkedObjectType",
+          "status": "EXPERIMENTAL",
+          "objectTypeApiName": "objectTypeWithAllPropertyTypes",
+          "cardinality": "ONE",
+          "displayName": "Linked Object Type",
+          "linkTypeRid": "rid.link-type.832"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "ObjectWithTimestampPrimaryKey": {
+      "objectType": {
+        "apiName": "ObjectWithTimestampPrimaryKey",
+        "displayName": "ObjectWithTimestampPrimaryKey",
+        "pluralDisplayName": "ObjectWithTimestampPrimaryKeys",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "person"
+        },
+        "description": "Object Type With Timestamp Primary Key",
+        "primaryKey": "timestamp",
+        "titleProperty": "value",
+        "properties": {
+          "timestamp": {
+            "dataType": {
+              "type": "timestamp"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "value": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.32bb9402-9cab-4705-81bb-edb65a4a6806",
+        "status": "ACTIVE"
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "equipment": {
+      "objectType": {
+        "apiName": "equipment",
+        "displayName": "Equipment",
+        "pluralDisplayName": "Equipment",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "gear"
+        },
+        "primaryKey": "equipmentId",
+        "titleProperty": "type",
+        "properties": {
+          "equipmentId": {
+            "description": "The id of an equipment",
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "type": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.808ac022-89eb-4591-8b7e-1a912b9efb45",
+        "status": "ACTIVE"
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Todo": {
+      "objectType": {
+        "apiName": "Todo",
+        "displayName": "Todo",
+        "pluralDisplayName": "ManyTodo",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "box"
+        },
+        "primaryKey": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "text": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.todo",
+        "status": "ACTIVE",
+        "titleProperty": "text"
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Task": {
+      "objectType": {
+        "apiName": "Task",
+        "displayName": "Task",
+        "pluralDisplayName": "Tasks",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "box"
+        },
+        "primaryKey": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "name": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "status": "ACTIVE",
+        "rid": "ri.task",
+        "titleProperty": "name"
+      },
+      "linkTypes": [
+        {
+          "apiName": "Todos",
+          "displayName": "Todos",
+          "cardinality": "MANY",
+          "objectTypeApiName": "Todo",
+          "status": "ACTIVE",
+          "linkTypeRid": "rid.link-type.123"
+        },
+        {
+          "apiName": "RP",
+          "displayName": "RP",
+          "cardinality": "ONE",
+          "objectTypeApiName": "Person",
+          "status": "ACTIVE",
+          "linkTypeRid": "rid.link-type.124"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Person": {
+      "objectType": {
+        "apiName": "Person",
+        "displayName": "Person",
+        "pluralDisplayName": "Persons",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "person"
+        },
+        "primaryKey": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "name": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.person",
+        "status": "ACTIVE",
+        "titleProperty": "name"
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "BgaoNflPlayer": {
+      "objectType": {
+        "apiName": "BgaoNflPlayer",
+        "displayName": "id",
+        "pluralDisplayName": "BgaoNflPlayers",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "box"
+        },
+        "primaryKey": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "gamesPlayed": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "name": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "number": {
+            "dataType": {
+              "type": "integer"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "wikiUrl": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "address": {
+            "dataType": {
+              "type": "struct",
+              "structFieldTypes": [
+                {
+                  "apiName": "addressLine1",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.a.b.c.d",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "addressLine2",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.a.b.c.d",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "city",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.a.b.c.d",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "state",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.a.b.c.d",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "zipCode",
+                  "dataType": {
+                    "type": "integer"
+                  },
+                  "rid": "ri.a.b.c.d",
+                  "typeClasses": []
+                }
+              ]
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "addressArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "struct",
+                "structFieldTypes": [
+                  {
+                    "apiName": "addressLine1",
+                    "dataType": {
+                      "type": "string"
+                    },
+                    "rid": "ri.a.b.c.d",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "addressLine2",
+                    "dataType": {
+                      "type": "string"
+                    },
+                    "rid": "ri.a.b.c.d",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "city",
+                    "dataType": {
+                      "type": "geoshape"
+                    },
+                    "rid": "ri.a.b.c.d",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "location",
+                    "dataType": {
+                      "type": "geopoint"
+                    },
+                    "rid": "ri.a.b.c.d",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "zipCode",
+                    "dataType": {
+                      "type": "integer"
+                    },
+                    "rid": "ri.a.b.c.d",
+                    "typeClasses": []
+                  }
+                ]
+              },
+              "reducers": []
+            },
+            "rid": "ri.a.b.c.structArray",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.nflplayer",
+        "status": "ACTIVE",
+        "titleProperty": "name"
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "ComplexImplementationObject": {
+      "objectType": {
+        "apiName": "ComplexImplementationObject",
+        "displayName": "Complex Implementation Object",
+        "pluralDisplayName": "Complex Implementation Objects",
+        "aliases": [],
+        "datasources": [],
+        "icon": {
+          "type": "blueprint",
+          "color": "blue",
+          "name": "cube"
+        },
+        "description": "Backs ComplexImplementationInterface with one property per impl kind",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "visibility": "NORMAL",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "localValue": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "nestedStruct": {
+            "dataType": {
+              "type": "struct",
+              "structFieldTypes": [
+                {
+                  "apiName": "label",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.struct.label",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "count",
+                  "dataType": {
+                    "type": "integer"
+                  },
+                  "rid": "ri.struct.count",
+                  "typeClasses": []
+                }
+              ]
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "multiStruct": {
+            "dataType": {
+              "type": "struct",
+              "structFieldTypes": [
+                {
+                  "apiName": "alpha",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.struct.alpha",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "beta",
+                  "dataType": {
+                    "type": "integer"
+                  },
+                  "rid": "ri.struct.beta",
+                  "typeClasses": []
+                },
+                {
+                  "apiName": "gamma",
+                  "dataType": {
+                    "type": "string"
+                  },
+                  "rid": "ri.struct.gamma",
+                  "typeClasses": []
+                }
+              ]
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "multiStructArray": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "struct",
+                "structFieldTypes": [
+                  {
+                    "apiName": "alpha",
+                    "dataType": {
+                      "type": "string"
+                    },
+                    "rid": "ri.struct.array.alpha",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "beta",
+                    "dataType": {
+                      "type": "integer"
+                    },
+                    "rid": "ri.struct.array.beta",
+                    "typeClasses": []
+                  },
+                  {
+                    "apiName": "gamma",
+                    "dataType": {
+                      "type": "string"
+                    },
+                    "rid": "ri.struct.array.gamma",
+                    "typeClasses": []
+                  }
+                ]
+              },
+              "reducers": []
+            },
+            "rid": "rid",
+            "typeClasses": []
+          },
+          "arrayValue": {
+            "dataType": {
+              "type": "array",
+              "subType": {
+                "type": "integer"
+              },
+              "reducers": [
+                {
+                  "direction": "DESCENDING_NULLS_LAST"
+                }
+              ]
+            },
+            "rid": "rid",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.complex-implementation-object",
+        "status": "ACTIVE"
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [
+        "ComplexImplementationInterface"
+      ],
+      "implementsInterfaces2": {
+        "ComplexImplementationInterface": {
+          "properties": {},
+          "propertiesV2": {
+            "iLocal": {
+              "type": "localPropertyImplementation",
+              "propertyApiName": "localValue"
+            },
+            "iStructField": {
+              "type": "structFieldImplementation",
+              "structFieldOfProperty": {
+                "propertyApiName": "nestedStruct",
+                "structFieldApiName": "label"
+              }
+            },
+            "iStruct": {
+              "type": "structImplementation",
+              "mapping": {
+                "theAlpha": {
+                  "type": "structFieldOfProperty",
+                  "propertyApiName": "multiStruct",
+                  "structFieldApiName": "alpha"
+                },
+                "theBeta": {
+                  "type": "structFieldOfProperty",
+                  "propertyApiName": "multiStruct",
+                  "structFieldApiName": "beta"
+                }
+              }
+            },
+            "iStructArray": {
+              "type": "structImplementation",
+              "mapping": {
+                "theAlpha": {
+                  "type": "structFieldOfProperty",
+                  "propertyApiName": "multiStructArray",
+                  "structFieldApiName": "alpha"
+                },
+                "theBeta": {
+                  "type": "structFieldOfProperty",
+                  "propertyApiName": "multiStructArray",
+                  "structFieldApiName": "beta"
+                }
+              }
+            },
+            "iReduced": {
+              "type": "reducedPropertyImplementation",
+              "implementation": {
+                "type": "localPropertyImplementation",
+                "propertyApiName": "arrayValue"
+              }
+            }
+          },
+          "links": {},
+          "actionTypes": {}
+        }
+      },
+      "sharedPropertyTypeMapping": {}
+    }
+  },
+  "ontology": {
+    "apiName": "default-ontology",
+    "displayName": "Ontology",
+    "description": "The default ontology",
+    "rid": "ri.ontology.main.ontology.698267cc-6b48-4d98-beff-29beb24e9361"
+  },
+  "queryTypes": {
+    "addOne:0.0.9": {
+      "apiName": "addOne",
+      "displayName": "myFunction",
+      "parameters": {
+        "n": {
+          "dataType": {
+            "type": "integer"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "integer"
+      },
+      "rid": "ri.function-registry.main.function.abd64ff3-276e-48c5-afee-5a6ef0b2ea47",
+      "version": "0.0.9",
+      "typeReferences": {}
+    },
+    "addOne:0.0.1": {
+      "apiName": "addOne",
+      "displayName": "myFunction",
+      "parameters": {
+        "n": {
+          "dataType": {
+            "type": "integer"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "integer"
+      },
+      "rid": "ri.function-registry.main.function.abd64ff3-276e-48c5-afee-5a6ef0b2ea47",
+      "version": "0.0.1",
+      "typeReferences": {}
+    },
+    "incrementPersonAge:0.0.9": {
+      "apiName": "incrementPersonAge",
+      "displayName": "incrementAge",
+      "parameters": {
+        "person": {
+          "dataType": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "firstName",
+                "fieldType": {
+                  "type": "string"
+                }
+              },
+              {
+                "name": "lastName",
+                "fieldType": {
+                  "type": "string"
+                }
+              },
+              {
+                "name": "age",
+                "fieldType": {
+                  "type": "union",
+                  "unionTypes": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "firstName",
+            "fieldType": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "fieldType": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "age",
+            "fieldType": {
+              "type": "union",
+              "unionTypes": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "rid": "ri.function-registry.main.function.b2ae7b3e-2c89-42f5-a762-68957a9c039d",
+      "version": "0.0.9",
+      "typeReferences": {}
+    },
+    "returnsDate:0.0.9": {
+      "apiName": "returnsDate",
+      "displayName": "returnsDate",
+      "parameters": {},
+      "output": {
+        "type": "date"
+      },
+      "rid": "ri.function-registry.main.function.b2ae7b3e-2c89-42f5-a762-68957a9c039d",
+      "version": "0.0.9",
+      "typeReferences": {}
+    },
+    "returnsObject:0.0.9": {
+      "apiName": "returnsObject",
+      "displayName": "returnsObject",
+      "parameters": {},
+      "output": {
+        "type": "object",
+        "objectApiName": "Employee",
+        "objectTypeApiName": "Employee"
+      },
+      "rid": "ri.function-registry.main.function.b2ae7b3e-2c89-42f5-a762-68957a9c039d",
+      "version": "0.0.9",
+      "typeReferences": {}
+    },
+    "returnsTimestamp:0.0.9": {
+      "apiName": "returnsTimestamp",
+      "displayName": "returnsTimestamp",
+      "parameters": {},
+      "output": {
+        "type": "timestamp"
+      },
+      "rid": "ri.function-registry.main.function.b2ae7b3e-2c89-42f5-a762-68957a9c039d",
+      "version": "0.0.9",
+      "typeReferences": {}
+    },
+    "twoDimensionalAggregationFunction:0.11.0": {
+      "apiName": "twoDimensionalAggregationFunction",
+      "displayName": "twoDimensionalAggregation",
+      "parameters": {},
+      "output": {
+        "type": "twoDimensionalAggregation",
+        "keyType": {
+          "type": "string"
+        },
+        "valueType": {
+          "type": "double"
+        }
+      },
+      "rid": "ri.function-registry.main.function.9b55870a-63c7-4d48-8f06-9627c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "threeDimensionalAggregationFunction:0.11.0": {
+      "apiName": "threeDimensionalAggregationFunction",
+      "displayName": "threeDimensionalAggregation",
+      "parameters": {},
+      "output": {
+        "type": "threeDimensionalAggregation",
+        "keyType": {
+          "type": "string"
+        },
+        "valueType": {
+          "keyType": {
+            "type": "range",
+            "subType": {
+              "type": "timestamp"
+            }
+          },
+          "valueType": {
+            "type": "double"
+          }
+        }
+      },
+      "rid": "ri.function-registry.main.function.9b55870a-63c7-4d48-8f06-9627c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "queryAcceptsObject:0.11.0": {
+      "apiName": "queryAcceptsObject",
+      "description": "description of the query that takes object types",
+      "displayName": "QueryAcceptsObject",
+      "parameters": {
+        "object": {
+          "dataType": {
+            "type": "object",
+            "objectApiName": "Employee",
+            "objectTypeApiName": "Employee"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "object",
+        "objectApiName": "Employee",
+        "objectTypeApiName": "Employee"
+      },
+      "rid": "ri.function-registry.main.function.9b55870a-63c7-4d48-8f06-9627c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "queryAcceptsObjectSets:0.11.0": {
+      "apiName": "queryAcceptsObjectSets",
+      "description": "description of the query that takes objectSet types",
+      "displayName": "QueryAcceptsObjectSets",
+      "parameters": {
+        "objectSet": {
+          "dataType": {
+            "type": "objectSet",
+            "objectApiName": "Employee",
+            "objectTypeApiName": "Employee"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "objectSet",
+        "objectApiName": "Employee",
+        "objectTypeApiName": "Employee"
+      },
+      "rid": "ri.function-registry.main.function.9b55870a-63c7-4d48-8f06-9627c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "acceptsTwoDimensionalAggregationFunction:0.11.0": {
+      "apiName": "acceptsTwoDimensionalAggregationFunction",
+      "displayName": "acceptsTwoDimensionalAggregation",
+      "parameters": {
+        "aggFunction": {
+          "dataType": {
+            "type": "twoDimensionalAggregation",
+            "keyType": {
+              "type": "string"
+            },
+            "valueType": {
+              "type": "double"
+            }
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "twoDimensionalAggregation",
+        "keyType": {
+          "type": "string"
+        },
+        "valueType": {
+          "type": "double"
+        }
+      },
+      "rid": "ri.function-registry.main.function.9b55870a-63c7-4d48-8f06-9627c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "acceptsThreeDimensionalAggregationFunction:0.11.0": {
+      "apiName": "acceptsThreeDimensionalAggregationFunction",
+      "displayName": "acceptsThreeDimensionalAggregation",
+      "parameters": {
+        "aggFunction": {
+          "dataType": {
+            "type": "threeDimensionalAggregation",
+            "keyType": {
+              "type": "string"
+            },
+            "valueType": {
+              "keyType": {
+                "type": "range",
+                "subType": {
+                  "type": "timestamp"
+                }
+              },
+              "valueType": {
+                "type": "double"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "threeDimensionalAggregation",
+        "keyType": {
+          "type": "string"
+        },
+        "valueType": {
+          "keyType": {
+            "type": "range",
+            "subType": {
+              "type": "timestamp"
+            }
+          },
+          "valueType": {
+            "type": "double"
+          }
+        }
+      },
+      "rid": "ri.function-registry.main.function.9b55870a-63c7-4d48-8f06-9627c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "queryTypeReturnsArray:0.1.1": {
+      "apiName": "queryTypeReturnsArray",
+      "output": {
+        "type": "array",
+        "subType": {
+          "type": "string"
+        }
+      },
+      "parameters": {
+        "people": {
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "string"
+            }
+          },
+          "required": true
+        }
+      },
+      "rid": "ri.function-registry.main.function.c3e58d52-8430-44ee-9f0b-3785d9a9bdda",
+      "version": "0.1.1",
+      "typeReferences": {}
+    },
+    "incrementPersonAgeComplex:0.0.9": {
+      "apiName": "incrementPersonAgeComplex",
+      "displayName": "incrementAgeComplex",
+      "parameters": {
+        "person": {
+          "dataType": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "firstName",
+                "fieldType": {
+                  "type": "string"
+                }
+              },
+              {
+                "name": "lastName",
+                "fieldType": {
+                  "type": "string"
+                }
+              },
+              {
+                "name": "age",
+                "fieldType": {
+                  "type": "union",
+                  "unionTypes": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "object",
+                "fieldType": {
+                  "type": "object",
+                  "objectApiName": "Employee",
+                  "objectTypeApiName": "Employee"
+                }
+              }
+            ]
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "firstName",
+            "fieldType": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "fieldType": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "age",
+            "fieldType": {
+              "type": "union",
+              "unionTypes": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "object",
+            "fieldType": {
+              "type": "object",
+              "objectApiName": "Employee",
+              "objectTypeApiName": "Employee"
+            }
+          }
+        ]
+      },
+      "rid": "ri.function-registry.main.function.b2ae7b3e-2c89-42f5-a762-68957a9c039d",
+      "version": "0.0.9",
+      "typeReferences": {}
+    },
+    "queryTypeReturnsMap:0.1.1": {
+      "apiName": "queryTypeReturnsMap",
+      "output": {
+        "type": "entrySet",
+        "keyType": {
+          "type": "object",
+          "objectApiName": "Employee",
+          "objectTypeApiName": "Employee"
+        },
+        "valueType": {
+          "type": "float"
+        }
+      },
+      "parameters": {
+        "peopleMap": {
+          "dataType": {
+            "type": "entrySet",
+            "keyType": {
+              "type": "object",
+              "objectApiName": "Employee",
+              "objectTypeApiName": "Employee"
+            },
+            "valueType": {
+              "type": "string"
+            }
+          },
+          "required": true
+        }
+      },
+      "rid": "ri.function-registry.main.function.c3e58d52-8430-44ee-9f0b-3785d9a9bdd2",
+      "version": "0.1.1",
+      "typeReferences": {}
+    },
+    "queryAcceptsInterface:0.11.0": {
+      "apiName": "queryAcceptsInterface",
+      "description": "description of the query that takes interface types",
+      "displayName": "QueryAcceptsObject",
+      "parameters": {
+        "interfaceObject": {
+          "dataType": {
+            "type": "interfaceObject",
+            "interfaceTypeApiName": "FooInterface"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "interfaceObject",
+        "interfaceTypeApiName": "FooInterface"
+      },
+      "rid": "ri.function-registry.main.function.9b35870a-63c7-4d48-8f06-9617c0805968",
+      "version": "0.11.0",
+      "typeReferences": {}
+    },
+    "queryAcceptsInterfaceObjectSet:0.14.0": {
+      "apiName": "queryAcceptsInterfaceObjectSet",
+      "displayName": "description of the query that takes interface type object sets",
+      "parameters": {
+        "interfaceObjectSet": {
+          "dataType": {
+            "type": "interfaceObjectSet",
+            "interfaceTypeApiName": "FooInterface"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "string"
+      },
+      "rid": "ri.function-registry.main.function.4db06290-aab9-43fd-a22d-608b7ecc1849",
+      "version": "0.14.0",
+      "typeReferences": {}
+    },
+    "queryOutputsInterface:0.14.0": {
+      "apiName": "queryOutputsInterface",
+      "displayName": "description of the query that outputs interface type",
+      "parameters": {
+        "idToLook": {
+          "dataType": {
+            "type": "string"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "interfaceObjectSet",
+        "interfaceTypeApiName": "FooInterface"
+      },
+      "rid": "ri.function-registry.main.function.4db06290-7bb9-43fd-a22d-60sdf7ecc1849",
+      "version": "0.14.0",
+      "typeReferences": {}
+    },
+    "queryTypeReturnsArrayOfObjects:0.1.1": {
+      "apiName": "queryTypeReturnsArrayOfObjects",
+      "output": {
+        "type": "array",
+        "subType": {
+          "type": "object",
+          "objectApiName": "Employee",
+          "objectTypeApiName": "Employee"
+        }
+      },
+      "parameters": {
+        "people": {
+          "dataType": {
+            "type": "array",
+            "subType": {
+              "type": "string"
+            }
+          },
+          "required": true
+        }
+      },
+      "rid": "ri.function-registry.main.function.c3e58d52-8430-44ee-9f0b-3785d9a9bdda",
+      "version": "0.1.1",
+      "typeReferences": {}
+    },
+    "queryReturnsMediaReference:0.1.0": {
+      "apiName": "queryReturnsMediaReference",
+      "displayName": "queryReturnsMediaReference",
+      "parameters": {},
+      "output": {
+        "type": "mediaReference"
+      },
+      "rid": "ri.function-registry.main.function.c3e58d52-8430-44ee-9f0b-3785d9a9bdd3",
+      "version": "0.1.0",
+      "typeReferences": {}
+    },
+    "queryAcceptsMediaReference:0.1.0": {
+      "apiName": "queryAcceptsMediaReference",
+      "displayName": "queryAcceptsMediaReference",
+      "parameters": {
+        "media": {
+          "dataType": {
+            "type": "mediaReference"
+          },
+          "required": true
+        }
+      },
+      "output": {
+        "type": "mediaReference"
+      },
+      "rid": "ri.function-registry.main.function.c3e58d52-8430-44ee-9f0b-3785d9a9bdd4",
+      "version": "0.1.0",
+      "typeReferences": {}
+    }
+  },
+  "sharedPropertyTypes": {
+    "fooSpt": {
+      "rid": "ri.sharedPropertyType.main.sharedPropertyType.1",
+      "apiName": "fooSpt",
+      "dataType": {
+        "type": "string"
+      },
+      "displayName": "Foo",
+      "description": "A foo",
+      "typeClasses": []
+    }
+  },
+  "valueTypes": {}
+}

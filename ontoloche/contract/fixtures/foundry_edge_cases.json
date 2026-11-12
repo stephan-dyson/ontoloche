@@ -1,0 +1,455 @@
+{
+  "ontology": {
+    "apiName": "edge-cases",
+    "displayName": "edge-cases",
+    "description": "Hand-built cases the generated fixtures do not carry",
+    "rid": "ri.ontology.main.ontology.00000001-0000-4000-8000-000000000000"
+  },
+  "objectTypes": {
+    "EndorsedThing": {
+      "objectType": {
+        "apiName": "EndorsedThing",
+        "displayName": "EndorsedThing",
+        "pluralDisplayName": "EndorsedThings",
+        "status": "ENDORSED",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000100-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000001-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A type an ontology owner has vetted and promoted."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "ExampleThing": {
+      "objectType": {
+        "apiName": "ExampleThing",
+        "displayName": "ExampleThing",
+        "pluralDisplayName": "ExampleThings",
+        "status": "EXAMPLE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000200-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000002-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A demo type that ships with a template."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "NoDescription": {
+      "objectType": {
+        "apiName": "NoDescription",
+        "displayName": "NoDescription",
+        "pluralDisplayName": "NoDescriptions",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000300-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000003-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": []
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "NursingHome": {
+      "objectType": {
+        "apiName": "NursingHome",
+        "displayName": "NursingHome",
+        "pluralDisplayName": "NursingHomes",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000400-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000004-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A licensed long-term care facility."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Nursing_Home": {
+      "objectType": {
+        "apiName": "Nursing_Home",
+        "displayName": "Nursing_Home",
+        "pluralDisplayName": "Nursing_Homes",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000500-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000005-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A care home, from a second team."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Ward3D": {
+      "objectType": {
+        "apiName": "Ward3D",
+        "displayName": "Ward3D",
+        "pluralDisplayName": "Ward3Ds",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000600-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000006-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A hospital ward, named with a digit run."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "_9Lives": {
+      "objectType": {
+        "apiName": "_9Lives",
+        "displayName": "_9Lives",
+        "pluralDisplayName": "_9Livess",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000700-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000007-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "An apiName that converts to a leading digit."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "LegacyWard": {
+      "objectType": {
+        "apiName": "LegacyWard",
+        "displayName": "LegacyWard",
+        "pluralDisplayName": "LegacyWards",
+        "status": "DEPRECATED",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000800-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000008-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "The pre-2025 ward model."
+      },
+      "linkTypes": [],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Doctor": {
+      "objectType": {
+        "apiName": "Doctor",
+        "displayName": "Doctor",
+        "pluralDisplayName": "Doctors",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00000900-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000009-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A licensed physician."
+      },
+      "linkTypes": [
+        {
+          "apiName": "treats",
+          "displayName": "treats",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Patient",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000001-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Patient": {
+      "objectType": {
+        "apiName": "Patient",
+        "displayName": "Patient",
+        "pluralDisplayName": "Patients",
+        "status": "ACTIVE",
+        "primaryKey": "id",
+        "titleProperty": "id",
+        "properties": {
+          "id": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00001000-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000010-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A person receiving care."
+      },
+      "linkTypes": [
+        {
+          "apiName": "treatedBy",
+          "displayName": "treatedBy",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Doctor",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000001-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    }
+  },
+  "actionTypes": {
+    "assignDoctor": {
+      "apiName": "assignDoctor",
+      "description": "Assign a doctor to a patient and notify the ward.",
+      "parameters": {
+        "doctor": {
+          "displayName": "Doctor",
+          "dataType": {
+            "type": "object",
+            "objectApiName": "Doctor",
+            "objectTypeApiName": "Doctor"
+          },
+          "required": true,
+          "typeClasses": []
+        },
+        "patient": {
+          "displayName": "Patient",
+          "dataType": {
+            "type": "object",
+            "objectApiName": "Patient",
+            "objectTypeApiName": "Patient"
+          },
+          "required": true,
+          "typeClasses": []
+        }
+      },
+      "rid": "ri.ontology.main.action-type.00000001-0000-4000-8000-000000000000",
+      "operations": [
+        {
+          "type": "createLink",
+          "aSideObjectTypeApiName": "Doctor",
+          "bSideObjectTypeApiName": "Patient",
+          "linkTypeApiNameAtoB": "treats",
+          "linkTypeApiNameBtoA": "treatedBy"
+        }
+      ],
+      "status": "ACTIVE"
+    }
+  },
+  "actionTypesFullMetadata": {
+    "assignDoctor": {
+      "actionType": {
+        "apiName": "assignDoctor",
+        "description": "Assign a doctor to a patient and notify the ward.",
+        "parameters": {
+          "doctor": {
+            "displayName": "Doctor",
+            "dataType": {
+              "type": "object",
+              "objectApiName": "Doctor",
+              "objectTypeApiName": "Doctor"
+            },
+            "required": true,
+            "typeClasses": []
+          },
+          "patient": {
+            "displayName": "Patient",
+            "dataType": {
+              "type": "object",
+              "objectApiName": "Patient",
+              "objectTypeApiName": "Patient"
+            },
+            "required": true,
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.action-type.00000001-0000-4000-8000-000000000000",
+        "operations": [
+          {
+            "type": "createLink",
+            "aSideObjectTypeApiName": "Doctor",
+            "bSideObjectTypeApiName": "Patient",
+            "linkTypeApiNameAtoB": "treats",
+            "linkTypeApiNameBtoA": "treatedBy"
+          }
+        ],
+        "status": "ACTIVE"
+      },
+      "fullLogicRules": [
+        {
+          "type": "createLink",
+          "linkTypeApiName": "treats",
+          "sourceObject": "doctor",
+          "targetObject": "patient"
+        },
+        {
+          "type": "function",
+          "functionRid": "ri.ontology.main.function.00000001-0000-4000-8000-000000000000",
+          "functionVersion": "1.0.0",
+          "functionInputValues": {}
+        }
+      ]
+    }
+  },
+  "queryTypes": {},
+  "interfaceTypes": {},
+  "sharedPropertyTypes": {},
+  "valueTypes": {}
+}
