@@ -243,7 +243,7 @@ Two findings no prediction covered: the undescribed Foundry properties, which ch
 6. **The import exception for descriptions moved again.** Round 1 showed rule 2.10-3's *"`approve` still refuses"* never fires for a Foundry import, because §2.5 imports `active` as `active` and `approve` never sees the row. That made the exception a decision about what the registry refuses at import, so it is no longer the spec's: rule 2.10-21 is `reserved: Q106`. Row 8a's founder ruling on undescribed *types* (hold the row, take the text from the caller) is offered there as an option.
 7. **The dangling `fooSpt` case loses a type.** A shared slot carries no `base_type`, so when the property it names is unregistered, `Employee.fullName`'s Foundry `string` has nowhere to go. It is still written and warned, and the loss is recorded in rule 2.10-10. An undescribed Foundry shared property type is rule 2.10-21's case too.
 
-### §1.8 — Score, corrected
+### §1.8 — Score, corrected after round 1 *(superseded by §1.10)*
 
 | test | predictions | hits | misses | untested |
 |---|---|---|---|---|
@@ -256,6 +256,30 @@ Two findings no prediction covered: the undescribed Foundry properties, which ch
 | falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
 
 **Doors §0.4 never listed:** D11, collapsing two entities whose declarations contradict (round 1, rule 2.10-18), and D7b, re-importing a `kind="property"` entry (round 1, rule 2.10-20).
+
+### §1.9 — Corrections from round 2, including one to §1.7
+
+§1.7's text is left as committed at `29a3728`. Round 2 found one of its corrections false, so this list corrects the correction rather than editing it.
+
+1. **§1.7 item 3 was itself false.** Only **one** shared property is forced: `ccn`, which is in both `facility`'s and `survey`'s `primary_key`. `tag_number` is the key of `deficiency_tag` alone (`_support.py:448`), and `citation` declares no key (`{"grain": "one per row"}`). So `ccn` and `tag_number` on `citation` are the walk's choices, not the fixture's. Declaring them also gives the citation-to-survey link a second home, because the fixture already carries it as the `issued_during` edge (`_support.py`, around line 511). The UC2 miss stands, and its count is one forced and up to three optional.
+2. **UC3 HIT 2 is rescored MISS, and contortion 10 is NARROWED, not CLOSED.** **[Observed]** given `kind="property"`, `resolve_type` proposes a property for any word that is not `not_a_type`, `parking_meter_record` included. So the call that scored the hit was echoing the caller's kind, and it is no evidence that the resolver finds a property. §10b.3's own call, with no kind, still proposes an entity. Rule 2.10-12, §10b.3's note and the §11 item now say NARROWED.
+3. **Every Foundry object type would have been refused by rule 2.10-5 as first written. A Foundry miss §1.4 did not score.** The rule required each key slot to be `required`, and **[Observed]** `foundry_sdk` 1.111.0's `PropertyV2` has the fields `description`, `display_name`, `data_type`, `rid`, `status`, `visibility`, `value_type_api_name`, `value_formatting`, `type_classes` and `data_constraints`, with no required flag. An importer would have had to make one up. Rule 2.10-5 now reads a key slot as required by being in the key. In the same round, `typeClasses` on every fixture property showed that an unknown slot key was undefined, and rule 2.10-3 now closes the shape.
+4. **D1 and D4 were scored without a run.** Both now are, in `properties_baseline_probe.py`, and both behave as §0.4 predicted **[Observed]**: re-minting a retired property's name returns `name_previously_retired`, and a retired `zip_code` (`str`) resolves to `postal_code` (`int`) as `existing` at 1.0, which is residual 5.3.2-13(b), now naming `property`.
+5. **Rule numbers in §1.0 to §1.5 are the first draft's.** Round 1 inserted rule 2.10-9, so the draft's 2.10-9 to 2.10-19 are now 2.10-10 to 2.10-20 in the order they were written. §1.3's *"2.10-15"* is now 2.10-16, and §1.2's references to 2.10-11 and 2.10-13 are now 2.10-12 and 2.10-14. Two names in §1.2 are wrong as well: NYC's namespace in [`3C-VALIDATION.md`](../findings/3C-VALIDATION.md) is `oti_311`, not `oti`, and `location` is proposed as a property only when the caller passes `kind="property"`.
+
+### §1.10 — Score, corrected after round 2
+
+| test | predictions | hits | misses | untested |
+|---|---|---|---|---|
+| UC2 | 7 | 5 | 2 (shared count, local-slot count) | 0 |
+| UC3 | 4 | 2 | 1 (contortion 10 closing) | 1 (`existing` against a registered property) |
+| UC1 | 1 | 0 | 1 partial (the cost) | 0 |
+| Foundry | 7 | 4 | 2 (`opaque` warning, half; key slots refused) | 1 (value types) |
+| doors D1 to D10 | 10 | 7 | 3 (D8 as first written; D9's warning; D10) | 0, after D1 and D4 were run in round 2 |
+| kill row: *"zero new trips"* | 1 | 1 | 0 | 0 |
+| falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
+
+**Doors §0.4 never listed:** D11 (round 1) and D7b (round 1), and from round 2 **D12**, the import alias write collapsing two properties or two entities with no acknowledgement after a plain `retire`, and **D13**, a value set that a slot references being retired or collapsed silently.
 
 ---
 
@@ -286,3 +310,24 @@ Three fresh lenses, run in parallel against `ae634c4` with nothing edited while 
 **A finding about this row, not the spec.** Row 8a is running in parallel in `.claude/worktrees/row-8a`, and its in-progress ruling file links to an `8A-RUN.md` it has not written yet, so `py docs/tools/check_links.py` from this tree reported one broken link **in that worktree's file** while round 1's fixes were being written, and passed again once that row wrote its record. `check_links.py` walks every `*.md` under the repo root, worktrees included, so another row's half-written file can fail this row's exit check. This row does not edit another row's files, so that is recorded rather than fixed.
 
 **Round 1 produced a BLOCKING and MAJOR fixes, so round 2 is a full round that sees them** (§0.6).
+
+### §2.2 — Round 2
+
+Three fresh lenses against `29a3728`, nothing edited while they ran. **0 BLOCKING, 9 MAJOR, 15 MINOR.** All three re-ran round 1's fixes and found them holding: UC2's `primary_key`-only shape is legal, the 2.10-15 guards refuse as stated, and the reserved rules' current behaviour matched the probe except where row 2 below says. Each [Observed] MAJOR was re-run before its fix was written, D12 and D13 by new lines in `properties_baseline_probe.py`.
+
+| # | sev | finding | lens | fix |
+|---|---|---|---|---|
+| 1 | MAJOR | the import alias write collapses two properties, and two UC2 entities, with **no acknowledgement and no warning** after a plain `retire` **[Observed, D12]**; 2.10-17 said *"not reproduced"*. Round 1 had tried it with the absorbed word still live, which is refused `alias_collision` | doors | 2.10-17, 2.10-18 and Q105 state the door |
+| 2 | MAJOR | a value set that a slot references retires or collapses silently, and no rule or question covered it **[Observed, D13]** | doors | 2.10-17, 2.10-19, Q104 and Q105 widened to value sets |
+| 3 | MAJOR | the view functions could not set `why_absent`, because a `TypeEntry` from `sqlite_minimal` carries no sign a key was dropped **[Observed]** | implementer | both take `caps: Capabilities`, raise on the wrong kind, never on stored data |
+| 4 | MAJOR | `property_reference_undeclared` would state a false fact on `sqlite_minimal`, which drops `base_type` | implementer | 2.10-10: never sent where the backend cannot return it |
+| 5 | MAJOR | 2.10-5 required `required` on key slots, and Foundry has no such flag, so all 13 fixture object types would be declined | implementer | 2.10-5: a key slot is required by being in the key |
+| 6 | MAJOR | unknown and malformed slot keys were undefined, and every Foundry property carries `typeClasses` | implementer | 2.10-3 closes the stored shape |
+| 7 | MAJOR | UC3 HIT 2 rests on a call that echoes the caller's kind; contortion 10 is not closed | fidelity | §1.9 item 2; 2.10-12, §10b.3 and §11 say NARROWED |
+| 8 | MAJOR | §1.7 item 3, a correction, was false: only `ccn` is forced shared | fidelity | §1.9 item 1 |
+| 9 | MAJOR | Q106 claimed the founder had ruled the same question for types, and left out row 8a's `carry` default | fidelity | Q106 says what R109 chose between, that `keep and warn` is new, and the `carry` default; the lean is withdrawn |
+| 10 to 24 | MINOR | §12's *"no consumer gates on one"*; `property` missing from 5.3.2-13(b); 2.10-1's shape check had no door; 2.10-9 did not bind `base_type` to `BASE_TYPES`; 2.10-10's `<slot>` for a property's own `value_set`, `_retired` against `_moved`, and its doors; 2.10-11 named no reader; the view's wrong-kind behaviour; the checker passing a claimed `C21-99`; 2.10-15 naming `word_held_by_tombstone` at the minting doors; D1 and D4 unrun; Foundry interface properties homeless; a shared slot discarding a source type, and `mainValue`; stale rule numbers and names in §1 | all three | each folded into the rule it names, §1.9, or the probe; the checker now fails on any claimed `C21` id the table does not name, proved by mutation |
+
+**Kill row:** the door lens found no door reaching it. Every property collapse toward a predicate is refused, and a word shared between two kinds blocks a collapse rather than causing one.
+
+**Round 2 produced MAJOR fixes, so round 3 is a full round that sees them** (§0.6).

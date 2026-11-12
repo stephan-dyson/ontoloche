@@ -788,6 +788,14 @@ def _check_planned_rules(text: str, implemented: set[str]) -> list[str]:
             )
         if seen != list(range(1, len(seen) + 1)):
             problems.append(f"INTERFACE {label}: the rule numbers are {seen}, not 1..{len(seen)}")
+        # Round 2 of row 8b's loop: an id the table never names was invisible, so the suite
+        # could start claiming `C21-99` and this check passed. Any claimed id under the
+        # planned prefix fails, named or not.
+        for cid in sorted(i for i in implemented if i.startswith(f"{prefix}-") and i not in named):
+            problems.append(
+                f"INTERFACE {label}: the suite claims {cid}, which is under this section's "
+                f"planned prefix {prefix} and named by no rule in it"
+            )
     return problems
 
 # ---------------------------------------------------------------------------

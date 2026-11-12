@@ -130,6 +130,49 @@ def main() -> int:
                                    locator=None))
     out = reg.retire("latitude", "no longer wanted", retired_by="user:sd")
     show("D10 retire a property a consumer gates on", getattr(out, "status", None) or out.reason)
+
+    # D12: the import alias write as a third collapsing door, after a plain retire.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "zip_code", kind="property", attributes={"base_type": "str"})
+    reg.retire("zip_code", "duplicate", retired_by="user:sd")
+    back = reg.import_types([{"name": "postal_code", "definition": "a postal code",
+                              "status": "active", "aliases": ["zip_code"],
+                              "attributes": {"base_type": "int"}}], kind="property")
+    show("D12 alias import over a retired property, warnings", back[0].warnings if back else None)
+    stored = {t.name: t.attributes for t in reg.list_types(kind="property").types}
+    show("D12 postal_code now", stored.get("postal_code"))
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "survey", attributes={"primary_key": ["ccn", "survey_date", "survey_type"]})
+    seed(reg, "citation")
+    reg.retire("survey", "duplicate", retired_by="user:sd")
+    back = reg.import_types([{"name": "citation", "definition": "a citation", "status": "active",
+                              "aliases": ["survey"], "attributes": {"grain": "one per row"}}])
+    show("D12 alias import over a retired entity, warnings", back[0].warnings if back else None)
+
+    # D13: a value set a slot references, collapsed by retire(successor=).
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "deficiency_corrected_status", kind="value_set")
+    seed(reg, "scope_severity_code", kind="value_set")
+    seed(reg, "citation", attributes={"properties": [{
+        "name": "correction_status", "base_type": "str", "description": "corrected or not",
+        "value_set": "deficiency_corrected_status"}]})
+    out = reg.retire("deficiency_corrected_status", "duplicate", retired_by="user:sd",
+                     successor="scope_severity_code")
+    show("D13 retire a referenced value set", getattr(out, "status", None) or out.reason)
+    show("D13 warnings", getattr(out, "warnings", None))
+
+    # D1 and D4, which §1 scored without a run: re-minting a retired property's name,
+    # and reading a retired property through resolve_type after a typed collapse.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "zip_code", kind="property", attributes={"base_type": "str"})
+    seed(reg, "postal_code", kind="property", attributes={"base_type": "int"})
+    reg.retire("zip_code", "duplicate", retired_by="user:sd", successor="postal_code")
+    r = reg.resolve_type("zip_code", ctx, kind="property", tier="opus")
+    show("D4 resolve retired zip_code (str) -> ", f"{r.outcome} {getattr(r.type, 'name', None)} "
+         f"{r.confidence} {getattr(r.type, 'attributes', None)}")
+    out = reg.propose_type("zip_code", "a zip code again", EVIDENCE, "user:sd", kind="property",
+                           attributes={"base_type": "str"})
+    show("D1 re-mint a retired property's name", getattr(out, "warnings", None))
     return 0
 
 

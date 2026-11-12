@@ -22,14 +22,14 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 **Why it is yours.** Declining a row is a refusal. Foundry `active` types also import as `active` and never pass `approve`, so "require it at approval" does not catch them.
 
-**You have already ruled the same question for types.** Row 8a, running in parallel, recorded your `hold + override map` answer for a Foundry *type* with no description (its R109, numbered provisionally and not yet on `main`): nothing is written, the row comes back refused, and the caller supplies the missing text and imports again. The first option below is that answer, one level down.
+**What you ruled for types, and why it does not settle this.** Row 8a, running in parallel, recorded your `hold + override map` answer for a Foundry *type* with no description (its R109, numbered provisionally and not yet on `main`): nothing is written, the row comes back refused, and the caller supplies the missing text and imports again. That ruling chose between holding the row and filing a proposal with placeholder text. **Writing it with no description was never an option for a type**, because a type's definition must be non-empty in the code (`registry.py:2596`) and in the database (`0001_init.sql:21`). A property's description has no such constraint, so `keep and warn` below is new and you have not weighed it.
 
-- **`like types`** — hold the row, as for a type: nothing is written, it comes back refused naming each undescribed property, and the caller passes the missing descriptions and imports again. Consistent with your type ruling, and the whole Palantir fixture needs descriptions supplied before it lands.
+- **`like types`** — hold the row, as for a type: nothing is written, it comes back refused naming each undescribed property, and the caller passes the missing descriptions and imports again. Consistent with your type ruling, and 61 descriptions must be supplied before Palantir's fixture lands.
 - **`keep and warn`** — write the slot with no description and warn, naming it. The import succeeds, nothing is fabricated, and the warning lists what a person must fill in.
 - **`decline`** — refuse the row with no way to supply the text in the same call. Faithful to the brief, and it fails Palantir's fixture.
 - **`recommend`** — I bring you the per-case rule with the fixture counts.
 
-**Ask: `like types`, `keep and warn`, `decline`, or `recommend`.** Default in force: the shipped code checks no property declaration, so an undescribed slot is written today with no warning. Spec rule 2.10-21 is `reserved: Q106`. My lean is `like types`, because one import should not treat a missing type description and a missing property description two different ways.
+**Ask: `like types`, `keep and warn`, `decline`, or `recommend`.** Default in force: the shipped code checks no property declaration, so a slot is written as given with no warning. In practice row 8a's Foundry importer writes **no slots yet**: under your R105 `carry` it keeps Foundry's properties verbatim in `attributes["foundry_properties"]`, marked unvalidated, so this question bites the row that turns them into slots. Spec rule 2.10-21 is `reserved: Q106`. I have no lean between `like types` and `keep and warn`: the first is consistent with your type ruling, the second keeps the import easy, and the type case never had to choose.
 
 ### 19 · `Q103` — how is an approved property declaration amended, and what may change?
 
@@ -47,11 +47,11 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 **Not blocking.** The spec landed with the rule reserved. The build row needs this ruling before it builds the amendment path.
 
-### 20 · `Q104` — can a shared property still used by a live entity be retired?
+### 20 · `Q104` — can a shared property or value set still used by a live entity be retired?
 
 *New 2026-11-12. Row 8b, R108 open question 4.*
 
-**TL;DR.** **[Observed]** today retiring a `kind="property"` entry that an active entity still names succeeds, with no refusal and no warning. `retire` protects a word by asking `consumers()`, and an entity's slot is not a consumer, so the guard never sees it. Every entity using it is left pointing at a retired word. (The one case already protected: a property that is a member of a predicate some consumer gates on is refused `live_consumers`, like any other type.)
+**TL;DR.** **[Observed]** today retiring a `kind="property"` entry that an active entity still names succeeds, with no refusal and no warning. `retire` protects a word by asking `consumers()`, and an entity's slot is not a consumer, so the guard never sees it. Every entity using it is left pointing at a retired word. **The same is true of a value set a slot names [Observed]**: CMS's `deficiency_corrected_status` retires silently while a `citation` slot uses it. (The one case already protected: a property that is a member of a predicate some consumer gates on is refused `live_consumers`, like any other type.)
 
 - **`refuse unless acknowledged`** — the `live_consumers` shape: refused, naming the entities that use it, and the caller can override.
 - **`warn`** — retire it and warn, naming the entities left pointing at it. The least-refusing option, and it matches how a dangling reference is already treated.
@@ -63,9 +63,9 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 *New 2026-11-12. Row 8b, R108 open question 3 (which guards the new kind inherits). The spec answered every inherited guard. This is the one new refusal it would need.*
 
-**TL;DR.** **[Observed]**, door by door. `zip_code` (text) and `postal_code` (integer) merge through `merge_types` once the caller acknowledges two existing overridable refusals, and through `retire(successor=)` with **no acknowledgement and no warning at all**. Every entity using the absorbed word then reads the survivor's type. **Entities have the same hole:** `retire("survey", successor="citation")` succeeds silently when `survey` declares a primary key and `citation` declares none, and the word `survey` then declares no key. **That is one word with two definitions**, the governance register's shape. Action families had the same hole. It is closed by `action_declarations_diverge`, refused non-overridably, and your `all eight` ruling (R102) set which keys it compares.
+**TL;DR.** **[Observed]**, door by door. `zip_code` (text) and `postal_code` (integer) merge through `merge_types` once the caller acknowledges two existing overridable refusals. They collapse with **no acknowledgement and no warning at all** through `retire(successor=)`, and through the import alias write after a plain retire (retire `zip_code`, then import `postal_code` with `zip_code` as an alias). Every entity using the absorbed word then reads the survivor's type. **Entities have the same hole at both silent doors:** `survey` declares a primary key and `citation` declares none, `survey` is collapsed into `citation`, and the word `survey` then declares no key. **So do value sets a slot names:** retiring CMS's `deficiency_corrected_status` with `scope_severity_code` as successor is silent, and the slot then reads the A to L severity grid. **That is one word with two definitions**, the governance register's shape. Action families had the same hole. It is closed by `action_declarations_diverge`, refused non-overridably, and your `all eight` ruling (R102) set which keys it compares.
 
-- **`refuse, like actions`** — `merge_types`, `retire(successor=)` and the import alias write refuse non-overridably when two shared properties differ on `base_type`, `item_type`, `value_set` or `source_type`, or two entities differ on `primary_key`, `title_property` or a slot's type. Same rule, one kind along.
+- **`refuse, like actions`** — `merge_types`, `retire(successor=)` and the import alias write refuse non-overridably when two shared properties differ on `base_type`, `item_type`, `value_set` or `source_type`, two entities differ on `primary_key`, `title_property` or a slot's type, or a value set a slot names is collapsed into another. Same rule, one kind along.
 - **`refuse on type only`** — refuse non-overridably on a type or key difference. A different value set, source type or title is acknowledged rather than refused.
 - **`recommend`** — I bring the per-key severity with a worked case for each.
 
