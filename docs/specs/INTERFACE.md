@@ -12,7 +12,9 @@
 
 A registry of **types** — the vocabulary a system uses to say what things *are* — with a proposal→approval loop around every addition, a lifecycle for every entry, and a mechanical answer to *"if I add this, what will silently ignore it?"*
 
-It is not a schema store and it is not a graph. It holds names, definitions, provenance, lifecycle and consumer registrations; **it does not hold instances, edges, storage, or transport.**
+~~It is not a schema store and it is not a graph.~~ **SUPERSEDED by founder ruling [R108](../decisions/2026-09-22-founder-ruling-R108.md) (`adopt B`), amended by row 8b, 2026-11-12.** The struck sentence is kept, not deleted, because it is what this document said from 2026-08-28 until this amendment, and a reader may have relied on it. That is the precedent of rule 5.3.2-3 under R99.
+
+**It holds no values, and it is not a graph.** It governs what a property *is* (its name, base type, description, required flag, and which entity it belongs to) the way it governs what a type is, and it never stores a property's value or checks a row against a declaration (§2.10, ruling R78 unchanged). It holds names, definitions, property declarations, provenance, lifecycle and consumer registrations; **it does not hold instances, property values, edges, storage, or transport.**
 
 **No single call is the centre.** Per A1, the centre is the **proposal→approval loop**: `resolve_type` → `propose_type` → `approve`/`reject`, with `consumers`, `usage`/`retire` and `provenance` all first-class around it.
 
