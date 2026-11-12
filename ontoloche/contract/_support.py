@@ -644,3 +644,19 @@ def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
             registry.record_use(spec["name"], by="cms_sample_loader")
         entries.append(entry)
     return {"facts": facts, "entries": entries}
+
+
+# --------------------------------------------------------------------------- row 8a
+#: The Foundry `OntologyFullMetadata` fixtures. Two are generated from Palantir's own
+#: `@osdk/faux` (`docs/tools/foundry_faux/generate.mts`) and three are hand-built
+#: (`docs/tools/foundry_faux/build_hand_fixtures.py`). All five are shape-checked by
+#: `docs/tools/check_foundry_fixtures.py`, which is not part of this suite because the
+#: SDK it needs is a test-only extra.
+FOUNDRY_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def foundry_fixture(name: str) -> dict:
+    """``foundry_fixture("faux_employee")`` -> the parsed ``foundry_faux_employee.json``."""
+    import json
+
+    return json.loads((FOUNDRY_FIXTURES / f"foundry_{name}.json").read_text(encoding="utf-8"))

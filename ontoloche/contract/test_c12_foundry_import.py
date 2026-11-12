@@ -1490,3 +1490,450 @@ def test_c12_29_a_truncated_action_declaration_scan_says_so(adapter, make_regist
         "divergence` -- which writes the alias and leaves one word with two policies",
         warnings,
     )
+
+
+# =========================================================================== row 8a
+# The Foundry metadata importer and the four `import_types` defects it sits in front of.
+# Pre-registered in docs/runs/8A-RUN.md §0 before any of this code existed. Rulings in
+# force: R105 (properties carried, never validated), R109 (no description: hold, and a
+# `definitions=` map) and R110 (a converted-name collision: hold every member, and a
+# `names=` map).
+
+from ._support import foundry_fixture  # noqa: E402
+
+#: The adapter's write primitives (PACKAGE.md 3.4). A dry run may call none of them.
+_WRITE_PRIMITIVES = (
+    "put_type",
+    "put_proposal",
+    "put_consumer",
+    "bump_usage",
+    "append_event",
+    "put_edge",
+    "put_invocation",
+    "put_attr_schema",
+)
+
+
+def _count_writes(adapter, monkeypatch) -> list[str]:
+    """Wrap each write primitive on THIS adapter instance and record every call."""
+    calls: list[str] = []
+    for attr in _WRITE_PRIMITIVES:
+        original = getattr(adapter, attr, None)
+        if original is None:
+            continue
+
+        def wrapped(*args, _attr=attr, _original=original, **kwargs):
+            calls.append(_attr)
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(adapter, attr, wrapped)
+    return calls
+
+
+def _items(report, **match):
+    return [
+        item
+        for item in report.items
+        if all(getattr(item, key) == value for key, value in match.items())
+    ]
+
+
+def _names(report, **match):
+    return sorted(item.name for item in _items(report, **match))
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c12_30_endorsed_becomes_active_plus_the_endorsed_predicate(registry, adapter):
+    """**Defect 1** (`FOUNDRY-PARITY.md` §2). `ENDORSED` imported as plain `active` with
+    no predicate and no warning, so a type an ontology owner vetted was
+    indistinguishable from any other on arrival. It now follows the `experimental`
+    precedent of `C12-01`: `active`, plus the predicate, so the endorsement survives the
+    move and `list_types(predicate=...)` can find it."""
+    out = registry.import_types(
+        [
+            {"name": "vetted_type", "status": "ENDORSED", "definition": "an owner-vetted type"},
+            {"name": "plain_type", "status": "active", "definition": "an ordinary type"},
+        ]
+    )
+    assert [e.status for e in out] == ["active", "active"]
+    assert "endorsed" in out[0].predicates
+    assert "endorsed" not in out[1].predicates
+    stored = adapter.get_type("default", "vetted_type", kind="entity")
+    assert stored.status == "active"
+    assert [t.name for t in registry.list_types(predicate="endorsed").types] == ["vetted_type"]
+
+
+def test_c12_31_example_and_unknown_statuses_are_held_and_no_status_is_still_active(
+    registry, adapter
+):
+    """**Defect 2.** Foundry's Example status imported as `active`, so demo types entered
+    the vocabulary as live types through the migration door, which is the pollution
+    `VISION.md` §1 names. Any status outside the four this mapping knows was the same
+    defect one value along: it fell through to `active`. Neither is written now, and
+    each says why. A row with NO status still imports `active`, which `C12-01`'s own
+    fixture relies on."""
+    out = registry.import_types(
+        [
+            {"name": "demo_type", "status": "EXAMPLE", "definition": "a template's demo"},
+            {"name": "odd_type", "status": "promoted", "definition": "an unknown status"},
+            {"name": "bare_type", "definition": "no status at all"},
+        ]
+    )
+    assert "import_refused:foundry_example" in out[0].warnings
+    assert "import_refused:status_unknown" in out[1].warnings
+    assert adapter.get_type("default", "demo_type", kind="entity") is None
+    assert adapter.get_type("default", "odd_type", kind="entity") is None
+    assert out[2].status == "active" and out[2].warnings == ()
+    assert adapter.get_type("default", "bare_type", kind="entity").status == "active"
+
+
+def test_c12_32_a_bad_name_is_refused_never_raised_and_the_batch_continues(registry, adapter):
+    """**Defect 3.** A camelCase Foundry apiName raised `sqlite3.IntegrityError` out of a
+    call whose contract is *it returns entries, not exceptions*: a raw backend error,
+    on one backend, with the rest of the batch unprocessed. Every name outside
+    `^[a-z][a-z0-9_]{0,63}$` now comes back `import_refused:name_invalid` on every
+    backend, and the valid row after it is written."""
+    bad = ["NursingHome", "9lives", "", "a" * 65, "has space", "trailing-dash"]
+    rows = [{"name": n, "status": "active", "definition": "a bad name"} for n in bad]
+    rows.append({"name": "good_after", "status": "active", "definition": "after the bad ones"})
+
+    out = registry.import_types(rows)
+
+    assert len(out) == len(rows)
+    for entry in out[:-1]:
+        assert "import_refused:name_invalid" in entry.warnings, entry
+    assert out[-1].status == "active" and "import_refused:name_invalid" not in out[-1].warnings
+    assert adapter.get_type("default", "good_after", kind="entity") is not None
+    assert sorted(t.name for t in registry.list_types().types) == ["equivalent_to", "good_after"]
+
+
+def test_c12_33_a_row_with_no_definition_is_never_written_with_one_it_did_not_have(
+    registry, adapter
+):
+    """**Defect 4, under R109 (`hold + override map`).** A missing description became the
+    definition `"imported from foundry"` on a LIVE type, and `INTERFACE.md` §2.1 says a
+    type without a definition *"is how collision starts"*. The brief asked for
+    `proposed`. In this registry `proposed` is a proposal record, which needs a
+    definition too, so the founder ruled the row is held: nothing written, the row
+    handed back shaped `proposed` with `import_refused:definition_missing`.
+
+    **An import over a STANDING row is an update, and keeps that row's definition.**
+    Nothing the caller did not supply is written, which is the rule. The standing
+    definition was supplied, by whoever wrote it. `C12-06` and `C12-19` import
+    definition-less rows over standing ones and depend on this."""
+    out = registry.import_types(
+        [
+            {"name": "no_definition", "status": "active"},
+            {"name": "empty_definition", "status": "active", "definition": ""},
+            {"name": "blank_definition", "status": "active", "definition": "   "},
+            {"name": "gone_type", "status": "deprecated"},
+        ]
+    )
+    for entry in out:
+        assert "import_refused:definition_missing" in entry.warnings, entry
+        assert entry.status == "proposed", "the row as it would have looked, unwritten"
+        assert adapter.get_type("default", entry.name, kind="entity") is None
+
+    seed(registry, "standing_type", definition="a definition someone wrote")
+    updated = registry.import_types([{"name": "standing_type", "status": "active"}])[0]
+    assert "import_refused:definition_missing" not in updated.warnings
+    assert adapter.get_type("default", "standing_type").definition == "a definition someone wrote"
+
+    every = registry.list_types(include_retired=True).types
+    assert all(t.definition != "imported from foundry" for t in every)
+
+
+def test_c12_34_a_dry_run_over_palantirs_employee_ontology_writes_nothing(
+    adapter, make_registry, monkeypatch
+):
+    """`8A-RUN.md` §0.3's `employee` column, and §0.5 item 4: **the dry run calls no
+    adapter write primitive.** The document is generated by Palantir's own `@osdk/faux`
+    from its `EmployeeOntology`."""
+    registry = make_registry(adapter)
+    calls = _count_writes(adapter, monkeypatch)
+
+    report = registry.import_foundry(foundry_fixture("faux_employee"))
+
+    assert calls == [], f"a dry run wrote: {calls}"
+    assert report.dry_run is True
+    assert _names(report, kind="predicate", outcome="would_write") == ["foo_interface"]
+    assert _names(report, kind="entity", outcome="would_write") == ["employee", "office"]
+    assert report.count(outcome="would_write") == 3
+    assert _names(report, kind="edge", reason="definition_missing") == [
+        "lead", "office_link", "visited_offices",
+    ]
+    assert report.count(outcome="held") == 3
+    unpaired = [i.name for i in _items(report, kind="edge") if i.detail.get("inverse_label") is None]
+    assert unpaired == ["visited_offices"]
+    assert sum(i.carried_properties for i in report.items) == 19
+    assert report.not_imported == {"queryTypes": 0, "sharedPropertyTypes": 0, "valueTypes": 0}
+    assert report.looks_like == ()
+    employee = _items(report, name="employee")[0]
+    assert employee.detail["predicates"] == ["foo_interface"]
+
+
+def test_c12_35_a_dry_run_over_palantirs_legacy_ontology(registry):
+    """`8A-RUN.md` §0.3's `legacy` column: Palantir's `LegacyFauxFoundry` default
+    ontology, the largest test ontology `@osdk/faux` ships."""
+    report = registry.import_foundry(foundry_fixture("faux_legacy"))
+
+    assert report.count(outcome="would_write", kind="predicate") == 3
+    assert _names(report, kind="entity", outcome="would_write") == [
+        "complex_implementation_object", "employee", "object_type_with_all_property_types",
+        "object_with_timestamp_primary_key", "office",
+    ]
+    assert report.count(outcome="would_write", kind="action") == 11
+    assert report.count(outcome="would_write") == 19
+    assert report.count(outcome="held", reason="definition_missing") == 16
+    assert _names(report, kind="entity", reason="definition_missing") == [
+        "bgao_nfl_player", "equipment", "person", "task", "todo",
+    ]
+    assert _names(report, kind="action", reason="definition_missing") == [
+        "action_takes_decimal", "add_geoshape", "create_foo_interface",
+        "delete_bar_interface", "delete_foo_interface",
+    ]
+    assert report.count(kind="edge") == 6
+    assert report.count(outcome="held") == 16, "no collision, no bad name, no odd status"
+    assert sum(i.carried_properties for i in report.items) == 75
+    assert report.not_imported == {"queryTypes": 21, "sharedPropertyTypes": 1, "valueTypes": 0}
+    ops = [e["op"] for i in _items(report, outcome="would_write", kind="action")
+           for e in i.detail["effects"]]
+    assert ops.count("host_state") == 6 and "add_edge" not in ops and "retract_edge" not in ops
+
+
+def test_c12_36_a_real_import_writes_the_would_write_set_and_carries_properties(
+    registry, adapter
+):
+    """The non-dry import of `employee` writes the would-write set and nothing else.
+    Only the importer writes: one `import_types` call, which is §0.5 item 1. The
+    Foundry apiName lands in provenance and is NOT an alias (§0.2)."""
+    doc = foundry_fixture("faux_employee")
+    planned = registry.import_foundry(doc)
+    report = registry.import_foundry(doc, dry_run=False)
+
+    assert report.dry_run is False
+    assert sorted((i.kind, i.name) for i in _items(report, outcome="written")) == sorted(
+        (i.kind, i.name) for i in _items(planned, outcome="would_write")
+    )
+    assert report.count(outcome="refused") == 0
+    for item in _items(report, outcome="written"):
+        assert adapter.get_type("default", item.name, kind=item.kind) is not None
+    for item in _items(report, outcome="held"):
+        assert adapter.get_type("default", item.name, kind=item.kind) is None
+
+    employee = adapter.get_type("default", "employee", kind="entity")
+    assert employee.status == "active"
+    assert employee.definition == doc["objectTypes"]["Employee"]["objectType"]["description"]
+    provenance = registry.provenance("employee")
+    assert provenance.imported_from["apiName"] == "Employee"
+    assert provenance.imported_from["system"] == "foundry"
+    assert "Employee" not in (employee.aliases or ())
+
+    # R105's interim `carry`: verbatim, marked not validated. Nothing reads it as a
+    # schema, because row 8b decides what properties become. A backend that declines
+    # `stores_attributes` has nowhere to put it, which `C12-04` already covers.
+    if adapter.capabilities().stores_attributes:
+        carried = employee.attributes["foundry_properties"]
+        source = doc["objectTypes"]["Employee"]["objectType"]
+        assert carried["validated"] is False
+        assert carried["primaryKey"] == source["primaryKey"]
+        assert carried["titleProperty"] == source["titleProperty"]
+        assert carried["properties"] == source["properties"]
+
+
+def test_c12_37_a_converted_name_collision_is_held_whole_and_names_resolves_it(
+    registry, adapter
+):
+    """**R110, `hold both + names map`.** `NursingHome` and `Nursing_Home` both convert
+    to `nursing_home`, and `import_types` overwrites a standing row of the same kind
+    and name, so without a rule the second silently replaced the first. Every member
+    of the collision is held. `_9Lives` converts to a leading digit and is held
+    `name_invalid`. `names=` resolves both, and is checked the same way."""
+    doc = foundry_fixture("edge_cases")
+    report = registry.import_foundry(doc, dry_run=False)
+
+    clash = _items(report, reason="name_collision_after_conversion")
+    assert sorted(i.api_name for i in clash) == ["NursingHome", "Nursing_Home"]
+    assert all(i.name == "nursing_home" for i in clash)
+    assert adapter.get_type("default", "nursing_home", kind="entity") is None
+    assert _items(report, api_name="_9Lives")[0].reason == "name_invalid"
+    assert _items(report, api_name="Ward3D")[0].name == "ward3_d"
+
+    fixed = registry.import_foundry(
+        doc,
+        dry_run=False,
+        names={"Nursing_Home": "care_home", "_9Lives": "nine_lives"},
+    )
+    assert _items(fixed, api_name="NursingHome")[0].outcome == "written"
+    assert _items(fixed, api_name="Nursing_Home")[0].name == "care_home"
+    assert adapter.get_type("default", "care_home", kind="entity") is not None
+    assert adapter.get_type("default", "nine_lives", kind="entity") is not None
+
+    remapped = registry.import_foundry(doc, names={"Nursing_Home": "nursing_home"})
+    assert len(_items(remapped, reason="name_collision_after_conversion")) == 2, (
+        "a mapped name cannot create a collision the map was meant to remove"
+    )
+    bad = registry.import_foundry(doc, names={"Nursing_Home": "Care Home"})
+    assert _items(bad, api_name="Nursing_Home")[0].reason == "name_invalid"
+
+
+@pytest.mark.requires_capability("stores_attributes")
+def test_c12_38_definitions_import_held_rows_and_links_become_edge_families(registry, adapter):
+    """**R109's override map, and link types.** A Foundry link side carries no
+    description, so every link is held for one, and `definitions=` supplies it. The two
+    MANY sides of `treats` / `treatedBy` pair by `linkTypeRid` into ONE family, named
+    for the first side by `(objectType, apiName)`, and cardinality, which `EDGES.md`
+    has no key for, is carried in `attributes["foundry_link"]` (brief question 3).
+    The statuses: ENDORSED lands active, EXAMPLE is held, DEPRECATED lands retired."""
+    doc = foundry_fixture("edge_cases")
+    report = registry.import_foundry(
+        doc,
+        dry_run=False,
+        definitions={
+            "Doctor.treats": "A doctor treats a patient.",
+            "NoDescription": "Supplied by the operator at import time.",
+        },
+    )
+    treats = _items(report, kind="edge")
+    assert [(i.name, i.outcome) for i in treats] == [("treats", "written")]
+    stored = adapter.get_type("default", "treats", kind="edge")
+    assert stored.definition == "A doctor treats a patient."
+    assert stored.attributes["level"] == "instance"
+    assert stored.attributes["symmetric"] is False
+    assert stored.attributes["inverse_label"] == "treated_by"
+    link = stored.attributes["foundry_link"]
+    assert [s["cardinality"] for s in link["sides"]] == ["MANY", "MANY"]
+    assert (link["src_type"], link["dst_type"]) == ("doctor", "patient")
+    assert adapter.get_type("default", "no_description", kind="entity").definition == (
+        "Supplied by the operator at import time."
+    )
+    assert adapter.get_type("default", "endorsed_thing", kind="entity").status == "active"
+    assert _items(report, api_name="ExampleThing")[0].reason == "status_not_imported"
+    assert adapter.get_type("default", "example_thing", kind="entity") is None
+    assert adapter.get_type("default", "legacy_ward", kind="entity").status == "retired"
+
+
+def test_c12_39_the_dry_run_names_the_word_the_vocabulary_already_has(registry):
+    """`FOUNDRY-PARITY.md` §3.1: *"you already have `facility`, and Foundry's
+    `Facilities` looks like it"*, before anything is written. The answer is
+    `resolve_type`'s, unmodified: this row adds no scoring of its own. A name that is
+    already STANDING is reported as standing, because importing it replaces that row."""
+    seed(registry, "facility", definition="A licensed nursing home.")
+    seed(registry, "survey", definition="An inspection visit.")
+    doc = foundry_fixture("uc2_cms")
+    doc["objectTypes"]["Facilities"] = doc["objectTypes"].pop("Facility")
+    doc["objectTypes"]["Facilities"]["objectType"]["apiName"] = "Facilities"
+
+    report = registry.import_foundry(doc)
+
+    looks = {(look.name, look.matched) for look in report.looks_like}
+    assert ("facilities", "facility") in looks
+    assert _items(report, name="survey")[0].detail["standing"] is True
+    assert _items(report, name="citation")[0].detail["standing"] is False
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c12_40_the_name_door_guards_are_inherited_through_import_foundry(registry, adapter):
+    """`8A-RUN.md` §0.5 item 3. `import_foundry` is a planner in front of the existing
+    door, not a new one: every state that makes `import_types` refuse a row makes
+    `import_foundry` refuse it the same way, and write nothing."""
+    seed(registry, "commentable", kind="predicate", definition="a code path accepts it")
+    seed(registry, "doctor", predicates=["commentable"], definition="a physician")
+    registry.register_consumer(Consumer(id="rounds.assign", gate="commentable", on_unknown="drop"))
+    seed(registry, "ward_old", definition="the old ward model")
+    registry.retire("ward_old", "superseded", retired_by="user:sd")
+
+    doc = foundry_fixture("edge_cases")
+    doc["objectTypes"]["Doctor"]["objectType"]["status"] = "DEPRECATED"
+    doc["objectTypes"]["WardOld"] = doc["objectTypes"].pop("LegacyWard")
+    doc["objectTypes"]["WardOld"]["objectType"].update(apiName="WardOld", status="ACTIVE")
+
+    report = registry.import_foundry(doc, dry_run=False)
+
+    doctor = _items(report, name="doctor")[0]
+    assert doctor.outcome == "refused" and "import_refused:live_consumers" in doctor.warnings
+    assert adapter.get_type("default", "doctor", kind="entity").status == "active"
+    ward = _items(report, name="ward_old")[0]
+    assert ward.outcome == "refused" and "name_previously_retired" in ward.warnings
+    assert adapter.get_type("default", "ward_old", kind="entity").status == "retired"
+
+
+@pytest.mark.requires_capability("stores_attributes")
+def test_c12_41_action_types_declare_no_family_and_report_their_effect_mapping(
+    registry, adapter
+):
+    """Brief question 4. Foundry gives no reversibility and no approval mode, so an
+    imported action declares **none** of `ACTIONS.md` §2.2's eight keys (rule 2.2-1: a
+    legal entry, not yet usable as a family) rather than guessing two required ones.
+    The `Effect.op` each logic rule WOULD map to is reported, not declared: a link rule
+    to `add_edge`, a function rule to `host_state` with a `why` naming it.
+    `fullLogicRules` is read in preference to `operations` when both exist."""
+    from ..actions import ACTION_ATTRIBUTE_KEYS
+
+    report = registry.import_foundry(foundry_fixture("edge_cases"), dry_run=False)
+
+    assign = _items(report, api_name="assignDoctor")[0]
+    assert assign.outcome == "written" and assign.name == "assign_doctor"
+    effects = assign.detail["effects"]
+    assert [e["op"] for e in effects] == ["add_edge", "host_state"]
+    assert effects[0]["link"] == "treats"
+    assert "function" in effects[1]["why"]
+    stored = adapter.get_type("default", "assign_doctor", kind="action")
+    assert not any(key in stored.attributes for key in ACTION_ATTRIBUTE_KEYS)
+    assert stored.attributes["foundry_action"]["apiName"] == "assignDoctor"
+
+
+def test_c12_42_uc2_cms_as_a_foundry_ontology(registry, adapter):
+    """**Design test UC2** (standing constraint 7, `8A-RUN.md` §0.6). The CMS vocabulary
+    re-expressed as Foundry object types and link types imports to the four entity
+    names `cms_vocabulary()` holds, with its definitions verbatim, and the three edge
+    family names `C18` loads. The two CMS value sets do not import, because value
+    types are outside this row: a recorded gap, not a pass."""
+    from ._support import cms_vocabulary, sample_facts
+
+    expected = cms_vocabulary(sample_facts())
+    cms = registry.import_foundry(
+        foundry_fixture("uc2_cms"),
+        dry_run=False,
+        definitions={
+            "Citation.issuedDuring": "A citation was issued during a survey.",
+            "Survey.conductedAt": "A survey was conducted at a facility.",
+            "Citation.cites": "A citation names a deficiency tag.",
+        },
+    )
+    entities = {s["name"] for s in expected if s["kind"] == "entity"}
+    assert set(_names(cms, kind="entity", outcome="written")) == entities
+    assert set(_names(cms, kind="edge", outcome="written")) == {
+        "issued_during", "conducted_at", "cites",
+    }
+    for spec in expected:
+        if spec["kind"] == "entity":
+            stored = adapter.get_type("default", spec["name"], kind="entity")
+            assert stored.definition == spec["definition"]
+    assert cms.count(kind="value_set") == 0
+
+
+def test_c12_43_uc3_one_foundry_ontology_lands_in_one_namespace(registry):
+    """**Design test UC3**, and the evidence for brief question 2. UC3 splits
+    `street_tree` into `dpr` and `service_request` into `oti_311`, joined by
+    `same_tax_lot`. A Foundry link joins object types inside ONE ontology, so the only
+    Foundry shape that holds the link holds both types, and one call imports one
+    document into one namespace. The split is **not** reproduced."""
+    nyc = registry.import_foundry(
+        foundry_fixture("uc3_nyc"),
+        namespace="nyc",
+        dry_run=False,
+        definitions={
+            "ServiceRequest.sameTaxLot": (
+                "Both endpoints sit on the same borough-block-lot. It asserts the "
+                "shared lot and nothing more."
+            )
+        },
+    )
+    assert {(i.kind, i.name) for i in _items(nyc, outcome="written")} == {
+        ("entity", "street_tree"), ("entity", "service_request"), ("edge", "same_tax_lot"),
+    }
+    assert _items(nyc, kind="edge")[0].detail["inverse_label"] == "shares_tax_lot_with"
+    assert {t.namespace for t in registry.list_types(namespace="nyc").types} == {"nyc"}
+    assert registry.list_types(namespace="dpr").types == ()
+    assert registry.list_types(namespace="oti_311").types == ()
