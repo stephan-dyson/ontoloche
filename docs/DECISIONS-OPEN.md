@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**6 open · 12 ruled · 7 FYI** *(2026-11-12: items 19 to 22 added by row 8b, Q103 to Q106, none blocking. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**7 open · 12 ruled · 7 FYI** *(2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,21 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 6 items
+## A. Decide when you want to — 7 items
+
+### 23 · `Q107` — row 8b stopped at its five-round cap with five MAJOR findings open in the spec. Run a sixth, fix-and-review pass?
+
+*New 2026-11-12. Row 8b. Not blocking anything that runs today: no code implements §2.10 yet.*
+
+**TL;DR.** Row 8b's spec amendment (`INTERFACE.md` §2.10) went through five adversarial rounds, the cap it set itself before round 1. Round 5 still found **5 distinct MAJOR and 9 MINOR**, so under its own rule it stopped and brought them instead of fixing them. All are wording a build row would have to guess at, three of the five MAJORs are in the reference reader (rule 2.10-11), and every one has a proposed fix. The list is [`8B-RUN.md` §2.5](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8B-RUN.md).
+
+**Why it is yours.** The cap is the row's own commitment, and only you can lift it. Applying unreviewed fixes would put text into the spec that no adversary has seen, which is the thing the loop exists to prevent.
+
+- **`fix pass`** — open a short follow-on: apply the 14 proposed fixes, then run fresh lenses until one full round finds no MAJOR, with its own cap. The build row then starts from a reviewed reader.
+- **`fold into the build row`** — leave §2.10 as it is and make the 14 findings the properties build row's first task, reviewed with its code.
+- **`leave`** — accept §2.10 as landed. A build row will meet these gaps and decide them itself.
+
+**Also carried here, unrouted:** a defect older than row 8b, found by its round 4 and reproduced (probe line D14). After `retire(word, successor=X)`, importing another entry with that word as an alias is written silently, so one word has two live claimants, for every kind, and the retired word can no longer be reinstated. It does not reach the kill row (the predicate version is refused). No row carries it yet.
 
 ### 22 · `Q106` — a Foundry property with no description: import it with a warning, or decline it?
 
