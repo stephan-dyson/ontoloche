@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 12 ruled · 7 FYI** *(2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**5 open · 12 ruled · 7 FYI** *(2026-11-12: items 19, 20 and 21 added by row 8b, Q103 to Q105, none blocking. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,47 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 2 items
+## A. Decide when you want to — 5 items
+
+### 19 · `Q103` — how is an approved entity's property declaration amended, and what may change?
+
+*New 2026-11-12. Raised by row 8b under your `adopt B` ruling (R108, open question 1). It decides what the registry refuses, so it is yours rather than the spec's.*
+
+**TL;DR.** Under `adopt B` an entity declares its properties, and a live entity will need a property added sooner or later. **No governed call does that today.** The only door that changes an approved entity's declaration is `import_types`, and **[Observed]** it replaces the whole declaration with no event and no warning: re-importing `facility` with a new property list silently dropped its declared primary key ([probe](https://github.com/stephan-dyson/ontoloche/blob/main/docs/tools/properties_baseline_probe.py), line D7).
+
+**Why supersede-and-retire is not one of the options.** Names are unique per kind and a retired name is burned, so supersede-and-retire would rename `facility` every time a column is added. The row pre-registered that as a falsifier and it held ([`8B-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8B-RUN.md) §0.3, F2).
+
+- **`governed amend`** — a new call that proposes a change to an approved entity's declaration and goes through the same approve/reject loop as a new type, with an event. Adding an optional property is approvable. **Removing a property, changing a property's base type, or changing the primary key is refused unless acknowledged**, because each changes what an existing consumer's rows mean. `import_types` stops being an amendment door: re-importing an active entity with a different declaration warns and leaves it unchanged.
+- **`governed amend, additive only`** — the same call, but it only adds. Anything else needs a new entity. Fewer refusals to design, and less useful.
+- **`recommend`** — I bring the rules per change type, with what each one breaks.
+
+**Ask: `governed amend`, `governed amend, additive only`, or `recommend`.** Default in force: the shipped behaviour above, which is that only an import can change it and the import does so silently. Spec rule [`INTERFACE.md` 2.10-18](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INTERFACE.md) is `reserved: Q103`.
+
+**Not blocking.** The spec landed with the rule reserved. The build row needs this ruling before it builds the amendment path.
+
+### 20 · `Q104` — can a shared property still used by a live entity be retired?
+
+*New 2026-11-12. Row 8b, R108 open question 4.*
+
+**TL;DR.** **[Observed]** today retiring a `kind="property"` entry that an active entity still names succeeds, with no refusal and no warning. `retire` protects a word by asking `consumers()`, and nothing registers a consumer of a property, so the guard never sees it. Every entity using it is left pointing at a retired word.
+
+- **`refuse unless acknowledged`** — the `live_consumers` shape: refused, naming the entities that use it, and the caller can override.
+- **`warn`** — retire it and warn, naming the entities left pointing at it. The least-refusing option, and it matches how a dangling reference is already treated.
+- **`refuse`** — refused with no override until every entity using it has been amended. This depends on Q103.
+
+**Ask: `refuse unless acknowledged`, `warn`, or `refuse`.** Default in force: it succeeds silently. Spec rule 2.10-17 is `reserved: Q104`. My lean is `refuse unless acknowledged`, because it is the guard `retire` already has, pointed at the right list.
+
+### 21 · `Q105` — can two shared properties with different types be merged?
+
+*New 2026-11-12. Row 8b, R108 open question 3 (which guards the new kind inherits). The spec answered every inherited guard. This is the one new refusal it would need.*
+
+**TL;DR.** **[Observed]** `zip_code` (text) and `postal_code` (integer) merge once the caller acknowledges two existing overridable refusals. Every entity using the absorbed word then reads the survivor's type. **That is one word with two definitions**, the governance register's shape. Action families had the same hole. It is closed by `action_declarations_diverge`, refused non-overridably, and your `all eight` ruling (R102) set which keys it compares.
+
+- **`refuse, like actions`** — `merge_types`, `retire(successor=)` and the import alias write refuse non-overridably when the two declarations differ on `base_type`, `item_type`, `value_set` or `source_type`. Same rule, one kind along.
+- **`refuse on type only`** — refuse non-overridably on `base_type` and `item_type`. A different value set or source type is acknowledged rather than refused.
+- **`recommend`** — I bring the per-key severity with a worked case for each.
+
+**Ask: `refuse, like actions`, `refuse on type only`, or `recommend`.** Default in force: they merge after the two acknowledgements. Spec rule 2.10-16 is `reserved: Q105`. Whether to mint a new refusal value or reuse `action_declarations_diverge` is part of the build row and not part of this question.
 
 ### 17 · The stop you armed has STOOD DOWN — `A3` is closed and the ACTIONS surface is reopen
 
