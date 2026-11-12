@@ -27,6 +27,7 @@ A registry of **types** — the vocabulary a system uses to say what things *are
 - **No package layout.** No module names, no `pip` name, no conformance test suite. → **#2**.
 - **No relationships or edges.** No `neighbors()`, no traversal, no edge storage — a *relationship type* can be registered here as a type, but the edges themselves are → deliverable **#4, [`docs/specs/EDGES.md`](EDGES.md)** — **landed 2026-08-29**.
 - **No actions.** Action families are registered here as `kind="action"` entries; their shape, their invocations and their gate are → deliverable **#6, [`docs/specs/ACTIONS.md`](ACTIONS.md)** — **landed 2026-08-29**. Tenshen's actions stay in code (beacon spec §10.7) and ACTIONS is written so that they can.
+- **No property values.** A property's *declaration* is governed here (§2.10, ruling R108); its values, and whether a row honours the declaration, are never stored or checked (ruling R78 unchanged).
 - **No instance resolution.** *"I already know 38 of these facilities"* (`WALKTHROUGH.md` step 2) is **entity** resolution, not **type** resolution. `resolve_type` resolves the word *facility*; it does not resolve `"BURNS NURSING HOME, INC."` against 14,627 CCNs. See §10.3 — this is a named gap, not an oversight. → **it is deliverable #7a, [`INGEST.md`](INGEST.md)** — **landed 2026-09-03**. **This non-goal is unchanged and gains a pointer rather than being deleted**, which is ruling **R77**'s own instruction: instance resolution is Phase 3's, it is a **new call** in that document, and `resolve_type` is never extended to cover it, because adding it here would make one call mean two things — 0.1's Cause B, committed by the spec itself.
 
 ---
@@ -38,7 +39,7 @@ A registry of **types** — the vocabulary a system uses to say what things *are
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `name` | `str` | yes | Stable identifier. Unique within `(namespace, kind)`. `^[a-z][a-z0-9_]{0,63}$` |
-| `kind` | `str` | yes | Open vocabulary. v0 defines four: `entity`, `predicate`, `edge`, `value_set`. See §2.2 |
+| `kind` | `str` | yes | Open vocabulary. v0 defined four: `entity`, `predicate`, `edge`, `value_set`. Row 8b defines a fifth, `property` (§2.10, ruling R108). See §2.2 |
 | `namespace` | `str` | yes | Defaults to `"default"`. The answer to mechanism 4 that is **not** merging. See §2.6 |
 | `definition` | `str` | yes | Prose, non-empty. What this word means *here*. Rejected if empty — a type without a definition is how collision starts |
 | `created_by` | `"seed" \| "ai" \| "user" \| "derived"` | yes | Where the vocabulary came from. Field name and the **first three** values taken deliberately from Tenshen's `work_link_types` (§9). `derived` added by ruling **R17**, row 3e — see below |
@@ -79,6 +80,7 @@ A registry of **types** — the vocabulary a system uses to say what things *are
 - **`predicate`** — *a named capability set.* `commentable`, `searchable`, `linkable`, `shareable`. Its members are the types that satisfy it.
 - **`edge`** — a relationship type. Registered here (name, definition, provenance, lifecycle); its shape and its instances live in **#4**.
 - **`value_set`** — an enumerated set of *property values* with optional ordering. `deficiency_corrected_status`, `scope_severity_code`. **Added because the CMS data forced it** — see §10.1, the first recorded CMS-vs-Tenshen conflict.
+- **`property`** *(row 8b, ruling R108)* — a property shared by more than one entity in a namespace, registered once. `latitude`, `borough`. Its declaration and the rules for it are §2.10. A property used by one entity only needs no entry: it is a slot in that entity's own declaration. `action`, specified by [`ACTIONS.md`](ACTIONS.md), is the other kind a later document added; the heading above still says four because it is linked from elsewhere.
 
 ### 2.3 `predicate` is first-class, and it is not the type list — read this before implementing anything
 
@@ -204,6 +206,86 @@ Consumer:
 ```
 
 `on_unknown="drop"` is the dangerous value and it is the **[Observed]** default behaviour of every one of Tenshen's seven allowlists. It is what makes a new type die silently.
+
+### 2.10 Properties — what a property *is*, never what it holds *(founder ruling [R108](../decisions/2026-09-22-founder-ruling-R108.md), `adopt B`, row 8b, 2026-11-12)*
+
+**The amendment in one paragraph.** An entity's properties are now governed vocabulary. A `kind="entity"` entry may declare the properties it has, which of them identify a row (`primary_key`) and which one names it (`title_property`). A property used by more than one entity in a namespace can be registered once, as its own `kind="property"` entry, and each entity that uses it says so. The registry governs those declarations the way it governs a type: a name, a definition, provenance and a lifecycle. **It never stores a property's value, and it never checks a row against a declaration.** Ruling R78 is unchanged, and option C of [`PROPERTIES-OPTIONS.md`](../findings/PROPERTIES-OPTIONS.md) (validate the data) is out of scope by R108's own text.
+
+**Why this is not a new field on `TypeEntry`.** A declaration lives in `TypeEntry.attributes`, under keys this section reserves, and the registry reads it as a view. That is the precedent edge families ([`EDGES.md`](EDGES.md) §2.4) and action families ([`ACTIONS.md`](ACTIONS.md) §2.2) already set, and it keeps §2.1's table, every backend's schema and every stored row exactly as they are. The cost is stated in rule 2.10-15: a backend that stores no arbitrary attributes cannot keep a declaration. Falsifier F1 in [`8B-RUN.md`](../runs/8B-RUN.md) §0.3 is the test that would make this choice wrong.
+
+**The shapes.** These are PLANNED: printed here, built by a later row. [`check_spec_drift.py`](../tools/check_spec_drift.py) holds them as planned, so the check fails the day the code lands one without the checker being moved to hold it as implemented.
+
+```
+PropertySpec:
+    name:          str              # the slot's name on this entity, ^[A-Za-z][A-Za-z0-9_]{0,63}$
+    required:      bool             # default False. A declaration, never enforced on a row (2.10-12)
+    shared:        str | None       # a kind="property" entry in this entity's namespace. When set,
+                                    # base_type, description, item_type, value_set and source_type are absent
+    base_type:     str | None       # one of BASE_TYPES. Required when shared is None
+    description:   str | None       # non-empty. Required when shared is None
+    display_name:  str | None       # the source's own label, verbatim: a CMS header, a Foundry displayName
+    item_type:     str | None       # required when base_type == "list", absent otherwise
+    value_set:     str | None       # a kind="value_set" entry in this entity's namespace
+    source_type:   str | None       # the foreign system's type, verbatim. Required when base_type == "opaque"
+
+EntityDeclaration:
+    properties:      list[PropertySpec]    # TypeEntry.attributes["properties"] on a kind="entity" entry
+    primary_key:     list[str] | None      # TypeEntry.attributes["primary_key"]: ordered slot names
+    title_property:  str | None            # TypeEntry.attributes["title_property"]: one slot name
+
+SharedPropertyDeclaration:
+    base_type:     str              # TypeEntry.attributes["base_type"] on a kind="property" entry
+    display_name:  str | None
+    item_type:     str | None
+    value_set:     str | None
+    source_type:   str | None
+```
+
+`BASE_TYPES` is closed and has ten values: `str`, `int`, `float`, `decimal`, `bool`, `date`, `datetime`, `list`, `dict`, `opaque`. Seven of them are `FieldSpec`'s own (`ontoloche/attributes.py`), so a property and an attribute schema share one type vocabulary. `date` is added because CMS's survey date and correction date carry no time, `decimal` because Foundry's `decimal` is not a `float`, and `opaque` means *this registry cannot type it*, with `source_type` saying what it is.
+
+A shared property's **description is its entry's `definition`**, so it has one home. **`required` belongs to the slot, never to the shared property**, because whether a property is required is a fact about the entity using it. Foundry's own `SharedPropertyType` carries no `required` either, and its interfaces put `required` on the use.
+
+**How the Foundry and CMS types land.** This table is informative. The import mapping is row 8a's ([`FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md)), and rule 2.10-6 is the only part of it this section binds. The Foundry list is the twenty-two variants of `foundry-platform-sdk` 1.111.0's `ObjectPropertyType`, as pinned in [`8B-RUN.md`](../runs/8B-RUN.md) §1.4.
+
+| source type | `base_type` | `source_type` kept |
+|---|---|---|
+| Foundry `string` | `str` | no |
+| Foundry `integer`, `long`, `short`, `byte` | `int` | yes, except for `integer` |
+| Foundry `double`, `float` | `float` | yes, except for `double` |
+| Foundry `decimal` | `decimal` | yes, with precision and scale when set |
+| Foundry `boolean` | `bool` | no |
+| Foundry `date` / `timestamp` | `date` / `datetime` | no |
+| Foundry `array` | `list`, with `item_type` mapped the same way | yes, when the sub-type keeps one |
+| Foundry `struct` | `dict` | yes, carrying the field types. The fields themselves are not governed, a recorded contortion |
+| Foundry `geopoint`, `geoshape`, `attachment`, `mediaReference`, `timeseries`, `geotimeSeriesReference`, `vector`, `cipherText`, `marking` | `opaque` | yes, always (rule 2.10-6) |
+| a CMS text column with leading zeros (CCN, ZIP, tag number) | `str` | no |
+
+**Rules.** Standing constraint 8 / ruling R31. The contract ids are PLANNED under the prefix `C21`, which no test claims yet, the way [`INGEST.md`](INGEST.md) §9's `C20` ids were planned before their build row. `check_spec_drift.py` holds this table to its numbering and to that state: a `C21` id the suite starts claiming fails the check until this section is moved to the implemented list. A rule tagged `reserved:` is one this section does **not** decide, because it decides what the registry refuses, and it names the founder question that does.
+
+| rule | what it says | exercised by |
+|---|---|---|
+| 2.10-1 | `properties`, `primary_key` and `title_property` are **reserved keys** of a `kind="entity"` entry's `attributes`, and `base_type`, `display_name`, `item_type`, `value_set` and `source_type` are reserved keys of a `kind="property"` entry's. **An entry declaring none of them is unchanged in every respect**, so a host whose entities live in its own code, Tenshen's shape, pays nothing | `planned: C21-01` |
+| 2.10-2 | A declaration that breaks any of rules 2.10-3 to 2.10-7 is refused at `propose_type`, `approve` and `import_types` with **`attributes_schema_violation`**, ruling R18's own value. `PACKAGE.md` §5.6's exception list goes to length three, one rule per kind, the shape R18 licensed. No value is minted | `planned: C21-02` |
+| 2.10-3 | A **local** slot (`shared` absent) declares a `base_type` from `BASE_TYPES` and a non-empty `description`. A **shared** slot (`shared` set) declares none of `base_type`, `description`, `item_type`, `value_set` and `source_type`, because each of those has one home and it is the shared property's entry. `display_name` may appear on either | `planned: C21-03` |
+| 2.10-4 | Slot names are unique within one entity's `properties` and match `^[A-Za-z][A-Za-z0-9_]{0,63}$`. Mixed case is allowed because Foundry's property apiNames are camelCase and a slot carries the source's identifier, not a registry word. The name of a `kind="property"` entry is a `TypeEntry.name` and follows §2.1's lower-case pattern, so a slot and the shared property it uses may have different names | `planned: C21-04` |
+| 2.10-5 | `primary_key`, when present, is a non-empty ordered list of **distinct** slot names declared in `properties`, and each named slot is `required`. A one-element list is a single key. `title_property`, when present, names one declared slot. **Either may be absent**, which says the entity has no declared key or title, a fact rather than an error. `primary_key` keeps the list shape the shipped suite already writes (`ontoloche/contract/_support.py`) | `planned: C21-05` |
+| 2.10-6 | `item_type` is present exactly when `base_type` is `list`, and it is any value of `BASE_TYPES` except `list`. `opaque`, as a `base_type` or an `item_type`, requires a non-empty `source_type`: an untyped hole that does not say what it holds is the silent drop this registry exists to prevent | `planned: C21-06` |
+| 2.10-7 | `value_set` may be set when the slot's type, or a list's `item_type`, is `str`, `int`, `decimal` or `date`, and on no other type. An enumeration is never inlined: an inline list has no provenance and no evidence slot, which is §10's CMS conflict 1 | `planned: C21-07` |
+| 2.10-8 | `shared` and `value_set` are bare words in the **entity's own namespace**. There is no syntax for another namespace, so a declaration cannot assert that two publishers' `status` are one property. *The same meaning, kept apart*, stays `equivalent_to`'s job (ruling R7, [`EDGES.md`](EDGES.md)) | `planned: C21-08` |
+| 2.10-9 | A `shared` or `value_set` reference that names no entry, names a retired entry, names an entry whose identity has moved, or names a `kind="property"` entry that declares no `base_type` is **written and warned, never refused**. This is ruling R55's treatment of a declared predicate (5.4.1-2), and a dangling reference is a fact (`EDGES.md` §2.7). The warning values are RESERVED, not minted: `property_reference_unregistered:<slot>:<word>`, `property_reference_retired:<slot>:<word>`, `property_reference_moved:<slot>:<word>:<identity>` and `property_reference_undeclared:<slot>:<word>`. They join §5.4's table and `types.WARNING_VALUES` in the change that emits them | `planned: C21-09` |
+| 2.10-10 | A reader following a `shared` or `value_set` reference **resolves it to the identity the word now belongs to** (ruling R38), and the written reference is never edited | `planned: C21-10` |
+| 2.10-11 | `resolve_type(name, ctx, kind="property")` scores against `kind="property"` entries and proposes one, which is the honest home contortion 10 (§10b.3) lacked. **`not_a_type`'s four reasons are unchanged**: the contortion closes because `property` is a kind, not because a fifth reason is added. **[Observed]** the shipped resolver already answers `proposal` with `proposal.kind == "property"` for `latitude` ([`properties_baseline_probe.py`](../tools/properties_baseline_probe.py)) | `planned: C21-11` |
+| 2.10-12 | **Values are never stored and never checked.** No row is refused, warned or counted for a missing required property, a duplicated primary key, a value outside its value set, or a value of the wrong base type. CMS's 1.28% of rows whose correction date precedes the survey date are not caught, by design (R78) | `prose-only:` the rule is an absence of behaviour, and a contract id asserting that the registry does not check a row would pass on a registry that never read a declaration at all, which is 5.3.2-5's reason for a tag |
+| 2.10-13 | `resolve_type` with `kind=None` still proposes an **entity** for a property's name, because the shipped proposal is built with `kind or "entity"`. Contortion 10's own text says *"it is not the resolver being weak"*, so this residual is the resolver's and this section does not claim to close it | `prose-only:` a residual stated so a later row does not read 2.10-11 as covering the default call, and asserting it would pin a behaviour the resolver is free to improve |
+| 2.10-14 | Every guard that is blind to kind applies to `kind="property"` unchanged: name uniqueness within `(namespace, kind)`, `name_previously_retired`, `word_held_by_tombstone` and `C16-06`'s one-word invariant at the minting doors, and `kind_mismatch` and `cross_namespace_merge` (both non-overridable) at every collapsing door. A property can never collapse into an entity, a predicate or another namespace | `planned: C21-12` |
+| 2.10-15 | On a backend whose `stores_attributes` is `False`, a declaration key the backend does not project comes back **absent, with a `why`**, which is `PACKAGE.md` §5.7's rule unchanged. **The write that loses it warns**, with the RESERVED value `property_declaration_not_stored:<key>`. **[Observed]** today `sqlite_minimal` keeps `primary_key` (a projected column) and drops `properties` and `title_property` with no warning at all | `planned: C21-13` |
+| 2.10-16 | **Collapsing two `kind="property"` entries whose declarations contradict**, at `merge_types`, `retire(successor=)` and `import_types`' alias write. **[Observed]** today `zip_code` (`str`) and `postal_code` (`int`) merge once `no_consumer_evidence` and `definitions_diverge` are acknowledged, and every entity using the absorbed word then reads the survivor's type. Whether that is refused, and on which keys, is not decided here | `reserved: Q105` |
+| 2.10-17 | **Retiring a `kind="property"` entry that an active entity's slot still names.** **[Observed]** today it succeeds with no refusal and no warning, because `retire` gates on `consumers()` and nothing registers a consumer of a property. Whether that is refused is not decided here | `reserved: Q104` |
+| 2.10-18 | **Amending an approved entity's declaration**: adding, removing or changing a slot, its key or its title. No governed call exists (§5 has fourteen, and the only amendment call is `EDGES.md`'s `amend_edge`). **[Observed]** today `import_types` re-importing an `active` entity **replaces its whole `attributes`** with no refusal and no warning, which drops a declared `primary_key` as readily as it adds a slot. What may change, through which call, and what that call refuses, is not decided here | `reserved: Q103` |
+| 2.10-19 | A `kind="property"` entry is not a predicate and has no extent. A consumer gates on a predicate (§2.9), so no consumer can gate on a property, and `ROADMAP.md`'s kill row (*"a capability predicate gets merged as a duplicate"*) is not reachable through this kind, because rule 2.10-14's `kind_mismatch` keeps every property collapse away from a predicate | `planned: C21-14` |
+| 2.10-20 | Every printed shape in this section is held by `check_spec_drift.py` as planned, and every `Name:` shape this document prints is either implemented or planned. A shape printed here and listed nowhere is a failure, because an unlisted shape is one the checker cannot see | `prose-only:` held by `check_spec_drift.py` itself, a tool run beside the suite that claims no contract id, the arrangement `ACTIONS.md` §14 used before its build row |
+
+**What this section does not do.** It adds no call, so §5 still has fourteen. It mints no `Refusal.reason`, so §5.12 still has thirty-three. It mints no warning, so §5.4 still has thirty-nine. It does not say how a Foundry property is imported (row 8a), and it does not validate data (option C). The three `reserved:` rules are founder questions Q103, Q104 and Q105 in [`DECISIONS-OPEN.md`](../DECISIONS-OPEN.md), and until each is ruled the shipped behaviour its row records is what a caller gets.
 
 ---
 
@@ -1317,6 +1399,8 @@ resolve_type("latitude", ctx, namespace="dot", tier="opus")
 
 Note what this is not: it is not the resolver being weak. A perfect resolver still has nowhere honest to put the answer.
 
+> **CLOSED by row 8b under ruling R108, and not in the way this section expected.** `property` is now a kind (§2.10), so `resolve_type("latitude", ctx, kind="property")` has an honest answer: `existing` where a namespace registered it, a `kind="property"` proposal where it did not (rule 2.10-11). `not_a_type`'s four reasons are **unchanged** and `property_not_type` is **not** taken, because a property *is* governed vocabulary now and a `not_a_type` answer would say the opposite. **The residual, kept:** with `kind=None` the resolver still proposes an entity (rule 2.10-13). The design test is [`8B-RUN.md`](../runs/8B-RUN.md) §1.2.
+
 ### 10b.4 CONTORTION 11 — a consumer that gates on *values* has no representation, and the nearest expressible thing reports backwards
 
 The UC3-shaped consumer is an operations dashboard that accepts only `Closed` and `In Progress` from B's `status`. §2.9's `Consumer.gate` is **a predicate name**, and a predicate's extent (§2.3) is a set of **types**. There is no value-level gate.
@@ -1393,7 +1477,7 @@ The partner conversations that A1–A3 stand in for. Each row names what arrives
 
 - **`resolve_type` cannot see across namespaces** (§10b.1). It takes `namespace: str` and scores against that namespace alone, so the second publisher of a word is never told the first exists — mechanism **2**, reintroduced by §2.6's answer to mechanism **4**. The smallest honest fix is an additive `search_namespaces: Sequence[str] | None` on §5.3 whose hits land in `alternatives` as `("<namespace>:<name>", score)`. **This is the first thing v1 must answer.**
 - **Nothing says *equivalent, kept apart*** (§10b.2). Every cross-type relation v0 has — `merge_types`, `aliases`, `predicates`, `retire(successor=)` — asserts something stronger than equivalence. The fix is a type-to-type edge, which is **#4**, so UC3 is evidence that `EDGES.md` must carry edges *between types* and not only between instances.
-- **`not_a_type` has no reason for a property** (§10b.3). `latitude` returns `outcome="proposal"`. `property_not_type` is the missing fifth value of §5.3's reason set.
+- ~~**`not_a_type` has no reason for a property** (§10b.3). `latitude` returns `outcome="proposal"`. `property_not_type` is the missing fifth value of §5.3's reason set.~~ **Closed by row 8b** (ruling R108): a property is a kind, not a non-type. §10b.3's closing note and §2.10.
 - **`Consumer.gate` is a predicate name, so a consumer that gates on *values* cannot be expressed** (§10b.4) — and the nearest expressible thing reports that the consumer would drop the type it gates on. **Ruling wanted**; see [`findings/3C-VALIDATION.md`](../findings/3C-VALIDATION.md) §6.
 - **`Provenance` has no `source_version`** (§10b.5). A type derived from a 2017 snapshot and one derived from a daily feed are different claims and record identically.
 
@@ -1416,6 +1500,8 @@ The partner conversations that A1–A3 stand in for. Each row names what arrives
 - Nothing in §5 requires collision to be dominant. The spine is `resolve_type` → `propose_type` → `approve`/`reject`, which is mechanisms 1 and 2; the lifecycle half is mechanism 3; `consumers` is C.
 
 **`ROADMAP.md`'s own kill row — "A capability predicate gets merged as a duplicate" — is structurally blocked**, not merely discouraged: refusal #2 in §5.10 is non-overridable, and `propose_type` deliberately does *not* refuse on near-duplicate (§5.4) precisely so that a locally-correct new predicate can be created rather than folded into an existing one.
+
+**Row 8b's new kind, checked door by door** *(ruling R108, 2026-11-12)*. `kind="property"` opens ten doors, listed in [`8B-RUN.md`](../runs/8B-RUN.md) §0.4 before §2.10 was written. **None reaches the kill row**: a property is not a predicate, no consumer gates on one, and `kind_mismatch` keeps every property collapse away from a predicate (rule 2.10-19). **Three doors stay open and are the founder's**, because closing each one is a refusal: collapsing two properties of different types (2.10-16, Q105), retiring a property still in use (2.10-17, Q104), and amending an approved entity (2.10-18, Q103). The first of those is *one word, two definitions*, which is the governance register's shape rather than the kill row's.
 
 ---
 

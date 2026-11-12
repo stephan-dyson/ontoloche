@@ -634,6 +634,128 @@ def _check_one_document(
 
 
 # ---------------------------------------------------------------------------
+# PLANNED shapes and rules -- printed by a spec row, built by a later one. Row 8b.
+#
+# Row 8b amends INTERFACE.md with section 2.10 (ruling R108) and ships no code, so the
+# three shapes it prints have no dataclass to be held against. Before this block an
+# unlisted printed shape was INVISIBLE to this file -- `SHAPES` is a list of what to
+# check, not a census of what is printed -- so the honest choice was to list the new
+# shapes somewhere the checker can see them, rather than print them where it cannot.
+#
+# What "planned" means here, and the reason it is a check rather than a silence:
+#   1. a planned shape is printed in INTERFACE.md, with at least one field;
+#   2. it is NOT yet defined in any ontoloche module the build row would put it in --
+#      the day one is, this fails until the shape moves to `SHAPES`, which is the
+#      check `ACTIONS.md` asked for ("extend the checker in the same change that lands
+#      the code"), kept true for the half that can run before the code exists;
+#   3. every `Name:` shape INTERFACE.md prints is in `SHAPES` or here. A shape printed
+#      and listed nowhere is a failure.
+#
+# And the planned R31 table: numbering 1..N, every cell `planned:` with `C21` ids the
+# suite does NOT claim yet, `reserved:` naming a founder question, or `prose-only:`
+# with a reason. A `C21` id the suite starts claiming fails, because then the section
+# belongs in `R31_INTERFACE_SECTIONS` and should be checked as implemented.
+
+PLANNED_SHAPES = {
+    # INTERFACE.md 2.10, row 8b, ruling R108. Build row: the properties build row.
+    "PropertySpec",
+    "EntityDeclaration",
+    "SharedPropertyDeclaration",
+}
+
+#: Modules a build row would put a planned shape in. Checked for the NAME only.
+_PLANNED_HOMES = (types_module, attributes_module, registry_module)
+
+PLANNED_R31_INTERFACE_SECTIONS = {
+    # Ruling R108 -- property declarations, governed and never validated against data.
+    "2.10": ("### 2.10", "C21"),
+}
+
+_SHAPE_HEAD = re.compile(r"^([A-Z]\w*):")
+_PLANNED_CELL = re.compile(r"^`?planned:\s*((?:`?C\d+-\d+`?[,\s]*)+)`?$")
+_RESERVED_CELL = re.compile(r"^`?reserved:\s*Q\d+`?$")
+
+
+def _printed_shape_names(blocks: list[str]) -> set[str]:
+    names: set[str] = set()
+    for block in blocks:
+        for chunk in re.split(r"\n(?=\S)", block):
+            m = _SHAPE_HEAD.match(chunk.lstrip())
+            if m and _FIELD.search(chunk):
+                names.add(m.group(1))
+    return names
+
+
+def _check_planned_shapes(blocks: list[str]) -> list[str]:
+    problems: list[str] = []
+    for name in sorted(PLANNED_SHAPES):
+        fields = shape_fields(blocks, name)
+        if not fields:
+            problems.append(
+                f"INTERFACE {name}: listed as PLANNED and the spec prints no `{name}:` "
+                f"block with fields -- a planned shape nobody printed is not planned"
+            )
+        for module in _PLANNED_HOMES:
+            if hasattr(module, name):
+                problems.append(
+                    f"INTERFACE {name}: PLANNED, and {module.__name__} now defines it -- "
+                    f"move it from PLANNED_SHAPES to SHAPES in the change that landed it, "
+                    f"so its fields are held against the code"
+                )
+    for name in sorted(_printed_shape_names(blocks) - set(SHAPES) - PLANNED_SHAPES):
+        problems.append(
+            f"INTERFACE {name}: printed as a shape and listed in neither SHAPES nor "
+            f"PLANNED_SHAPES -- an unlisted shape is one this checker cannot see"
+        )
+    return problems
+
+
+def _check_planned_rules(text: str, implemented: set[str]) -> list[str]:
+    problems: list[str] = []
+    for label, (heading, prefix) in PLANNED_R31_INTERFACE_SECTIONS.items():
+        body = _section(text, heading)
+        if not body:
+            problems.append(f"INTERFACE {label}: the section heading {heading!r} is not there")
+            continue
+        rows = [(n, c) for n, c in _R31_ROW.findall(body) if n.startswith(f"{label}-")]
+        if not rows:
+            problems.append(f"INTERFACE {label}: no planned rule table")
+            continue
+        seen: list[int] = []
+        for number, cells in rows:
+            seen.append(int(number.rsplit("-", 1)[1]))
+            cell = cells.rsplit("|", 1)[-1].strip()
+            planned = _PLANNED_CELL.match(cell)
+            if planned:
+                for cid in re.findall(r"C\d+-\d+", planned.group(1)):
+                    if not cid.startswith(f"{prefix}-"):
+                        problems.append(
+                            f"INTERFACE {number}: planned id {cid} is outside this "
+                            f"section's prefix {prefix}"
+                        )
+                    elif cid in implemented:
+                        problems.append(
+                            f"INTERFACE {number}: {cid} is PLANNED and the suite now claims "
+                            f"it -- move {label} into R31_INTERFACE_SECTIONS so it is "
+                            f"checked as implemented"
+                        )
+                continue
+            if _RESERVED_CELL.match(cell):
+                continue
+            if cell.startswith("`prose-only:`") or cell.startswith("prose-only:"):
+                if len(cell.split("prose-only:", 1)[1].strip(" `")) < 20:
+                    problems.append(f"INTERFACE {number}: `prose-only:` with no reason")
+                continue
+            problems.append(
+                f"INTERFACE {number}: a planned rule's cell must read `planned: "
+                f"{prefix}-NN`, `reserved: QNNN` or `prose-only:` with a reason; it reads "
+                f"{cell[:60]!r}"
+            )
+        if seen != list(range(1, len(seen) + 1)):
+            problems.append(f"INTERFACE {label}: the rule numbers are {seen}, not 1..{len(seen)}")
+    return problems
+
+# ---------------------------------------------------------------------------
 # PACKAGE.md 3.4's printed PRIMITIVE signatures, against the Protocol.
 #
 # Added by row 4b's third adversarial round, and the defect that produced it is the
@@ -1077,6 +1199,8 @@ def main() -> int:
     from ontoloche.contract.test_manifest import implemented_ids
 
     problems.extend(_check_rule_coverage(set(implemented_ids())))
+    problems.extend(_check_planned_rules(text, set(implemented_ids())))
+    problems.extend(_check_planned_shapes(blocks))
 
     if problems:
         print("the specifications have drifted from the implementation:\n")
@@ -1120,7 +1244,11 @@ def main() -> int:
         f"INTERFACE.md: every numbered rule in "
         f"{', '.join(sorted(R31_INTERFACE_SECTIONS))} does too -- row 4d is the first "
         f"row to change rules in this document since R31 landed, and constraint 8 binds "
-        f"every spec rather than one."
+        f"every spec rather than one.\n"
+        f"INTERFACE.md: {len(PLANNED_SHAPES)} PLANNED shapes are printed and not yet built, "
+        f"every printed shape is listed, and every rule in "
+        f"{', '.join(sorted(PLANNED_R31_INTERFACE_SECTIONS))} is planned, reserved or tagged "
+        f"(row 8b, ruling R108)."
     )
     return 0
 
