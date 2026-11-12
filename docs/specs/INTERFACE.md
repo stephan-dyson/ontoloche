@@ -146,7 +146,7 @@ Per **0.3 consequence 2**, the migration mapping from Foundry's `status ∈ {act
 
 `visibility` and `groups` from Foundry land in `attributes`; `apiName` and `rid` land in `provenance.imported_from`.
 
-**Two more rules on the import door, row 8a.** A name outside `^[a-z][a-z0-9_]{0,63}$` is `import_refused:name_invalid` on every backend and the rest of the batch is processed. It used to raise a raw `sqlite3.IntegrityError` on one backend (defect 3, `C12-32`). A row with a missing or blank definition is **not written**, `import_refused:definition_missing`, and `"imported from <system>"` is never written as a definition again (defect 4, ruling **R109**, `C12-33`). An import over a standing row of the same kind is an update and keeps that row's definition. The definition check runs **after** every guard, so a guard's answer is never masked by it (`C17-09`).
+**Two more rules on the import door, row 8a.** A name outside `^[a-z][a-z0-9_]{0,63}$` is `import_refused:name_invalid` on every backend and the rest of the batch is processed. It used to raise a raw `sqlite3.IntegrityError` on one backend (defect 3, `C12-32`). A row with a missing or blank definition is **not written**, `import_refused:definition_missing`, and `"imported from <system>"` is never written as a definition again (defect 4, ruling **R109**, `C12-33`). An import over a standing row of the same kind is an update and keeps that row's definition. **Only** the definition: status, predicates, attributes and aliases are still the incoming row's, as they always were. A `deprecated` row over a name this deployment retired is `name_previously_retired` and nothing is written, so a re-run never rewrites a local tombstone (`C12-44`). A name is checked with `fullmatch`, because `$` matches before a final newline (`C12-46`). The definition check runs **after** every guard, so a guard's answer is never masked by it (`C17-09`).
 
 #### 2.5a `import_foundry` — a Foundry `OntologyFullMetadata` document, planned first *(row 8a, 2026-11-12)*
 
@@ -168,8 +168,8 @@ def import_foundry(
 |---|---|
 | interface type | `kind="predicate"`. The property contract, links and `extendsInterfaces` in `attributes["foundry_interface"]` |
 | object type | `kind="entity"`, its converted `implementsInterfaces` as predicates. Properties, `primaryKey` and `titleProperty` carried verbatim in `attributes["foundry_properties"]` with `"validated": false` (ruling **R105**'s interim `carry`). Every other key in `attributes["foundry_object_type"]` |
-| link type | `kind="edge"`, `level="instance"`, `symmetric=False`, entity to entity. Both sides pair by `linkTypeRid` into **one** family. The forward side carries `foreignKeyPropertyApiName`, else it is the first by `(objectType apiName, side apiName)`. Its converted `apiName` is the name and the other side's is `inverse_label` (`None` when unpaired). Cardinality is carried per side in `attributes["foundry_link"]`, because `EDGES.md` has no key for it (contortion) |
-| action type | `kind="action"` declaring **none** of `ACTIONS.md` §2.2's eight keys, which rule 2.2-1 makes legal and not yet usable. Foundry gives no reversibility or approval mode, and guessing them is what Rule U forbids. The `Effect.op` each logic rule *would* map to is **reported**: `createLink`/`addLink` to `add_edge`, `deleteLink`/`removeLink` to `retract_edge`, anything else to `host_state` with a `why`. `fullLogicRules` is read in preference to `operations` |
+| link type | `kind="edge"`, `level="instance"`, `symmetric=False`, entity to entity. Both sides pair by `linkTypeRid` into **one** family. The forward side carries `foreignKeyPropertyApiName`, else it is the first by `(objectType apiName, side apiName)`. Its converted `apiName` is the name and the other side's is `inverse_label` (`None` when unpaired). **The forward side's `status` is the family's**, mapped as every other kind's (`C12-50`), and each side's own status stays in `attributes["foundry_link"]["sides"]`. Cardinality is carried per side in `attributes["foundry_link"]`, because `EDGES.md` has no key for it (contortion) |
+| action type | `kind="action"` declaring **none** of `ACTIONS.md` §2.2's eight keys, which rule 2.2-1 makes legal and not yet usable. Foundry gives no reversibility or approval mode, and guessing them is what Rule U forbids. The `Effect.op` each logic rule *would* map to is **reported**: `createLink`/`addLink`/`createInterfaceLink` to `add_edge`, `deleteLink`/`removeLink`/`deleteInterfaceLink` to `retract_edge`, anything else to `host_state` with a `why`. `fullLogicRules` is read in preference to `operations` |
 | query types, shared property types, value types | not imported, counted in `not_imported` |
 | `apiName`, `rid` | `provenance.imported_from`, as §2.5. **The `apiName` is not written into `aliases`**: an alias is an identity claim that runs every guard at the alias door, and the Foundry name is recoverable from provenance |
 
@@ -186,6 +186,7 @@ FoundryImportReport:
     looks_like:   list[LookAlike]          # resolve_type's answers naming a different word
     not_imported: dict                     # queryTypes, sharedPropertyTypes, valueTypes counts
     entries:      list[TypeEntry]          # import_types' own return; empty on a dry run
+    unmatched:    dict                     # names= and definitions= keys that matched no item
 ```
 
 ```
@@ -196,7 +197,7 @@ FoundryItem:
     outcome:            str                # would_write | held | written | refused
     reason:             str | None         # the hold reason, or import_types' refusal reason
     warnings:           list[str]          # the returned entry's, on a real run
-    detail:             dict               # standing, and predicates | inverse_label, sides | effects
+    detail:             dict               # key, standing, unresolved, and predicates | inverse_label, sides | effects
     carried_properties: int                # properties carried under R105
 ```
 
@@ -207,6 +208,10 @@ LookAlike:
     matched: str                           # the word the vocabulary already has
     score:   float | None                  # resolve_type's own score, unmodified
 ```
+
+**Every item says how to lift its hold** *(round 1)*. `detail["key"]` is the exact key `names=` and `definitions=` take, which for a link is `"<objectType>.<side>"`, because Foundry's link side `apiName` is unique per object type, not per ontology. A collision's `detail["colliding"]` lists keys. A map key that matches no item is listed in `unmatched`, and a map value that is not a `str` raises `TypeError` naming the key. `implementsInterfaces2`'s keys are read beside `implementsInterfaces`.
+
+**A row pointing at a row this import does not write is reported, never held** *(round 1, `C12-45`)*. An entity whose interface is held, or not in the document, and an edge whose endpoint entity is held or absent, carry `detail["unresolved"]`, e.g. `[{"predicate": "iface", "why": "held:definition_missing"}]`. A word the store already holds is not listed. Holding the dependent as well would decide a refusal, and that is the founder's.
 
 **Look-alikes** are `resolve_type`'s answers, unmodified, filtered at the namespace's own `near_duplicate_threshold` (`PACKAGE.md` §2.6). `resolve_type`'s `alternatives` carry every scored name down to 0.0, and unfiltered every planned edge name "looked like" the seeded `equivalent_to` at 0.08 to 0.32 (**[Observed]**, row 8a). `detail["standing"]` says whether the name is already held, because importing it replaces that row. `C12-39`.
 

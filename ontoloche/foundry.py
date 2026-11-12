@@ -51,8 +51,10 @@ KIND_ORDER = ("predicate", "entity", "edge", "action")
 
 #: Brief question 4, interim and REPORTED ONLY (``8A-RUN.md`` §0.7). Imported action
 #: families declare no effects, so nothing in this row refuses on this table.
-LINK_ADD_RULES = frozenset({"createLink", "addLink"})
-LINK_REMOVE_RULES = frozenset({"deleteLink", "removeLink"})
+#: ``createInterfaceLink`` / ``deleteInterfaceLink`` are published by the SDK as
+#: ``CreateInterfaceLinkLogicRule`` / ``DeleteInterfaceLinkLogicRule`` (round 1).
+LINK_ADD_RULES = frozenset({"createLink", "addLink", "createInterfaceLink"})
+LINK_REMOVE_RULES = frozenset({"deleteLink", "removeLink", "deleteInterfaceLink"})
 
 #: Object type keys mapped to a field of their own. Every other key is carried in
 #: ``attributes["foundry_object_type"]``, so nothing Foundry said is dropped.
@@ -132,6 +134,9 @@ class FoundryImportReport:
     not_imported: dict = field(default_factory=dict)
     #: ``import_types``' own return value, in call order. Empty on a dry run.
     entries: tuple = ()
+    #: ``names=`` and ``definitions=`` keys that matched no item (round 1). A key that
+    #: matches nothing lifts nothing, and used to say nothing.
+    unmatched: dict = field(default_factory=lambda: {"names": [], "definitions": []})
 
     def count(self, **match: Any) -> int:
         """``report.count(outcome="held", kind="edge")``."""
@@ -154,6 +159,8 @@ class _Planned:
     detail: dict
     carried: int = 0
     reason: str | None = None
+    #: ``(label, kind, apiName, name)`` of each row this one points at (round 1).
+    refs: list = field(default_factory=list)
 
 
 def _named(key: str, names: dict[str, str]) -> str:
@@ -182,6 +189,8 @@ def _effects(action_api_name: str, doc: dict) -> list[dict]:
     for rule in rules:
         rule_type = rule.get("type")
         link = rule.get("linkTypeApiName") or rule.get("linkTypeApiNameAtoB")
+        if link is None and rule.get("interfaceLinkTypeApiName"):
+            link = f"{rule.get('interfaceTypeApiName')}.{rule['interfaceLinkTypeApiName']}"
         if rule_type in LINK_ADD_RULES:
             out.append({"op": "add_edge", "rule": rule_type, "link": link, "source": source})
         elif rule_type in LINK_REMOVE_RULES:
@@ -250,6 +259,12 @@ def plan(
     """
     names = dict(names or {})
     definitions = dict(definitions or {})
+    # A caller's type error, not a hold: ``names={"Foo": 5}`` raised a bare
+    # ``TypeError`` from inside the regex (round 1). Said here, naming the key.
+    for label, mapping in (("names", names), ("definitions", definitions)):
+        for key, value in mapping.items():
+            if not isinstance(value, str):
+                raise TypeError(f"{label}[{key!r}] must be a str, got {type(value).__name__}")
     planned: list[_Planned] = []
 
     for api, iface in sorted((doc.get("interfaceTypes") or {}).items()):
@@ -273,9 +288,12 @@ def plan(
         ot = full.get("objectType") or {}
         name = _named(api, names)
         entity_names[api] = name
-        predicates = [
-            iface_names.get(i, _named(i, names)) for i in full.get("implementsInterfaces") or ()
-        ]
+        # The published `ObjectTypeFullMetadata` carries both the list and the map
+        # (`implementsInterfaces2`, "implements and how"), and only the list was read
+        # (round 1). The union, in the list's order first.
+        declared = list(full.get("implementsInterfaces") or ())
+        declared += [i for i in (full.get("implementsInterfaces2") or {}) if i not in declared]
+        predicates = [iface_names.get(i, _named(i, names)) for i in declared]
         properties = ot.get("properties") or {}
         attributes = {
             "foundry_properties": {
@@ -302,6 +320,7 @@ def plan(
                     "attributes": attributes,
                 },
                 detail={"predicates": predicates},
+                refs=[("predicate", "interface", i, n) for i, n in zip(declared, predicates)],
                 carried=len(properties),
             )
         )
@@ -341,6 +360,10 @@ def plan(
                     },
                 },
                 detail={"inverse_label": inverse_label, "sides": len(sides)},
+                refs=[
+                    ("src", "entity", ot_api, family["src"]),
+                    ("dst", "entity", side.get("objectTypeApiName", ""), family["dst"]),
+                ],
             )
         )
 
@@ -364,17 +387,40 @@ def plan(
         )
 
     _hold(planned)
+    by_api = {(p.kind, p.api_name): p for p in planned if p.kind in ("predicate", "entity")}
     for p in planned:
         p.detail.setdefault("standing", False)
+        # The exact key `names=` and `definitions=` take for this item. For a link it
+        # is `"<objectType>.<side>"`, which no other field carried (round 1).
+        p.detail["key"] = p.key
+        # **A row pointing at a row this import does not write** (round 1). Reported,
+        # never held: holding the dependent too would decide a refusal, which is the
+        # founder's. `import_foundry` drops an entry whose word the store already holds.
+        unresolved = []
+        for label, kind, api, name in p.refs:
+            target = by_api.get((kind if kind != "interface" else "predicate", api))
+            if target is None:
+                unresolved.append({label: name, "why": "not_in_document"})
+            elif target.reason is not None:
+                unresolved.append({label: name, "why": f"held:{target.reason}"})
+        if unresolved:
+            p.detail["unresolved"] = unresolved
     planned.sort(key=lambda p: KIND_ORDER.index(p.kind))
     not_imported = {k: len(doc.get(k) or {}) for k in _NOT_IMPORTED}
-    return planned, not_imported
+    keys = {p.key for p in planned}
+    unmatched = {
+        "names": sorted(k for k in names if k not in keys),
+        "definitions": sorted(k for k in definitions if k not in keys),
+    }
+    return planned, not_imported, unmatched
 
 
 def _hold(planned: list[_Planned]) -> None:
     """Apply the four holds. First reason wins, in the order a caller has to fix them."""
     for p in planned:
-        if not NAME_RE.match(p.name):
+        # `fullmatch`: `$` matches before a final newline, so `.match` let
+        # `"person\n"` through (round 1).
+        if not NAME_RE.fullmatch(p.name):
             p.reason = "name_invalid"
     by_word: dict[tuple[str, str], list[_Planned]] = {}
     for p in planned:
@@ -384,7 +430,9 @@ def _hold(planned: list[_Planned]) -> None:
         if len(members) > 1:
             for p in members:
                 p.reason = "name_collision_after_conversion"
-                p.detail["colliding"] = sorted(m.api_name for m in members)
+                # Keys, not apiNames: two link sides named `owner` on two object
+                # types gave `["owner", "owner"]`, which no map can address (round 1).
+                p.detail["colliding"] = sorted(m.key for m in members)
     for p in planned:
         status = p.row.get("status")
         if p.reason is None and status is not None and str(status).upper() not in KNOWN_STATUSES:

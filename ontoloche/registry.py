@@ -5591,7 +5591,9 @@ class Registry:
             # `IntegrityError` out of a call that returns entries, on one backend, with
             # the rest of the batch unprocessed. Checked FIRST, because every later
             # statement in this body reads the name as a word.
-            if not isinstance(name, str) or not NAME_RE.match(name):
+            # `fullmatch`, because `$` matches before a final newline and `.match` let
+            # `"person\n"` be written (row 8a, round 1, `C12-46`).
+            if not isinstance(name, str) or not NAME_RE.fullmatch(name):
                 out.append(
                     self._refused_import(
                         namespace, str(name if name is not None else ""),
@@ -5747,7 +5749,16 @@ class Registry:
                             )
                         )
                         continue
-            if standing is not None and standing.status == "retired" and status != "retired":
+            # **Retired over retired is refused too** (row 8a, round 1, `C12-44`). The
+            # clause read `and status != "retired"`, so a Foundry `deprecated` row over
+            # a name this deployment retired went to `put_type` and rewrote the
+            # tombstone's `retire_reason`, `retired_by` and `retired_at` -- the harm
+            # the paragraph above names, reached by the ordinary re-run of a migration.
+            # Only the row THIS call would overwrite: a retired variant spelling found
+            # by the scan above is not touched by writing a retired `name` (`C12-20`).
+            if standing is not None and standing.status == "retired" and (
+                status != "retired" or standing.name == name
+            ):
                 out.append(
                     self._entry(standing, extra_warnings=("name_previously_retired",))
                 )
@@ -5898,6 +5909,7 @@ class Registry:
                     declared_here = SimpleNamespace(
                         kind=incoming_kind, attributes=row.get("attributes") or {}
                     )
+                    refused_here = False
                     for word in incoming:
                         # **THE `why` IS READ, and dropping it was finding A3** (row 6d,
                         # round 3; ruling **R94**'s change 4). This read
@@ -5957,16 +5969,17 @@ class Registry:
                                         extra=extra_import_warnings,
                                     )
                                 )
+                                refused_here = True
                                 break
                         else:
                             continue
                         break
                     else:
                         pass
-                    if out and out[-1].warnings and any(
-                        w == "import_refused:action_declarations_diverge"
-                        for w in out[-1].warnings
-                    ):
+                    # **THIS row's refusal, not the last entry's** (row 8a, round 1,
+                    # `C12-48`). Reading `out[-1]` let the action row after a refused
+                    # one `continue` with no entry: three rows in, two entries out.
+                    if refused_here:
                         continue
                 # **The identity guards run FIRST, and the order is the finding.**
                 # `_alias_clash` asks *"is this word already spoken for by something
@@ -6226,9 +6239,27 @@ class Registry:
         ``name_invalid``, ``name_collision_after_conversion`` (R110) and
         ``definition_missing`` (R109) holds.
         """
-        planned, not_imported = foundry_plan(
+        planned, not_imported, unmatched = foundry_plan(
             full_metadata, names=names, definitions=definitions
         )
+        # A word the store already holds is not unresolved: the plan only knows the
+        # document, and this is where the store is asked (round 1, `C12-45`).
+        for p in planned:
+            if "unresolved" in p.detail:
+                still = [
+                    ref
+                    for ref in p.detail["unresolved"]
+                    if self.adapter.get_type(
+                        namespace,
+                        next(v for k, v in ref.items() if k != "why"),
+                        kind="predicate" if "predicate" in ref else "entity",
+                    )
+                    is None
+                ]
+                if still:
+                    p.detail["unresolved"] = still
+                else:
+                    del p.detail["unresolved"]
         context = ResolveContext(source="import:foundry dry run")
         # **The deployment's own near-duplicate line, not one this method invents.**
         # `resolve_type`'s `alternatives` carries every scored name down to 0.0, so on a
@@ -6299,6 +6330,7 @@ class Registry:
             looks_like=tuple(looks),
             not_imported=not_imported,
             entries=tuple(entries),
+            unmatched=unmatched,
         )
 
     # ===================================================================== edges

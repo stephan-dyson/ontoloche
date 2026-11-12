@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 13 ruled · 7 FYI** *(2026-11-12: item 23 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**2 open · 13 ruled · 7 FYI** *(2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -86,9 +86,9 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ## E. Ruled — 13 items
 
-### 23 · Row 8a's two Foundry import questions → **RULED: `hold + override map` (R109) and `hold both + names map` (R110)** *(2026-11-12)*
+### 24 · Row 8a's two Foundry import questions → **RULED: `hold + override map` (R109) and `hold both + names map` (R110)** *(2026-11-12)*
 
-**Recorded as [R109–R110](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-11-12-founder-rulings-R109-R110.md).** Numbered provisionally, because row 8b runs in parallel on `main` and may mint rulings of its own first. Row 8b's `Q106` (item 22 on `main`) already cites R109 as provisional, so if the numbers move, that citation moves with them. **Item 23**, because `main` has taken item 22.
+**Recorded as [R109–R110](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-11-12-founder-rulings-R109-R110.md).** Numbered provisionally, because row 8b runs in parallel on `main` and may mint rulings of its own first. Row 8b's `Q106` (item 22 on `main`) already cites R109 as provisional, so if the numbers move, that citation moves with them. **Item 24**, because `main` has taken items 19 to 23 for row 8b (`Q103`–`Q107`).
 
 *New 2026-11-12. Asked by row 8a before its §0 was written, because both decide what the registry refuses.*
 

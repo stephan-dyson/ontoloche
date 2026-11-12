@@ -130,3 +130,96 @@ Each is fixed at `import_types`, where `FOUNDRY-PARITY.md` §2 observed it, so b
 1. A §0.4 falsifier fires and the fix cannot be made without changing what another door refuses. That goes to the founder.
 2. §0.5 item 2 is falsified by `check_merge_guard.py`. Then `import_foundry` is a door, and it gets a Part B row before the row continues.
 3. The adversarial loop's stopping rule (`6J-RUN.md` §5, `Q5` as ruled in `answers-10` §1) is not met by round 5. Then the row stops and brings the finding rather than fixing it.
+
+---
+
+## 1. Results
+
+### 1.1 Predictions against what was measured
+
+**Every §0.3 row matched on both fixtures, after one deviation (§1.2 item 1).** **[Observed]** by `measure.py`, which runs `import_foundry` dry on an empty sqlite store with every adapter write primitive wrapped in a counter, then runs it for real on a second empty store.
+
+| | `employee` predicted | observed | `legacy` predicted | observed |
+|---|---|---|---|---|
+| would write, total | 3 | 3 | 19 (3 predicates, 5 entities, 11 actions) | 19 (3, 5, 11) |
+| held `definition_missing` | 3 | 3 | 16 | 16 |
+| other holds | 0 | 0 | 0 | 0 |
+| unpaired link sides | 1 | 1 (`visited_offices`) | 4 | 4 |
+| properties carried | 19 | 19 | 75 | 75 |
+| not imported (query / shared property / value) | 0 / 0 / 0 | 0 / 0 / 0 | 21 / 1 / 0 | 21 / 1 / 0 |
+| ops `host_state` / `add_edge` / `retract_edge` | 0 / 0 / 0 | 0 / 0 / 0 | 6 / 0 / 0 | 6 / 0 / 0 |
+| look-alikes | 0 | 0, after the filter | 0 | 0, after the filter |
+| write primitives during the dry run | 0 | 0 | 0 | 0 |
+| real run: written / refused | 3 / 0 | 3 / 0 | 19 / 0 | 19 / 0 |
+
+Every written predicate carries `predicate_requires_review`, and no written row carries an `import_refused` warning. **[Observed]**
+
+**The four §0.4 falsifiers did not fire.** `C12-30` to `C12-33` were red before the code (`06e2d3b`) and are green after it, on all three legs and in the async mirror.
+
+**§0.5 held.** `check_merge_guard.py` Part A discovered no new writer of `aliases` or `successor` (item 2), so `import_foundry` needed no `KNOWN_CALLERS` verdict and §0.9 item 2 did not trip. `C12-34` counts the write primitives (item 4) and `C12-40` drives the name-door guards through `import_foundry` (item 3).
+
+### 1.2 Deviations
+
+1. **Look-alikes are filtered at the namespace's `near_duplicate_threshold`.** §0.3 predicted 0 look-alikes and said nothing about a filter. **[Observed]** `resolve_type`'s `alternatives` carry every scored name down to 0.0, so unfiltered `employee` reported 3 look-alikes and `legacy` 6, every one against the seeded `equivalent_to` at 0.0 to 0.32. The filter uses the policy value the write door already uses (`PACKAGE.md` §2.6, default 0.72), so it adds no new number. **[Observed]** `facilities` against `facility` scores 0.7778 and is still reported. Written into `INTERFACE.md` §2.5a.
+2. **`C8-04`'s fixture gained a definition.** Its row had none and was written with the old `"imported from <system>"` placeholder. Under R109 it is refused, so the test's subject (provenance) disappeared. The row now carries `"definition": "a scheduled flight"`, with a comment citing R109. This is a test changing because a ruling changed what the door does, not a test bent to pass.
+3. **The definition check runs after every guard, not first.** The first cut checked the definition before the guards, and `C17-09` went red on every capability configuration of `check_capability_matrix`: a definition-less row over a retired name answered `definition_missing` where the guard's `name_previously_retired` is the true answer. The check moved to just before the write, so a guard's reason is never masked.
+4. **`FOUNDRY_FIXTURES` is `FIXTURE.parent` in `_support.py`,** not a path built from `__file__` in the test module, because the async mirror's copy of the test lives in another directory and would otherwise look for fixtures that are not there.
+5. **Two RIDs differ between generator runs:** the ontology `rid` and `editTodo`'s action `rid`. `@osdk/faux` mints them. Nothing in the importer or the tests keys on either, so the committed fixtures are one run's output and re-running `generate.mts` gives a two-line diff.
+6. **The brief's fixture check ("parses with the SDK") was replaced before code,** as §0.1 item 2 and §0.5 record, because Palantir's own fixtures fail Palantir's own model. `check_foundry_fixtures.py` applies the allow-list and exits 0 on all five fixtures. **[Observed]**
+
+7. **§0.5 item 4 names `put_attribute_schema`.** The adapter's primitive is `put_attr_schema`, and the test's list uses the right name. §0 stays as committed, so the stale name is corrected here rather than there.
+8. **§0.7 question 3 said cardinality would be "listed in the report as a contortion".** No report field lists contortions. Cardinality is carried per side in `attributes["foundry_link"]`, and `INTERFACE.md` §2.5a names it a contortion in prose. A report field for it was not added.
+
+### 1.3 Use cases
+
+1. **UC2, CMS (`C12-42`).** 7 of 7 names match `cms_vocabulary()`: 4 entities and 3 edge families. The 2 CMS value sets do not import, as predicted, because value types are out of scope. **That is a gap, not a pass.** Value types are where a CMS-shaped customer keeps its controlled vocabularies.
+2. **UC3, NYC (`C12-43`).** One Foundry ontology imports into one namespace, so the `dpr` / `oti_311` split is not reproduced, as predicted. This is the evidence brief question 2 asked for. Splitting a document across namespaces is a later row's call.
+3. **UC1, Tenshen.** Not tested, as §0.6 said.
+
+### 1.4 Gates and suite
+
+**[Observed]** on `e3411c0`, with `OO_POSTGRES_DSN` set and the `oo-pg` container up. Three legs, both contract directories: **1998 passed, 640 skipped, 0 failed** (22 min 48 s). The postgres leg reports `CONFORMANT: 423 ids exercised, 1 not exercisable`. All five gates exit 0: `check_links`, `check_spec_drift`, `check_merge_guard`, `check_capability_matrix`, `check_skip_census` (5 result-conditioned skips, baseline 5).
+
+**After round 1's fixes** (`C12-44`–`C12-51`): **2040 passed, 646 skipped, 0 failed** (21 min 48 s), postgres `CONFORMANT: 431 ids exercised, 1 not exercisable`, and all five gates exit 0 again, skip census still 5 against a baseline of 5. **[Observed]**
+
+### 1.5 Shared files this row changed, for the merge with row 8b
+
+Row 8b landed on `main` (`586ba1a..22933f8`) while this row ran, adding `INTERFACE.md` §2.10 and changing `check_spec_drift.py`. **This branch was not rebased**, per the supervisor's instruction, so the merge resolves these. Properties stay under R105 `carry`; mapping them under §2.10 is a later row's.
+
+| File | What this row changed | Why |
+|---|---|---|
+| `docs/specs/INTERFACE.md` §2.5 | two rows added to the status table (`endorsed`; `example` or any other value), and a paragraph after the table on `name_invalid`, `definition_missing`, the definition check's order, retired-over-retired and `fullmatch` | defects 1 to 4 (§0.4), R109, and round 1's `C12-44` / `C12-46` |
+| `docs/specs/INTERFACE.md` §2.5a | **new subsection**, inserted between §2.5 and §2.6: `import_foundry`'s signature, mapping table, name rules, holds, the three printed shapes (`FoundryImportReport`, `FoundryItem`, `LookAlike`), `key` / `unresolved` / `unmatched`, the look-alike filter and what a dry run cannot say | the call this row adds. §2.10 sits after §2.9 on `main`, so the two do not overlap in place, only in the hunk offsets |
+| `docs/specs/INTERFACE.md` §5.4 | the `import_refused` row of the refusal table names four import-only reasons and cites `C12-31`–`C12-33` | so the closed refusal list matches the code |
+| `docs/tools/check_spec_drift.py` | `import_foundry` added to `CALLS`; a `FOUNDRY_SHAPES` dict near `CALLS`; a block in `main()` checking §2.5a's three printed shapes against `ontoloche.foundry` | so §2.5a is held to the code like every other printed shape. Additive: a merge keeps both rows' additions |
+| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 436), the C12 header (29 → 51) and table rows `C12-30`–`C12-51` | the new contract ids. `main` did not touch this file |
+| `ontoloche/contract/test_manifest.py` | `12: 51`, `TOTAL = 436` | the manifest checks the counts above. `main` did not touch this file |
+| `docs/DECISIONS-OPEN.md` | item **24** (R109–R110, ruled) and the header line | first numbered 23; renumbered after `main` took 19 to 23 for `Q103`–`Q107`. The header's open and ruled counts will need re-adding at the merge, because both rows changed them |
+
+### 1.6 Adversarial loop
+
+**The bar** is `6J-RUN.md` §5's stopping rule as `answers-10` §1 ruled it: the loop ends when a full round finds no in-scope code MAJOR reachable by a shape a contributor would plausibly write, measured by whether that shape, or anything structurally like it, appears in the live suite. Cap 5 rounds (§0.9 item 3). Each round is three fresh reviewers on Sonnet, one lens each, with no knowledge of earlier rounds.
+
+#### Round 1: three lenses, five MAJORs, all fixed
+
+| Lens | Finding | Fix | Id |
+|---|---|---|---|
+| guards | **A `deprecated` import over a name this deployment retired rewrote the tombstone.** The un-retire guard read `status != "retired"`, so retired-over-retired went straight to `put_type`, and `retire_reason`, `retired_by` and `retired_at` became the import's. That is the ordinary re-run of a migration. **Pre-existing** at `import_types`, and made routine by this row | refused `name_previously_retired`, narrowed to the row the call overwrites, because a retired variant spelling is not touched (`C12-20` caught the first cut) | `C12-44` |
+| mapping | **A held interface, or one the document never defines, left a written entity declaring a predicate nobody wrote**, and a held entity left a written edge pointing at it. The item said `written` and nothing else | `detail["unresolved"]` names each, with why. **Reported, not held**, because holding the dependent would decide a refusal | `C12-45` |
+| mapping | **A link-name collision could not be lifted from the report.** Foundry's link side `apiName` is unique per object type, so `Task.owner` and `Project.owner` collide, and the item gave `colliding: ["owner", "owner"]` and never the `"Task.owner"` key `names=` takes | every item carries `detail["key"]`, a collision lists keys, and unmatched map keys are reported in `unmatched` | `C12-46` |
+| tests | **§0.5 item 1 had no falsifier on a real run.** One `import_types` call per item, a stray second call, or a `register_consumer` after the call all left the suite green | the real run is spied on: one call, kind order, no consumer, and the store gains exactly the written set | `C12-49` |
+| tests | **A link's status was never exercised.** Every fixture link is ACTIVE, so dropping the edge row's status left the suite green, and a `DEPRECATED` link would have landed live | the forward side's status governs, stated in §2.5a, and `DEPRECATED` / `EXAMPLE` links are tested | `C12-50` |
+
+**MINORs taken:** a trailing-newline name passed `NAME_RE.match` at both the planner and `import_types`, so it is now `fullmatch` at both (`C12-46`). A non-`str` map value raises `TypeError` naming the key. `implementsInterfaces2` is read, and `createInterfaceLink` / `deleteInterfaceLink` report `add_edge` / `retract_edge` (`C12-47`). A **pre-existing** `import_types` defect, where an action row after a divergence refusal was dropped with no entry, is fixed (`C12-48`). `word_previously_retired` and `alias_collision` are now driven through `import_foundry` (`C12-51`). The two `NAME_RE`s are pinned to one pattern, one word across two kinds is pinned as not a collision, and RIDs, `imported_by` and the ontology are asserted (`C12-49`).
+
+**MINORs declined, on the record:**
+- **`extendsInterfaces` is not followed into predicates.** Transitive membership is predicate semantics, which row 8b's spec owns, and the chain is carried in `attributes["foundry_interface"]`.
+- **A link is held for a definition by default.** That is R109 applied as ruled. A `displayName` fallback would be a default that decides a refusal, and that is the founder's.
+- **The inverse side's status is not reported in `detail`.** It is carried in `attributes["foundry_link"]["sides"]`.
+- **The status refusal runs before the retired-name guard.** An `EXAMPLE` row over a retired name answers `foundry_example` rather than `name_previously_retired`. Both refuse and neither writes.
+- **`NAME_RE.match` at `propose_type` (`registry.py` 2083, 2621) and `attributes.py` is unchanged.** Those are other doors, and §0.9 item 1 says changing what another door refuses is not this row's. The trailing-newline residual is named here for the row that owns them.
+- **The look-alike filter's boundary is not pinned by a test of its own.** `C12-34` kills the unfiltered form.
+
+**Each fix was proven by mutation.** Eight mutations were run against a copy, one per fix: the link status dropped, one call per item, kind order reversed, collision keyed across kinds, `word_previously_retired` unread, the tombstone guard reverted, `unresolved` dropped, and `out[-1]` restored. **All eight were killed.** **[Observed]**
+
+
