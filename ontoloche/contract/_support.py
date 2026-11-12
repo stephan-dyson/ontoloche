@@ -652,7 +652,9 @@ def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
 #: (`docs/tools/foundry_faux/build_hand_fixtures.py`). All five are shape-checked by
 #: `docs/tools/check_foundry_fixtures.py`, which is not part of this suite because the
 #: SDK it needs is a test-only extra.
-FOUNDRY_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+#: Derived from `FIXTURE` rather than from `__file__`, so the generated async copy of
+#: this module reads the same files through `tools/unasync.py`'s one substitution.
+FOUNDRY_FIXTURES = FIXTURE.parent
 
 
 def foundry_fixture(name: str) -> dict:

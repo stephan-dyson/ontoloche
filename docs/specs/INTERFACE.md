@@ -141,8 +141,76 @@ Per **0.3 consequence 2**, the migration mapping from Foundry's `status ∈ {act
 | `active` | `active` | direct |
 | `deprecated` | `retired`, with `retire_reason: "imported: foundry deprecated"` | direct |
 | `experimental` | **`active`, plus predicate `experimental`** | **Not `proposed`.** `proposed` here means *no one has approved it*; a Foundry `experimental` type has been approved and is in use. Collapsing them would silently un-approve a customer's live vocabulary |
+| `endorsed` *(row 8a)* | **`active`, plus predicate `endorsed`** | `experimental`'s precedent. It fell through to plain `active`, so an owner's vetting vanished on arrival (`FOUNDRY-PARITY.md` §2 defect 1). `C12-30` |
+| `example`, or any other value *(row 8a)* | **not written**: `import_refused:foundry_example`, or `import_refused:status_unknown` | Both fell through to `active`, so a template's demo types entered the vocabulary as live types (defect 2). The published `ReleaseStatus` has exactly four values, `ACTIVE`, `ENDORSED`, `EXPERIMENTAL`, `DEPRECATED`, and nothing outside them is guessed. A row with **no** status still imports `active`. `C12-31` |
 
 `visibility` and `groups` from Foundry land in `attributes`; `apiName` and `rid` land in `provenance.imported_from`.
+
+**Two more rules on the import door, row 8a.** A name outside `^[a-z][a-z0-9_]{0,63}$` is `import_refused:name_invalid` on every backend and the rest of the batch is processed. It used to raise a raw `sqlite3.IntegrityError` on one backend (defect 3, `C12-32`). A row with a missing or blank definition is **not written**, `import_refused:definition_missing`, and `"imported from <system>"` is never written as a definition again (defect 4, ruling **R109**, `C12-33`). An import over a standing row of the same kind is an update and keeps that row's definition. The definition check runs **after** every guard, so a guard's answer is never masked by it (`C17-09`).
+
+#### 2.5a `import_foundry` — a Foundry `OntologyFullMetadata` document, planned first *(row 8a, 2026-11-12)*
+
+`import_types` takes rows already in this registry's shape. `import_foundry` takes what Foundry emits, the `OntologyFullMetadata` document of `GET /v2/ontologies/{ontology}/fullMetadata`, and is **a planner in front of `import_types`, not a new door**: its only write is one `import_types` call, made only when `dry_run=False`, so every guard on the import door applies unchanged. The run record is [`runs/8A-RUN.md`](../runs/8A-RUN.md), whose §0 fixed the mapping before the code.
+
+```
+def import_foundry(
+    full_metadata: dict,           # Foundry OntologyFullMetadata, as parsed JSON
+    *,
+    namespace: str = "default",    # one document, one namespace (brief question 2)
+    dry_run: bool = True,          # what WOULD happen, writing nothing
+    names: dict[str, str] | None = None,        # apiName -> name; lifts name_invalid and R110
+    definitions: dict[str, str] | None = None,  # apiName -> definition; lifts R109
+    imported_by: str = "import:foundry",
+) -> FoundryImportReport
+```
+
+| Foundry | Ours |
+|---|---|
+| interface type | `kind="predicate"`. The property contract, links and `extendsInterfaces` in `attributes["foundry_interface"]` |
+| object type | `kind="entity"`, its converted `implementsInterfaces` as predicates. Properties, `primaryKey` and `titleProperty` carried verbatim in `attributes["foundry_properties"]` with `"validated": false` (ruling **R105**'s interim `carry`). Every other key in `attributes["foundry_object_type"]` |
+| link type | `kind="edge"`, `level="instance"`, `symmetric=False`, entity to entity. Both sides pair by `linkTypeRid` into **one** family. The forward side carries `foreignKeyPropertyApiName`, else it is the first by `(objectType apiName, side apiName)`. Its converted `apiName` is the name and the other side's is `inverse_label` (`None` when unpaired). Cardinality is carried per side in `attributes["foundry_link"]`, because `EDGES.md` has no key for it (contortion) |
+| action type | `kind="action"` declaring **none** of `ACTIONS.md` §2.2's eight keys, which rule 2.2-1 makes legal and not yet usable. Foundry gives no reversibility or approval mode, and guessing them is what Rule U forbids. The `Effect.op` each logic rule *would* map to is **reported**: `createLink`/`addLink` to `add_edge`, `deleteLink`/`removeLink` to `retract_edge`, anything else to `host_state` with a `why`. `fullLogicRules` is read in preference to `operations` |
+| query types, shared property types, value types | not imported, counted in `not_imported` |
+| `apiName`, `rid` | `provenance.imported_from`, as §2.5. **The `apiName` is not written into `aliases`**: an alias is an identity claim that runs every guard at the alias door, and the Foundry name is recoverable from provenance |
+
+**Names.** Insert `_` before an upper-case letter following a lower-case letter or digit, and before the last capital of an acronym run followed by a lower-case letter. Lower-case, replace each run outside `[a-z0-9]` with one `_`, and strip `_` from both ends. A link is keyed `"<objectType apiName>.<side apiName>"` of its forward side in both maps.
+
+**Four holds, before `import_types` is called, writing nothing:** `name_invalid`, `name_collision_after_conversion` (ruling **R110**: every member of the collision is held, and a name from `names=` goes through the same check), `status_not_imported` (a status outside the published four), and `definition_missing` (ruling **R109**). The first that applies wins. Rows go to `import_types` in the order predicates, entities, edges, actions.
+
+```
+FoundryImportReport:
+    dry_run:      bool
+    namespace:    str
+    ontology:     dict                     # the document's ontology apiName and rid
+    items:        list[FoundryItem]        # one per Foundry type, link family or action
+    looks_like:   list[LookAlike]          # resolve_type's answers naming a different word
+    not_imported: dict                     # queryTypes, sharedPropertyTypes, valueTypes counts
+    entries:      list[TypeEntry]          # import_types' own return; empty on a dry run
+```
+
+```
+FoundryItem:
+    kind:               str                # predicate | entity | edge | action
+    api_name:           str                # Foundry's
+    name:               str                # ours, after conversion or names=
+    outcome:            str                # would_write | held | written | refused
+    reason:             str | None         # the hold reason, or import_types' refusal reason
+    warnings:           list[str]          # the returned entry's, on a real run
+    detail:             dict               # standing, and predicates | inverse_label, sides | effects
+    carried_properties: int                # properties carried under R105
+```
+
+```
+LookAlike:
+    kind:    str
+    name:    str                           # the planned name
+    matched: str                           # the word the vocabulary already has
+    score:   float | None                  # resolve_type's own score, unmodified
+```
+
+**Look-alikes** are `resolve_type`'s answers, unmodified, filtered at the namespace's own `near_duplicate_threshold` (`PACKAGE.md` §2.6). `resolve_type`'s `alternatives` carry every scored name down to 0.0, and unfiltered every planned edge name "looked like" the seeded `equivalent_to` at 0.08 to 0.32 (**[Observed]**, row 8a). `detail["standing"]` says whether the name is already held, because importing it replaces that row. `C12-39`.
+
+**What a dry run cannot say.** It reports the planner's holds and `resolve_type`'s look-alikes. It does **not** predict a guard refusal inside `import_types` (`name_previously_retired`, `word_previously_retired`, `import_refused:live_consumers`, `import_refused:alias_collision`, a family declaration refusal), because evaluating those means running the write path. A row a dry run lists `would_write` can come back `refused` from the real run, and the real run's `FoundryItem` says which guard (`C12-40`).
 
 ### 2.6 `namespace` — present, unused, and deliberately so
 
@@ -555,7 +623,7 @@ Proposal:
 | `retired_without_usage_evidence` | **`TypeEntry` only** — the retired entry `retire` returns | §5.9 |
 | `reinstate_no_op:not_retired` | **`TypeEntry` only** — `reinstate` on a type that is not retired. Nothing was prevented, so it is not a `Refusal`; a call that quietly did nothing is the shape ruling **R4** forbade for `register_consumer` | §5.9b |
 | `gate_unregistered:<gate>` | **`ConsumerReport`** — one per consumer whose `gate` names no registered `kind="predicate"` entry, so `would_drop` is not read as a fact about a live gate | §5.1, ruling **R8** |
-| `import_refused:<reason>` | **`TypeEntry` only** — the standing entry (or, when there is none, the row as it would have looked) that `import_types` hands back instead of writing. Four causes: a row would have retired a type something still gates on; it would have written a word a live entry already answers to (`alias_collision`); or — **row 4c** — its alias would have made one word resolve to an entry of another `kind` (`kind_mismatch`) or to a predicate whose extent differs (`predicate_merge`, the kill row's fourth trip). Nothing is written; the `<reason>` is the `Refusal.reason` the equivalent §5 call would have given, and the entry carries the **row's** `kind` rather than a hard-coded `entity` *(also row 4c, first adversarial round: the reason said `predicate` and the shape said `entity`)* | §2.5, `C12-06`, `C12-08`, `C12-10` |
+| `import_refused:<reason>` | **`TypeEntry` only** — the standing entry (or, when there is none, the row as it would have looked) that `import_types` hands back instead of writing. Four causes: a row would have retired a type something still gates on; it would have written a word a live entry already answers to (`alias_collision`); or — **row 4c** — its alias would have made one word resolve to an entry of another `kind` (`kind_mismatch`) or to a predicate whose extent differs (`predicate_merge`, the kill row's fourth trip). Nothing is written; the `<reason>` is the `Refusal.reason` the equivalent §5 call would have given, **except four reasons only the import door has** *(row 8a)*: `name_invalid` (`C12-32`), `foundry_example` and `status_unknown` (`C12-31`), and `definition_missing` (ruling **R109**, `C12-33`). No §5 call is handed a source status, and `propose_type` raises `ValueError` on a bad name and on an empty definition rather than refusing, so none of the four has a §5 equivalent, and the entry carries the **row's** `kind` rather than a hard-coded `entity` *(also row 4c, first adversarial round: the reason said `predicate` and the shape said `entity`)* | §2.5, `C12-06`, `C12-08`, `C12-10`, `C12-31`–`C12-33` |
 | `retire_no_op:already_retired` | **`TypeEntry` only** — `retire` on a row that is **already retired**. Never a refusal: nothing was prevented and the desired state already holds, which is ruling **R4**'s own line for a call that would otherwise quietly do nothing, and it is `reinstate_no_op:not_retired`'s treatment of the identical question one call along. **The kill row's TWELFTH trip is why it exists** *(row 6c)*: this call read `.status` twice and both times on the **successor**, so a repeat retirement toward a second successor copied the retired row's aliases onto a **second live row while the first still held them** — two active entries answering to one word, which is `C16-06` and mechanism **4**. It is also the more correct answer to what the old behaviour was answering badly: rewriting a standing tombstone's `retire_reason`, `retired_by`, `retired_at` and `successor` is an **edit** of a provenance-bearing row, and §5.8's rule is that *a correction is a new event, never an edit*. The path to change a successor is **`retire` the successor first, then `reinstate`, then `retire`** — *(corrected in row 6c's round 3: the first cut of this row said "`reinstate` then `retire`", and `reinstate` refuses `successor_active` **non-overridably** while the successor is live, which is the ordinary case. `successor_active.detail["path_back"]` had the correct step one all along. A remedy nobody can run is an unreachable guard written in prose.)* `C9-29` |
 | `reinstate_alias_check_unavailable:<why>` | **`TypeEntry` only** — `reinstate` on a backend with `stores_aliases=False`, where every alias list is empty and §5.9b's collision check therefore means *we could not look* rather than *there is none*. Rule U, warned rather than refused because nothing is destroyed by proceeding | §5.9b |
 | `identity_guard_skipped:<guard>:<capability>` | **`TypeEntry`, `MergeResult` and `Refusal`** — every door that asks §5.10's identity guards: `propose_type`, `approve`, `import_types`, `retire`, `merge_types`, `reinstate`. **An identity guard that could not be EVALUATED because the backend declines a capability it needs.** Refusal **#1** compares CONSUMER SETS, and on `indexes_membership=False` a stored row's `predicates` come back empty, so both sides read blank and #1 compares equal **vacuously**. The comparison is deliberately unchanged — refusing would ban these doors on UC1's own declared shape, which is `C10-09`'s lesson, `C3-13`'s and `C12-13`'s — but the caller is now **told**. **Not `alias_check_incomplete`**, which says *a LOOK did not finish and there is more to read*; this says *a GUARD was never asked, and the store does not hold the fact at all*. One word for two facts is §2.3's Cause B. **And it rides a `Refusal` too** *(row 6d, round 2; findings G4 / A14 / K5 / X11, four lenses)* — until then every door dropped its accumulator the moment it refused, so this value reached a caller **only when the call succeeded**. That is the half that matters more: a caller told *no* could not tell *we checked and the answer is no* from *we could not check and the answer is no anyway*. `C10-27`. **The kill row's NINETEENTH trip** (row 6d, ruling **R92**): the same five calls refused `different_consumer_sets` **non-overridably** on sqlite and were written with `warnings=()` on the degraded adapter, with `resolve_type` answering at **1.0**. `C12-24` |

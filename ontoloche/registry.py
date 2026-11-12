@@ -103,6 +103,9 @@ from .edges import (
     type_of,
 )
 from .errors import NotSupported, UnknownType
+from .foundry import FoundryImportReport, FoundryItem, LookAlike
+from .foundry import plan as foundry_plan
+from .foundry import to_row as foundry_row
 from .policy import NamespacePolicy
 from .types import (
     WARNING_VALUES,
@@ -341,6 +344,24 @@ def _evidence_from_dict(d: dict) -> Evidence:
 def _iso(value: Any) -> str | None:
     """``EventRecord.detail`` is JSON on both reference backends, and a datetime is not."""
     return value.isoformat() if isinstance(value, datetime) else (value or None)
+
+
+def _import_refusal(warnings: Sequence[str]) -> str | None:
+    """Why ``import_types`` declined a row, read off the entry it returned, or ``None``.
+
+    ``import_types`` returns entries, not refusals, so a declined row is recognised by
+    its warnings: ``import_refused:<reason>`` from ``_refused_import``, or the standing
+    entry handed back with ``name_previously_retired`` / ``word_previously_retired:<w>``
+    (5.9, ``C12-05``, ``C12-21``). Row 8a's ``import_foundry`` reports it per item.
+    """
+    for warning in warnings:
+        if warning.startswith("import_refused:"):
+            return warning.split(":", 1)[1]
+        if warning == "name_previously_retired":
+            return warning
+        if warning.startswith("word_previously_retired:"):
+            return "word_previously_retired"
+    return None
 
 
 def _ts(value: Any) -> datetime | None:
@@ -5562,7 +5583,24 @@ class Registry:
             # per-iteration accumulator that exists before the first statement that could
             # fill it removes the hazard rather than relying on that.
             extra_import_warnings: list[str] = []
-            name = row["name"]
+            name = row.get("name")
+            row_kind = row.get("kind", kind)
+
+            # **Defect 3, row 8a** (`FOUNDRY-PARITY.md` §2, `C12-32`). A name outside
+            # NAME_RE reached `put_type`, so the sqlite CHECK raised a raw
+            # `IntegrityError` out of a call that returns entries, on one backend, with
+            # the rest of the batch unprocessed. Checked FIRST, because every later
+            # statement in this body reads the name as a word.
+            if not isinstance(name, str) or not NAME_RE.match(name):
+                out.append(
+                    self._refused_import(
+                        namespace, str(name if name is not None else ""),
+                        f"{name!r} does not match {NAME_RE.pattern} (INTERFACE.md 2.1)",
+                        reason="name_invalid", kind=row_kind,
+                    )
+                )
+                continue
+
             foundry_status = (row.get("status") or "active").lower()
             predicates = list(row.get("predicates") or ())
             status, retire_reason = "active", None
@@ -5573,6 +5611,31 @@ class Registry:
                 status = "active"
                 if "experimental" not in predicates:
                     predicates.append("experimental")
+            elif foundry_status == "endorsed":
+                # **Defect 1, row 8a** (`C12-30`). ENDORSED fell through to plain
+                # `active`, so an owner's vetting vanished on arrival. `experimental`'s
+                # precedent: live, plus a predicate saying which kind of live.
+                if "endorsed" not in predicates:
+                    predicates.append("endorsed")
+            elif foundry_status != "active":
+                # **Defect 2, row 8a** (`C12-31`). Every other status fell through to
+                # `active` too, so a template's demo types entered the vocabulary as
+                # live types through the migration door. Nothing is guessed: the row is
+                # not written and says which rule held it.
+                out.append(
+                    self._refused_import(
+                        namespace, name,
+                        f"source status {row.get('status')!r} has no mapping "
+                        "(INTERFACE.md 2.5 maps active, endorsed, experimental, "
+                        "deprecated)",
+                        reason=(
+                            "foundry_example" if foundry_status == "example"
+                            else "status_unknown"
+                        ),
+                        kind=row_kind,
+                    )
+                )
+                continue
 
             attributes = dict(row.get("attributes") or {})
             for key in ("visibility", "groups"):
@@ -6005,6 +6068,35 @@ class Registry:
                 if tomb_why is not None:
                     extra_import_warnings.append("alias_check_incomplete:" + tomb_why)
 
+            # **Defect 4, row 8a, ruling R109** (`C12-33`). A missing definition was
+            # written as `"imported from <system>"` on a LIVE type, and INTERFACE.md 2.1
+            # says a type without a definition is how collision starts. The founder
+            # ruled `hold + override map`: nothing is written. An import over a STANDING
+            # row of the same kind is an update and keeps that row's definition, since
+            # whoever wrote that definition supplied it. `C12-06` and `C12-19` rely on
+            # it.
+            #
+            # **Checked LAST, after every guard** (`C17-09`). Run before them, it
+            # answered `definition_missing` for a row a guard refuses for a different
+            # reason, so a family declaration breach or a retired name stopped saying
+            # so. `8A-RUN.md` §0.5 item 3: the guards' answers are inherited unchanged.
+            supplied = row.get("definition")
+            definition = supplied if isinstance(supplied, str) and supplied.strip() else None
+            if definition is None:
+                kept = self.adapter.get_type(namespace, name, kind=row_kind)
+                if kept is not None and kept.definition:
+                    definition = kept.definition
+                else:
+                    out.append(
+                        self._refused_import(
+                            namespace, name,
+                            "the source row has no definition and none was supplied "
+                            "(ruling R109: pass one and import again)",
+                            reason="definition_missing", kind=row_kind,
+                        )
+                    )
+                    continue
+
             imported_from = {"system": system}
             for key in ("apiName", "rid"):
                 if key in row:
@@ -6027,7 +6119,7 @@ class Registry:
                 namespace=namespace,
                 kind=row.get("kind", kind),
                 name=name,
-                definition=row.get("definition") or f"imported from {system}",
+                definition=definition,
                 created_by="seed",
                 status=status,
                 predicates=tuple(predicates),
@@ -6108,6 +6200,106 @@ class Registry:
                     )
             out.append(self._written(self._entry(stored)))
         return out
+
+    def import_foundry(
+        self,
+        full_metadata: dict,
+        *,
+        namespace: str = "default",
+        dry_run: bool = True,
+        names: dict[str, str] | None = None,
+        definitions: dict[str, str] | None = None,
+        imported_by: str = "import:foundry",
+    ) -> FoundryImportReport:
+        """Import a Foundry ``OntologyFullMetadata`` document. Row 8a, INTERFACE.md 2.5a.
+
+        **Dry run by default**, because the first thing a migrating customer needs is
+        what *would* happen. ``ontoloche.foundry.plan`` parses and holds, this method
+        asks the store which names it already holds and what ``resolve_type`` says each
+        planned name looks like, and only with ``dry_run=False`` hands every row that is
+        not held to **one** ``import_types`` call. That call is this method's only
+        write, so every guard on the import door applies unchanged and no new door is
+        opened (``8A-RUN.md`` §0.5).
+
+        ``names`` and ``definitions`` are keyed by Foundry ``apiName``, and by
+        ``"<objectType apiName>.<link side apiName>"`` for a link. They lift the
+        ``name_invalid``, ``name_collision_after_conversion`` (R110) and
+        ``definition_missing`` (R109) holds.
+        """
+        planned, not_imported = foundry_plan(
+            full_metadata, names=names, definitions=definitions
+        )
+        context = ResolveContext(source="import:foundry dry run")
+        # **The deployment's own near-duplicate line, not one this method invents.**
+        # `resolve_type`'s `alternatives` carries every scored name down to 0.0, so on a
+        # store holding only the seeded `equivalent_to` family every edge name came back
+        # "looking like" it at 0.08 to 0.32. [Observed, row 8a.] PACKAGE.md 2.6's
+        # `near_duplicate_threshold` is where this namespace already says what counts as
+        # a near duplicate, so that is the line a look-alike has to clear.
+        near = self.policy(namespace).near_duplicate_threshold
+        looks: list[LookAlike] = []
+        for p in planned:
+            if p.reason == "name_invalid":
+                continue
+            p.detail["standing"] = (
+                self.adapter.get_type(namespace, p.name, kind=p.kind) is not None
+            )
+            resolution = self.resolve_type(
+                p.name, context, kind=p.kind, namespace=namespace, tier="unspecified"
+            )
+            if resolution.type is not None and resolution.type.name != p.name:
+                looks.append(
+                    LookAlike(p.kind, p.name, resolution.type.name, resolution.confidence)
+                )
+            for matched, score in resolution.alternatives:
+                if matched != p.name and score is not None and score >= near:
+                    looks.append(LookAlike(p.kind, p.name, matched, score))
+
+        sent = [p for p in planned if p.reason is None]
+        entries: list[TypeEntry] = []
+        if not dry_run and sent:
+            entries = self.import_types(
+                [foundry_row(p) for p in sent],
+                system="foundry",
+                namespace=namespace,
+                imported_by=imported_by,
+            )
+        results = dict(zip([id(p) for p in sent], entries))
+
+        items: list[FoundryItem] = []
+        for p in planned:
+            if p.reason is not None:
+                items.append(
+                    FoundryItem(p.kind, p.api_name, p.name, "held", p.reason,
+                                detail=p.detail, carried_properties=p.carried)
+                )
+                continue
+            if dry_run:
+                items.append(
+                    FoundryItem(p.kind, p.api_name, p.name, "would_write",
+                                detail=p.detail, carried_properties=p.carried)
+                )
+                continue
+            entry = results[id(p)]
+            refused = _import_refusal(entry.warnings)
+            items.append(
+                FoundryItem(
+                    p.kind, p.api_name, p.name,
+                    "refused" if refused else "written", refused,
+                    warnings=tuple(entry.warnings), detail=p.detail,
+                    carried_properties=p.carried,
+                )
+            )
+        ontology = full_metadata.get("ontology") or {}
+        return FoundryImportReport(
+            dry_run=dry_run,
+            namespace=namespace,
+            ontology={k: ontology.get(k) for k in ("apiName", "rid")},
+            items=tuple(items),
+            looks_like=tuple(looks),
+            not_imported=not_imported,
+            entries=tuple(entries),
+        )
 
     # ===================================================================== edges
     #

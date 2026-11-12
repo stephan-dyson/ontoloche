@@ -60,7 +60,10 @@ async def test_c8_03_an_auto_approved_entry_says_auto(adapter, make_registry):
 
 async def test_c8_04_an_imported_row_says_unknown_imported_never_null(registry):
     await registry.import_types(
-        [{"name": "flight", "status": "active", "apiName": "Flight", "rid": "ri.o.1"}]
+        # A definition since row 8a: ruling R109 holds a definition-less row unwritten
+        # (`C12-33`), and this test is about provenance, not about that.
+        [{"name": "flight", "status": "active", "apiName": "Flight", "rid": "ri.o.1",
+          "definition": "a scheduled flight"}]
     )
     provenance = await registry.provenance("flight")
     assert provenance.approved_by == "unknown:imported"

@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 12 ruled · 7 FYI** *(2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**2 open · 13 ruled · 7 FYI** *(2026-11-12: item 23 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -84,7 +84,19 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## E. Ruled — 12 items
+## E. Ruled — 13 items
+
+### 23 · Row 8a's two Foundry import questions → **RULED: `hold + override map` (R109) and `hold both + names map` (R110)** *(2026-11-12)*
+
+**Recorded as [R109–R110](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-11-12-founder-rulings-R109-R110.md).** Numbered provisionally, because row 8b runs in parallel on `main` and may mint rulings of its own first. Row 8b's `Q106` (item 22 on `main`) already cites R109 as provisional, so if the numbers move, that citation moves with them. **Item 23**, because `main` has taken item 22.
+
+*New 2026-11-12. Asked by row 8a before its §0 was written, because both decide what the registry refuses.*
+
+**R109, a Foundry type with no description.** The brief said import it as `proposed`. In this registry `proposed` is a proposal record, which needs a definition too, so that instruction had nowhere to land. You chose `hold + override map`: nothing is written, the row comes back `import_refused:definition_missing`, and the caller passes `definitions={apiName: text}` and imports again. `"imported from foundry"` is never written as a definition again. **Built and tested as `C12-33` and `C12-38`.** Every Foundry link type is held under it, because a link side has no description field at all.
+
+**R110, two Foundry names that convert to one.** `NursingHome` and `Nursing_Home` both become `nursing_home`, and without a rule the second silently replaced the first. You chose `hold both + names map`: every member of the collision is held, `names={apiName: name}` resolves it, and a mapped name goes through the same check so the map cannot create a collision of its own. **Built and tested as `C12-37`.**
+
+**Nothing else from row 8a needs you.** Brief questions 2 to 4 do not decide a refusal in this row and have interim answers in [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §0.7. Route 4 (a real Foundry instance through the AIP Developer Tier) stays your call and was not attempted.
 
 ### 18 · Q102 — govern entity properties as vocabulary (option B) → **RULED: `adopt B`** *(2026-09-22)*
 
