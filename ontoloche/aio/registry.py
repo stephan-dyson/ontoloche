@@ -5407,10 +5407,12 @@ class AsyncRegistry:
             # a name this deployment retired went to `put_type` and rewrote the
             # tombstone's `retire_reason`, `retired_by` and `retired_at` -- the harm
             # the paragraph above names, reached by the ordinary re-run of a migration.
-            # Only the row THIS call would overwrite: a retired variant spelling found
-            # by the scan above is not touched by writing a retired `name` (`C12-20`).
+            # Only the row THIS call would overwrite: a retired variant spelling, or a
+            # tombstone of another kind with the same name, found by the scan above is
+            # not touched by writing a retired `name` (`C12-20`, round 2's `C12-53`).
             if standing is not None and standing.status == "retired" and (
-                status != "retired" or standing.name == name
+                status != "retired"
+                or (standing.name == name and standing.kind == row_kind)
             ):
                 out.append(
                     await self._entry(standing, extra_warnings=("name_previously_retired",))
@@ -5895,24 +5897,7 @@ class AsyncRegistry:
         planned, not_imported, unmatched = foundry_plan(
             full_metadata, names=names, definitions=definitions
         )
-        # A word the store already holds is not unresolved: the plan only knows the
-        # document, and this is where the store is asked (round 1, `C12-45`).
-        for p in planned:
-            if "unresolved" in p.detail:
-                still = [
-                    ref
-                    for ref in p.detail["unresolved"]
-                    if await self.adapter.get_type(
-                        namespace,
-                        next(v for k, v in ref.items() if k != "why"),
-                        kind="predicate" if "predicate" in ref else "entity",
-                    )
-                    is None
-                ]
-                if still:
-                    p.detail["unresolved"] = still
-                else:
-                    del p.detail["unresolved"]
+
         context = ResolveContext(source="import:foundry dry run")
         # **The deployment's own near-duplicate line, not one this method invents.**
         # `resolve_type`'s `alternatives` carries every scored name down to 0.0, so on a
@@ -5931,10 +5916,8 @@ class AsyncRegistry:
             resolution = await self.resolve_type(
                 p.name, context, kind=p.kind, namespace=namespace, tier="unspecified"
             )
-            if resolution.type is not None and resolution.type.name != p.name:
-                looks.append(
-                    LookAlike(p.kind, p.name, resolution.type.name, resolution.confidence)
-                )
+            # `resolution.type`, when set, is also `alternatives[0]` at the same score,
+            # so reading both reported an alias match twice (round 2). One source.
             for matched, score in resolution.alternatives:
                 if matched != p.name and score is not None and score >= near:
                     looks.append(LookAlike(p.kind, p.name, matched, score))
@@ -5949,6 +5932,7 @@ class AsyncRegistry:
                 imported_by=imported_by,
             )
         results = dict(zip([id(p) for p in sent], entries))
+        await self._foundry_unresolved(planned, results, namespace, dry_run)
 
         items: list[FoundryItem] = []
         for p in planned:
@@ -5985,6 +5969,61 @@ class AsyncRegistry:
             entries=tuple(entries),
             unmatched=unmatched,
         )
+
+    async def _foundry_unresolved(
+        self, planned: list, results: dict, namespace: str, dry_run: bool
+    ) -> None:
+        """``detail["unresolved"]``: each predicate or endpoint entity an item points at
+        that is not live after this import. ``INTERFACE.md`` 2.5a, ``C12-45``, ``C12-52``.
+
+        **Reported, never held**: holding the dependent too would decide a refusal,
+        which is the founder's. Round 1 computed this from the document alone, so a
+        referent ``import_types`` then REFUSED, or a local tombstone, counted as there
+        (round 2). A reference resolves only to a row that is live afterwards:
+
+        * ``held:<reason>`` -- the planner held the referent;
+        * ``refused:<reason>`` -- the real run refused it;
+        * ``retired`` -- the store holds it retired, or this document deprecates it;
+        * ``not_in_document`` -- the document never defines it and the store has no row.
+
+        A dry run cannot predict a guard's refusal (2.5a), so there a referent the
+        document would write and the store holds retired reads ``retired``.
+        """
+        by_api = {(p.kind, p.api_name): p for p in planned}
+        for p in planned:
+            unresolved = []
+            for label, kind, api, word in p.refs:
+                target_kind = "predicate" if kind == "interface" else kind
+                target = by_api.get((target_kind, api))
+                why = None
+                if target is not None and target.reason is not None:
+                    why = f"held:{target.reason}"
+                elif target is not None and id(target) in results:
+                    refused = _import_refusal(results[id(target)].warnings)
+                    if refused is not None:
+                        why = f"refused:{refused}"
+                if why is None:
+                    stored = (
+                        await self.adapter.get_type(namespace, word, kind=target_kind)
+                        if isinstance(word, str) and word
+                        else None
+                    )
+                    deprecated = (
+                        target is not None
+                        and str(target.row.get("status") or "").upper() == "DEPRECATED"
+                    )
+                    if stored is not None and stored.status == "retired":
+                        why = "retired"
+                    elif dry_run and deprecated:
+                        why = "retired"
+                    elif stored is None and target is None:
+                        why = "not_in_document"
+                if why is not None:
+                    unresolved.append({label: word, "why": why})
+            if unresolved:
+                p.detail["unresolved"] = unresolved
+            else:
+                p.detail.pop("unresolved", None)
 
     # ===================================================================== edges
     #

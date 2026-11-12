@@ -1655,6 +1655,7 @@ async def test_c12_35_a_dry_run_over_palantirs_legacy_ontology(registry):
     assert report.count(outcome="held") == 16, "no collision, no bad name, no odd status"
     assert sum(i.carried_properties for i in report.items) == 75
     assert report.not_imported == {"queryTypes": 21, "sharedPropertyTypes": 1, "valueTypes": 0}
+    assert report.looks_like == (), "the [Observed] legacy cell of §1.1 (round 2)"
     ops = [e["op"] for i in _items(report, outcome="would_write", kind="action")
            for e in i.detail["effects"]]
     assert ops.count("host_state") == 6 and "add_edge" not in ops and "retract_edge" not in ops
@@ -1771,7 +1772,8 @@ async def test_c12_38_definitions_import_held_rows_and_links_become_edge_familie
 async def test_c12_39_the_dry_run_names_the_word_the_vocabulary_already_has(registry):
     """`FOUNDRY-PARITY.md` §3.1: *"you already have `facility`, and Foundry's
     `Facilities` looks like it"*, before anything is written. The answer is
-    `resolve_type`'s, unmodified: this row adds no scoring of its own. A name that is
+    `resolve_type`'s, filtered at the namespace's `near_duplicate_threshold`: this row
+    adds no scoring of its own. A name that is
     already STANDING is reported as standing, because importing it replaces that row."""
     await seed(registry, "facility", definition="A licensed nursing home.")
     await seed(registry, "survey", definition="An inspection visit.")
@@ -2191,3 +2193,189 @@ async def test_c12_51_the_word_and_alias_guards_are_inherited_through_import_fou
     assert (clash.outcome, clash.reason) == ("refused", "alias_collision")
     assert await adapter.get_type("default", "zzz_moved", kind="predicate") is None
     assert await adapter.get_type("default", "commentable", kind="predicate") is None
+
+async def test_c12_52_a_reference_is_resolved_against_what_was_actually_written(registry, adapter):
+    """**Round 2, guards lens.** `unresolved` was computed before the write and only
+    knew holds and absence from the document, and the store check counted ANY row,
+    retired or not, as resolving a reference. So on the ordinary re-run of a partly
+    retired migration, an edge to an entity `import_types` refused, or to a local
+    tombstone, was written with nothing reported, and an edge to an entity the same
+    document deprecates the same. A reference resolves only to a row that is live
+    after the import, and the reason says which case it is: `refused:<reason>` for a
+    referent the real run refused, `retired` for one that is (or will be) retired."""
+    # The alias-collision half needs a stored alias to collide with (PACKAGE.md 3.2):
+    # scaffolding, not the subject, so it runs only where aliases are stored.
+    aliases = (await adapter.capabilities()).stores_aliases
+    await registry.import_types(
+        [{"name": "ward", "kind": "entity", "definition": "a ward", "status": "deprecated"}]
+        + ([{"name": "widget", "kind": "entity", "definition": "a widget",
+             "aliases": ["gadget"]}] if aliases else [])
+    )
+    doc = _ontology(
+        objects={"Ward": ("a ward", "ACTIVE", ()), "Gadget": ("a gadget", "ACTIVE", ()),
+                 "Gone": ("a gone thing", "DEPRECATED", ()), "Bed": ("a bed", "ACTIVE", ())},
+        links={"Bed": [_side("inWard", "Ward", "ri.l.w", fk="wardId"),
+                       _side("hasGadget", "Gadget", "ri.l.g", fk="gadgetId"),
+                       _side("hadGone", "Gone", "ri.l.x", fk="goneId")]},
+    )
+    definitions = {"Bed.inWard": "a bed is in a ward", "Bed.hasGadget": "a bed has a gadget",
+                   "Bed.hadGone": "a bed had a gone thing"}
+
+    planned = await registry.import_foundry(doc, definitions=definitions)
+    assert _items(planned, api_name="inWard", kind="edge")[0].detail["unresolved"] == [
+        {"dst": "ward", "why": "retired"},
+    ], "the dry run sees the local tombstone"
+    assert _items(planned, api_name="hadGone", kind="edge")[0].detail["unresolved"] == [
+        {"dst": "gone", "why": "retired"},
+    ], "the dry run sees the document's own DEPRECATED"
+
+    # Edge names unlike any entity word: a tombstone holds its word across kinds
+    # (`C12-21`), so an edge called `ward` would itself be refused.
+    report = await registry.import_foundry(doc, dry_run=False, definitions=definitions)
+    assert _items(report, api_name="Ward")[0].reason == "name_previously_retired"
+    by_side = {i.api_name: i for i in _items(report, kind="edge")}
+    assert by_side["inWard"].outcome == "written"
+    assert by_side["inWard"].detail["unresolved"] == [
+        {"dst": "ward", "why": "refused:name_previously_retired"},
+    ]
+    if aliases:
+        assert _items(report, api_name="Gadget")[0].reason == "alias_collision"
+        assert by_side["hasGadget"].detail["unresolved"] == [
+            {"dst": "gadget", "why": "refused:alias_collision"},
+        ]
+    assert by_side["hadGone"].detail["unresolved"] == [{"dst": "gone", "why": "retired"}]
+    assert "unresolved" not in _items(report, api_name="Bed")[0].detail
+
+async def test_c12_53_a_retired_row_beside_a_retired_row_of_another_kind_is_written(
+    registry, adapter
+):
+    """**Round 2, guards lens.** Round 1's retired-over-retired refusal matched on the
+    name alone, and `standing` can be a tombstone of ANOTHER kind with the identical
+    name (the twenty-first trip's cell, `C12-21`). Writing a retired `old` entity
+    beside a retired `old` predicate touches no tombstone, so it is written, as it was
+    before round 1. Only the row the call would overwrite is protected."""
+    await registry.import_types(
+        [{"name": "old", "kind": "predicate", "definition": "an old capability",
+          "status": "deprecated"}]
+    )
+    entries = await registry.import_types(
+        [{"name": "old", "kind": "entity", "definition": "an old thing",
+          "status": "deprecated"}]
+    )
+    assert not [w for w in entries[0].warnings if w == "name_previously_retired"], entries
+    assert (await adapter.get_type("default", "old", kind="entity")).status == "retired"
+    assert (await adapter.get_type("default", "old", kind="predicate")).definition == (
+        "an old capability"
+    )
+
+async def test_c12_54_the_inverse_label_and_the_interface_mapping_are_the_customers_too(
+    registry, adapter
+):
+    """**Round 2, mapping lens.** Three things a migrating customer said and lost.
+
+    1. A `names=` key on a link's INVERSE side (`"Dept.staff"`) renamed the
+       `inverse_label` and was reported in `unmatched` as matching nothing, because only
+       forward keys were item keys. It is now `detail["inverse_key"]`, and a label
+       that is not a legal name is held `name_invalid` rather than written unchecked.
+    2. `implementsInterfaces2`'s VALUES (which local property implements which
+       interface property) and `sharedPropertyTypeMapping` sit beside `objectType`, so
+       the carry never reached them. They are carried, not validated.
+    3. A predicate word that fails `NAME_RE` was written into the entity's
+       `predicates`; it stays reported in `unresolved` and is not written."""
+    long_iface = "I" + "x" * 70
+    doc = _ontology(
+        interfaces={"Located": "has a place", long_iface: "too long to be a name"},
+        objects={"Dept": ("a department", "ACTIVE", ()),
+                 "Employee": ("an employee", "ACTIVE", ("Located", long_iface))},
+        links={"Employee": [_side("dept", "Dept", "ri.l.d", fk="deptId")],
+               "Dept": [_side("staff", "Employee", "ri.l.d")]},
+    )
+    implementation = {"properties": {"place": "officeName"}, "links": {}}
+    doc["objectTypes"]["Employee"]["implementsInterfaces2"]["Located"] = implementation
+    doc["objectTypes"]["Employee"]["sharedPropertyTypeMapping"] = {"spt": "officeName"}
+    definitions = {"Employee.dept": "an employee works in a department"}
+
+    named = await registry.import_foundry(
+        doc, names={"Dept.staff": "employs"}, definitions=definitions
+    )
+    edge = _items(named, kind="edge")[0]
+    assert (edge.detail["inverse_label"], edge.detail["inverse_key"]) == (
+        "employs", "Dept.staff",
+    )
+    assert named.unmatched == {"names": [], "definitions": []}
+
+    bad = await registry.import_foundry(
+        doc, names={"Dept.staff": "Bad Name"}, definitions=definitions
+    )
+    held = _items(bad, kind="edge")[0]
+    assert (held.outcome, held.reason, held.detail["invalid"]) == (
+        "held", "name_invalid", "inverse_label",
+    )
+
+    report = await registry.import_foundry(doc, dry_run=False, definitions=definitions)
+    employee = _items(report, api_name="Employee")[0]
+    assert employee.outcome == "written"
+    assert {"predicate": long_iface.lower(), "why": "held:name_invalid"} in (
+        employee.detail["unresolved"]
+    )
+    stored = await adapter.get_type("default", "employee", kind="entity")
+    assert long_iface.lower() not in (stored.predicates or ())
+    if (await adapter.capabilities()).stores_attributes:
+        carried = stored.attributes["foundry_object_type_metadata"]
+        assert carried["validated"] is False
+        assert carried["implementsInterfaces2"]["Located"] == implementation
+        assert carried["sharedPropertyTypeMapping"] == {"spt": "officeName"}
+
+async def test_c12_55_what_the_record_says_is_tested_is_tested(adapter, make_registry):
+    """**Round 2, tests lens.** Five claims the record made that no test could fail on.
+
+    1. A non-str value in EITHER map raises a ``TypeError`` naming the key. Only
+       ``names`` was exercised, so dropping the ``definitions`` check left the suite
+       green and ``definitions={"Ward": 5}`` read as "no definition supplied".
+    2. ``operations`` (``ActionTypeV2``) spells a link rule ``CreateLinkRule`` with
+       ``linkTypeApiNameAtoB`` (``foundry_sdk.v2.ontologies.models.CreateLinkRule``),
+       not ``linkTypeApiName``: an action read from ``operations`` named no link.
+    3. The look-alike filter reads the namespace's ``near_duplicate_threshold``
+       (``8A-RUN.md`` §1.2 item 1); it was pinned only at its extremes.
+    4. ``definition_missing`` and ``status_not_imported`` say how to lift the hold.
+    """
+    registry = await make_registry(adapter)
+    doc = foundry_fixture("uc2_cms")
+    with pytest.raises(TypeError, match=r"definitions\['Ward'\] must be a str, got int"):
+        await registry.import_foundry(doc, definitions={"Ward": 5})
+    with pytest.raises(TypeError, match=r"names\['Ward'\] must be a str, got NoneType"):
+        await registry.import_foundry(doc, names={"Ward": None})
+
+    edge_cases = foundry_fixture("edge_cases")
+    edge_cases.pop("actionTypesFullMetadata")
+    action = _items(await registry.import_foundry(edge_cases), api_name="assignDoctor")[0]
+    assert action.detail["effects"][0] == {
+        "op": "add_edge", "rule": "createLink", "link": "treats", "source": "operations",
+    }
+
+    def facilities():
+        moved = foundry_fixture("uc2_cms")
+        moved["objectTypes"]["Facilities"] = moved["objectTypes"].pop("Facility")
+        moved["objectTypes"]["Facilities"]["objectType"]["apiName"] = "Facilities"
+        return moved
+
+    await seed(registry, "facility", definition="A licensed nursing home.")
+    for threshold, expected in ((0.77, True), (0.78, False)):
+        strict = await make_registry(adapter, near_duplicate_threshold=threshold)
+        looks = {(lk.name, lk.matched) for lk in (await strict.import_foundry(facilities())).looks_like}
+        assert (("facilities", "facility") in looks) is expected, (threshold, looks)
+
+    status_doc = _ontology(objects={"Draft": ("a draft", "EXAMPLE", ())})
+    held = _items(await registry.import_foundry(status_doc), api_name="Draft")[0]
+    assert (held.reason, held.detail["foundry_status"]) == ("status_not_imported", "EXAMPLE")
+    bare = _ontology(objects={"Bare": (None, "ACTIVE", ())})
+    held = _items(await registry.import_foundry(bare), api_name="Bare")[0]
+    assert (held.reason, held.detail["definitions_key"]) == ("definition_missing", "Bare")
+
+    # 5. A name `resolve_type` answers with ANOTHER row (a variant spelling) is a
+    #    look-alike, reported ONCE: the answer and its first alternative were both read.
+    await seed(registry, "widget", definition="a widget")
+    widgets = _ontology(objects={"Widgets": ("some widgets", "ACTIVE", ())})
+    assert [(lk.name, lk.matched) for lk in (await registry.import_foundry(widgets)).looks_like] == [
+        ("widgets", "widget"),
+    ]

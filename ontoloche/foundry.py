@@ -106,7 +106,8 @@ class FoundryItem:
 class LookAlike:
     """``resolve_type``'s answer for one planned name, when it names a different word.
 
-    Unmodified: this row adds no scoring of its own (``FOUNDRY-PARITY.md`` §3.1)."""
+    No scoring of its own (``FOUNDRY-PARITY.md`` §3.1): ``resolve_type``'s match, or an
+    alternative at or above the namespace's ``near_duplicate_threshold``."""
 
     kind: str
     name: str
@@ -254,7 +255,7 @@ def plan(
 ) -> tuple[list[_Planned], dict]:
     """Every Foundry type in ``doc`` as a planned item, holds applied, in KIND_ORDER.
 
-    Returns ``(planned, not_imported)``. A held item carries ``reason`` and no row is
+    Returns ``(planned, not_imported, unmatched)``. A held item carries ``reason`` and no row is
     sent for it.
     """
     names = dict(names or {})
@@ -305,6 +306,17 @@ def plan(
             "foundry_object_type": {
                 k: v for k, v in ot.items() if k not in _OBJECT_TYPE_MAPPED
             },
+            # **How this object type implements its interfaces** (round 2). The values
+            # of `implementsInterfaces2` (which local property or link implements which
+            # interface property or link) and `sharedPropertyTypeMapping` sit BESIDE
+            # `objectType`, not inside it, so the carry above never reached them and
+            # the only record of that mapping was dropped. Every sibling except
+            # `objectType` itself and `linkTypes` (carried on the edge families),
+            # verbatim and not validated, as R105's `carry`.
+            "foundry_object_type_metadata": {
+                "validated": False,
+                **{k: v for k, v in full.items() if k not in ("objectType", "linkTypes")},
+            },
         }
         if "visibility" in ot:
             attributes["visibility"] = ot["visibility"]
@@ -314,7 +326,10 @@ def plan(
                 row={
                     "definition": _definition(ot.get("description"), api, definitions),
                     "status": ot.get("status"),
-                    "predicates": predicates,
+                    # A predicate word that is not a legal name has no row and never
+                    # will under that word, so it is not written into the entity: it
+                    # stays in `detail` and is reported `unresolved` (round 2).
+                    "predicates": [w for w in predicates if NAME_RE.fullmatch(w)],
                     "apiName": api,
                     **({"rid": ot["rid"]} if "rid" in ot else {}),
                     "attributes": attributes,
@@ -329,9 +344,8 @@ def plan(
         ot_api, side = family["forward"]
         key = f"{ot_api}.{side['apiName']}"
         inverse = family["inverse"]
-        inverse_label = (
-            _named(f"{inverse[0]}.{inverse[1]['apiName']}", names) if inverse else None
-        )
+        inverse_key = f"{inverse[0]}.{inverse[1]['apiName']}" if inverse else None
+        inverse_label = _named(inverse_key, names) if inverse else None
         sides = [
             {"objectType": o, **s}
             for o, s in [family["forward"]] + ([inverse] if inverse else []) + family["extra_sides"]
@@ -359,7 +373,13 @@ def plan(
                         },
                     },
                 },
-                detail={"inverse_label": inverse_label, "sides": len(sides)},
+                detail={
+                    "inverse_label": inverse_label,
+                    # The `names=` key for the inverse label (round 2): it is not an
+                    # item's key, and `unmatched` reported it as matching nothing.
+                    "inverse_key": inverse_key,
+                    "sides": len(sides),
+                },
                 refs=[
                     ("src", "entity", ot_api, family["src"]),
                     ("dst", "entity", side.get("objectTypeApiName", ""), family["dst"]),
@@ -387,27 +407,18 @@ def plan(
         )
 
     _hold(planned)
-    by_api = {(p.kind, p.api_name): p for p in planned if p.kind in ("predicate", "entity")}
     for p in planned:
         p.detail.setdefault("standing", False)
         # The exact key `names=` and `definitions=` take for this item. For a link it
         # is `"<objectType>.<side>"`, which no other field carried (round 1).
         p.detail["key"] = p.key
-        # **A row pointing at a row this import does not write** (round 1). Reported,
-        # never held: holding the dependent too would decide a refusal, which is the
-        # founder's. `import_foundry` drops an entry whose word the store already holds.
-        unresolved = []
-        for label, kind, api, name in p.refs:
-            target = by_api.get((kind if kind != "interface" else "predicate", api))
-            if target is None:
-                unresolved.append({label: name, "why": "not_in_document"})
-            elif target.reason is not None:
-                unresolved.append({label: name, "why": f"held:{target.reason}"})
-        if unresolved:
-            p.detail["unresolved"] = unresolved
+    # `refs` are resolved by `Registry.import_foundry`, against the store and, on a
+    # real run, against what was actually written (round 2).
     planned.sort(key=lambda p: KIND_ORDER.index(p.kind))
     not_imported = {k: len(doc.get(k) or {}) for k in _NOT_IMPORTED}
-    keys = {p.key for p in planned}
+    keys = {p.key for p in planned} | {
+        p.detail["inverse_key"] for p in planned if p.detail.get("inverse_key")
+    }
     unmatched = {
         "names": sorted(k for k in names if k not in keys),
         "definitions": sorted(k for k in definitions if k not in keys),
@@ -422,6 +433,12 @@ def _hold(planned: list[_Planned]) -> None:
         # `"person\n"` through (round 1).
         if not NAME_RE.fullmatch(p.name):
             p.reason = "name_invalid"
+        # An inverse label is a word too, from the conversion or from `names=`, and it
+        # was written unchecked (round 2).
+        label = p.detail.get("inverse_label")
+        if p.reason is None and label is not None and not NAME_RE.fullmatch(label):
+            p.reason = "name_invalid"
+            p.detail["invalid"] = "inverse_label"
     by_word: dict[tuple[str, str], list[_Planned]] = {}
     for p in planned:
         if p.reason is None:
