@@ -2273,7 +2273,8 @@ def test_c12_52_a_reference_is_resolved_against_what_was_actually_written(regist
     tombstone, was written with nothing reported, and an edge to an entity the same
     document deprecates the same. A reference resolves only to a row that is live
     after the import, and the reason says which case it is: `refused:<reason>` for a
-    referent the real run refused, `retired` for one that is (or will be) retired."""
+    referent the real run refused and the store does not hold, `retired` for one that
+    is (or will be) retired."""
     # The alias-collision half needs a stored alias to collide with (PACKAGE.md 3.2):
     # scaffolding, not the subject, so it runs only where aliases are stored.
     aliases = adapter.capabilities().stores_aliases
@@ -2306,9 +2307,9 @@ def test_c12_52_a_reference_is_resolved_against_what_was_actually_written(regist
     assert _items(report, api_name="Ward")[0].reason == "name_previously_retired"
     by_side = {i.api_name: i for i in _items(report, kind="edge")}
     assert by_side["inWard"].outcome == "written"
-    assert by_side["inWard"].detail["unresolved"] == [
-        {"dst": "ward", "why": "refused:name_previously_retired"},
-    ]
+    # The store first (round 3): the tombstone reads `retired`, and the refusal is
+    # on `Ward`'s own item.
+    assert by_side["inWard"].detail["unresolved"] == [{"dst": "ward", "why": "retired"}]
     if aliases:
         assert _items(report, api_name="Gadget")[0].reason == "alias_collision"
         assert by_side["hasGadget"].detail["unresolved"] == [
@@ -2401,7 +2402,8 @@ def test_c12_54_the_inverse_label_and_the_interface_mapping_are_the_customers_to
 
 
 def test_c12_55_what_the_record_says_is_tested_is_tested(adapter, make_registry):
-    """**Round 2, tests lens.** Five claims the record made that no test could fail on.
+    """**Round 2, tests lens.** Four claims the record made that no test could fail on,
+    and a fifth found while fixing them.
 
     1. A non-str value in EITHER map raises a ``TypeError`` naming the key. Only
        ``names`` was exercised, so dropping the ``definitions`` check left the suite
@@ -2425,6 +2427,7 @@ def test_c12_55_what_the_record_says_is_tested_is_tested(adapter, make_registry)
     action = _items(registry.import_foundry(edge_cases), api_name="assignDoctor")[0]
     assert action.detail["effects"][0] == {
         "op": "add_edge", "rule": "createLink", "link": "treats", "source": "operations",
+        "inverse_link": "treatedBy",
     }
 
     def facilities():
@@ -2453,3 +2456,138 @@ def test_c12_55_what_the_record_says_is_tested_is_tested(adapter, make_registry)
     assert [(lk.name, lk.matched) for lk in registry.import_foundry(widgets).looks_like] == [
         ("widgets", "widget"),
     ]
+
+
+# ---------------------------------------------------------------------------------
+# Row 8a's adversarial round 3.
+
+
+def test_c12_56_every_action_and_its_logic_reaches_the_store(registry, adapter):
+    """**Round 3, mapping lens.** `OntologyFullMetadata` carries actions in two maps,
+    `actionTypes` and `actionTypesFullMetadata` (whose `actionType` is a whole
+    `ActionTypeV2`, beside its `fullLogicRules`), and only the first was walked. An
+    action in the second alone produced no item and no count. And `fullLogicRules`
+    was read for the report but never stored, while `ActionTypeV2.operations` has no
+    `function` or interface rule variants, so for those the logic left with the
+    report. An action is now the union of both maps, and its `fullLogicRules` are
+    carried. An `operations` link rule also reports its B-to-A name."""
+    doc = _ontology()
+    doc["actionTypesFullMetadata"] = {
+        "doIt": {
+            "actionType": {"apiName": "doIt", "description": "does it", "status": "ACTIVE",
+                           "parameters": {}, "operations": []},
+            "fullLogicRules": [{"type": "function", "functionRid": "ri.f.1",
+                                "functionVersion": "1.0.0"}],
+        }
+    }
+    report = registry.import_foundry(doc, dry_run=False)
+    action = _items(report, api_name="doIt")[0]
+    assert (action.kind, action.outcome) == ("action", "written")
+    assert [e["op"] for e in action.detail["effects"]] == ["host_state"]
+    if adapter.capabilities().stores_attributes:
+        stored = adapter.get_type("default", "do_it", kind="action")
+        assert stored.attributes["foundry_action"]["fullLogicRules"] == (
+            doc["actionTypesFullMetadata"]["doIt"]["fullLogicRules"]
+        )
+
+    edge_cases = foundry_fixture("edge_cases")
+    edge_cases.pop("actionTypesFullMetadata")
+    effect = _items(registry.import_foundry(edge_cases), api_name="assignDoctor")[0].detail[
+        "effects"
+    ][0]
+    assert (effect["link"], effect["inverse_link"]) == ("treats", "treatedBy")
+
+
+def test_c12_57_a_document_that_is_not_full_metadata_is_refused_not_emptied(registry):
+    """**Round 3, mapping lens.** A dict with none of `OntologyFullMetadata`'s type
+    maps (a pydantic `model_dump()` without `by_alias=True` gives `object_types`) was
+    read as an empty ontology: a clean dry run, and a real run that wrote nothing. A
+    caller's mistake, said as one. An empty ontology still has its keys."""
+    with pytest.raises(ValueError, match="by_alias=True"):
+        registry.import_foundry({"ontology": {}, "object_types": {"Person": {}}})
+    with pytest.raises(TypeError, match="dict"):
+        registry.import_foundry([])
+    assert registry.import_foundry(_ontology()).items == ()
+
+
+def test_c12_58_a_definitions_key_on_an_inverse_side_is_unmatched(registry):
+    """**Round 3, mapping lens.** `definitions=` keyed by an inverse side was checked
+    against the inverse keys `names=` takes, so it read as matched and defined
+    nothing. Only an item's own key takes a definition."""
+    doc = _ontology(
+        objects={"Pet": ("a pet", "ACTIVE", ()), "Owner": ("an owner", "ACTIVE", ())},
+        links={"Pet": [_side("owner", "Owner", "ri.l.o", fk="ownerId")],
+               "Owner": [_side("pets", "Pet", "ri.l.o")]},
+    )
+    report = registry.import_foundry(doc, definitions={"Owner.pets": "an owner has pets"})
+    assert report.unmatched == {"names": [], "definitions": ["Owner.pets"]}
+    assert _items(report, kind="edge")[0].reason == "definition_missing"
+
+
+def test_c12_59_a_referent_the_store_holds_live_is_resolved(registry, adapter):
+    """**Round 3, guards lens.** `unresolved` trusted the plan before the store. A
+    migration re-run without `definitions=` holds a standing interface
+    `definition_missing` (the plan never asks the store), while its row stays active,
+    and every entity implementing it was told its predicate was missing. The store is
+    asked first: a live row resolves the reference, whatever the plan held."""
+    doc = _ontology(
+        interfaces={"Auditable": None},
+        objects={"Flight": ("a flight", "ACTIVE", ("Auditable",))},
+    )
+    first = registry.import_foundry(
+        doc, dry_run=False, definitions={"Auditable": "a record keeps an audit trail"}
+    )
+    assert "unresolved" not in _items(first, api_name="Flight")[0].detail
+
+    again = registry.import_foundry(doc, dry_run=False)
+    assert _items(again, api_name="Auditable")[0].reason == "definition_missing"
+    assert adapter.get_type("default", "auditable", kind="predicate").status == "active"
+    assert "unresolved" not in _items(again, api_name="Flight")[0].detail
+
+
+def test_c12_60_the_rest_of_round_3s_record_is_pinned(registry, adapter, make_registry):
+    """**Round 3, tests lens.** Four claims the record made that a narrower mutant passed.
+
+    1. `foundry_object_type_metadata` is EVERY sibling but `objectType` and
+       `linkTypes`. Only the two keys `C12-54` names were asserted, so keeping
+       `objectType` or `linkTypes` in it, or dropping `implementsInterfaces`, passed.
+    2. A dry run reads a referent the document deprecates as `retired` even while the
+       store holds it live, and Foundry's status is matched in any case.
+    3. A look-alike at EXACTLY the namespace's `near_duplicate_threshold` is reported.
+    4. `detail["standing"]` asks the store for the item's own kind: a predicate named
+       like an entity is not that entity standing."""
+    doc = _ontology(objects={"Crew": ("a crew", "ACTIVE", ())})
+    doc["objectTypes"]["Crew"]["extraSibling"] = {"kept": True}
+    registry.import_foundry(doc, dry_run=False)
+    if adapter.capabilities().stores_attributes:
+        stored = adapter.get_type("default", "crew", kind="entity")
+        full = doc["objectTypes"]["Crew"]
+        assert stored.attributes["foundry_object_type_metadata"] == {
+            "validated": False,
+            **{k: v for k, v in full.items() if k not in ("objectType", "linkTypes")},
+        }
+
+    pets = _ontology(
+        objects={"Pet": ("a pet", "ACTIVE", ()), "Owner": ("an owner", "ACTIVE", ())},
+        links={"Pet": [_side("owner", "Owner", "ri.l.o", fk="ownerId")],
+               "Owner": [_side("pets", "Pet", "ri.l.o")]},
+    )
+    defined = {"Pet.owner": "a pet has an owner"}
+    registry.import_foundry(pets, dry_run=False, definitions=defined)
+    assert adapter.get_type("default", "owner", kind="entity").status == "active"
+    pets["objectTypes"]["Owner"]["objectType"]["status"] = "deprecated"
+    edge = _items(registry.import_foundry(pets, definitions=defined), kind="edge")[0]
+    assert {"dst": "owner", "why": "retired"} in edge.detail["unresolved"]
+
+    seed(registry, "facility", kind="predicate", definition="a facility predicate")
+    cms = foundry_fixture("uc2_cms")
+    facility = _items(registry.import_foundry(cms), api_name="Facility")[0]
+    assert facility.detail["standing"] is False
+
+    seed(registry, "widget", definition="a widget")
+    widgets = _ontology(objects={"Widgets": ("some widgets", "ACTIVE", ())})
+    [score] = [lk.score for lk in make_registry(
+        adapter, near_duplicate_threshold=0.0
+    ).import_foundry(widgets).looks_like if lk.matched == "widget"]
+    at = make_registry(adapter, near_duplicate_threshold=score)
+    assert [lk.matched for lk in at.import_foundry(widgets).looks_like] == ["widget"]

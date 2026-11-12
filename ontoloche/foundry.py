@@ -64,6 +64,7 @@ _OBJECT_TYPE_MAPPED = frozenset(
 )
 
 _NOT_IMPORTED = ("queryTypes", "sharedPropertyTypes", "valueTypes")
+_TYPE_MAPS = ("objectTypes", "interfaceTypes", "actionTypes", "actionTypesFullMetadata")
 
 
 def convert_name(api_name: str) -> str:
@@ -192,10 +193,13 @@ def _effects(action_api_name: str, doc: dict) -> list[dict]:
         link = rule.get("linkTypeApiName") or rule.get("linkTypeApiNameAtoB")
         if link is None and rule.get("interfaceLinkTypeApiName"):
             link = f"{rule.get('interfaceTypeApiName')}.{rule['interfaceLinkTypeApiName']}"
+        # `CreateLinkRule` / `DeleteLinkRule` name both directions; the family's
+        # forward side may be either (round 3).
+        inverse = {"inverse_link": rule["linkTypeApiNameBtoA"]} if rule.get("linkTypeApiNameBtoA") else {}
         if rule_type in LINK_ADD_RULES:
-            out.append({"op": "add_edge", "rule": rule_type, "link": link, "source": source})
+            out.append({"op": "add_edge", "rule": rule_type, "link": link, "source": source, **inverse})
         elif rule_type in LINK_REMOVE_RULES:
-            out.append({"op": "retract_edge", "rule": rule_type, "link": link, "source": source})
+            out.append({"op": "retract_edge", "rule": rule_type, "link": link, "source": source, **inverse})
         else:
             out.append(
                 {
@@ -258,6 +262,19 @@ def plan(
     Returns ``(planned, not_imported, unmatched)``. A held item carries ``reason`` and no row is
     sent for it.
     """
+    # **Not a full-metadata document** (round 3). A dict with none of the type maps
+    # (a pydantic `model_dump()` without `by_alias=True` gives `object_types`) read as
+    # an empty ontology: a clean dry run, and a real run that wrote nothing.
+    if not isinstance(doc, dict):
+        raise TypeError(
+            f"import_foundry takes an OntologyFullMetadata dict, got {type(doc).__name__}"
+        )
+    if not any(k in doc for k in _TYPE_MAPS):
+        raise ValueError(
+            "not an OntologyFullMetadata document: none of "
+            f"{', '.join(_TYPE_MAPS)} is present (an SDK model needs "
+            "model_dump(by_alias=True))"
+        )
     names = dict(names or {})
     definitions = dict(definitions or {})
     # A caller's type error, not a hold: ``names={"Foo": 5}`` raised a bare
@@ -387,8 +404,21 @@ def plan(
             )
         )
 
-    for api, action in sorted((doc.get("actionTypes") or {}).items()):
+    # **Both action maps** (round 3). `actionTypesFullMetadata[x].actionType` is a
+    # whole `ActionTypeV2`, so an action in that map alone is an action; it was
+    # dropped with no count. And its `fullLogicRules` hold the rule variants
+    # `operations` cannot (`function`, interface rules), so they are carried.
+    full_actions = doc.get("actionTypesFullMetadata") or {}
+    actions = {
+        api: (entry.get("actionType") or {"apiName": api})
+        for api, entry in full_actions.items()
+    }
+    actions.update(doc.get("actionTypes") or {})
+    for api, action in sorted(actions.items()):
         carried = {k: v for k, v in action.items() if k not in ("rid", "description", "status")}
+        logic = (full_actions.get(api) or {}).get("fullLogicRules")
+        if logic:
+            carried["fullLogicRules"] = logic
         effects = _effects(api, doc)
         planned.append(
             _Planned(
@@ -416,11 +446,13 @@ def plan(
     # real run, against what was actually written (round 2).
     planned.sort(key=lambda p: KIND_ORDER.index(p.kind))
     not_imported = {k: len(doc.get(k) or {}) for k in _NOT_IMPORTED}
-    keys = {p.key for p in planned} | {
+    keys = {p.key for p in planned}
+    # An inverse key takes a name (the label), never a definition (round 3).
+    name_keys = keys | {
         p.detail["inverse_key"] for p in planned if p.detail.get("inverse_key")
     }
     unmatched = {
-        "names": sorted(k for k in names if k not in keys),
+        "names": sorted(k for k in names if k not in name_keys),
         "definitions": sorted(k for k in definitions if k not in keys),
     }
     return planned, not_imported, unmatched

@@ -6333,8 +6333,9 @@ class Registry:
         * ``retired`` -- the store holds it retired, or this document deprecates it;
         * ``not_in_document`` -- the document never defines it and the store has no row.
 
-        A dry run cannot predict a guard's refusal (2.5a), so there a referent the
-        document would write and the store holds retired reads ``retired``.
+        The store is asked first (round 3): a live stored row resolves the
+        reference, a retired one reads ``retired``, and only an absent row is
+        explained by the plan. A dry run cannot predict a guard's refusal (2.5a).
         """
         by_api = {(p.kind, p.api_name): p for p in planned}
         for p in planned:
@@ -6342,35 +6343,42 @@ class Registry:
             for label, kind, api, word in p.refs:
                 target_kind = "predicate" if kind == "interface" else kind
                 target = by_api.get((target_kind, api))
+                # **The store first** (round 3). A referent the store holds live is
+                # resolved whatever the plan held or `import_types` refused: a re-run
+                # without `definitions=` holds a standing interface `definition_missing`
+                # while its row stays active, and a refused change leaves the standing
+                # row live. A retired row reads `retired` (the referent's own item
+                # carries any refusal). Only an absent row is explained by the plan.
+                stored = (
+                    self.adapter.get_type(namespace, word, kind=target_kind)
+                    if isinstance(word, str) and word
+                    else None
+                )
+                deprecated = (
+                    target is not None
+                    and target.reason is None
+                    and str(target.row.get("status") or "").upper() == "DEPRECATED"
+                )
+                refused = (
+                    _import_refusal(results[id(target)].warnings)
+                    if target is not None and id(target) in results
+                    else None
+                )
                 why = None
-                if target is not None and target.reason is not None:
+                if dry_run and deprecated:
+                    why = "retired"
+                elif stored is not None:
+                    why = "retired" if stored.status == "retired" else None
+                elif target is None:
+                    why = "not_in_document"
+                elif target.reason is not None:
                     why = f"held:{target.reason}"
-                elif target is not None and id(target) in results:
-                    refused = _import_refusal(results[id(target)].warnings)
-                    if refused is not None:
-                        why = f"refused:{refused}"
-                if why is None:
-                    stored = (
-                        self.adapter.get_type(namespace, word, kind=target_kind)
-                        if isinstance(word, str) and word
-                        else None
-                    )
-                    deprecated = (
-                        target is not None
-                        and str(target.row.get("status") or "").upper() == "DEPRECATED"
-                    )
-                    if stored is not None and stored.status == "retired":
-                        why = "retired"
-                    elif dry_run and deprecated:
-                        why = "retired"
-                    elif stored is None and target is None:
-                        why = "not_in_document"
+                elif refused is not None:
+                    why = f"refused:{refused}"
                 if why is not None:
                     unresolved.append({label: word, "why": why})
             if unresolved:
                 p.detail["unresolved"] = unresolved
-            else:
-                p.detail.pop("unresolved", None)
 
     # ===================================================================== edges
     #
