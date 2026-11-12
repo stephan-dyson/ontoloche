@@ -161,7 +161,8 @@ def main() -> int:
     show("D13 retire a referenced value set", getattr(out, "status", None) or out.reason)
     show("D13 warnings", getattr(out, "warnings", None))
 
-    # D1 and D4, which §1 scored without a run: re-minting a retired property's name,
+    # D1 and D4, which §1 scored without a run: proposing a retired property's name, which
+    # mints nothing and hands back the tombstone (the way back is reinstate),
     # and reading a retired property through resolve_type after a typed collapse.
     reg = Registry(SQLiteAdapter(":memory:"))
     seed(reg, "zip_code", kind="property", attributes={"base_type": "str"})
@@ -172,7 +173,7 @@ def main() -> int:
          f"{r.confidence} {getattr(r.type, 'attributes', None)}")
     out = reg.propose_type("zip_code", "a zip code again", EVIDENCE, "user:sd", kind="property",
                            attributes={"base_type": "str"})
-    show("D1 re-mint a retired property's name", getattr(out, "warnings", None))
+    show("D1 propose a retired property's name", f"{getattr(out, 'status', None)} {getattr(out, 'warnings', None)}")
     return 0
 
 

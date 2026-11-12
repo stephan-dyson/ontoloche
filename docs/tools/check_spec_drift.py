@@ -663,6 +663,17 @@ PLANNED_SHAPES = {
     "SharedPropertyDeclaration",
 }
 
+#: The two planned view functions 2.10 prints, held to their printed signature line.
+#: Round 3 of row 8b's loop found that dropping `caps` from the printed signature passed
+#: every check. Each value is the exact signature text 2.10 must print.
+PLANNED_FUNCTIONS = {
+    "entity_declaration":
+        "def entity_declaration(entry: TypeEntry, caps: Capabilities) -> EntityDeclaration: ...",
+    "shared_property_declaration":
+        "def shared_property_declaration(entry: TypeEntry, caps: Capabilities) "
+        "-> SharedPropertyDeclaration: ...",
+}
+
 #: Every importable ``ontoloche`` module is a place a build row could put a planned
 #: shape -- the precedent puts views in their own module (`edges.py`, `actions.py`), so a
 #: fixed list of three would miss `ontoloche/properties.py`, which is where 2.10 says the
@@ -719,8 +730,23 @@ def _check_planned_shapes(blocks: list[str]) -> list[str]:
             if hasattr(module, name):
                 problems.append(
                     f"INTERFACE {name}: PLANNED, and {module.__name__} now defines it -- "
-                    f"move it from PLANNED_SHAPES to SHAPES in the change that landed it, "
+                    f"move it from PLANNED_SHAPES to a shape table this checker resolves in "
+                    f"{module.__name__} (SHAPES itself reads `ontoloche.types` only, so a "
+                    f"shape landing elsewhere needs its own table, as ACTIONS_SHAPES has), "
                     f"so its fields are held against the code"
+                )
+    printed = "\n".join(blocks)
+    for name, signature in sorted(PLANNED_FUNCTIONS.items()):
+        if signature not in printed:
+            problems.append(
+                f"INTERFACE {name}: PLANNED view function, and the spec no longer prints "
+                f"its signature `{signature}` -- change both together"
+            )
+        for module in _planned_homes():
+            if hasattr(module, name):
+                problems.append(
+                    f"INTERFACE {name}: PLANNED, and {module.__name__} now defines it -- "
+                    f"hold its signature against the code in the change that landed it"
                 )
     for name in sorted(_printed_shape_names(blocks) - set(SHAPES) - PLANNED_SHAPES):
         problems.append(

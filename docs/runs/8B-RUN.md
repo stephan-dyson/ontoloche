@@ -267,7 +267,7 @@ Two findings no prediction covered: the undescribed Foundry properties, which ch
 4. **D1 and D4 were scored without a run.** Both now are, in `properties_baseline_probe.py`, and both behave as §0.4 predicted **[Observed]**: re-minting a retired property's name returns `name_previously_retired`, and a retired `zip_code` (`str`) resolves to `postal_code` (`int`) as `existing` at 1.0, which is residual 5.3.2-13(b), now naming `property`.
 5. **Rule numbers in §1.0 to §1.5 are the first draft's.** Round 1 inserted rule 2.10-9, so the draft's 2.10-9 to 2.10-19 are now 2.10-10 to 2.10-20 in the order they were written. §1.3's *"2.10-15"* is now 2.10-16, and §1.2's references to 2.10-11 and 2.10-13 are now 2.10-12 and 2.10-14. Two names in §1.2 are wrong as well: NYC's namespace in [`3C-VALIDATION.md`](../findings/3C-VALIDATION.md) is `oti_311`, not `oti`, and `location` is proposed as a property only when the caller passes `kind="property"`.
 
-### §1.10 — Score, corrected after round 2
+### §1.10 — Score, corrected after round 2 *(superseded by §1.12)*
 
 | test | predictions | hits | misses | untested |
 |---|---|---|---|---|
@@ -280,6 +280,30 @@ Two findings no prediction covered: the undescribed Foundry properties, which ch
 | falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
 
 **Doors §0.4 never listed:** D11 (round 1) and D7b (round 1), and from round 2 **D12**, the import alias write collapsing two properties or two entities with no acknowledgement after a plain `retire`, and **D13**, a value set that a slot references being retired or collapsed silently.
+
+### §1.11 — Corrections from round 3, including one to §1.9
+
+§1.9's text is left as committed at `1ba5d41`.
+
+1. **§1.9 item 1 was itself false, the second correction of this count to be wrong.** No rule forces sharing at all. §2.10 says a property used by several entities *can* be registered once, and rule 2.10-4 only makes slot names unique within one entity, so `facility` and `survey` may each declare a local `ccn`. What `survey`'s key forces is a `ccn` **slot**, and only on an entity that declares `properties`. Under rule 2.10-1's carve-out the shipped fixture, which declares none, forces nothing. **The honest count is zero to four shared, all the declarer's choice.** The UC2 miss stands, on §0's own stated reason (*"no column is used by two entities"*), which is false: `ccn` is a column of both.
+2. **D2 was scored HIT with a mechanism wrong at two of its three doors.** §0.4 D2 predicted a collapse *"after acknowledging `no_consumer_evidence` and `definitions_diverge`"* at `merge_types`, `retire(successor=)` and the import alias write. **[Observed]** only `merge_types` asks for those. `retire(successor=)` and the alias write (after a plain `retire`) collapse with no acknowledgement. D9 was scored MISS for being half wrong, so D2 is now a half MISS too. **D12's property half is D2's own third door**, so the door §0.4 never listed is D12's **entity** half only.
+3. **UC3's row in §1.10 did not add up, and its untested item is now run.** §1.2 items 1, 3 and 4 are HITs no correction touched, and item 2 is the MISS (§1.9 item 2). **[Observed]** after registering `latitude` as `kind="property"` in `dot`, `resolve_type("latitude")` answers `existing` at 1.0 both with `kind="property"` and with `kind=None`. So UC3 is three hits and one miss, and rule 2.10-14's *kind=None proposes an entity* is now scoped to unregistered words.
+4. **The Foundry key-slot refusal was not a §0 prediction.** §1.10 moved Foundry's hits from 5 to 4 without naming which prediction was demoted, and none was: §0 said nothing about `required` on key slots. It is now listed as an **unpredicted** miss, and the five hits stand.
+5. **§1.4 HIT 1 conflicts with row 8a's mapping.** It said `foo_spt` keeps Foundry's `apiName` *"as an alias per §2.1"*. Row 8a's mapping does not write the `apiName` into `aliases`, and records the source in `provenance.imported_from`. The mapping is row 8a's, so §1.4's sentence is withdrawn rather than argued.
+
+### §1.12 — Score, corrected after round 3
+
+| test | predictions | hits | misses | untested |
+|---|---|---|---|---|
+| UC2 | 7 | 5 | 2 (shared count, local-slot count) | 0 |
+| UC3 | 4 | 3 | 1 (contortion 10 closing) | 0, after round 3's run |
+| UC1 | 1 | 0 | 1 partial (the cost) | 0 |
+| Foundry | 7 | 5 | 1 half (`opaque` warning) | 1 (value types) |
+| doors D1 to D10 | 10 | 6 | 4 (D2, half; D8 as first written; D9's warning; D10) | 0 |
+| kill row: *"zero new trips"* | 1 | 1 | 0 | 0 |
+| falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
+
+**Misses no prediction named:** every Foundry object type refused by rule 2.10-5 as first written (round 2). **Doors §0.4 never listed:** D7b and D11 (round 1); D12's entity half and D13 (round 2).
 
 ---
 
@@ -331,3 +355,20 @@ Three fresh lenses against `29a3728`, nothing edited while they ran. **0 BLOCKIN
 **Kill row:** the door lens found no door reaching it. Every property collapse toward a predicate is refused, and a word shared between two kinds blocks a collapse rather than causing one.
 
 **Round 2 produced MAJOR fixes, so round 3 is a full round that sees them** (§0.6).
+
+### §2.3 — Round 3
+
+Three fresh lenses against `1ba5d41`, nothing edited while they ran. **0 BLOCKING, 7 MAJOR, 14 MINOR.** No lens reached the kill row. Round 2's door fixes held at every door re-run, including value sets at `merge_types` and the alias write, `reinstate` after both kinds of collapse, every cross-kind alias write and cross-namespace aliases. Four of the seven MAJORs are in one place: how a slot's reference is read and warned.
+
+| # | sev | finding | lens | fix |
+|---|---|---|---|---|
+| 1 | MAJOR | the printed reader had no `namespace`, so a NYC `oti_311` slot read `default`'s `status` **[Observed]** | doors | 2.10-11: `namespace=entry.namespace`, mandatory; §10b.3's call too |
+| 2 | MAJOR | the printed reader fuzzy-matched, so `boroughs` bound to `borough` at 0.93 while 2.10-10 warned it unregistered **[Observed]** | implementer | 2.10-11: `min_confidence=1.0`, which keeps the redirect **[Observed]** |
+| 3 | MAJOR | 2.10-10 chose `_moved` from the tombstone's `successor`, which the alias write leaves empty, so a CMS slot would be warned *retired* while reading the severity grid **[Observed]** | doors | 2.10-10: the warning follows what the reader answers |
+| 4 | MAJOR | one scalar `why_absent` could not describe three keys | implementer | `why_absent: dict[str, str]`, keyed by reserved key; a 2.10-5 breach nulls the key, never `properties` |
+| 5 | MAJOR | `required` defaulted False in the shape and read True on a key slot in 2.10-5 | implementer | the shape comment says what the view returns |
+| 6 | MAJOR | D2 scored HIT with the wrong mechanism at two doors | fidelity | §1.11 item 2 |
+| 7 | MAJOR | §1.9 item 1, a correction, was false: no rule forces sharing | fidelity | §1.11 item 1 |
+| 8 to 21 | MINOR | 2.10-18 lacked `merge_types`; `properties: []` and `null`; JSON `null` in a field; evaluation order inside one import; `_undeclared` keyed on `stores_attributes` rather than `stores_attribute(key)`; precedent cited backwards (`action_attributes` writes, `ActionFamily.from_attributes` reads); the checker not holding the view signatures, and its *move it to SHAPES* advice wrong for a shape outside `ontoloche.types`; `types.KINDS` gating nothing; D1 labelled a re-mint; UC3's count; Foundry's demoted hit unnamed; §1.4's alias claim against row 8a; `mainValue` is struct-level; `source_type`'s serialisation; row 8a dropping shared property types | all three | each folded into the rule it names, §1.11, or the probe; the checker now holds both printed view signatures, proved by mutation |
+
+**Round 3 produced MAJOR fixes, so round 4 is a full round that sees them** (§0.6). Round 4 is the fourth of five, so if round 4 also finds a MAJOR, round 5 is the last the stopping rule allows.

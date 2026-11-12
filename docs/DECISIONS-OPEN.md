@@ -29,7 +29,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 - **`decline`** — refuse the row with no way to supply the text in the same call. Faithful to the brief, and it fails Palantir's fixture.
 - **`recommend`** — I bring you the per-case rule with the fixture counts.
 
-**Ask: `like types`, `keep and warn`, `decline`, or `recommend`.** Default in force: the shipped code checks no property declaration, so a slot is written as given with no warning. In practice row 8a's Foundry importer writes **no slots yet**: under your R105 `carry` it keeps Foundry's properties verbatim in `attributes["foundry_properties"]`, marked unvalidated, so this question bites the row that turns them into slots. Spec rule 2.10-21 is `reserved: Q106`. I have no lean between `like types` and `keep and warn`: the first is consistent with your type ruling, the second keeps the import easy, and the type case never had to choose.
+**Ask: `like types`, `keep and warn`, `decline`, or `recommend`.** Default in force: the shipped code checks no property declaration, so a slot is written as given with no warning. In practice row 8a's Foundry importer writes **no slots yet**: under your R105 `carry` it keeps Foundry's properties verbatim in `attributes["foundry_properties"]`, marked unvalidated, so this question bites the row that turns them into slots. That importer also brings in no shared property types yet, which is row 8a's to record. Spec rule 2.10-21 is `reserved: Q106`. I have no lean between `like types` and `keep and warn`: the first is consistent with your type ruling, the second keeps the import easy, and the type case never had to choose.
 
 ### 19 · `Q103` — how is an approved property declaration amended, and what may change?
 
