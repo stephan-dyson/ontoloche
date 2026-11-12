@@ -1,0 +1,128 @@
+# 8B-RUN — roadmap row 8b: entity properties in `INTERFACE.md`, the SPEC row under R108
+
+**Status:** in flight. **Row:** opened by founder ruling [R108](../decisions/2026-09-22-founder-ruling-R108.md) (`adopt B`), run per the [brief](../handoffs/2026-09-22-row-8b-properties-spec-brief.md). **This row ships no product code.** Anything it runs lives under `docs/tools/`, the way row 7a's probes did.
+
+**Claim tags:** **[Observed]** seen directly in this repo, in a command's output, or on a page opened this row · **[Inferred]** a reasonable read · **[Assumed]** believed, untested.
+
+---
+
+## §0 — PRE-REGISTRATION, committed before any section of `INTERFACE.md` changes and before any design test runs
+
+This section is the first commit that touches this record. Every prediction below is made from the brief, R108, [`PROPERTIES-OPTIONS.md`](../findings/PROPERTIES-OPTIONS.md), the shipped code and the three use-case documents. **No design test has been walked and the Foundry fixture has not been read** when this is written. A wrong prediction stays here and is scored as a miss in §1.
+
+### §0.1 — The spec choices the predictions are made under
+
+The predictions only mean something against a stated design, so the design is stated first. Each choice is the spec's to make unless it decides what the registry refuses (§0.5).
+
+1. **Carrier.** Local property declarations live in `TypeEntry.attributes` of a `kind="entity"` entry, under three reserved keys: `properties`, `primary_key` and `title_property`. A shared property's declaration lives in the `attributes` of its own `kind="property"` entry. This is the precedent edge families (`EDGES.md` §2.4) and action families (`ACTIONS.md` §2.2) already use: a declaration in `attributes`, read as a view, validated by the registry. **No new `TypeEntry` field.**
+2. **`primary_key` keeps the shape it already has.** **[Observed]** the contract suite's CMS fixture already writes `attributes={"primary_key": ["ccn"]}`, and `["ccn", "survey_date", "survey_type"]` for `survey` (`ontoloche/contract/_support.py:390`, `:411`), and `sqlite_minimal` owns that one key as a typed column (`ontoloche/backends/sqlite_minimal.py:108`). So `primary_key` is an ordered list of slot names, not a single name. Foundry's single key is a one-element list.
+3. **A slot either is local or uses a shared property, never both.** A local slot declares `name`, `base_type`, `description` (required, non-empty), `required`, and optionally `value_set` and `item_type`. A shared slot declares `name`, `shared` and `required`, and reads its type, description and value set from the `kind="property"` entry it names. One fact, one home.
+4. **No inline `enum`.** An enumerated property points at a `kind="value_set"` entry. `INTERFACE.md` §10's CMS conflict 1 is the reason: an inline list has no provenance and no evidence slot.
+5. **`shared` and `value_set` name entries in the entity's own namespace only.** A cross-namespace reference is not expressible. *The same meaning, kept apart* across namespaces stays `equivalent_to`'s job (ruling R7, `EDGES.md`).
+6. **Base types.** `base_type` is a closed set: FieldSpec's seven (`str`, `int`, `float`, `bool`, `datetime`, `list`, `dict`) plus `date`, `decimal` and `opaque`. A property imported from a foreign system keeps the foreign type verbatim in `source_type`. A foreign type with no faithful mapping lands as `opaque`.
+7. **Dangling and moved references warn, they never refuse.** A `shared` or `value_set` reference that names nothing, names a retired word, or names a word whose identity moved is written and warned. This is ruling R55's treatment of a declared predicate, and `EDGES.md` §2.7's rule that a dangling reference is a fact.
+8. **`not_a_type`'s four reasons are untouched.** Contortion 10 closes because `property` is now a kind, so `resolve_type` has an honest answer to give, not because a fifth reason is added.
+
+### §0.2 — Predictions for each design test (brief §3)
+
+#### UC2 CMS — the 23 columns
+
+| # | column | predicted home |
+|---|---|---|
+| 1 | CMS Certification Number (CCN) | `facility` local, `str` (leading zeros), `primary_key` |
+| 2 | Provider Name | `facility` local, `str`, `title_property` |
+| 3 | Provider Address | `facility` local, `str` |
+| 4 | City/Town | `facility` local, `str` |
+| 5 | State | `facility` local, `str` |
+| 6 | ZIP Code | `facility` local, `str` (leading zeros) |
+| 7 | Survey Date | `survey` local, `date`, part of `primary_key` |
+| 8 | Survey Type | `survey` local, `str`, part of `primary_key` |
+| 9 | Deficiency Prefix | `deficiency_tag` local, `str` |
+| 10 | Deficiency Category | `deficiency_tag` local, `str` |
+| 11 | Deficiency Tag Number | `deficiency_tag` local, `str` (leading zero), `primary_key` |
+| 12 | Deficiency Description | `deficiency_tag` local, `str`, `title_property` (T5: the description belongs to the tag) |
+| 13 | Scope Severity Code | `citation` local, `value_set` → `scope_severity_code`, **external evidence kept** |
+| 14 | Deficiency Corrected | `citation` local, `value_set` → `deficiency_corrected_status` (T1) |
+| 15 | Correction Date | `citation` local, `date`, not required |
+| 16 | Inspection Cycle | `citation` local, `int` |
+| 17–21 | Standard / Complaint / Infection Control Inspection Deficiency, Citation under IDR / IIDR | `citation` local, `bool` each |
+| 22 | Location | **`not_a_type` / `redundant_projection`**, unchanged |
+| 23 | Processing Date | **`not_a_type` / `export_artefact`**, unchanged (T7) |
+
+**Counts predicted:** 21 local slots across four entities, **0 shared**, 2 slots pointing at a `value_set`, 2 `not_a_type`. **Shared properties: zero**, because one publisher writes one flat file and no column is used by two entities. That is a finding about which fixture exercises the shared tier (UC3 and Foundry), not a failure.
+
+**Contortions predicted in UC2:** (a) `survey.ccn` and `citation`'s survey columns are **foreign keys**, and B has no way to say a slot's values are another entity's key. That is `EDGES.md`'s job, so it is recorded, not designed away. (b) `citation` has no natural key. `primary_key` is absent, which is a fact rather than an error. (c) The 1.28% of rows whose correction date precedes the survey date are **not caught**, because values are never checked (R78). That is by design, not a contortion.
+
+#### UC3 NYC — `status`, `latitude`, `longitude`
+
+1. **`status` stays three separate things.** Each agency's entity declares a local `status` slot whose `value_set` names its own namespace's value set. Nothing joins them: `shared` cannot cross a namespace (§0.1 item 5) and `merge_types` across namespaces is still refused non-overridably.
+2. **`latitude` and `longitude` resolve as properties** in two shapes. Where an agency has registered `latitude` as a `kind="property"` entry, `resolve_type("latitude", kind="property")` answers `existing` at 1.0. Where it is only a local slot, the same call answers `proposal` with `kind="property"`, which is an honest home and closes contortion 10 as written.
+3. **The residual, predicted and not designed away:** with `kind=None`, the shipped resolver still proposes an **entity**. **[Observed]** `ontoloche/registry.py:2082` builds the proposal with `kind=kind or "entity"`. Contortion 10's own text says *"it is not the resolver being weak"*, so this residual is the resolver's, and the spec does not claim to close it.
+4. **No cross-namespace merge succeeds**, and none of the new doors offers a route to one.
+
+#### UC1 Tenshen
+
+**Predicted: B costs Tenshen nothing on the path it uses, and the brief's [Assumed] "costs nothing" is REFUTED in one place.** Tenshen's entities live in its own code and its registry vocabulary is relationship types, so an entry declaring no properties must behave exactly as today. **But** Tenshen's declared backend shape is `sqlite_minimal`, which keeps only `primary_key` out of `attributes` ([Observed] the module docstring and `Capabilities.surviving_attributes`, `ontoloche/adapter.py:320`). So `properties` and `title_property` cannot be stored there. If Tenshen ever declares a property, the declaration is lost on write unless the host adds a column. **Predicted cost: zero today, one `ALTER TABLE` the day it declares a property**, the same shape as `PACKAGE.md` §7's one `ALTER TABLE`.
+
+#### Foundry — the fixture from R106's routes
+
+Predicted without reading the fixture:
+
+1. Every Foundry **shared property type** becomes one `kind="property"` entry, and every object type property that maps onto one becomes a shared slot.
+2. Every other object type property becomes a local slot.
+3. `string`, `integer`, `double`, `boolean`, `timestamp` and `date` map. `long`, `short`, `byte`, `float` and `decimal` map with `source_type` kept. `array` maps to `list` with `item_type`. **Geo, attachment, media, time series, vector, cipher text and marking types land `opaque`**, with `source_type` kept and a warning.
+4. **Recorded contortions predicted:** (a) an **interface's property contract** has no home, because `kind="predicate"` is a capability set, not a property contract. (b) A `struct`'s sub-fields have no typed home. (c) Value types other than an enum constraint (range, regex, uuid) have no home beyond `source_type`. (d) A Foundry shared property mapped onto an object type under a **different property apiName** needs the slot name and the shared name to differ, and §0.1 item 3 allows that.
+
+### §0.3 — The falsifiers
+
+The brief asks for *"a falsifier for the amendment-mechanism choice"*, and "amendment" means two things in the governing documents: the carrier this spec amendment uses (brief §1), and how an approved entity is amended (R108 §2 item 1). Both get one.
+
+- **F1, the carrier.** §0.1 item 1 is falsified if any design test needs a property fact that a declaration in `attributes` cannot hold without a second home for the same fact, or if an entry written before this amendment changes meaning because of the reserved keys. **Predicted: not falsified,** with the `sqlite_minimal` cost above recorded as a cost of the carrier rather than a falsification.
+- **F2, amending an approved entity.** The candidates are a governed amendment through the proposal loop, or supersede-and-retire. **Supersede-and-retire is falsified** if adding one optional slot to an approved `facility` needs a name other than `facility`. **Predicted: falsified.** Names are unique per `(namespace, kind)`, a taken name returns the existing entry (§5.4), and a retired name is burned (§5.9), so every property addition would rename the word. **The governed amendment is falsified** if an ordinary property change in any design test can only be written by editing a provenance-bearing row in place with no event. **Predicted: not falsified.** What the amendment call may *refuse* is the founder's (§0.5), so the spec records the mechanism and does not decide its refusals.
+
+### §0.4 — The kill-row doors `kind="property"` opens
+
+Rows 6b and 6d produced trips through new doors. Kill row at the start of this row: **twenty-three** trips (`STATUS.md`). The doors, listed before the spec is written:
+
+| # | door | predicted state |
+|---|---|---|
+| D1 | minting a `kind="property"` name at `propose_type`, `approve`, `import_types` | **inherited**: uniqueness, `name_previously_retired`, `word_previously_retired` and `C16-06`'s one-word invariant are kind-blind |
+| D2 | collapsing two `kind="property"` entries at `merge_types`, `retire(successor=)`, `import_types`' alias write | **OPEN.** No guard compares base types, so two properties of different types collapse after acknowledging `no_consumer_evidence` and `definitions_diverge`. Every entity using the absorbed word then reads the survivor's type. *One word, two definitions*: the governance register's shape, not the kill row's |
+| D3 | collapsing a property into an entity, or across namespaces | **inherited**: `kind_mismatch` and `cross_namespace_merge`, non-overridable |
+| D4 | `resolve_type` redirecting through a property's alias or successor | **inherited residual**: `kind="property"` joins 5.3.2-13(b), a kind with no staleness operand that answers 1.0 |
+| D5 | an entity's `shared` or `value_set` reference to a word that is unregistered, retired or merged | **new door, warned** under §0.1 item 7. Resolves to the identity by R38 |
+| D6 | retiring a `kind="property"` entry an active entity still uses | **OPEN.** `retire` is guarded by `consumers()`, and nothing gates on a property, so it succeeds silently and leaves every user dangling |
+| D7 | amending an approved entity's declaration | **OPEN.** No call exists. **[Inferred]** `import_types` re-importing an active entity rewrites its `attributes`, which makes import an ungoverned amendment door today. Checked in §1 |
+| D8 | the reserved keys colliding with `attributes` written before the amendment | **inherited**: `PACKAGE.md` §5.4 never re-validates an entry written under an older schema. `primary_key` already has the reserved shape |
+| D9 | a backend that cannot store `attributes` | **new door**: declarations dropped on write. Warned, never refused, as the least-refusing option |
+| D10 | a property entering a predicate's extent, or being a consumer's gate | **not opened.** A property is not a predicate and `kind_mismatch` blocks every collapse into one |
+
+**Predicted: zero new kill-row trips** (the kill row is a capability predicate merged as a duplicate, and D3 and D10 keep properties away from predicates). **Three open doors (D2, D6, D7), and each one decides what the registry refuses**, so each goes to the founder (§0.5) instead of into the spec as a default.
+
+### §0.5 — What goes to the founder
+
+From R108 §2's four open questions:
+
+1. **How an approved entity is amended (D7)** decides what may change after approval, so it is the founder's. **Q103.**
+2. **Base-type mapping** decides no refusal. The spec answers it (§0.1 item 6).
+3. **Which guards the door inherits** is answered by the spec for every inherited guard. The one new refusal it needs, comparing two properties' declarations before a collapse (D2), is the founder's. **Q105.**
+4. **Retiring a shared property still in use (D6)** is a refusal by construction. **Q104.**
+
+The spec lands with all three marked open, and their rules are reserved rather than pinned.
+
+### §0.6 — The stopping rule, adapted to a spec row and stated before round 1
+
+Row 6j's adopted criterion (`6J-RUN.md` §3.9, §5 item 10), verbatim: *"The loop ends when a full round finds no in-scope code MAJOR reachable by a shape a contributor would plausibly write — measured as: does the shape, or anything structurally like it, appear anywhere in the live suite?"*
+
+This row has no code, so the adaptation is stated here and not chosen later. **The loop ends when a full round finds no in-scope BLOCKING or MAJOR in the amended spec that a build row or a caller would plausibly hit, measured as: is it reachable using only calls and shapes the amended `INTERFACE.md` prints, over UC1, UC2, UC3 or the Foundry fixture?** Also bound, from `6I-RUN.md` §6.6 and `6J-RUN.md` §4.4: a round that produces a MAJOR or BLOCKING fix is followed by a full round that sees it, the last round sees the final text, and nothing in the reviewed artefact is edited while any lens of a round is running. **Cap: five rounds.** If round 5 still finds a reachable in-scope MAJOR, the row stops and brings it rather than fixing it, which is `answers-10` §3's rule.
+
+Each round runs three fresh lenses: the build-row implementer, the kill-row door adversary, and the use-case and Foundry fidelity reviewer. The reviewer brief names the three use cases and the Foundry fixture.
+
+### §0.7 — The commands this row will run, named before they are run
+
+```
+py docs/tools/check_links.py          # exit 0 at the row's start (observed) and at its end
+py docs/tools/check_spec_drift.py     # exit 0 at the row's start (observed) and at its end
+```
+
+`check_spec_drift.py` has to learn every printed shape this amendment adds (brief §4). There is no code for those shapes to be checked against, so the row teaches the checker to hold them as **planned**: printed, listed, and absent from the code. The check fails the day a build row lands the class without moving it to the implemented list. That is `ACTIONS.md`'s *"extend the checker in the same change that lands the code"*, kept true for the half of the check that can run before the code exists.
