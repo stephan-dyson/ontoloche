@@ -690,7 +690,9 @@ def _planned_homes() -> list:
             continue  # test support and the generated async mirror, never a shape's home
         try:
             found.append(importlib.import_module(info.name))
-        except Exception:  # pragma: no cover - an optional backend whose driver is absent
+        except ModuleNotFoundError as exc:  # pragma: no cover - an optional driver is absent
+            if (exc.name or "").startswith("ontoloche"):
+                raise  # a first-party module that will not import hides a landed shape
             continue
     return found
 
@@ -797,10 +799,10 @@ def _check_planned_rules(text: str, implemented: set[str]) -> list[str]:
                 continue
             if _RESERVED_CELL.match(cell):
                 q = re.search(r"Q\d+", cell).group(0)
-                if f"`{q}`" not in decisions:
+                if not re.search(rf"^### \d+ · `{q}`", decisions, re.M):
                     problems.append(
                         f"INTERFACE {number}: reserved for {q}, and DECISIONS-OPEN.md asks "
-                        f"no `{q}` -- a reserved rule must name a question that exists"
+                        f"no item headed `{q}` -- a reserved rule must name a question that exists"
                     )
                 continue
             if cell.startswith("`prose-only:`") or cell.startswith("prose-only:"):

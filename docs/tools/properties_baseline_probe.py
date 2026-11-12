@@ -174,6 +174,21 @@ def main() -> int:
     out = reg.propose_type("zip_code", "a zip code again", EVIDENCE, "user:sd", kind="property",
                            attributes={"base_type": "str"})
     show("D1 propose a retired property's name", f"{getattr(out, 'status', None)} {getattr(out, 'warnings', None)}")
+
+    # D14 (round 4): the import alias write over a tombstone that HAS a successor. Older
+    # than row 8b, and the same for every kind: the word ends with two live claimants.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "zip_code", kind="property", attributes={"base_type": "str"})
+    seed(reg, "postal_code", kind="property", attributes={"base_type": "str"})
+    reg.retire("zip_code", "duplicate", retired_by="user:sd", successor="postal_code")
+    back = reg.import_types([{"name": "post_code", "definition": "a post code",
+                              "status": "active", "aliases": ["zip_code"],
+                              "attributes": {"base_type": "int"}}], kind="property")
+    show("D14 alias import over a tombstone with successor", back[0].warnings if back else None)
+    holders = [t.name for t in reg.list_types(kind="property").types if "zip_code" in (t.aliases or ())]
+    show("D14 live alias holders of zip_code", holders)
+    out = reg.reinstate("zip_code", "bring it back", reinstated_by="user:sd")
+    show("D14 reinstate zip_code", getattr(out, "reason", None) or getattr(out, "status", None))
     return 0
 
 

@@ -291,7 +291,7 @@ Two findings no prediction covered: the undescribed Foundry properties, which ch
 4. **The Foundry key-slot refusal was not a §0 prediction.** §1.10 moved Foundry's hits from 5 to 4 without naming which prediction was demoted, and none was: §0 said nothing about `required` on key slots. It is now listed as an **unpredicted** miss, and the five hits stand.
 5. **§1.4 HIT 1 conflicts with row 8a's mapping.** It said `foo_spt` keeps Foundry's `apiName` *"as an alias per §2.1"*. Row 8a's mapping does not write the `apiName` into `aliases`, and records the source in `provenance.imported_from`. The mapping is row 8a's, so §1.4's sentence is withdrawn rather than argued.
 
-### §1.12 — Score, corrected after round 3
+### §1.12 — Score, corrected after round 3 *(superseded by §1.14)*
 
 | test | predictions | hits | misses | untested |
 |---|---|---|---|---|
@@ -304,6 +304,29 @@ Two findings no prediction covered: the undescribed Foundry properties, which ch
 | falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
 
 **Misses no prediction named:** every Foundry object type refused by rule 2.10-5 as first written (round 2). **Doors §0.4 never listed:** D7b and D11 (round 1); D12's entity half and D13 (round 2).
+
+### §1.13 — Corrections from round 4, including one to §1.11
+
+§1.11's text is left as committed at `8249e5e`.
+
+1. **§1.11 item 1's *"zero to four shared"* was the third false statement of this count.** No rule bounds it: a `kind="property"` entry may be used by one entity, and `citation`'s flat row could declare any facility or tag column. **The count is the declarer's choice, from zero to every column.** The UC2 miss stands on §0's false reason alone, and §1.12's UC2 row does not change. Three corrections of one number in a row is itself the finding: the walk kept supplying a number where the rules supply none.
+2. **D12's entity half was counted twice.** By §1.11 item 2's own logic its entity half is a door of D11, which rule 2.10-18 already lists door by door. The one door from round 2 that §0.4 never listed is D13.
+3. **The Foundry fixture report's *"array reducers never exercised"* is false.** **[Observed]** `Employee.performanceScores` and `ComplexImplementationObject.arrayValue` carry `reducers`. The type table now keeps them in `source_type` and records them as a contortion.
+4. **The Foundry walk missed `implementsInterfaces2`**, the object type's side of an interface, which no field holds and row 8a does not read. Recorded in §2.10's *What this section does not do*. It is a recorded contortion, so §1.14 scores it as an unpredicted miss rather than demoting a hit.
+
+### §1.14 — Score, corrected after round 4
+
+| test | predictions | hits | misses | untested |
+|---|---|---|---|---|
+| UC2 | 7 | 5 | 2 (shared count, local-slot count) | 0 |
+| UC3 | 4 | 3 | 1 (contortion 10 closing) | 0 |
+| UC1 | 1 | 0 | 1 partial (the cost) | 0 |
+| Foundry | 7 | 5 | 1 half (`opaque` warning) | 1 (value types) |
+| doors D1 to D10 | 10 | 6 | 4 (D2, half; D8 as first written; D9's warning; D10) | 0 |
+| kill row: *"zero new trips"* | 1 | 1 | 0 | 0 |
+| falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
+
+**Misses no prediction named:** every Foundry object type refused by rule 2.10-5 as first written (round 2); `implementsInterfaces2` and array reducers homeless (round 4). **Doors §0.4 never listed:** D7b and D11 (round 1), D13 (round 2), and the two-claimant alias write (round 4), which is older than this row.
 
 ---
 
@@ -372,3 +395,19 @@ Three fresh lenses against `1ba5d41`, nothing edited while they ran. **0 BLOCKIN
 | 8 to 21 | MINOR | 2.10-18 lacked `merge_types`; `properties: []` and `null`; JSON `null` in a field; evaluation order inside one import; `_undeclared` keyed on `stores_attributes` rather than `stores_attribute(key)`; precedent cited backwards (`action_attributes` writes, `ActionFamily.from_attributes` reads); the checker not holding the view signatures, and its *move it to SHAPES* advice wrong for a shape outside `ontoloche.types`; `types.KINDS` gating nothing; D1 labelled a re-mint; UC3's count; Foundry's demoted hit unnamed; §1.4's alias claim against row 8a; `mainValue` is struct-level; `source_type`'s serialisation; row 8a dropping shared property types | all three | each folded into the rule it names, §1.11, or the probe; the checker now holds both printed view signatures, proved by mutation |
 
 **Round 3 produced MAJOR fixes, so round 4 is a full round that sees them** (§0.6). Round 4 is the fourth of five, so if round 4 also finds a MAJOR, round 5 is the last the stopping rule allows.
+
+### §2.4 — Round 4
+
+Three fresh lenses against `8249e5e`, nothing edited while they ran. **0 BLOCKING, 10 MAJOR, 12 MINOR.** No lens reached the kill row. Six of the ten MAJORs, from all three lenses, were about one design choice: specifying the reference reader as a `resolve_type` call. Round 3 had patched that call twice (`namespace=`, `min_confidence=1.0`), and round 4 found it still raised without `tier`, still depended on a free `ResolveContext`, still answered `proposal` in any namespace with no entry of the kind (every Foundry namespace today), still answered `not_a_type` for some words, and still matched `Foo_Spt` to `foo_spt` at 1.0 **[Observed]**. **So the fix replaces the choice rather than patching it a third time**: rule 2.10-11's reader is now an exact lookup in three steps over `adapter.get_type`, the successor chain `resolve_type` already walks, and `Registry._alias_holder`. And rule 2.10-8 requires each reference to be pattern-legal and its own `identity_key`, so the two steps cannot disagree about spelling.
+
+| # | sev | finding | lens | fix |
+|---|---|---|---|---|
+| 1 | MAJOR | the alias write over a tombstone **with** a successor gives one word two live claimants, for every kind, with no warning, and the tombstone cannot be reinstated **[Observed by the lens, and re-run here for `property`, `entity` and `value_set`, and now probe line D14: `reinstate` refused `successor_active`]**. Older than this row | doors | recorded in 2.10-17 and §12, routed to a build row; the reader answers deterministically |
+| 2 to 7 | MAJOR | the `resolve_type` reader: `proposal` and `not_a_type` unmapped (doors, fidelity, implementer), the call cannot run without `tier` (implementer), *"exact"* false at 1.0 and *"bare word"* untestable (implementer), a retired word with no successor answers `none` (implementer) | all three | 2.10-11 replaced by an exact lookup; 2.10-10 maps its five answers to four warnings; 2.10-8 requires a pattern-legal canonical word |
+| 8 | MAJOR | a missing description: 2.10-3 against the view, which cannot tell which door wrote a row, so the view would null every Foundry entity's `properties` | implementer | 2.10-3: refused at `propose_type` and `approve`, never a breach to the view |
+| 9 | MAJOR | `implementsInterfaces2` homeless and unrecorded, a hidden Foundry miss | fidelity | §2.10's *does not do*; §1.13 item 4 |
+| 10 | MAJOR | array reducers in the fixture, homeless, and two serialisations of an array's `source_type` | fidelity | the array row: the whole array object as compact JSON; reducers recorded |
+| 11 | MAJOR | §1.11 item 1's bound of four, a third false correction | fidelity | §1.13 item 1 |
+| 12 to 23 | MINOR | *"moved"* when nothing moved (now *redirected*); later changes beyond 2.10-17 and 2.10-19 (now: a reader always gets the current answer); a null slot `name`; no tiebreak between warnings; the same-call clause vacuous (now an import-order note); a 2.10-9 breach with no key to null; D12 counted twice; `fooSpt` overstated as dropped; the checker swallowing a first-party import error, and matching any backticked `Qnnn`; the precedent still cited backwards in *does not do* | all three | each folded into the rule it names or §1.13; the checker now re-raises a first-party import failure and matches a `### N · \`Qnnn\`` heading |
+
+**Round 4 produced MAJOR fixes, so round 5 is a full round that sees them, and it is the last the stopping rule allows** (§0.6). If round 5 finds a BLOCKING or MAJOR, the row stops at the cap and says so rather than running a sixth.
