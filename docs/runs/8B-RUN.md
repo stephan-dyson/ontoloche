@@ -126,3 +126,96 @@ py docs/tools/check_spec_drift.py     # exit 0 at the row's start (observed) and
 ```
 
 `check_spec_drift.py` has to learn every printed shape this amendment adds (brief §4). There is no code for those shapes to be checked against, so the row teaches the checker to hold them as **planned**: printed, listed, and absent from the code. The check fails the day a build row lands the class without moving it to the implemented list. That is `ACTIONS.md`'s *"extend the checker in the same change that lands the code"*, kept true for the half of the check that can run before the code exists.
+
+
+---
+
+## §1 — The design tests, walked after §0 was committed, and scored against it
+
+### §1.0 — The baseline, measured rather than read
+
+`py docs/tools/properties_baseline_probe.py`, on the shipped registry at `2558863` **[Observed]**:
+
+```
+C10 resolve_type(latitude, kind=None)            outcome=proposal proposal.kind=entity
+C10 resolve_type(latitude, kind='property')      outcome=proposal proposal.kind=property
+D7 active entity attributes after re-import      {'properties': []}
+D9 sqlite_minimal attributes after write         {'primary_key': ['ccn']}
+D9 sqlite_minimal warnings                       ()
+D2 merge, no acknowledgement                     definitions_diverge
+D2 merge, acknowledged                           MergeResult
+D6 retire a used shared property                 retired
+D6 warnings                                      ()
+```
+
+**Scored against §0.4: D2, D6, D7 and D9 all HIT.** D7 is worse than predicted: re-importing an active entity did not merely rewrite `properties`, it dropped the declared `primary_key` as well, because the whole `attributes` dict is replaced. D9 is half wrong: §0.4 predicted a warning, and today there is **none**, so the warning in rule 2.10-15 is new behaviour for the build row rather than a description of the shipped code.
+
+### §1.1 — UC2 CMS, the 23 columns
+
+Walked under rules 2.10-1 to 2.10-12 against the shipped CMS fixture's keys (`ontoloche/contract/_support.py:390`, `:411`, `:448`: `facility` keyed on `["ccn"]`, `survey` on `["ccn", "survey_date", "survey_type"]`, `deficiency_tag` on `["tag_number"]`).
+
+| entity | slots | key | title |
+|---|---|---|---|
+| `facility` | `ccn` (shared), `provider_name`, `provider_address`, `city_town`, `state`, `zip_code` (`str`) | `["ccn"]` | `provider_name` |
+| `survey` | `ccn` (shared), `survey_date` (`date`), `survey_type` (`str`) | `["ccn", "survey_date", "survey_type"]` | absent |
+| `deficiency_tag` | `tag_number` (shared), `deficiency_prefix`, `deficiency_category`, `deficiency_description` (`str`) | `["tag_number"]` | `deficiency_description` |
+| `citation` | `scope_severity_code` (`str`, value set), `deficiency_corrected` (`str`, value set), `correction_date` (`date`), `inspection_cycle` (`int`), five `bool` flags, and `ccn`, `survey_date`, `survey_type`, `tag_number` to say which survey and tag | absent | absent |
+| not declared | `Location` is `not_a_type` / `redundant_projection`, `Processing Date` is `not_a_type` / `export_artefact` | | |
+
+**Scored against §0.2:**
+
+- **MISS: shared properties are not zero, they are two.** §0.2 predicted 0 shared and wrote *"no column is used by two entities"*. That is false. The shipped fixture's own `survey` key includes `ccn`, and rule 2.10-5 requires every key slot to be declared on the entity, so `ccn` is a slot on `facility`, `survey` and `citation`, and `tag_number` on `deficiency_tag` and `citation`. One property used by several entities in one namespace is exactly what `kind="property"` is for. The miss came from counting CSV columns instead of slots.
+- **HIT:** 2 value sets. `scope_severity_code` keeps its `external_doc` evidence because it is a `kind="value_set"` entry with provenance, so §10's severity case is unchanged. `Location` stays `redundant_projection`.
+- **HIT, contortion (a):** a shared `ccn` says *the same property*, not *a reference to a facility*. Nothing in §2.10 can say that `survey.ccn`'s values are `facility`'s key. That is `EDGES.md`'s job and stays recorded, not designed away.
+- **HIT, contortion (b):** `citation` has no natural key, and `primary_key` is absent.
+- **HIT, by design:** the 1.28% of rows whose correction date precedes the survey date are not caught (rule 2.10-12).
+- **Not predicted, recorded:** the CMS headers are not slot names (`City/Town`, `Deficiency Tag Number`). Each slot carries the header verbatim in `display_name`, which is why that field is on `PropertySpec`.
+
+### §1.2 — UC3 NYC, `status`, `latitude`, `longitude`
+
+1. **HIT.** Each agency's entity declares a local `status` slot with a `value_set` in its own namespace (`dpr`, `oti`, `dot`). Rule 2.10-8 gives no syntax to name another namespace's value set or property, and `merge_types` across namespaces is still refused non-overridably (rule 2.10-14). They stay three separate things.
+2. **HIT.** `resolve_type("latitude", ctx, kind="property")` answers a `kind="property"` proposal **[Observed]**, §1.0 line C10. Where an agency has registered `latitude` as a `kind="property"` entry, the same call scores against it and answers `existing`. **[Inferred]** from the shipped resolver scoring within the requested kind, and not run against a seeded property in this row. Each UC3 agency publishes one dataset, so in UC3 `latitude` is a local slot and no agency needs the entry, which is a fact about the fixture rather than a gap in the design.
+3. **HIT, the residual.** With `kind=None` the resolver still proposes an entity **[Observed]**, §1.0. Rule 2.10-13 records it.
+4. **HIT.** No door offers a cross-namespace merge.
+
+### §1.3 — UC1 Tenshen
+
+**HIT, and the brief's [Assumed] "costs nothing" is REFUTED in one place, as predicted.** Rule 2.10-1 leaves an entry that declares nothing unchanged in every respect, so Tenshen, whose entities live in its own code, pays nothing today. **But** its declared backend shape is `sqlite_minimal` (beacon finding U3, `PACKAGE.md` §5.7), and **[Observed]** §1.0 line D9: that backend keeps `primary_key` and drops `properties` and `title_property`. If Tenshen ever declares a property, the declaration is lost unless the host adds a column. **The cost is zero today and one host-side column the day it declares a property.** Rule 2.10-15 makes the write say so.
+
+### §1.4 — Foundry, the fixture from R106's routes
+
+**The pin [Observed].** `palantir/osdk-ts` at `7fed36772967fa8287d0e8b4497177c2b204af67` (<https://github.com/palantir/osdk-ts/tree/7fed36772967fa8287d0e8b4497177c2b204af67>), the `@osdk/faux` test ontologies in `packages/shared.test/src/stubs/` and two inline in `packages/faux/src/FauxFoundry/`. Generated to `OntologyFullMetadata` JSON and parsed with `foundry-platform-sdk` **1.111.0**. The raw documents fail a strict parse only on placeholder RIDs (`"rid"`, `"ri.Employee"`), and pass with no data-type, field or discriminator error once those are rewritten, so the property shapes are valid against Palantir's own SDK. The generation reproduced `FauxOntology`'s three register methods rather than importing the class, which needs a workspace install. The generated documents are not committed: they are Palantir's test data regenerated from a pinned commit, and the pin is what makes this reproducible.
+
+**What the fixture holds [Observed].** Four registration sites, 13 object-type rows, **84 distinct properties**, **1 shared property type** (`fooSpt`, mapped by `Employee.fullName`), **3 interfaces**, **0 value types**. 21 distinct top-level property types, which is 21 of the SDK's 22 `ObjectPropertyType` variants (`marking` never appears). Every object type is `ACTIVE`.
+
+**Scored against §0.2:**
+
+1. **HIT.** `fooSpt` becomes one `kind="property"` entry (`foo_spt`, with the apiName kept as an alias per §2.1), and `Employee.fullName` a shared slot.
+2. **HIT.** Every other property is a local slot.
+3. **HIT on the mapping: every one of the 21 types has a home** under §2.10's table. 13 of the 84 properties land `opaque` (`attachment` 2, `geopoint` 2, `geoshape` 2, `timeseries` 2, `vector` 2, `cipherText`, `geotimeSeriesReference`, `mediaReference`), with `source_type` kept.
+4. **HIT (a):** an interface's property contract has no home. **HIT (b):** a `struct`'s sub-field types are kept only in `source_type`. **UNTESTED (c):** the fixture has no value types, so the prediction that a range or regex constraint has no home was neither confirmed nor refuted here. **HIT (d):** `fooSpt` is mapped onto `fullName`, a different name, which rule 2.10-4 allows.
+
+**Not predicted, and the largest finding of the walk:**
+
+- **MISS, and it changed the spec before the loop. 61 of the 84 properties have no description**, and that puts an undescribed property on **all ten** `LegacyFauxFoundry` object types. Rule 2.10-3 as first written required a description at `import_types`, so the import would have declined every object type in Palantir's main test ontology. That is the founder's stated goal for this project, an easy import (R105 to R107), failing on the first fixture. Rule 2.10-3 now writes an imported slot with no description, warns `property_description_missing:<slot>`, and still refuses it at `approve`. This **deviates from the brief's literal "description (required, non-empty)" at one door**, and the deviation is chosen because it is the less-refusing option: it refuses nothing new, it fabricates nothing, and `approve` keeps the brief's rule for anything that becomes approved vocabulary. Reviewers are asked to test this choice directly.
+- **Recorded contortion: per-property metadata beyond `displayName` and `description` has no home.** Every fixture property carries `typeClasses`. `PropertyV2` also models `status`, `visibility`, `valueFormatting` and `dataConstraints`, which the fixture never sets. None of them has a slot, and only `status` is a governance fact. The importer's handling is row 8a's.
+- **Recorded: Palantir's fixture contains a dangling reference.** In the `addEmployeeOntology` ontology, `Employee` maps `fooSpt` and no `fooSpt` is registered. Under rule 2.10-9 that is written and warned `property_reference_unregistered`, never refused. A refusal there would reject Palantir's own test data, which is the strongest evidence this row has that warn-not-refuse is the right treatment of a dangling reference.
+- **Primary keys and titles [Observed]:** every object type has a single `primaryKey` and a `titleProperty`, and each lands as a one-element `primary_key` list and a `title_property`. `ObjectWithTimestampPrimaryKey` keys on a `timestamp`, so a `datetime` key slot is legal under rule 2.10-5.
+
+### §1.5 — The falsifiers, scored
+
+- **F1, the carrier: NOT falsified.** No design test needed a property fact that `attributes` could not hold without a second home. The `sqlite_minimal` cost (§1.3) is a cost of the carrier and is stated in rule 2.10-15.
+- **F2, amending an approved entity: supersede-and-retire FALSIFIED, as predicted.** Adding a slot to an approved `facility` would need a name other than `facility`, because a taken name returns the existing entry and a retired name is burned. **The governed amendment is not falsified**, and what it refuses is Q103's.
+
+### §1.6 — Score
+
+| test | predictions | hits | misses | untested |
+|---|---|---|---|---|
+| UC2 | 6 | 5 | 1 (shared count) | 0 |
+| UC3 | 4 | 4 | 0 | 0 |
+| UC1 | 1 | 1 | 0 | 0 |
+| Foundry | 7 | 6 | 0 | 1 (value types) |
+| doors D2, D6, D7, D9 | 4 | 4 | 0 (D9's warning half wrong, §1.0) | 0 |
+| falsifiers | 2 | 2 | 0 | 0 |
+
+Two findings no prediction covered: the undescribed Foundry properties, which changed rule 2.10-3, and the CMS headers needing `display_name`.
