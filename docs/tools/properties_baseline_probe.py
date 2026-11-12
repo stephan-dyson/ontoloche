@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 from ontoloche import Registry  # noqa: E402
 from ontoloche.backends.sqlite import SQLiteAdapter  # noqa: E402
 from ontoloche.backends.sqlite_minimal import MinimalSQLiteAdapter  # noqa: E402
-from ontoloche.types import Evidence, MergeResult, Refusal, ResolveContext, TypeEntry  # noqa: E402
+from ontoloche.types import Consumer, Evidence, MergeResult, Refusal, ResolveContext, TypeEntry  # noqa: E402
 
 EVIDENCE = [Evidence(kind="human", summary="seeded by row 8b's baseline probe")]
 
@@ -90,6 +90,46 @@ def main() -> int:
     out = reg.retire("latitude", "no longer wanted", retired_by="user:sd")
     show("D6 retire a used shared property", getattr(out, "status", None) or out.reason)
     show("D6 warnings", getattr(out, "warnings", None))
+
+    # D2 at the second collapsing door: retire(successor=), no acknowledgement.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "zip_code", kind="property", attributes={"base_type": "str"})
+    seed(reg, "postal_code", kind="property", attributes={"base_type": "int"})
+    out = reg.retire("zip_code", "duplicate", retired_by="user:sd", successor="postal_code")
+    show("D2 retire(successor=), no acknowledgement", getattr(out, "status", None) or out.reason)
+
+    # D11: two ENTITIES whose declarations contradict, collapsed by retire(successor=).
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "survey", attributes={"primary_key": ["ccn", "survey_date", "survey_type"]})
+    seed(reg, "citation")
+    out = reg.retire("survey", "duplicate", retired_by="user:sd", successor="citation")
+    show("D11 retire(survey, successor=citation)", getattr(out, "status", None) or out.reason)
+    show("D11 warnings", getattr(out, "warnings", None))
+
+    # D7b: re-importing an ACTIVE kind="property" entry with a different base type.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    reg.import_types([{"name": "foo_spt", "definition": "a foo", "status": "active",
+                       "attributes": {"base_type": "str"}}], kind="property")
+    back = reg.import_types([{"name": "foo_spt", "definition": "a foo", "status": "active",
+                              "attributes": {"base_type": "int"}}], kind="property")
+    stored = next(t.attributes for t in reg.list_types(kind="property").types)
+    show("D7b property attributes after re-import", stored)
+    show("D7b warnings", back[0].warnings if back else None)
+
+    # D10: a property carrying a predicate that a consumer gates on.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    seed(reg, "searchable", kind="predicate")
+    out = reg.propose_type("latitude", "latitude, seeded by row 8b's baseline probe", EVIDENCE,
+                           "user:sd", kind="property", predicates=["searchable"],
+                           attributes={"base_type": "float"})
+    if not isinstance(out, (TypeEntry, Refusal)):
+        reg.approve(out.id, "user:sd")
+    from datetime import datetime, timezone
+    reg.register_consumer(Consumer(id="search.index", gate="searchable", on_unknown="drop",
+                                   owner=None, registered_at=datetime.now(timezone.utc),
+                                   locator=None))
+    out = reg.retire("latitude", "no longer wanted", retired_by="user:sd")
+    show("D10 retire a property a consumer gates on", getattr(out, "status", None) or out.reason)
     return 0
 
 

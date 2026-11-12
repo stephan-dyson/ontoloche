@@ -663,8 +663,28 @@ PLANNED_SHAPES = {
     "SharedPropertyDeclaration",
 }
 
-#: Modules a build row would put a planned shape in. Checked for the NAME only.
-_PLANNED_HOMES = (types_module, attributes_module, registry_module)
+#: Every importable ``ontoloche`` module is a place a build row could put a planned
+#: shape -- the precedent puts views in their own module (`edges.py`, `actions.py`), so a
+#: fixed list of three would miss `ontoloche/properties.py`, which is where 2.10 says the
+#: view goes. Round 1 of row 8b's loop found the fixed list. Checked for the NAME only.
+def _planned_homes() -> list:
+    import importlib
+    import pkgutil
+
+    import ontoloche
+
+    found = []
+    for info in pkgutil.walk_packages(ontoloche.__path__, "ontoloche."):
+        if ".contract" in info.name or ".aio" in info.name:
+            continue  # test support and the generated async mirror, never a shape's home
+        try:
+            found.append(importlib.import_module(info.name))
+        except Exception:  # pragma: no cover - an optional backend whose driver is absent
+            continue
+    return found
+
+
+DECISIONS = ROOT / "docs" / "DECISIONS-OPEN.md"
 
 PLANNED_R31_INTERFACE_SECTIONS = {
     # Ruling R108 -- property declarations, governed and never validated against data.
@@ -695,7 +715,7 @@ def _check_planned_shapes(blocks: list[str]) -> list[str]:
                 f"INTERFACE {name}: listed as PLANNED and the spec prints no `{name}:` "
                 f"block with fields -- a planned shape nobody printed is not planned"
             )
-        for module in _PLANNED_HOMES:
+        for module in _planned_homes():
             if hasattr(module, name):
                 problems.append(
                     f"INTERFACE {name}: PLANNED, and {module.__name__} now defines it -- "
@@ -722,10 +742,19 @@ def _check_planned_rules(text: str, implemented: set[str]) -> list[str]:
             problems.append(f"INTERFACE {label}: no planned rule table")
             continue
         seen: list[int] = []
+        named: dict[str, str] = {}
+        decisions = DECISIONS.read_text(encoding="utf-8") if DECISIONS.exists() else ""
         for number, cells in rows:
             seen.append(int(number.rsplit("-", 1)[1]))
             cell = cells.rsplit("|", 1)[-1].strip()
             planned = _PLANNED_CELL.match(cell)
+            for cid in re.findall(r"C\d+-\d+", planned.group(1)) if planned else ():
+                if cid in named:
+                    problems.append(
+                        f"INTERFACE {number}: planned id {cid} is already named by "
+                        f"{named[cid]} -- one id, one rule"
+                    )
+                named[cid] = number
             if planned:
                 for cid in re.findall(r"C\d+-\d+", planned.group(1)):
                     if not cid.startswith(f"{prefix}-"):
@@ -741,6 +770,12 @@ def _check_planned_rules(text: str, implemented: set[str]) -> list[str]:
                         )
                 continue
             if _RESERVED_CELL.match(cell):
+                q = re.search(r"Q\d+", cell).group(0)
+                if f"`{q}`" not in decisions:
+                    problems.append(
+                        f"INTERFACE {number}: reserved for {q}, and DECISIONS-OPEN.md asks "
+                        f"no `{q}` -- a reserved rule must name a question that exists"
+                    )
                 continue
             if cell.startswith("`prose-only:`") or cell.startswith("prose-only:"):
                 if len(cell.split("prose-only:", 1)[1].strip(" `")) < 20:

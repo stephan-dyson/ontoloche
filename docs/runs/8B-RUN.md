@@ -148,6 +148,17 @@ D6 retire a used shared property                 retired
 D6 warnings                                      ()
 ```
 
+Round 1 added four lines to the probe, run on the same code **[Observed]**:
+
+```
+D2 retire(successor=), no acknowledgement        retired
+D11 retire(survey, successor=citation)           retired
+D11 warnings                                     ()
+D7b property attributes after re-import          {'base_type': 'int'}
+D7b warnings                                     ()
+D10 retire a property a consumer gates on        live_consumers
+```
+
 **Scored against §0.4: D2, D6, D7 and D9 all HIT.** D7 is worse than predicted: re-importing an active entity did not merely rewrite `properties`, it dropped the declared `primary_key` as well, because the whole `attributes` dict is replaced. D9 is half wrong: §0.4 predicted a warning, and today there is **none**, so the warning in rule 2.10-15 is new behaviour for the build row rather than a description of the shipped code.
 
 ### §1.1 — UC2 CMS, the 23 columns
@@ -207,7 +218,7 @@ Walked under rules 2.10-1 to 2.10-12 against the shipped CMS fixture's keys (`on
 - **F1, the carrier: NOT falsified.** No design test needed a property fact that `attributes` could not hold without a second home. The `sqlite_minimal` cost (§1.3) is a cost of the carrier and is stated in rule 2.10-15.
 - **F2, amending an approved entity: supersede-and-retire FALSIFIED, as predicted.** Adding a slot to an approved `facility` would need a name other than `facility`, because a taken name returns the existing entry and a retired name is burned. **The governed amendment is not falsified**, and what it refuses is Q103's.
 
-### §1.6 — Score
+### §1.6 — Score *(as first committed; superseded by §1.8 after round 1)*
 
 | test | predictions | hits | misses | untested |
 |---|---|---|---|---|
@@ -219,3 +230,59 @@ Walked under rules 2.10-1 to 2.10-12 against the shipped CMS fixture's keys (`on
 | falsifiers | 2 | 2 | 0 | 0 |
 
 Two findings no prediction covered: the undescribed Foundry properties, which changed rule 2.10-3, and the CMS headers needing `display_name`.
+
+### §1.7 — Corrections to §1, from round 1 of the loop
+
+§1.0 to §1.5 are left as committed at `ae634c4`, so the record shows what the walk claimed before review. Each correction below is round 1's, re-checked from disk or by a run before it was written here, and §1.6's table is replaced by the corrected one in §1.8.
+
+1. **UC1 was scored against the wrong backend. Partial MISS.** **[Observed]** Tenshen's shipped adapter is `WorkLinkTypeAdapter` (`C:\Users\steph\projects\beacon\src\beacon\services\ontology\work_link_type_adapter.py`, beacon `ec2e7000`), not `sqlite_minimal`. It declares `stores_attributes=True` with an `attributes_json` column, and it raises on any record other than `("tenshen", "edge")`. So *"zero today"* holds, more strongly than stated, because no entity or property entry can be written there at all. The predicted cost, *"one `ALTER TABLE`"* because declarations would be dropped, is wrong: nothing would be dropped. The real cost of Tenshen declaring properties is widening that adapter's fixed kind and namespace. Rule 2.10-16's mechanism stands for `sqlite_minimal` itself.
+2. **The UC2 fixture's own shape broke rule 2.10-5 as first written. BLOCKING, fixed.** The shipped loader writes `primary_key` with no `properties` (`_support.py:390`, `:411`, `:448`), and 2.10-5 required every key name to be a declared slot, so the build row would have refused the suite's own UC2 entities. §1.1's walk had quietly assumed a fixture with `properties` added. Rule 2.10-1 now keeps that pre-amendment shape legal and unchecked against slots. **D8 is rescored MISS as first written, HIT after the fix**, and **F1 was falsified by the first draft** on §0.3's own clause (*"an entry written before this amendment changes meaning"*); the fix is what keeps the carrier, and §1.5's NOT falsified is true only of the corrected text.
+3. **UC2's shared count is a choice, not a fact.** Sharing is the declarer's choice. `ccn` and `tag_number` are the two that a key forces onto several entities. `survey_date` and `survey_type` could be shared too if `citation` declares them, which makes four candidates. §0's *"21 local slots"* is scored MISS: the count of slots is not the count of columns.
+4. **UC3 HIT 2 is half UNTESTED.** `existing` against a registered `kind="property"` entry was [Inferred], not run. And NYC's `location` is **not** caught as `redundant_projection`, because the resolver's `location` projection family names address columns rather than coordinates (`ontoloche/_resolve.py`). It was never walked in §1.2. It is pre-existing and now recorded as a residual in rule 2.10-14.
+5. **The Foundry `opaque` prediction was half wrong.** §0.2 Foundry item 3 said `opaque` lands *"with `source_type` kept **and a warning**"*. §2.10 attaches no warning, and says so.
+6. **The import exception for descriptions moved again.** Round 1 showed rule 2.10-3's *"`approve` still refuses"* never fires for a Foundry import, because §2.5 imports `active` as `active` and `approve` never sees the row. That made the exception a decision about what the registry refuses at import, so it is no longer the spec's: rule 2.10-21 is `reserved: Q106`. Row 8a's founder ruling on undescribed *types* (hold the row, take the text from the caller) is offered there as an option.
+7. **The dangling `fooSpt` case loses a type.** A shared slot carries no `base_type`, so when the property it names is unregistered, `Employee.fullName`'s Foundry `string` has nowhere to go. It is still written and warned, and the loss is recorded in rule 2.10-10. An undescribed Foundry shared property type is rule 2.10-21's case too.
+
+### §1.8 — Score, corrected
+
+| test | predictions | hits | misses | untested |
+|---|---|---|---|---|
+| UC2 | 7 | 5 | 2 (shared count, local-slot count) | 0 |
+| UC3 | 4 | 3 | 0 | 1 (`existing` against a registered property) |
+| UC1 | 1 | 0 | 1 partial (the cost) | 0 |
+| Foundry | 7 | 5 | 1 half (`opaque` warning) | 1 (value types) |
+| doors D1 to D10 | 10 | 7 | 3 (D8 as first written; D9's warning; D10, see §2.1) | 0 |
+| kill row: *"zero new trips"* | 1 | 1 | 0 | 0 |
+| falsifiers | 2 | 1 | 1 (F1 falsified by the first draft) | 0 |
+
+**Doors §0.4 never listed:** D11, collapsing two entities whose declarations contradict (round 1, rule 2.10-18), and D7b, re-importing a `kind="property"` entry (round 1, rule 2.10-20).
+
+---
+
+## §2 — The adversarial loop
+
+### §2.1 — Round 1
+
+Three fresh lenses, run in parallel against `ae634c4` with nothing edited while they ran: the build-row implementer, the door adversary, and the use-case and Foundry fidelity reviewer. **1 BLOCKING, 11 MAJOR, 13 MINOR** across the three, with two lenses finding the BLOCKING independently. Every MAJOR below was reached using only calls and shapes the amended `INTERFACE.md` prints, over a design test, and each one marked [Observed] was re-run by `properties_baseline_probe.py` before the fix was written.
+
+| # | sev | finding | lens | fix |
+|---|---|---|---|---|
+| 1 | BLOCKING | 2.10-5 refuses the shipped UC2 fixture's `primary_key`-only shape | implementer, fidelity | 2.10-1 keeps that shape legal |
+| 2 | MAJOR | D11: two entities with contradicting declarations collapse silently at `retire(successor=)` **[Observed]** | doors | 2.10-18, `reserved: Q105`, Q105 widened |
+| 3 | MAJOR | Q105 and 2.10-16 misstated the default: `retire(successor=)` collapses two properties with **no** acknowledgement **[Observed]** | doors | stated door by door in 2.10-17 and Q105 |
+| 4 | MAJOR | re-importing an active `kind="property"` entry changes its type silently **[Observed]** | doors | 2.10-20 and Q103 widened to property entries |
+| 5 | MAJOR | the view cannot say *absent, not stored*, and no accessor was named | implementer | `why_absent` and two planned view functions |
+| 6 | MAJOR | a `kind="property"` entry's validity was undefined | implementer | new rule 2.10-9 |
+| 7 | MAJOR | a property may carry a predicate, so a consumer *can* gate on it and `retire` refuses `live_consumers` **[Observed]**; 2.10-17, 2.10-19, D10 and Q104 were false | implementer | 2.10-19, 2.10-22 and Q104 reworded |
+| 8 | MAJOR | 2.10-2 misstated its precedent (*"one rule per kind"*) and did not say whether the checks run through `AttributeSchema` | implementer | 2.10-2: bespoke and unconditional, `detail` keys printed |
+| 9 | MAJOR | 2.10-3's *"`approve` still refuses"* never fires for an `active` import | fidelity | the import case reserved as 2.10-21, Q106 |
+| 10 | MAJOR | UC1 scored HIT against the wrong backend | fidelity | §1.7 item 1 |
+| 11 | MAJOR | the `opaque` warning half-miss was not disclosed | fidelity | §1.7 item 5 |
+| 12 | MAJOR | (counted with 1 by the fidelity lens) the UC2 rescore of D8 and F1 | fidelity | §1.7 item 2 |
+| 13 to 25 | MINOR | wrong guard named at `merge_types` (`predicate_merge` runs before `kind_mismatch`); `AmbiguousKind` and the cross-kind tombstone; the absence case in Q105; an `AttributeSchema` with `additional="forbid"`; `_PLANNED_HOMES` too narrow, ids not checked unique, reserved questions not checked to exist; the namespace rule for a property entry's own `value_set`; `display_name` on both sides; `required` on a property entry; `types.KINDS` and `PROPOSABLE_KINDS`; the UC2 shared count; UC3 `location`; unscored doors; the dangling `fooSpt` type loss; an undescribed shared property type | all three | each folded into the rule named in §2.10 or §1.7; the checker now scans every `ontoloche` module, requires each `C21` id once, and requires each `reserved:` question to exist in `DECISIONS-OPEN.md` |
+
+**Not reproduced, recorded:** the door lens could not reproduce `import_types`' alias write collapsing two properties, and called its result inconclusive. Rule 2.10-17 says so rather than claiming the door.
+
+**A finding about this row, not the spec.** Row 8a is running in parallel in `.claude/worktrees/row-8a`, and its in-progress ruling file links to an `8A-RUN.md` it has not written yet, so `py docs/tools/check_links.py` from this tree reported one broken link **in that worktree's file** while round 1's fixes were being written, and passed again once that row wrote its record. `check_links.py` walks every `*.md` under the repo root, worktrees included, so another row's half-written file can fail this row's exit check. This row does not edit another row's files, so that is recorded rather than fixed.
+
+**Round 1 produced a BLOCKING and MAJOR fixes, so round 2 is a full round that sees them** (§0.6).
