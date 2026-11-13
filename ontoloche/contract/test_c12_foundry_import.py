@@ -1693,6 +1693,10 @@ def test_c12_35_a_dry_run_over_palantirs_legacy_ontology(registry):
         "delete_bar_interface", "delete_foo_interface",
     ]
     assert report.count(kind="edge") == 6
+    assert sorted(i.name for i in _items(report, kind="edge")
+                  if i.detail.get("inverse_label") is None) == [
+        "linked_object_type", "rp", "todos", "visited_offices",
+    ], "§1.1's unpaired link sides (round 4)"
     assert report.count(outcome="held") == 16, "no collision, no bad name, no odd status"
     assert sum(i.carried_properties for i in report.items) == 75
     assert report.not_imported == {"queryTypes": 21, "sharedPropertyTypes": 1, "valueTypes": 0}
@@ -2591,3 +2595,213 @@ def test_c12_60_the_rest_of_round_3s_record_is_pinned(registry, adapter, make_re
     ).import_foundry(widgets).looks_like if lk.matched == "widget"]
     at = make_registry(adapter, near_duplicate_threshold=score)
     assert [lk.matched for lk in at.import_foundry(widgets).looks_like] == ["widget"]
+
+
+# ---------------------------------------------------------------------------------
+# Row 8a's adversarial round 4.
+
+
+def test_c12_61_what_a_write_would_lose_is_said_before_it_is_lost(registry, adapter):
+    """**Round 4, guards and mapping lenses.**
+
+    1. A live local row with the item's name was overwritten (`import_types` replaces
+       a standing row's predicates, aliases and attributes, and its definition when
+       one is supplied), its predicate dropped from under a consumer's gate, and the
+       item said `written` with `standing: True` and nothing else. What would be lost
+       is now `detail["replaces"]`, on the dry run as well, and an idempotent re-run
+       reports nothing. Whether to REFUSE it is the founder's.
+    2. An action only in `actionTypesFullMetadata` reported `effects: []`: its
+       `operations` sit in that map's `actionType`, and only `actionTypes` was read.
+    3. `visibility: None`, as `model_dump(by_alias=True)` emits an unset field, was
+       stored as an attribute."""
+    doc = _ontology(objects={"Employee": ("an employee", "ACTIVE", ())})
+    doc["objectTypes"]["Employee"]["objectType"]["visibility"] = None
+    doc["actionTypesFullMetadata"] = {
+        "relocate": {
+            "actionType": {
+                "apiName": "relocate", "description": "moves an employee",
+                "status": "ACTIVE", "parameters": {},
+                "operations": [{"type": "createLink", "linkTypeApiNameAtoB": "office",
+                                "linkTypeApiNameBtoA": "employees",
+                                "aSideObject": "a", "bSideObject": "b"}],
+            },
+            "fullLogicRules": [],
+        }
+    }
+    action = _items(registry.import_foundry(doc), api_name="relocate")[0]
+    assert action.detail["effects"] == [{
+        "op": "add_edge", "rule": "createLink", "link": "office",
+        "source": "operations", "inverse_link": "employees",
+    }]
+
+    seed(registry, "employee", definition="a locally approved employee",
+         predicates=["audited"])
+    dry = _items(registry.import_foundry(doc), api_name="Employee")[0]
+    lost = dry.detail["replaces"]
+    held = sorted(adapter.get_type("default", "employee", kind="entity").predicates or ())
+    assert (lost["imported_from"], lost.get("predicates_dropped", []), lost["definition_replaced"]) == (
+        None, held, True,
+    )
+
+    written = _items(registry.import_foundry(doc, dry_run=False), api_name="Employee")[0]
+    assert (written.outcome, written.detail["replaces"]) == ("written", lost)
+    stored = adapter.get_type("default", "employee", kind="entity")
+    assert "audited" not in (stored.predicates or ())
+    if adapter.capabilities().stores_attributes:
+        assert "visibility" not in stored.attributes
+
+    again = _items(registry.import_foundry(doc, dry_run=False), api_name="Employee")[0]
+    assert "replaces" not in again.detail
+
+
+def test_c12_62_a_namespace_reads_its_own_store(registry):
+    """**Round 4, tests lens.** `namespace=` was pinned only where it reaches
+    `import_types`. `standing`, the look-alike `resolve_type`, the store read behind
+    `unresolved` and `report.namespace` could each read `"default"` with the suite
+    green, so a customer importing into its own namespace would be told about
+    another namespace's vocabulary."""
+    seed(registry, "pet", namespace="vet", definition="an animal in the care of a vet")
+    seed(registry, "auditable", namespace="vet", kind="predicate",
+         definition="a record keeps an audit trail")
+    seed(registry, "pets", definition="the pets a household keeps")
+    doc = _ontology(objects={"Pet": ("a pet", "ACTIVE", ()),
+                             "Flight": ("a flight", "ACTIVE", ("Auditable",))})
+
+    vet = registry.import_foundry(doc, namespace="vet")
+    assert vet.namespace == "vet"
+    assert _items(vet, api_name="Pet")[0].detail["standing"] is True
+    assert vet.looks_like == ()
+    assert "unresolved" not in _items(vet, api_name="Flight")[0].detail
+
+    default = registry.import_foundry(doc)
+    assert default.namespace == "default"
+    assert _items(default, api_name="Pet")[0].detail["standing"] is False
+    assert ("pet", "pets") in {(lk.name, lk.matched) for lk in default.looks_like}
+    assert _items(default, api_name="Flight")[0].detail["unresolved"] == [
+        {"predicate": "auditable", "why": "not_in_document"},
+    ]
+
+
+def test_c12_63_every_link_rule_and_an_actions_status(registry, adapter):
+    """**Round 4, tests lens.** Only `createLink`, `createInterfaceLink` and
+    `deleteInterfaceLink` were pinned, so `deleteLink` could become `host_state` with
+    the suite green; a retract's `inverse_link` and `source` were unpinned; and an
+    action's `status` was never exercised (`C12-50`'s twin, fixed for links only).
+    `addLink` and `removeLink`, named at pre-registration, are not rule types the SDK
+    defines, so they are `host_state`. A dry run reads a deprecated referent the
+    planner HOLDS as held, not retired, and an edge reports its source too."""
+    link = {"linkTypeApiNameAtoB": "owner", "linkTypeApiNameBtoA": "pets",
+            "aSideObject": "a", "bSideObject": "b"}
+    ops = [{"type": t, **link} for t in ("createLink", "deleteLink", "addLink", "removeLink")]
+    doc = _ontology(actions={
+        "rehome": {"apiName": "rehome", "description": "rehomes a pet", "status": "ACTIVE",
+                   "parameters": {}, "operations": ops},
+        "draft": {"apiName": "draft", "description": "a draft", "status": "EXAMPLE",
+                  "parameters": {}, "operations": []},
+        "old": {"apiName": "old", "description": "an old action", "status": "DEPRECATED",
+                "parameters": {}, "operations": []},
+    })
+    doc["actionTypesFullMetadata"] = {
+        "stale": {"actionType": {"apiName": "stale", "description": "a stale action",
+                                 "status": "DEPRECATED", "parameters": {}, "operations": []},
+                  "fullLogicRules": [{"type": "deleteLink", "linkTypeApiName": "owner"}]},
+    }
+    report = registry.import_foundry(doc, dry_run=False)
+    effects = _items(report, api_name="rehome")[0].detail["effects"]
+    assert [(e["op"], e.get("inverse_link"), e["source"]) for e in effects] == [
+        ("add_edge", "pets", "operations"), ("retract_edge", "pets", "operations"),
+        ("host_state", None, "operations"), ("host_state", None, "operations"),
+    ]
+    stale = _items(report, api_name="stale")[0]
+    assert stale.detail["effects"][0]["op"] == "retract_edge"
+    assert stale.detail["effects"][0]["source"] == "fullLogicRules"
+    assert _items(report, api_name="draft")[0].reason == "status_not_imported"
+    for name in ("old", "stale"):
+        assert _items(report, api_name=name)[0].outcome == "written"
+        assert adapter.get_type("default", name, kind="action").status == "retired"
+
+    pets = _ontology(
+        objects={"Pet": (None, "ACTIVE", ()), "Owner": (None, "DEPRECATED", ())},
+        links={"Pet": [_side("owner", "Owner", "ri.l.o", fk="ownerId")],
+               "Owner": [_side("pets", "Pet", "ri.l.o")]},
+    )
+    defined = {"Pet.owner": "a pet has an owner"}
+    for dry_run in (True, False):
+        edge = _items(registry.import_foundry(pets, dry_run=dry_run, definitions=defined),
+                      kind="edge")[0]
+        assert edge.detail["unresolved"] == [
+            {"src": "pet", "why": "held:definition_missing"},
+            {"dst": "owner", "why": "held:definition_missing"},
+        ], dry_run
+
+
+def test_c12_64_the_mapping_the_record_states_is_the_mapping(registry, adapter):
+    """**Round 4, tests lens.** Mapping claims a narrower mutant passed: the foreign
+    `rid` in provenance for every kind (only entities were checked), the forward side
+    of a self-link with no foreign key chosen by `(objectType, side)` whatever the
+    document order, the name conversion's acronym rule and its strip, the
+    `implementsInterfaces` list read on its own (and a repeat written once), an
+    entity's `visibility` through `import_foundry`, `report.entries`, the inverse
+    label's `fullmatch`, a blank description held at the planner, and a document
+    carrying only some of the type maps."""
+    from ontoloche.foundry import convert_name
+
+    names = ("NFLPlayer", "HTTPServer", "_Foo", "Foo_", "Route66Bus")
+    assert [convert_name(n) for n in names] == [
+        "nfl_player", "http_server", "foo", "foo", "route66_bus",
+    ]
+
+    doc = _ontology(
+        interfaces={"Located": "has a place", "Named": "has a name"},
+        objects={"Pet": ("a pet", "ACTIVE", ()), "Owner": ("an owner", "ACTIVE", ())},
+        links={"Pet": [_side("owner", "Owner", "ri.l.o", fk="ownerId")],
+               "Owner": [_side("pets", "Pet", "ri.l.o")]},
+        actions={"feed": {"apiName": "feed", "rid": "ri.a.feed", "description": "feeds",
+                          "status": "ACTIVE", "parameters": {}, "operations": []}},
+    )
+    pet = doc["objectTypes"]["Pet"]
+    pet["implementsInterfaces"] = ["Located", "Located"]
+    pet.pop("implementsInterfaces2")
+    doc["objectTypes"]["Owner"]["implementsInterfaces"] = ["Named"]
+    doc["objectTypes"]["Owner"]["implementsInterfaces2"] = {"Located": {}}
+    pet["objectType"]["visibility"] = "PROMINENT"
+    defined = {"Pet.owner": "a pet has an owner"}
+    report = registry.import_foundry(doc, dry_run=False, definitions=defined)
+    assert _items(report, api_name="Pet")[0].detail["predicates"] == ["located"]
+    assert _items(report, api_name="Owner")[0].detail["predicates"] == ["named", "located"]
+    assert [e.name for e in report.entries] == [
+        i.name for i in report.items if i.outcome in ("written", "refused")
+    ]
+    assert len(report.entries) == 6
+    expected = {("predicate", "located"): ("Located", "ri.i.Located"),
+                ("entity", "pet"): ("Pet", "ri.o.Pet"),
+                ("edge", "owner"): ("Pet.owner", "ri.l.o"),
+                ("action", "feed"): ("feed", "ri.a.feed")}
+    for (kind, name), (api, rid) in expected.items():
+        stored = adapter.get_type("default", name, kind=kind)
+        assert stored.provenance["imported_from"] == {
+            "system": "foundry", "apiName": api, "rid": rid,
+        }, (kind, name)
+    if adapter.capabilities().stores_attributes:
+        assert adapter.get_type("default", "pet", kind="entity").attributes[
+            "visibility"] == "PROMINENT"
+
+    for order in ((0, 1), (1, 0)):
+        sides = [_side("boss", "Employee", "ri.l.b"), _side("reports", "Employee", "ri.l.b")]
+        selfie = _ontology(objects={"Employee": ("an employee", "ACTIVE", ())},
+                           links={"Employee": [sides[i] for i in order]})
+        edge = _items(registry.import_foundry(selfie), kind="edge")[0]
+        assert (edge.name, edge.detail["inverse_label"]) == ("boss", "reports"), order
+
+    held = _items(registry.import_foundry(
+        doc, names={"Owner.pets": "owned_pets\n"}, definitions=defined,
+    ), kind="edge")[0]
+    assert (held.reason, held.detail["invalid"]) == ("name_invalid", "inverse_label")
+
+    blank = _ontology(objects={"Blank": ("   ", "ACTIVE", ())})
+    assert _items(registry.import_foundry(blank), api_name="Blank")[0].reason == (
+        "definition_missing"
+    )
+    solo = _ontology(objects={"Solo": ("a solo", "ACTIVE", ())})["objectTypes"]
+    only = {"ontology": {}, "objectTypes": solo}
+    assert [i.name for i in registry.import_foundry(only).items] == ["solo"]

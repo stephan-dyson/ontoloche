@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**2 open · 13 ruled · 7 FYI** *(2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**3 open · 13 ruled · 7 FYI** *(2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,20 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 2 items
+## A. Decide when you want to — 3 items
+
+### 25 · Row 8a: should a Foundry import write over a live row Foundry did not import?
+
+*New, 2026-11-12. Found by row 8a's adversarial round 4. Not blocking: the row ships with the behaviour below reported, and your answer changes a refusal, which is yours to make.*
+
+**What happens today.** `import_types` has always replaced a standing row's predicates, aliases and attributes, and its definition when one is supplied ([`INTERFACE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INTERFACE.md) §2.5). `import_foundry` makes that routine. A reviewer seeded a locally approved `employee` with the predicate `audited`, registered a consumer gating on `audited`, and imported a Foundry `Employee`. The local predicate and definition were gone, and the consumer's gate matched nothing. `retire` refuses the same effect with `live_consumers`.
+
+**What row 8a did.** Reported, not refused. Each item that would write over a live row now carries `detail["replaces"]` (what would be dropped, and which system wrote the standing row), on the dry run as well, so the loss is visible before anything is written. `C12-61`.
+
+**The question, two parts.**
+- **(a)** Should `import_foundry` hold or refuse writing over a live row whose `imported_from` is not `foundry`? Options: `report` (today), `hold` (a new hold reason, lifted by a map like R109's), or `refuse when a consumer gates on a dropped predicate` (the `live_consumers` reasoning).
+- **(b)** On a re-run without `definitions=`, the planner holds `definition_missing` on a row the store already defines, while `import_types` itself would keep the stored definition. So a Foundry status change to that row is not applied. Options: `hold` (today, R109 read literally) or `lift the hold when the store holds a definition of that kind`.
+
 
 ### 17 · The stop you armed has STOOD DOWN — `A3` is closed and the ACTIONS surface is reopen
 

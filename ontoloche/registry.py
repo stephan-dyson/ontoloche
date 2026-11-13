@@ -105,6 +105,7 @@ from .edges import (
 from .errors import NotSupported, UnknownType
 from .foundry import FoundryImportReport, FoundryItem, LookAlike
 from .foundry import plan as foundry_plan
+from .foundry import replaces as foundry_replaces
 from .foundry import to_row as foundry_row
 from .policy import NamespacePolicy
 from .types import (
@@ -6257,9 +6258,15 @@ class Registry:
         for p in planned:
             if p.reason == "name_invalid":
                 continue
-            p.detail["standing"] = (
-                self.adapter.get_type(namespace, p.name, kind=p.kind) is not None
-            )
+            stored = self.adapter.get_type(namespace, p.name, kind=p.kind)
+            p.detail["standing"] = stored is not None
+            # **What the write would lose** (round 4). A live local row of the same
+            # name was overwritten, its predicates dropped from under a consumer's
+            # gate, and the item said plain `written`. Reported on a dry run too.
+            if stored is not None and stored.status != "retired" and p.reason is None:
+                lost = foundry_replaces(stored, foundry_row(p))
+                if lost is not None:
+                    p.detail["replaces"] = lost
             resolution = self.resolve_type(
                 p.name, context, kind=p.kind, namespace=namespace, tier="unspecified"
             )

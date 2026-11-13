@@ -53,8 +53,12 @@ KIND_ORDER = ("predicate", "entity", "edge", "action")
 #: families declare no effects, so nothing in this row refuses on this table.
 #: ``createInterfaceLink`` / ``deleteInterfaceLink`` are published by the SDK as
 #: ``CreateInterfaceLinkLogicRule`` / ``DeleteInterfaceLinkLogicRule`` (round 1).
-LINK_ADD_RULES = frozenset({"createLink", "addLink", "createInterfaceLink"})
-LINK_REMOVE_RULES = frozenset({"deleteLink", "removeLink", "deleteInterfaceLink"})
+# The link rule types `foundry_sdk.v2.ontologies.models` defines, in both `operations`
+# (`CreateLinkRule`, `DeleteLinkRule`) and `fullLogicRules` (`*LinkLogicRule`). The
+# pre-registration also named `addLink` / `removeLink`, which the SDK does not define
+# (round 4, checked), so a rule of that type is `host_state` like any unknown rule.
+LINK_ADD_RULES = frozenset({"createLink", "createInterfaceLink"})
+LINK_REMOVE_RULES = frozenset({"deleteLink", "deleteInterfaceLink"})
 
 #: Object type keys mapped to a field of their own. Every other key is carried in
 #: ``attributes["foundry_object_type"]``, so nothing Foundry said is dropped.
@@ -179,13 +183,17 @@ def _definition(source: Any, key: str, definitions: dict[str, str]) -> str | Non
     return None
 
 
-def _effects(action_api_name: str, doc: dict) -> list[dict]:
-    """The ``Effect.op`` each rule WOULD map to. ``fullLogicRules`` wins when present."""
+def _effects(action_api_name: str, doc: dict, action: dict) -> list[dict]:
+    """The ``Effect.op`` each rule WOULD map to. ``fullLogicRules`` wins when present.
+
+    ``action`` is the merged ``ActionTypeV2`` (round 4): an action found only in
+    ``actionTypesFullMetadata`` has its ``operations`` in that map's ``actionType``,
+    and reading ``actionTypes`` alone reported ``effects: []`` for it."""
     full = (doc.get("actionTypesFullMetadata") or {}).get(action_api_name) or {}
     rules = full.get("fullLogicRules")
     source = "fullLogicRules"
     if not rules:
-        rules = (doc.get("actionTypes") or {}).get(action_api_name, {}).get("operations") or []
+        rules = action.get("operations") or []
         source = "operations"
     out = []
     for rule in rules:
@@ -309,7 +317,8 @@ def plan(
         # The published `ObjectTypeFullMetadata` carries both the list and the map
         # (`implementsInterfaces2`, "implements and how"), and only the list was read
         # (round 1). The union, in the list's order first.
-        declared = list(full.get("implementsInterfaces") or ())
+        # A repeated list entry was written twice into `predicates` (round 4).
+        declared = list(dict.fromkeys(full.get("implementsInterfaces") or ()))
         declared += [i for i in (full.get("implementsInterfaces2") or {}) if i not in declared]
         predicates = [iface_names.get(i, _named(i, names)) for i in declared]
         properties = ot.get("properties") or {}
@@ -335,7 +344,8 @@ def plan(
                 **{k: v for k, v in full.items() if k not in ("objectType", "linkTypes")},
             },
         }
-        if "visibility" in ot:
+        # `model_dump(by_alias=True)` emits an unset field as None (round 4).
+        if ot.get("visibility") is not None:
             attributes["visibility"] = ot["visibility"]
         planned.append(
             _Planned(
@@ -419,7 +429,7 @@ def plan(
         logic = (full_actions.get(api) or {}).get("fullLogicRules")
         if logic:
             carried["fullLogicRules"] = logic
-        effects = _effects(api, doc)
+        effects = _effects(api, doc, action)
         planned.append(
             _Planned(
                 kind="action", api_name=api, key=api, name=_named(api, names),
@@ -491,6 +501,34 @@ def _hold(planned: list[_Planned]) -> None:
         if p.reason is None and p.row.get("definition") is None:
             p.reason = "definition_missing"
             p.detail["definitions_key"] = p.key
+
+
+def replaces(stored: Any, row: dict) -> dict | None:
+    """What writing ``row`` over the live ``stored`` row would lose (round 4).
+
+    ``import_types`` replaces a standing row's predicates, aliases and attributes, and
+    its definition when one is supplied (``INTERFACE.md`` 2.5). Row 8a makes that door
+    routine, and a dry run said only ``standing: True``. Reported, never held: whether
+    to refuse overwriting a row this system did not import is the founder's
+    (``DECISIONS-OPEN.md``). ``None`` when nothing would be lost, so an idempotent
+    re-run reports nothing."""
+    incoming_predicates = set(row.get("predicates") or ())
+    incoming_attributes = set(row.get("attributes") or {})
+    definition = row.get("definition")
+    lost = {
+        "predicates_dropped": sorted(set(stored.predicates or ()) - incoming_predicates),
+        "aliases_dropped": sorted(set(stored.aliases or ()) - set(row.get("aliases") or ())),
+        "attributes_dropped": sorted(set(stored.attributes or {}) - incoming_attributes),
+        "definition_replaced": bool(
+            isinstance(definition, str) and definition.strip()
+            and definition != stored.definition
+        ),
+    }
+    lost = {k: v for k, v in lost.items() if v}
+    if not lost:
+        return None
+    source = ((stored.provenance or {}).get("imported_from") or {}).get("system")
+    return {"imported_from": source, **lost}
 
 
 def to_row(p: _Planned) -> dict:

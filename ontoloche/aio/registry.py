@@ -112,6 +112,7 @@ from ontoloche.edges import (
 from ontoloche.errors import NotSupported, UnknownType
 from ontoloche.foundry import FoundryImportReport, FoundryItem, LookAlike
 from ontoloche.foundry import plan as foundry_plan
+from ontoloche.foundry import replaces as foundry_replaces
 from ontoloche.foundry import to_row as foundry_row
 from ontoloche.policy import NamespacePolicy
 from ontoloche.types import (
@@ -5910,9 +5911,15 @@ class AsyncRegistry:
         for p in planned:
             if p.reason == "name_invalid":
                 continue
-            p.detail["standing"] = (
-                await self.adapter.get_type(namespace, p.name, kind=p.kind) is not None
-            )
+            stored = await self.adapter.get_type(namespace, p.name, kind=p.kind)
+            p.detail["standing"] = stored is not None
+            # **What the write would lose** (round 4). A live local row of the same
+            # name was overwritten, its predicates dropped from under a consumer's
+            # gate, and the item said plain `written`. Reported on a dry run too.
+            if stored is not None and stored.status != "retired" and p.reason is None:
+                lost = foundry_replaces(stored, foundry_row(p))
+                if lost is not None:
+                    p.detail["replaces"] = lost
             resolution = await self.resolve_type(
                 p.name, context, kind=p.kind, namespace=namespace, tier="unspecified"
             )

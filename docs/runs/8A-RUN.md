@@ -169,6 +169,7 @@ Every written predicate carries `predicate_requires_review`, and no written row 
 
 7. **§0.5 item 4 names `put_attribute_schema`.** The adapter's primitive is `put_attr_schema`, and the test's list uses the right name. §0 stays as committed, so the stale name is corrected here rather than there.
 8. **§0.7 question 3 said cardinality would be "listed in the report as a contortion".** No report field lists contortions. Cardinality is carried per side in `attributes["foundry_link"]`, and `INTERFACE.md` §2.5a names it a contortion in prose. A report field for it was not added.
+9. **§0.7 question 4 mapped `addLink` and `removeLink` as link rules.** Neither is a rule type `foundry_sdk.v2.ontologies.models` defines: its link rules are `createLink`, `deleteLink`, `createInterfaceLink` and `deleteInterfaceLink`, in both `operations` (`CreateLinkRule`, `DeleteLinkRule`) and `fullLogicRules` (`*LinkLogicRule`). **[Observed]**, round 4. The two names were removed, so such a rule is `host_state` like any unknown one (`C12-63`). §0 stays as committed.
 
 ### 1.3 Use cases
 
@@ -192,8 +193,8 @@ Row 8b landed on `main` (`586ba1a..22933f8`) while this row ran, adding `INTERFA
 | `docs/specs/INTERFACE.md` §2.5a | **new subsection**, inserted between §2.5 and §2.6 (round 3 added the action-maps row, the store-first `unresolved` and the paragraph refusing a document that is not full metadata): `import_foundry`'s signature, mapping table, name rules, holds, the three printed shapes (`FoundryImportReport`, `FoundryItem`, `LookAlike`), `key` / `unresolved` / `unmatched`, the look-alike filter and what a dry run cannot say | the call this row adds. §2.10 sits after §2.9 on `main`, so the two do not overlap in place, only in the hunk offsets |
 | `docs/specs/INTERFACE.md` §5.4 | the `import_refused` row of the refusal table names four import-only reasons and cites `C12-31`–`C12-33` | so the closed refusal list matches the code |
 | `docs/tools/check_spec_drift.py` | `import_foundry` added to `CALLS`; a `FOUNDRY_SHAPES` dict near `CALLS`; a block in `main()` checking §2.5a's three printed shapes against `ontoloche.foundry` | so §2.5a is held to the code like every other printed shape. Additive: a merge keeps both rows' additions |
-| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 445), the C12 header (29 → 60) and table rows `C12-30`–`C12-60` | the new contract ids. `main` did not touch this file |
-| `ontoloche/contract/test_manifest.py` | `12: 60`, `TOTAL = 445` | the manifest checks the counts above. `main` did not touch this file |
+| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 449), the C12 header (29 → 64) and table rows `C12-30`–`C12-64` | the new contract ids. `main` did not touch this file |
+| `ontoloche/contract/test_manifest.py` | `12: 64`, `TOTAL = 449` | the manifest checks the counts above. `main` did not touch this file |
 | `docs/DECISIONS-OPEN.md` | item **24** (R109–R110, ruled) and the header line | first numbered 23; renumbered after `main` took 19 to 23 for `Q103`–`Q107`. The header's open and ruled counts will need re-adding at the merge, because both rows changed them |
 
 ### 1.6 Adversarial loop
@@ -269,4 +270,31 @@ Three new Sonnet reviewers, the same three lenses, the range `2e94fe5..e2b3467`,
 **Each fix was proven by mutation.** Fourteen mutations against a copy: the plan trusted before the store, the full-metadata-only action dropped, `fullLogicRules` not carried, the document check removed, a non-dict accepted, the inverse key matching `definitions`, `inverse_link` unreported, the metadata keeping `linkTypes`, the metadata keeping `objectType`, the metadata carrying two keys only, the dry-run deprecation applied only to an absent row, the status compared case-sensitively, the look-alike compared strictly, and `standing` read without its kind. **All fourteen were killed.** **[Observed]**
 
 **Round 3's run.** **[Observed]** The full three-leg suite with `OO_POSTGRES_DSN` set gave **2094 passed, 646 skipped, 0 failed** (21m05s), postgres `CONFORMANT: 440 ids exercised, 1 not exercisable`. All five gates exit 0, and the skip census is 5 against a baseline of 5.
+
+#### Round 4: three fresh lenses, thirteen MAJORs, all closed
+
+Three new Sonnet reviewers, the same three lenses, the range `2e94fe5..4bcd90d`, with rounds 1 to 3's declined lists given as settled. Eleven of the thirteen MAJORs are the tests lens's: behaviour the code does correctly and the record states, which a single-site mutant could break with the C12 file green. Not one lens came back clean, so round 5, the last the cap allows, runs.
+
+| Lens | Finding | Fix | Test |
+|---|---|---|---|
+| guards | **A real run wrote over a live local row of the same name and said `written`.** A reviewer seeded `employee` with the predicate `audited`, registered a consumer gating on it, and imported a Foundry `Employee`: the predicate and the local definition were gone, the gate matched nothing, and a dry run said only `standing: True`. `import_types` has always replaced a standing row this way (`INTERFACE.md` §2.5); row 8a makes that door routine | `detail["replaces"]` lists what the write would drop (predicates, aliases, attributes, the definition) and which system wrote the standing row, on the dry run too, and is absent when nothing would be lost. **Reported, not refused**: refusing is a refusal, so it is open as `DECISIONS-OPEN.md` item **25** | `C12-61` |
+| mapping | **An action only in `actionTypesFullMetadata` reported `effects: []`.** Round 3 made it an action, but `_effects` read `operations` from `actionTypes` alone | `_effects` reads the merged action's `operations` | `C12-61` |
+| tests | **`namespace=`'s read side was unpinned**: `standing`, the look-alike `resolve_type`, the store read behind `unresolved` and `report.namespace` could each read `"default"` | one fixture seeded differently in two namespaces | `C12-62` |
+| tests | **`deleteLink`, a retract's `inverse_link` and `source`, and an action's `status` were unpinned** (`C12-50`'s class, fixed for links only). Checking the rule names against the SDK found `addLink` and `removeLink` are not rule types at all (§1.2 item 9) | the two names removed; every SDK link rule, an `EXAMPLE` action held, a `DEPRECATED` action (in either map) written retired | `C12-63` |
+| tests | **A held source entity, and a deprecated referent the planner also holds**: only the `dst` half and the unheld case were pinned | both in a dry run and a real run | `C12-63` |
+| tests | **Seven mapping claims a narrower mutant passed**: the foreign `rid` for interfaces, edges and actions; the self-link forward side whatever the document order; the acronym rule and the strip in `convert_name`; the `implementsInterfaces` list on its own; an entity's `visibility` through `import_foundry`; `report.entries` | each asserted | `C12-64` |
+
+**MINORs taken:** an unset `visibility: None` is no longer stored (`C12-61`). A repeated `implementsInterfaces` entry is written once (`C12-64`). The inverse label's `fullmatch`, a whitespace-only description held at the planner rather than refused at the door, and a document carrying only some of the type maps are pinned (`C12-64`). §1.1's four unpaired legacy link sides are asserted by name in `C12-35`. §2.5a says a name the store holds exactly gets no look-alike, because `resolve_type` answers an exact match with no alternatives.
+
+**MINORs declined, on the record:**
+- **On a re-run without `definitions=`, a row the store already defines is held `definition_missing`**, while `import_types` would keep the stored definition, so a Foundry status change to it is not applied. Lifting a hold R109 placed is the founder's: `DECISIONS-OPEN.md` item 25 (b).
+- **A dry run over a type a re-run will refuse `name_previously_retired` says `would_write`.** §2.5a already says a dry run cannot predict a guard's refusal.
+- **A link name in an effect is not tied to an edge item**, as round 2 declined.
+- **The ontology's `displayName`, `description` and `branch` are neither carried nor counted.** §2.5a states the report keeps `apiName` and `rid`.
+- **A `names=` entry is not applied to an edge endpoint whose object type is absent from the document.** Only a partial document reaches it.
+- **Hold precedence beyond `definition_missing`, the default `imported_by`, a `None` look-alike score, a link side with no `linkTypeRid`, `properties` duplicated into `foundry_object_type`, `source` on a `host_state` effect, and `carried_properties` on a written item are unpinned.** Each is a hand-built shape or carries no behaviour a caller acts on.
+
+**Each fix was proven by mutation.** Twenty-seven mutations against a copy: the seven for `replaces`, the merged `operations` and `visibility`, and twenty for the tests lens (the four namespace reads, `deleteLink` dropped, `addLink` restored, the action status, the three foreign `rid`s, the `src` ref, the self-link sort, the acronym rule, the strip, the list ignored, a repeat kept, `visibility` dropped, `entries` emptied, the held deprecated referent read as retired, and `match` for `fullmatch`). **All twenty-seven were killed.** **[Observed]**
+
+**Round 4's run.** **[Observed]** The full three-leg suite with `OO_POSTGRES_DSN` set gave **2118 passed, 646 skipped, 0 failed** (21m42s), postgres `CONFORMANT: 444 ids exercised, 1 not exercisable`. All five gates exit 0, and the skip census is 5 against a baseline of 5.
 
