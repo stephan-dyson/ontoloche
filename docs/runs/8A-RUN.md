@@ -1,6 +1,6 @@
 # 8A-RUN — roadmap row 8a: the Foundry metadata importer
 
-**Status:** in flight. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
+**Status:** **stopped at the adversarial cap, blocked on the founder** (`DECISIONS-OPEN.md` item 26). Round 5 of 5 found six MAJORs, none fixed, recorded in §1.6. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
 
 **Worktree:** `row-8a`, cut from `main` at `2e94fe5`. Row 8b runs on `main` at the same time. Properties follow R105's interim `carry` and this row does not anticipate 8b's spec.
 
@@ -297,4 +297,23 @@ Three new Sonnet reviewers, the same three lenses, the range `2e94fe5..4bcd90d`,
 **Each fix was proven by mutation.** Twenty-seven mutations against a copy: the seven for `replaces`, the merged `operations` and `visibility`, and twenty for the tests lens (the four namespace reads, `deleteLink` dropped, `addLink` restored, the action status, the three foreign `rid`s, the `src` ref, the self-link sort, the acronym rule, the strip, the list ignored, a repeat kept, `visibility` dropped, `entries` emptied, the held deprecated referent read as retired, and `match` for `fullmatch`). **All twenty-seven were killed.** **[Observed]**
 
 **Round 4's run.** **[Observed]** The full three-leg suite with `OO_POSTGRES_DSN` set gave **2118 passed, 646 skipped, 0 failed** (21m42s), postgres `CONFORMANT: 444 ids exercised, 1 not exercisable`. All five gates exit 0, and the skip census is 5 against a baseline of 5.
+
+#### Round 5: three fresh lenses, six MAJORs, none fixed — the loop stopped at the cap
+
+Three new Sonnet reviewers, the same three lenses, the range `2e94fe5..ea5b7a7`, with rounds 1 to 4's declined lists given as settled. Every lens found a MAJOR. §0.9 item 3 says the loop stops after round 5 and the finding goes to the founder, so **nothing below is fixed**. The question is `DECISIONS-OPEN.md` item **26**.
+
+**Three of the six are in round 4's own fix, `detail["replaces"]`.** That is the pattern of every round since round 2: each round's fixes carry the next round's MAJORs. The code underneath (holds, refusals, store-first `unresolved`, the mapping) held up under all three lenses.
+
+| # | Lens | Finding | Verified |
+|---|---|---|---|
+| 1 | guards, mapping (both, independently) | **`replaces` reports a loss on every idempotent re-run of an `EXPERIMENTAL` or `ENDORSED` item** (`predicates_dropped: ["experimental"]`). `import_types` appends the lifecycle predicate after the row `replaces` diffs against is built, so the stored marker looks dropped. Breaks §2.5a's "an idempotent re-run reports nothing" | **[Observed]** by both reviewers' probes; the cause is `ontoloche/registry.py`'s `import_types`, which appends `experimental` / `endorsed` to `predicates` |
+| 2 | guards | **`replaces` omits the largest losses**: a live local row turned `retired` by a `DEPRECATED` import, and its provenance (`approved_by: user:sd` becomes `unknown:imported`) | reviewer's probe |
+| 3 | mapping | **On a backend with `stores_attributes=False`, everything carried is dropped and every item reads `written` with no warning**: properties, the interface mapping, link sides and cardinality, the action carry. `import_types` and `propose_type` have always been silent here (no `attributes_not_stored` warning exists in the package); the importer routes almost all of its mapping through attributes | reviewer's probe; the absence of a warning checked in `ontoloche/types.py` |
+| 4 | tests | **`replaces` is three-quarters unpinned**: `aliases_dropped`, `attributes_dropped`, `imported_from == "foundry"` and the live-only gate each survive a mutant | reviewer's mutants |
+| 5 | tests | **A `names=` rename is not pinned on an edge's `src_type` / `dst_type`**, the R110 collision-lift flow | reviewer's mutants; the code is right |
+| 6 | tests | **A blank `definitions=` value is not pinned**; loosening the check makes a dry run say `would_write` for a row the real run refuses | reviewer's mutants; the code is right |
+
+**MINORs, not acted on:** `replaces` stays on a real run's `refused` item; a re-run's `name_previously_retired` cannot tell the importer's own earlier write from a local tombstone; a raise inside `import_types` loses the report after a partial write (unprobed for an SDK-shaped document); three effect fields, `LookAlike.kind`, definition precedence and the converse of "every other key" are unpinned; `plan()`'s docstring says two return values, and it returns three.
+
+**No suite was run for round 5**, because nothing changed: `ea5b7a7`'s run (round 4) stands.
 
