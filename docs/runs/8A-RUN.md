@@ -1,6 +1,6 @@
 # 8A-RUN — roadmap row 8a: the Foundry metadata importer
 
-**Status:** **stopped at the adversarial cap, blocked on the founder** (`DECISIONS-OPEN.md` item 26). Round 5 of 5 found six MAJORs, none fixed, recorded in §1.6. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
+**Status:** in flight, round 6. The founder ruled `round 6` on `DECISIONS-OPEN.md` item 26 (2026-11-15): round 5's six MAJORs are fixed, and one fresh round reviews the result. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
 
 **Worktree:** `row-8a`, cut from `main` at `2e94fe5`. Row 8b runs on `main` at the same time. Properties follow R105's interim `carry` and this row does not anticipate 8b's spec.
 
@@ -193,8 +193,8 @@ Row 8b landed on `main` (`586ba1a..22933f8`) while this row ran, adding `INTERFA
 | `docs/specs/INTERFACE.md` §2.5a | **new subsection**, inserted between §2.5 and §2.6 (round 3 added the action-maps row, the store-first `unresolved` and the paragraph refusing a document that is not full metadata): `import_foundry`'s signature, mapping table, name rules, holds, the three printed shapes (`FoundryImportReport`, `FoundryItem`, `LookAlike`), `key` / `unresolved` / `unmatched`, the look-alike filter and what a dry run cannot say | the call this row adds. §2.10 sits after §2.9 on `main`, so the two do not overlap in place, only in the hunk offsets |
 | `docs/specs/INTERFACE.md` §5.4 | the `import_refused` row of the refusal table names four import-only reasons and cites `C12-31`–`C12-33` | so the closed refusal list matches the code |
 | `docs/tools/check_spec_drift.py` | `import_foundry` added to `CALLS`; a `FOUNDRY_SHAPES` dict near `CALLS`; a block in `main()` checking §2.5a's three printed shapes against `ontoloche.foundry` | so §2.5a is held to the code like every other printed shape. Additive: a merge keeps both rows' additions |
-| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 449), the C12 header (29 → 64) and table rows `C12-30`–`C12-64` | the new contract ids. `main` did not touch this file |
-| `ontoloche/contract/test_manifest.py` | `12: 64`, `TOTAL = 449` | the manifest checks the counts above. `main` did not touch this file |
+| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 452), the C12 header (29 → 67) and table rows `C12-30`–`C12-67` | the new contract ids. `main` did not touch this file |
+| `ontoloche/contract/test_manifest.py` | `12: 67`, `TOTAL = 452` | the manifest checks the counts above. `main` did not touch this file |
 | `docs/DECISIONS-OPEN.md` | item **24** (R109–R110, ruled) and the header line | first numbered 23; renumbered after `main` took 19 to 23 for `Q103`–`Q107`. The header's open and ruled counts will need re-adding at the merge, because both rows changed them |
 
 ### 1.6 Adversarial loop
@@ -316,4 +316,23 @@ Three new Sonnet reviewers, the same three lenses, the range `2e94fe5..ea5b7a7`,
 **MINORs, not acted on:** `replaces` stays on a real run's `refused` item; a re-run's `name_previously_retired` cannot tell the importer's own earlier write from a local tombstone; a raise inside `import_types` loses the report after a partial write (unprobed for an SDK-shaped document); three effect fields, `LookAlike.kind`, definition precedence and the converse of "every other key" are unpinned; `plan()`'s docstring says two return values, and it returns three.
 
 **No suite was run for round 5**, because nothing changed: `ea5b7a7`'s run (round 4) stands.
+
+#### Round 6: round 5's six MAJORs fixed
+
+The founder ruled **`round 6`** on item 26 (2026-11-15). The ruling did not answer whether round 6 has its own cap, so this run reads it the narrow way: one fresh round of three lenses after the fixes, and a MAJOR it finds goes back to the founder rather than into a seventh round.
+
+| # | Finding (round 5) | Fix | Test |
+|---|---|---|---|
+| 1 | a false `predicates_dropped: ["experimental"]` or `["endorsed"]` on every idempotent re-run | `replaces` adds the lifecycle predicate `import_types` will add for that status before it diffs | `C12-65` |
+| 2 | a live row a `DEPRECATED` import retires, and a human approver overwritten, not reported | `replaces` gains `retires` and `approved_by_replaced` (any approver other than `unknown:imported`) | `C12-65` |
+| 3 | on a backend declining `stores_attributes`, everything carried dropped while the item says `written` | `detail["attributes_not_stored"]` lists the keys `Capabilities.stores_attribute` says this backend drops, on a dry run too. Reported, not held. The same silence at `import_types` and `propose_type` is older than this row and is not changed here | `C12-66` |
+| 4 | `aliases_dropped`, `attributes_dropped`, `imported_from == "foundry"` and the live-only gate unpinned | each asserted | `C12-65` |
+| 5 | a `names=` rename on an edge's `src_type` / `dst_type` unpinned | asserted in `unresolved` and in the stored `foundry_link` | `C12-67` |
+| 6 | a blank `definitions=` value unpinned | a blank value holds an edge `definition_missing` on both runs, and falls back to the description for an object type | `C12-67` |
+
+**Red first.** Against `d1e5967`'s code, `C12-65` and `C12-66` fail on both sqlite legs. `C12-67` passes there, as round 5 said: the code was right and only the pin was missing. **[Observed]**
+
+**Each fix was proven by mutation.** Fifteen new mutations against a copy: the lifecycle marker dropped or narrowed to `experimental`, `retires` and `approved_by_replaced` dropped, the approver compared with nothing, `aliases_dropped`, `attributes_dropped` and `imported_from` unread, the live-only gate dropped, `attributes_not_stored` never said, `attribute_projections` ignored, the `src` and `dst` renames ignored, a blank `definitions=` value accepted, and a blank value refusing the description fallback. Round 4's twenty-seven were re-run against the changed code. **All forty-two were killed.** One harness line, `entries emptied`, matched three sites in `registry.py` and was applied by hand to `import_foundry`'s. **A correction to round 4:** `ea5b7a7`'s `registry.py` has the same three sites, so that line could not have been placed then either, and round 4's "all twenty-seven were killed" was twenty-six killed and one not run. It is killed now. **[Observed]**
+
+**Round 6's run.** Full three-leg suite: **2136 passed, 646 skipped, 0 failed** (22m54s). sqlite and postgres CONFORMANT, 447 ids exercised each; sqlite_minimal CONFORMANT, 127 exercised. All five gates exit 0, and `check_skip_census` holds at 5 of baseline 5. **[Observed]**
 

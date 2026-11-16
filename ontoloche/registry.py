@@ -6267,6 +6267,18 @@ class Registry:
                 lost = foundry_replaces(stored, foundry_row(p))
                 if lost is not None:
                     p.detail["replaces"] = lost
+            # **What this backend would not keep** (round 6). The importer routes most
+            # of its mapping through attributes (properties, the interface mapping, link
+            # sides, the action carry), and on a backend declining `stores_attributes`
+            # every key outside `attribute_projections` was dropped while the item said
+            # `written`. Said on the item, on a dry run too. Reported, not held.
+            if p.reason is None:
+                not_stored = sorted(
+                    k for k in (p.row.get("attributes") or {})
+                    if not self.caps.stores_attribute(k)
+                )
+                if not_stored:
+                    p.detail["attributes_not_stored"] = not_stored
             resolution = self.resolve_type(
                 p.name, context, kind=p.kind, namespace=namespace, tier="unspecified"
             )

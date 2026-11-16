@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**4 open (1 blocking) · 13 ruled · 7 FYI** *(2026-11-13: item 26 added, BLOCKING, row 8a stopped at the review cap. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**3 open · 14 ruled · 7 FYI** *(2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,23 +12,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A0. Blocking — 1 item
-
-### 26 · Row 8a stopped at the review cap. Six MAJORs are open. Fix them in a sixth round, or land as is?
-
-*New, 2026-11-13. **This blocks row 8a.** §0.9 item 3 capped the adversarial loop at five rounds and said a MAJOR in round 5 comes to you. Round 5 found six. Full table: [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §1.6, round 5.*
-
-**Where the row stands.** Committed through round 4 (`ea5b7a7`): 2118 passed, 0 failed, all five gates exit 0. The importer's holds, refusals and mapping held up under all three round-5 lenses.
-
-**The six.** Three are defects or gaps in round 4's own fix, `detail["replaces"]` (a false loss on every re-run of an `EXPERIMENTAL` or `ENDORSED` type, a status change and a provenance overwrite not reported, and most of the field unpinned). Two are test gaps where the code is right (a `names=` rename on an edge's endpoints, a blank `definitions=` value). One is older than the row: a backend that declines `stores_attributes` drops everything the importer carries, and no warning exists for that anywhere in the package.
-
-**None of the six adds a refusal.** All are reports, warnings or tests.
-
-**Options.**
-- **`round 6`** *(my recommendation)*: fix all six, add the tests, prove them by mutation, full suite, then one more fresh round. The pattern so far is that each round's fixes carry the next round's MAJORs, so a sixth round could find more. If you take this, say whether round 6 gets its own cap (one round, then land whatever it finds as recorded defects).
-- **`land as is`**: land `ea5b7a7` with the six recorded as known defects in `8A-RUN.md`, for a later row.
-- **`fix 1 to 2 only`**: fix the false-loss defect and the unreported status change (the two that make `replaces` say something untrue or omit the biggest loss), land, and leave the test gaps and the attribute warning for a later row.
-
+## A. Decide when you want to — 3 items
 
 ### 25 · Row 8a: should a Foundry import write over a live row Foundry did not import?
 
@@ -113,7 +97,24 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## E. Ruled — 13 items
+## E. Ruled — 14 items
+
+### 26 · Row 8a stopped at the review cap. Fix the six MAJORs in a sixth round, or land as is? → **RULED: `round 6`** *(2026-11-15)*
+
+**Built.** Round 5's six are fixed and pinned as `C12-65`–`C12-67` (`8A-RUN.md` §1.6, round 6). The ruling did not say whether round 6 has its own cap, so it is read the narrow way: one fresh review round, and a MAJOR it finds comes back to you rather than starting a seventh.
+
+*Asked 2026-11-13. §0.9 item 3 capped the adversarial loop at five rounds and said a MAJOR in round 5 comes to you. Round 5 found six. Full table: [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §1.6, round 5.*
+
+**Where the row stands.** Committed through round 4 (`ea5b7a7`): 2118 passed, 0 failed, all five gates exit 0. The importer's holds, refusals and mapping held up under all three round-5 lenses.
+
+**The six.** Three are defects or gaps in round 4's own fix, `detail["replaces"]` (a false loss on every re-run of an `EXPERIMENTAL` or `ENDORSED` type, a status change and a provenance overwrite not reported, and most of the field unpinned). Two are test gaps where the code is right (a `names=` rename on an edge's endpoints, a blank `definitions=` value). One is older than the row: a backend that declines `stores_attributes` drops everything the importer carries, and no warning exists for that anywhere in the package.
+
+**None of the six adds a refusal.** All are reports, warnings or tests.
+
+**Options.**
+- **`round 6`** *(my recommendation)*: fix all six, add the tests, prove them by mutation, full suite, then one more fresh round. The pattern so far is that each round's fixes carry the next round's MAJORs, so a sixth round could find more. If you take this, say whether round 6 gets its own cap (one round, then land whatever it finds as recorded defects).
+- **`land as is`**: land `ea5b7a7` with the six recorded as known defects in `8A-RUN.md`, for a later row.
+- **`fix 1 to 2 only`**: fix the false-loss defect and the unreported status change (the two that make `replaces` say something untrue or omit the biggest loss), land, and leave the test gaps and the attribute warning for a later row.
 
 ### 24 · Row 8a's two Foundry import questions → **RULED: `hold + override map` (R109) and `hold both + names map` (R110)** *(2026-11-12)*
 

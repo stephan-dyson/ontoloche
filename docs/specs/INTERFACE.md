@@ -197,7 +197,7 @@ FoundryItem:
     outcome:            str                # would_write | held | written | refused
     reason:             str | None         # the hold reason, or import_types' refusal reason
     warnings:           list[str]          # the returned entry's, on a real run
-    detail:             dict               # key, standing, replaces, unresolved; predicates | inverse_label, inverse_key, sides | effects; on a hold colliding, foundry_status or definitions_key
+    detail:             dict               # key, standing, replaces, attributes_not_stored, unresolved; predicates | inverse_label, inverse_key, sides | effects; on a hold colliding, foundry_status or definitions_key
     carried_properties: int                # properties carried under R105
 ```
 
@@ -217,7 +217,9 @@ LookAlike:
 
 **Look-alikes** are `resolve_type`'s answers, unmodified, filtered at the namespace's own `near_duplicate_threshold` (`PACKAGE.md` §2.6). `resolve_type`'s `alternatives` carry every scored name down to 0.0, and unfiltered every planned edge name "looked like" the seeded `equivalent_to` at 0.08 to 0.32 (**[Observed]**, row 8a). `detail["standing"]` says whether the name is already held, because importing it replaces that row. A name the store already holds exactly gets no look-alike, because `resolve_type` answers an exact match with no alternatives, and `standing` carries it instead. `C12-39`.
 
-**What a write would lose** (row 8a, round 4). When the store holds a live row of the item's name and kind, `detail["replaces"]` lists what writing over it drops: `predicates_dropped`, `aliases_dropped`, `attributes_dropped` and `definition_replaced`, with `imported_from` naming the system that wrote the standing row (`None` for a local row). It is computed on the dry run as well, and absent when nothing would be lost, so an idempotent re-run reports nothing. **Reported, never held**: whether to refuse writing over a row Foundry did not import is a refusal, and it is open for the founder in `DECISIONS-OPEN.md`. `C12-61`.
+**What a write would lose** (row 8a, round 4). When the store holds a live row of the item's name and kind, `detail["replaces"]` lists what writing over it drops: `predicates_dropped`, `aliases_dropped`, `attributes_dropped`, `definition_replaced`, `retires` (a `DEPRECATED` import would retire it) and `approved_by_replaced` (the approver the import's `unknown:imported` would overwrite), with `imported_from` naming the system that wrote the standing row (`None` for a local row). It compares the stored row with what `import_types` will write, including the `experimental` or `endorsed` predicate it adds for those statuses (round 6). It is computed on the dry run as well, and absent when nothing would be lost, so an idempotent re-run reports nothing. **Reported, never held**: whether to refuse writing over a row Foundry did not import is a refusal, and it is open for the founder in `DECISIONS-OPEN.md`. `C12-61`, `C12-65`.
+
+**What this backend would not keep** (row 8a, round 6). The importer carries most of its mapping in attributes. On a backend that declines `stores_attributes`, `detail["attributes_not_stored"]` lists the item's attribute keys the backend would drop (a key in `attribute_projections` survives and is not listed), on the dry run as well. Reported, never held. `import_types` and `propose_type` give no such warning at their own doors, which is older than row 8a. `C12-66`.
 
 **What a dry run cannot say.** It reports the planner's holds and `resolve_type`'s look-alikes. It does **not** predict a guard refusal inside `import_types` (`name_previously_retired`, `word_previously_retired`, `import_refused:live_consumers`, `import_refused:alias_collision`, a family declaration refusal), because evaluating those means running the write path. A row a dry run lists `would_write` can come back `refused` from the real run, and the real run's `FoundryItem` says which guard (`C12-40`).
 

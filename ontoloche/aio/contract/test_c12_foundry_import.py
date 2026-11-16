@@ -2714,3 +2714,119 @@ async def test_c12_64_the_mapping_the_record_states_is_the_mapping(registry, ada
     solo = _ontology(objects={"Solo": ("a solo", "ACTIVE", ())})["objectTypes"]
     only = {"ontology": {}, "objectTypes": solo}
     assert [i.name for i in (await registry.import_foundry(only)).items] == ["solo"]
+
+async def test_c12_65_what_a_write_would_lose_is_what_it_would_write(registry, adapter):
+    """**Round 5, guards, mapping and tests lenses.** `replaces` diffed the stored row
+    against the row it hands `import_types`, but `import_types` appends `experimental`
+    or `endorsed` for those statuses, so every idempotent re-run of such an item
+    reported the marker dropped. It also omitted the two largest losses, a live row a
+    `DEPRECATED` import would retire and a human approver overwritten with
+    `unknown:imported`. And `aliases_dropped`, `attributes_dropped`, the
+    `imported_from` system and the live-only gate were each unpinned."""
+    caps = await adapter.capabilities()
+    for status in ("EXPERIMENTAL", "ENDORSED"):
+        doc = _ontology(objects={"Ward": ("a hospital ward", status, ())})
+        await registry.import_foundry(doc, dry_run=False)
+        for dry_run in (True, False):
+            again = _items(await registry.import_foundry(doc, dry_run=dry_run), api_name="Ward")[0]
+            assert "replaces" not in again.detail, (status, dry_run, again.detail)
+
+    await seed(registry, "employee", definition="an employee", approved_by="user:sd")
+    gone = _ontology(objects={"Employee": ("an employee", "DEPRECATED", ())})
+    lost = _items(await registry.import_foundry(gone), api_name="Employee")[0].detail["replaces"]
+    approver = (await adapter.get_type("default", "employee", kind="entity")).provenance["approved_by"]
+    assert approver and approver != "unknown:imported"
+    assert (lost.get("retires"), lost.get("approved_by_replaced")) == (True, approver)
+    assert "definition_replaced" not in lost
+
+    await registry.import_types(
+        [{"name": "contractor", "kind": "entity", "definition": "a contractor",
+          "aliases": ["temp_worker"], "attributes": {"cost_centre": "c1"}}],
+        system="hr",
+    )
+    doc = _ontology(objects={"Contractor": ("a contractor", "ACTIVE", ())})
+    lost = _items(await registry.import_foundry(doc), api_name="Contractor")[0].detail["replaces"]
+    assert lost["imported_from"] == "hr"
+    assert "approved_by_replaced" not in lost
+    if caps.stores_aliases:
+        assert lost["aliases_dropped"] == ["temp_worker"]
+    if caps.stores_attributes:
+        assert lost["attributes_dropped"] == ["cost_centre"]
+
+    looked = _ontology(objects={"Desk": ("a desk", "ACTIVE", ("Located",))},
+                       interfaces={"Located": "has a place"})
+    await registry.import_foundry(looked, dry_run=False)
+    looked["objectTypes"]["Desk"]["implementsInterfaces"] = []
+    looked["objectTypes"]["Desk"]["implementsInterfaces2"] = {}
+    if "located" in ((await adapter.get_type("default", "desk", kind="entity")).predicates or ()):
+        lost = _items(await registry.import_foundry(looked), api_name="Desk")[0].detail["replaces"]
+        assert (lost["imported_from"], lost["predicates_dropped"]) == ("foundry", ["located"])
+
+    if caps.indexes_membership:
+        # `retire` reads consumers through the membership index (`C12-44`'s marker).
+        await seed(registry, "chair", definition="a chair", predicates=["audited"])
+        await registry.retire("chair", "replaced by seating", retired_by="user:sd")
+        assert (await adapter.get_type("default", "chair", kind="entity")).status == "retired"
+        chair = _ontology(objects={"Chair": ("something to sit on", "ACTIVE", ())})
+        item = _items(await registry.import_foundry(chair), api_name="Chair")[0]
+        assert "replaces" not in item.detail
+
+async def test_c12_66_a_backend_that_keeps_no_attributes_says_what_it_drops(
+    adapter, make_registry
+):
+    """**Round 5, mapping lens.** The importer routes most of its mapping through
+    attributes, and on a backend declining `stores_attributes` every key outside
+    `attribute_projections` was dropped while the item said `written`. The item names
+    the keys this backend would not keep, on a dry run and a real run, and a projected
+    key is not among them. Reported, not held."""
+    doc = _ontology(objects={"Pet": ("a pet", "ACTIVE", ())})
+    doc["objectTypes"]["Pet"]["objectType"]["visibility"] = "PROMINENT"
+
+    full = await make_registry(adapter, approval_policy="auto")
+    if (await adapter.capabilities()).stores_attributes:
+        item = _items(await full.import_foundry(doc), api_name="Pet")[0]
+        assert "attributes_not_stored" not in item.detail
+
+    bare = await make_registry(
+        AsyncDegradedAdapter(adapter, stores_attributes=False, attribute_projections=("visibility",)),
+        approval_policy="auto",
+    )
+    for dry_run in (True, False):
+        item = _items(await bare.import_foundry(doc, dry_run=dry_run), api_name="Pet")[0]
+        dropped = item.detail["attributes_not_stored"]
+        assert "foundry_object_type" in dropped and "visibility" not in dropped, dry_run
+        assert dropped == sorted(dropped)
+        assert item.outcome == ("would_write" if dry_run else "written")
+
+async def test_c12_67_a_rename_reaches_an_edge_and_a_blank_definition_is_no_definition(
+    registry, adapter
+):
+    """**Round 5, tests lens.** A `names=` rename of an object type was not pinned on
+    an edge's `src_type` and `dst_type`, the flow R110's collision lift depends on,
+    and a blank `definitions=` value was not pinned: loosening the check made a dry run
+    say `would_write` for a row the real run refuses."""
+    doc = _ontology(
+        objects={"Pet": (None, "ACTIVE", ()), "Owner": ("an owner", "ACTIVE", ())},
+        links={"Pet": [_side("owner", "Owner", "ri.l.o", fk="ownerId")],
+               "Owner": [_side("pets", "Pet", "ri.l.o")]},
+    )
+    names = {"Pet": "animal", "Owner": "keeper"}
+    edge = _items(await registry.import_foundry(
+        doc, names=names, definitions={"Pet.owner": "an animal has a keeper"},
+    ), kind="edge")[0]
+    assert edge.detail["unresolved"] == [{"src": "animal", "why": "held:definition_missing"}]
+
+    defined = {"Pet": "a pet", "Pet.owner": "an animal has a keeper"}
+    await registry.import_foundry(doc, dry_run=False, names=names, definitions=defined)
+    if (await adapter.capabilities()).stores_attributes:
+        link = (await adapter.get_type("default", "owner", kind="edge")).attributes["foundry_link"]
+        assert (link["src_type"], link["dst_type"]) == ("animal", "keeper")
+
+    blank = {"Pet": "a pet", "Pet.owner": "   "}
+    for dry_run in (True, False):
+        edge = _items(await registry.import_foundry(doc, dry_run=dry_run, definitions=blank),
+                      kind="edge")[0]
+        assert (edge.outcome, edge.reason) == ("held", "definition_missing"), dry_run
+    fresh = {"Pet": "pet", "Owner": "guardian"}
+    await registry.import_foundry(doc, dry_run=False, names=fresh, definitions={"Owner": "  "})
+    assert (await adapter.get_type("default", "guardian", kind="entity")).definition == "an owner"

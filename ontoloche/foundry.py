@@ -503,6 +503,10 @@ def _hold(planned: list[_Planned]) -> None:
             p.detail["definitions_key"] = p.key
 
 
+#: The approver ``import_types`` writes on every imported row (``INTERFACE.md`` 2.5).
+IMPORTED_APPROVER = "unknown:imported"
+
+
 def replaces(stored: Any, row: dict) -> dict | None:
     """What writing ``row`` over the live ``stored`` row would lose (round 4).
 
@@ -511,8 +515,19 @@ def replaces(stored: Any, row: dict) -> dict | None:
     routine, and a dry run said only ``standing: True``. Reported, never held: whether
     to refuse overwriting a row this system did not import is the founder's
     (``DECISIONS-OPEN.md``). ``None`` when nothing would be lost, so an idempotent
-    re-run reports nothing."""
+    re-run reports nothing.
+
+    **The row is compared with what ``import_types`` will WRITE, not with what it is
+    handed** (round 6). ``import_types`` appends ``experimental`` or ``endorsed`` to the
+    predicates for those statuses, so reading the row alone reported the stored marker
+    as dropped on every idempotent re-run. ``retires`` is a live row a ``DEPRECATED``
+    import would retire, and ``approved_by_replaced`` is a human approver the import's
+    ``unknown:imported`` would overwrite: the two largest losses, and round 5 found
+    neither was said."""
+    status = str(row.get("status") or "active").lower()
     incoming_predicates = set(row.get("predicates") or ())
+    if status in ("experimental", "endorsed"):
+        incoming_predicates.add(status)
     incoming_attributes = set(row.get("attributes") or {})
     definition = row.get("definition")
     lost = {
@@ -523,7 +538,11 @@ def replaces(stored: Any, row: dict) -> dict | None:
             isinstance(definition, str) and definition.strip()
             and definition != stored.definition
         ),
+        "retires": status == "deprecated" and stored.status != "retired",
     }
+    approved_by = (stored.provenance or {}).get("approved_by")
+    if approved_by and approved_by != IMPORTED_APPROVER:
+        lost["approved_by_replaced"] = approved_by
     lost = {k: v for k, v in lost.items() if v}
     if not lost:
         return None
