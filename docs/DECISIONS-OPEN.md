@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**3 open · 14 ruled · 7 FYI** *(2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**4 open (1 blocking) · 14 ruled · 7 FYI** *(2026-11-15: item 27 added, BLOCKING, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,22 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 3 items
+## A0. Blocking — 1 item
+
+### 27 · Row 8a round 6 found one MAJOR. Fix it and land, or land as is?
+
+*New, 2026-11-15. **This blocks row 8a.** Item 26 ruled `round 6` without saying whether round 6 had its own cap, so it was read the narrow way: a MAJOR comes back to you. Full table: [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §1.6, round 6 review.*
+
+**Where the row stands.** Round 5's six are fixed at `afab2f4`: 2136 passed, 0 failed, all five gates exit 0, 42 of 42 mutations killed. Two of round 6's three lenses (tests, mapping) said ship it.
+
+**The one MAJOR.** `detail["replaces"]` compares attribute *keys*, never values. So a write that changes a value under a key both rows carry says nothing. Observed: a local `visibility: "restricted"` became `NORMAL`, and a local edge family's `symmetric: True` became `False`, with `replaces` silent on both. It is a report, not a refusal.
+
+**The fix would be** an `attributes_changed` list for shared keys whose values differ. One choice is yours inside it: on a re-import of a row Foundry already wrote, should a changed `foundry_*` carry key count (it fires on every legitimate change to the Foundry document), or only the keys the importer does not own (`visibility`, `groups`, the edge declaration keys)?
+
+**Options.**
+- **`fix and land`** *(my recommendation)*: add `attributes_changed`, excluding `foundry_*` keys when the standing row was imported from Foundry, pin it, mutation, full suite, and land without another review round. It is one line of comparison in code that two lenses already passed.
+- **`fix and review`**: the same fix, then one more fresh round.
+- **`land as is`**: land `afab2f4` with this recorded as a known defect for a later row.
 
 ### 25 · Row 8a: should a Foundry import write over a live row Foundry did not import?
 

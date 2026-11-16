@@ -1,6 +1,6 @@
 # 8A-RUN — roadmap row 8a: the Foundry metadata importer
 
-**Status:** in flight, round 6. The founder ruled `round 6` on `DECISIONS-OPEN.md` item 26 (2026-11-15): round 5's six MAJORs are fixed, and one fresh round reviews the result. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
+**Status:** **blocked on the founder** (`DECISIONS-OPEN.md` item 27). The founder ruled `round 6` on item 26 (2026-11-15). Round 5's six MAJORs are fixed at `afab2f4`, and round 6's fresh review found one MAJOR, not fixed, recorded in §1.6. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
 
 **Worktree:** `row-8a`, cut from `main` at `2e94fe5`. Row 8b runs on `main` at the same time. Properties follow R105's interim `carry` and this row does not anticipate 8b's spec.
 
@@ -335,4 +335,19 @@ The founder ruled **`round 6`** on item 26 (2026-11-15). The ruling did not answ
 **Each fix was proven by mutation.** Fifteen new mutations against a copy: the lifecycle marker dropped or narrowed to `experimental`, `retires` and `approved_by_replaced` dropped, the approver compared with nothing, `aliases_dropped`, `attributes_dropped` and `imported_from` unread, the live-only gate dropped, `attributes_not_stored` never said, `attribute_projections` ignored, the `src` and `dst` renames ignored, a blank `definitions=` value accepted, and a blank value refusing the description fallback. Round 4's twenty-seven were re-run against the changed code. **All forty-two were killed.** One harness line, `entries emptied`, matched three sites in `registry.py` and was applied by hand to `import_foundry`'s. **A correction to round 4:** `ea5b7a7`'s `registry.py` has the same three sites, so that line could not have been placed then either, and round 4's "all twenty-seven were killed" was twenty-six killed and one not run. It is killed now. **[Observed]**
 
 **Round 6's run.** Full three-leg suite: **2136 passed, 646 skipped, 0 failed** (22m54s). sqlite and postgres CONFORMANT, 447 ids exercised each; sqlite_minimal CONFORMANT, 127 exercised. All five gates exit 0, and `check_skip_census` holds at 5 of baseline 5. **[Observed]**
+
+#### Round 6 review: three fresh lenses, one MAJOR, not fixed
+
+Three new Sonnet reviewers, the same three lenses, each on its own copy of `afab2f4`. The tests and mapping lenses said **SHIP IT**. The guards lens said **NOT YET** with one MAJOR. Under item 26's narrow reading, that MAJOR goes to the founder as `DECISIONS-OPEN.md` item **27**, and nothing below is fixed.
+
+| Lens | Finding | Verified |
+|---|---|---|
+| guards | **`replaces` compares attribute KEYS, never values**, so a value overwritten under a key both rows carry is not reported. A local `employee` with `visibility: "restricted"` was written as `NORMAL`, and the dry run's `replaces` named only the dropped `groups`. A local edge family's `symmetric: True` became `False`, and `replaces` named only the approver. `inverse_label`, `endpoint_kinds`, `level` and `payload_schema` are silent the same way | **[Observed]**: the first probe re-run by this session in the reviewer's copy, same output. The second is the reviewer's probe; the cause is one line, `attributes_dropped` in `foundry.replaces`, which diffs key sets |
+
+**MINORs, not acted on:**
+- **tests:** the `p.reason is None` gate on `replaces` and on `attributes_not_stored` is unpinned, so a held item beside a standing row could report an overwrite that never happens.
+- **guards:** `replaces` names the approver but not the proposer or creation time, which `import_types`'s fresh `Provenance` also replaces. Read in code, not probed.
+- **mapping:** a dry run says `would_write` for a re-run the real run refuses `name_previously_retired` (round 4 declined this; the reviewer notes the planner already holds the stored row). The dry-run item does not say the resulting status (`retired`, or `active` plus `experimental`/`endorsed`). A `definitions=` override drops the Foundry description from the carry. An effect's `link` is the bare side name, not `"<objectType>.<side>"` (round 2 declined this).
+
+**The mapping lens checked the planner against `foundry_sdk` 1.111's models** and found link direction, side pairing, both action maps, all four statuses and the carried fields as §1.1 states.
 
