@@ -523,8 +523,18 @@ def replaces(stored: Any, row: dict) -> dict | None:
     as dropped on every idempotent re-run. ``retires`` is a live row a ``DEPRECATED``
     import would retire, and ``approved_by_replaced`` is a human approver the import's
     ``unknown:imported`` would overwrite: the two largest losses, and round 5 found
-    neither was said."""
+    neither was said.
+
+    ``attributes_changed`` is a key both rows carry whose value the write would change
+    (item 27, ruled ``fix and land``). Keys were compared and values never were, so a
+    local ``visibility: "restricted"`` written as ``NORMAL``, or an edge family's
+    ``symmetric: True`` written as ``False``, was silent. A ``foundry_*`` carry key is
+    left out when the standing row was itself imported from Foundry, because it changes
+    on every legitimate change to the Foundry document; every other key is reported."""
     status = str(row.get("status") or "active").lower()
+    source = ((stored.provenance or {}).get("imported_from") or {}).get("system")
+    stored_attributes = dict(stored.attributes or {})
+    incoming = dict(row.get("attributes") or {})
     incoming_predicates = set(row.get("predicates") or ())
     if status in ("experimental", "endorsed"):
         incoming_predicates.add(status)
@@ -534,6 +544,11 @@ def replaces(stored: Any, row: dict) -> dict | None:
         "predicates_dropped": sorted(set(stored.predicates or ()) - incoming_predicates),
         "aliases_dropped": sorted(set(stored.aliases or ()) - set(row.get("aliases") or ())),
         "attributes_dropped": sorted(set(stored.attributes or {}) - incoming_attributes),
+        "attributes_changed": sorted(
+            key for key in set(stored_attributes) & set(incoming)
+            if stored_attributes[key] != incoming[key]
+            and not (source == "foundry" and key.startswith("foundry_"))
+        ),
         "definition_replaced": bool(
             isinstance(definition, str) and definition.strip()
             and definition != stored.definition
@@ -546,7 +561,6 @@ def replaces(stored: Any, row: dict) -> dict | None:
     lost = {k: v for k, v in lost.items() if v}
     if not lost:
         return None
-    source = ((stored.provenance or {}).get("imported_from") or {}).get("system")
     return {"imported_from": source, **lost}
 
 

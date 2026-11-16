@@ -1,6 +1,6 @@
 # 8A-RUN — roadmap row 8a: the Foundry metadata importer
 
-**Status:** **blocked on the founder** (`DECISIONS-OPEN.md` item 27). The founder ruled `round 6` on item 26 (2026-11-15). Round 5's six MAJORs are fixed at `afab2f4`, and round 6's fresh review found one MAJOR, not fixed, recorded in §1.6. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
+**Status:** **landed** on `row-8a` (local, not pushed). The founder ruled `round 6` on item 26 (2026-11-15) and `fix and land` on item 27 (2026-11-16): round 6's one MAJOR is fixed as `C12-68`, with no further review round, by that ruling. **Opened** by the supervising session on 2026-11-12 under the founder's instruction *"keep the project moving forward"*. **Brief:** [`handoffs/2026-09-22-row-8a-foundry-importer-brief.md`](../handoffs/2026-09-22-row-8a-foundry-importer-brief.md). **Rulings in force:** [R105–R107](../decisions/2026-09-22-founder-rulings-R105-R107.md), [R108](../decisions/2026-09-22-founder-ruling-R108.md), and [R109–R110](../decisions/2026-11-12-founder-rulings-R109-R110.md), which this row asked for before §0 was written. **Evidence:** [`findings/FOUNDRY-PARITY.md`](../findings/FOUNDRY-PARITY.md).
 
 **Worktree:** `row-8a`, cut from `main` at `2e94fe5`. Row 8b runs on `main` at the same time. Properties follow R105's interim `carry` and this row does not anticipate 8b's spec.
 
@@ -193,8 +193,8 @@ Row 8b landed on `main` (`586ba1a..22933f8`) while this row ran, adding `INTERFA
 | `docs/specs/INTERFACE.md` §2.5a | **new subsection**, inserted between §2.5 and §2.6 (round 3 added the action-maps row, the store-first `unresolved` and the paragraph refusing a document that is not full metadata): `import_foundry`'s signature, mapping table, name rules, holds, the three printed shapes (`FoundryImportReport`, `FoundryItem`, `LookAlike`), `key` / `unresolved` / `unmatched`, the look-alike filter and what a dry run cannot say | the call this row adds. §2.10 sits after §2.9 on `main`, so the two do not overlap in place, only in the hunk offsets |
 | `docs/specs/INTERFACE.md` §5.4 | the `import_refused` row of the refusal table names four import-only reasons and cites `C12-31`–`C12-33` | so the closed refusal list matches the code |
 | `docs/tools/check_spec_drift.py` | `import_foundry` added to `CALLS`; a `FOUNDRY_SHAPES` dict near `CALLS`; a block in `main()` checking §2.5a's three printed shapes against `ontoloche.foundry` | so §2.5a is held to the code like every other printed shape. Additive: a merge keeps both rows' additions |
-| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 452), the C12 header (29 → 67) and table rows `C12-30`–`C12-67` | the new contract ids. `main` did not touch this file |
-| `ontoloche/contract/test_manifest.py` | `12: 67`, `TOTAL = 452` | the manifest checks the counts above. `main` did not touch this file |
+| `docs/specs/PACKAGE.md` §6.2 | the total line (414 → 453), the C12 header (29 → 68) and table rows `C12-30`–`C12-68` | the new contract ids. `main` did not touch this file |
+| `ontoloche/contract/test_manifest.py` | `12: 68`, `TOTAL = 453` | the manifest checks the counts above. `main` did not touch this file |
 | `docs/DECISIONS-OPEN.md` | item **24** (R109–R110, ruled) and the header line | first numbered 23; renumbered after `main` took 19 to 23 for `Q103`–`Q107`. The header's open and ruled counts will need re-adding at the merge, because both rows changed them |
 
 ### 1.6 Adversarial loop
@@ -350,4 +350,21 @@ Three new Sonnet reviewers, the same three lenses, each on its own copy of `afab
 - **mapping:** a dry run says `would_write` for a re-run the real run refuses `name_previously_retired` (round 4 declined this; the reviewer notes the planner already holds the stored row). The dry-run item does not say the resulting status (`retired`, or `active` plus `experimental`/`endorsed`). A `definitions=` override drops the Foundry description from the carry. An effect's `link` is the bare side name, not `"<objectType>.<side>"` (round 2 declined this).
 
 **The mapping lens checked the planner against `foundry_sdk` 1.111's models** and found link direction, side pairing, both action maps, all four statuses and the carried fields as §1.1 states.
+
+#### Item 27: the round 6 MAJOR fixed, and the row lands
+
+The founder ruled **`fix and land`** (2026-11-16), with the recommended scope: a `foundry_*` carry key is left out of `attributes_changed` when the standing row was imported from Foundry, and `visibility`, `groups` and the edge declaration keys are always reported. The founder also said that from now on only refusal rulings go to the founder; a report field, a test, a process or a cap choice is decided here and recorded in this record.
+
+| Finding | Fix | Test |
+|---|---|---|
+| `replaces` compared attribute keys, never values (round 6, guards) | `attributes_changed`: each key both rows carry whose value the write changes, with the `foundry_*` exception above | `C12-68` |
+| the `p.reason is None` gate on `replaces` and `attributes_not_stored` unpinned (round 6 MINOR, tests) | taken under the new instruction: a held item beside a standing row carries neither, on both backends and both runs | `C12-68` |
+
+**Decided here, under the new instruction, and not built:** round 6's other MINORs stay as recorded above. The provenance fields besides the approver, the dry-run status, the overridden description and the effect's link key are each a report field a later row can add. The dry-run `name_previously_retired` and the bare link name were declined in rounds 4 and 2, and nothing in round 6 changes those reasons.
+
+**Red first.** Against `a91aacd`'s code, `C12-68` fails on the sqlite leg (the minimal leg passes there, because its part 1 needs `stores_attributes`). **[Observed]**
+
+**Proven by mutation.** Five mutants against a copy: changed values ignored, the `foundry_*` exception applied always, applied never, `replaces` on a held item, and `attributes_not_stored` on a held item. **All five were killed.** **[Observed]**
+
+**The landing run.** Full three-leg suite: **2142 passed, 646 skipped, 0 failed** (22m18s). sqlite and postgres CONFORMANT, 448 ids exercised each; sqlite_minimal CONFORMANT, 128 exercised. All five gates exit 0, and `check_skip_census` holds at 5 of baseline 5. **[Observed]**
 

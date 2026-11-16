@@ -2924,3 +2924,59 @@ def test_c12_67_a_rename_reaches_an_edge_and_a_blank_definition_is_no_definition
     fresh = {"Pet": "pet", "Owner": "guardian"}
     registry.import_foundry(doc, dry_run=False, names=fresh, definitions={"Owner": "  "})
     assert adapter.get_type("default", "guardian", kind="entity").definition == "an owner"
+
+
+def test_c12_68_a_changed_value_is_a_loss_and_a_held_item_reports_none(
+    registry, adapter, make_registry
+):
+    """**Round 6, guards and tests lenses** (item 27, ruled `fix and land`).
+
+    1. `replaces` compared attribute KEYS and never values, so a local
+       `visibility: "restricted"` written as `NORMAL`, or an edge family's
+       `symmetric: True` written as `False`, was silent. `attributes_changed` names
+       each shared key whose value the write changes. A `foundry_*` carry key is left
+       out only when the standing row was imported from Foundry, and an idempotent
+       re-run of an edge reports nothing.
+    2. `replaces` and `attributes_not_stored` describe a write, so a HELD item beside a
+       standing row carries neither (the `p.reason is None` gate, unpinned)."""
+    if adapter.capabilities().stores_attributes:
+        seed(registry, "employee", definition="an employee",
+             attributes={"visibility": "restricted", "foundry_object_type": {"local": 1}})
+        doc = _ontology(objects={"Employee": ("an employee", "ACTIVE", ())})
+        doc["objectTypes"]["Employee"]["objectType"]["visibility"] = "NORMAL"
+        for dry_run in (True, False):
+            lost = _items(registry.import_foundry(doc, dry_run=dry_run),
+                          api_name="Employee")[0].detail["replaces"]
+            assert lost["attributes_changed"] == ["foundry_object_type", "visibility"], dry_run
+
+        doc["objectTypes"]["Employee"]["objectType"]["icon"] = {"type": "blueprint"}
+        doc["objectTypes"]["Employee"]["objectType"]["visibility"] = "PROMINENT"
+        lost = _items(registry.import_foundry(doc), api_name="Employee")[0].detail["replaces"]
+        assert lost == {"imported_from": "foundry", "attributes_changed": ["visibility"]}
+
+        seed(registry, "person", definition="a person")
+        seed(registry, "friends", kind="edge", definition="people who are friends",
+             attributes={"level": "instance", "symmetric": True, "inverse_label": None,
+                         "endpoint_kinds": {"src": ["entity"], "dst": ["entity"]},
+                         "payload_schema": None})
+        people = _ontology(
+            objects={"Person": ("a person", "ACTIVE", ())},
+            links={"Person": [_side("friends", "Person", "ri.l.f", fk="friendId"),
+                              _side("friendOf", "Person", "ri.l.f")]},
+        )
+        defined = {"Person.friends": "people who are friends"}
+        edge = _items(registry.import_foundry(people, definitions=defined), kind="edge")[0]
+        assert edge.detail["replaces"]["attributes_changed"] == ["inverse_label", "symmetric"]
+        registry.import_foundry(people, dry_run=False, definitions=defined)
+        again = _items(registry.import_foundry(people, definitions=defined), kind="edge")[0]
+        assert "replaces" not in again.detail
+
+    seed(registry, "solo", definition="a local solo", predicates=["audited"])
+    bare = make_registry(DegradedAdapter(adapter, stores_attributes=False),
+                         approval_policy="auto")
+    held_doc = _ontology(objects={"Solo": (None, "ACTIVE", ())})
+    for reg in (registry, bare):
+        for dry_run in (True, False):
+            item = _items(reg.import_foundry(held_doc, dry_run=dry_run), api_name="Solo")[0]
+            assert (item.outcome, item.reason) == ("held", "definition_missing")
+            assert "replaces" not in item.detail and "attributes_not_stored" not in item.detail
