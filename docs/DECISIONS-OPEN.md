@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**7 open · 12 ruled · 7 FYI** *(2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**8 open · 15 ruled · 7 FYI** *(2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 7 items
+## A. Decide when you want to — 8 items
 
 ### 23 · `Q107` — row 8b stopped at its five-round cap with five MAJOR findings open in the spec. Run a sixth, fix-and-review pass?
 
@@ -85,6 +85,19 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 **Ask: `refuse, like actions`, `refuse on type only`, or `recommend`.** Default in force: the door-by-door behaviour above. Spec rules 2.10-17 (properties) and 2.10-18 (entities) are `reserved: Q105`. **One sub-question either option carries:** when one side declares a key and the other does not, which includes every collapse on the stripped-down `sqlite_minimal` backend, because it drops the declaration on write. That is `Q101`'s absence question one kind along, and your answer to `Q101` can stand for both. Whether to mint a new refusal value or reuse `action_declarations_diverge` is part of the build row and not part of this question.
 
+### 25 · Row 8a: should a Foundry import write over a live row Foundry did not import?
+
+*New, 2026-11-12. Found by row 8a's adversarial round 4. Not blocking: the row ships with the behaviour below reported, and your answer changes a refusal, which is yours to make.*
+
+**What happens today.** `import_types` has always replaced a standing row's predicates, aliases and attributes, and its definition when one is supplied ([`INTERFACE.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INTERFACE.md) §2.5). `import_foundry` makes that routine. A reviewer seeded a locally approved `employee` with the predicate `audited`, registered a consumer gating on `audited`, and imported a Foundry `Employee`. The local predicate and definition were gone, and the consumer's gate matched nothing. `retire` refuses the same effect with `live_consumers`.
+
+**What row 8a did.** Reported, not refused. Each item that would write over a live row now carries `detail["replaces"]` (what would be dropped, and which system wrote the standing row), on the dry run as well, so the loss is visible before anything is written. `C12-61`.
+
+**The question, two parts.**
+- **(a)** Should `import_foundry` hold or refuse writing over a live row whose `imported_from` is not `foundry`? Options: `report` (today), `hold` (a new hold reason, lifted by a map like R109's), or `refuse when a consumer gates on a dropped predicate` (the `live_consumers` reasoning).
+- **(b)** On a re-run without `definitions=`, the planner holds `definition_missing` on a row the store already defines, while `import_types` itself would keep the stored definition. So a Foundry status change to that row is not applied. Options: `hold` (today, R109 read literally) or `lift the hold when the store holds a definition of that kind`.
+
+
 ### 17 · The stop you armed has STOOD DOWN — `A3` is closed and the ACTIONS surface is reopen
 
 *No action. On the page because you armed that stop, and you are entitled to know it stood down and on what.*
@@ -155,7 +168,53 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## E. Ruled — 12 items
+## E. Ruled — 15 items
+
+### 27 · Row 8a round 6 found one MAJOR. Fix it and land, or land as is? → **RULED: `fix and land`** *(2026-11-16)*
+
+**Ruled with the recommended scope:** a `foundry_*` carry key is left out of `attributes_changed` when the standing row came from Foundry, and `visibility`, `groups` and the edge declaration keys are always reported. **Built** as `C12-68`, and the row lands without another review round. **Standing instruction from the same answer:** only refusal rulings come to you. A report field, a test, a process or a cap choice is decided by the running session, recorded in that row's run record, and does not stop the row.
+
+*Asked 2026-11-15. Item 26 ruled `round 6` without saying whether round 6 had its own cap, so it was read the narrow way: a MAJOR comes back to you. Full table: [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §1.6, round 6 review.*
+
+**Where the row stands.** Round 5's six are fixed at `afab2f4`: 2136 passed, 0 failed, all five gates exit 0, 42 of 42 mutations killed. Two of round 6's three lenses (tests, mapping) said ship it.
+
+**The one MAJOR.** `detail["replaces"]` compares attribute *keys*, never values. So a write that changes a value under a key both rows carry says nothing. Observed: a local `visibility: "restricted"` became `NORMAL`, and a local edge family's `symmetric: True` became `False`, with `replaces` silent on both. It is a report, not a refusal.
+
+**The fix would be** an `attributes_changed` list for shared keys whose values differ. One choice is yours inside it: on a re-import of a row Foundry already wrote, should a changed `foundry_*` carry key count (it fires on every legitimate change to the Foundry document), or only the keys the importer does not own (`visibility`, `groups`, the edge declaration keys)?
+
+**Options.**
+- **`fix and land`** *(my recommendation)*: add `attributes_changed`, excluding `foundry_*` keys when the standing row was imported from Foundry, pin it, mutation, full suite, and land without another review round. It is one line of comparison in code that two lenses already passed.
+- **`fix and review`**: the same fix, then one more fresh round.
+- **`land as is`**: land `afab2f4` with this recorded as a known defect for a later row.
+
+### 26 · Row 8a stopped at the review cap. Fix the six MAJORs in a sixth round, or land as is? → **RULED: `round 6`** *(2026-11-15)*
+
+**Built.** Round 5's six are fixed and pinned as `C12-65`–`C12-67` (`8A-RUN.md` §1.6, round 6). The ruling did not say whether round 6 has its own cap, so it is read the narrow way: one fresh review round, and a MAJOR it finds comes back to you rather than starting a seventh.
+
+*Asked 2026-11-13. §0.9 item 3 capped the adversarial loop at five rounds and said a MAJOR in round 5 comes to you. Round 5 found six. Full table: [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §1.6, round 5.*
+
+**Where the row stands.** Committed through round 4 (`ea5b7a7`): 2118 passed, 0 failed, all five gates exit 0. The importer's holds, refusals and mapping held up under all three round-5 lenses.
+
+**The six.** Three are defects or gaps in round 4's own fix, `detail["replaces"]` (a false loss on every re-run of an `EXPERIMENTAL` or `ENDORSED` type, a status change and a provenance overwrite not reported, and most of the field unpinned). Two are test gaps where the code is right (a `names=` rename on an edge's endpoints, a blank `definitions=` value). One is older than the row: a backend that declines `stores_attributes` drops everything the importer carries, and no warning exists for that anywhere in the package.
+
+**None of the six adds a refusal.** All are reports, warnings or tests.
+
+**Options.**
+- **`round 6`** *(my recommendation)*: fix all six, add the tests, prove them by mutation, full suite, then one more fresh round. The pattern so far is that each round's fixes carry the next round's MAJORs, so a sixth round could find more. If you take this, say whether round 6 gets its own cap (one round, then land whatever it finds as recorded defects).
+- **`land as is`**: land `ea5b7a7` with the six recorded as known defects in `8A-RUN.md`, for a later row.
+- **`fix 1 to 2 only`**: fix the false-loss defect and the unreported status change (the two that make `replaces` say something untrue or omit the biggest loss), land, and leave the test gaps and the attribute warning for a later row.
+
+### 24 · Row 8a's two Foundry import questions → **RULED: `hold + override map` (R109) and `hold both + names map` (R110)** *(2026-11-12)*
+
+**Recorded as [R109–R110](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-11-12-founder-rulings-R109-R110.md).** Numbered provisionally, because row 8b runs in parallel on `main` and may mint rulings of its own first. Row 8b's `Q106` (item 22 on `main`) already cites R109 as provisional, so if the numbers move, that citation moves with them. **Item 24**, because `main` has taken items 19 to 23 for row 8b (`Q103`–`Q107`).
+
+*New 2026-11-12. Asked by row 8a before its §0 was written, because both decide what the registry refuses.*
+
+**R109, a Foundry type with no description.** The brief said import it as `proposed`. In this registry `proposed` is a proposal record, which needs a definition too, so that instruction had nowhere to land. You chose `hold + override map`: nothing is written, the row comes back `import_refused:definition_missing`, and the caller passes `definitions={apiName: text}` and imports again. `"imported from foundry"` is never written as a definition again. **Built and tested as `C12-33` and `C12-38`.** Every Foundry link type is held under it, because a link side has no description field at all.
+
+**R110, two Foundry names that convert to one.** `NursingHome` and `Nursing_Home` both become `nursing_home`, and without a rule the second silently replaced the first. You chose `hold both + names map`: every member of the collision is held, `names={apiName: name}` resolves it, and a mapped name goes through the same check so the map cannot create a collision of its own. **Built and tested as `C12-37`.**
+
+**Nothing else from row 8a needs you.** Brief questions 2 to 4 do not decide a refusal in this row and have interim answers in [`8A-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8A-RUN.md) §0.7. Route 4 (a real Foundry instance through the AIP Developer Tier) stays your call and was not attempted.
 
 ### 18 · Q102 — govern entity properties as vocabulary (option B) → **RULED: `adopt B`** *(2026-09-22)*
 

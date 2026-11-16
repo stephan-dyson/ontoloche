@@ -1,0 +1,203 @@
+{
+  "ontology": {
+    "apiName": "cms-health-citations",
+    "displayName": "cms-health-citations",
+    "description": "UC2 re-expressed as a Foundry ontology",
+    "rid": "ri.ontology.main.ontology.00000002-0000-4000-8000-000000000000"
+  },
+  "objectTypes": {
+    "Facility": {
+      "objectType": {
+        "apiName": "Facility",
+        "displayName": "Facility",
+        "pluralDisplayName": "Facilitys",
+        "status": "ACTIVE",
+        "primaryKey": "ccn",
+        "titleProperty": "ccn",
+        "properties": {
+          "ccn": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00002100-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000021-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A Medicare/Medicaid-certified nursing home, identified by its CMS Certification Number (CCN). Provider Name is a label, not an identifier: 104 distinct names are shared by more than one CCN in the August 2026 file."
+      },
+      "linkTypes": [
+        {
+          "apiName": "surveys",
+          "displayName": "surveys",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Survey",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000022-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Survey": {
+      "objectType": {
+        "apiName": "Survey",
+        "displayName": "Survey",
+        "pluralDisplayName": "Surveys",
+        "status": "ACTIVE",
+        "primaryKey": "surveyKey",
+        "titleProperty": "surveyKey",
+        "properties": {
+          "surveyKey": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00002200-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000022-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "One inspection visit to a facility, keyed by (CCN, Survey Date, Survey Type). Several citations are issued during one survey."
+      },
+      "linkTypes": [
+        {
+          "apiName": "conductedAt",
+          "displayName": "conductedAt",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Facility",
+          "cardinality": "ONE",
+          "linkTypeRid": "ri.ontology.main.link-type.00000022-0000-4000-8000-000000000000",
+          "foreignKeyPropertyApiName": "ccn"
+        },
+        {
+          "apiName": "citations",
+          "displayName": "citations",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Citation",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000021-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "Citation": {
+      "objectType": {
+        "apiName": "Citation",
+        "displayName": "Citation",
+        "pluralDisplayName": "Citations",
+        "status": "ACTIVE",
+        "primaryKey": "citationId",
+        "titleProperty": "citationId",
+        "properties": {
+          "citationId": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00002300-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000023-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "One deficiency cited against a facility during a survey. The file's grain: one citation per row."
+      },
+      "linkTypes": [
+        {
+          "apiName": "issuedDuring",
+          "displayName": "issuedDuring",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Survey",
+          "cardinality": "ONE",
+          "linkTypeRid": "ri.ontology.main.link-type.00000021-0000-4000-8000-000000000000",
+          "foreignKeyPropertyApiName": "surveyKey"
+        },
+        {
+          "apiName": "cites",
+          "displayName": "cites",
+          "status": "ACTIVE",
+          "objectTypeApiName": "DeficiencyTag",
+          "cardinality": "ONE",
+          "linkTypeRid": "ri.ontology.main.link-type.00000023-0000-4000-8000-000000000000",
+          "foreignKeyPropertyApiName": "tagNumber"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "DeficiencyTag": {
+      "objectType": {
+        "apiName": "DeficiencyTag",
+        "displayName": "DeficiencyTag",
+        "pluralDisplayName": "DeficiencyTags",
+        "status": "ACTIVE",
+        "primaryKey": "tagNumber",
+        "titleProperty": "tagNumber",
+        "properties": {
+          "tagNumber": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00002400-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000024-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "A regulatory tag (an F-tag) a citation is written under. Deficiency Description is a lookup on the tag, not per-citation free text: no tag in the sample carries more than one description."
+      },
+      "linkTypes": [
+        {
+          "apiName": "citedBy",
+          "displayName": "citedBy",
+          "status": "ACTIVE",
+          "objectTypeApiName": "Citation",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000023-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    }
+  },
+  "actionTypes": {},
+  "actionTypesFullMetadata": {},
+  "queryTypes": {},
+  "interfaceTypes": {},
+  "sharedPropertyTypes": {},
+  "valueTypes": {}
+}

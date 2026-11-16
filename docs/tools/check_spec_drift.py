@@ -98,7 +98,19 @@ CALLS = (
     "merge_types",
     "register_consumer",
     "record_use",
+    # Row 8a, INTERFACE.md 2.5a. Beyond the twelve, like `import_types` (deviation D-8),
+    # and printed in full, so it is held here like the twelve are.
+    "import_foundry",
 )
+
+#: Row 8a's report shapes, printed in INTERFACE.md 2.5a. They live in
+#: ``ontoloche/foundry.py`` rather than ``types.py``, because that module is the pure
+#: planner and the registry imports them from it.
+FOUNDRY_SHAPES = {
+    "FoundryImportReport": "FoundryImportReport",
+    "FoundryItem": "FoundryItem",
+    "LookAlike": "LookAlike",
+}
 
 #: `EDGES.md`'s four printed CALL signatures, against `Registry`. **Row 4c, and the gap
 #: is the same one deviation D-4b-2 recorded for a primitive:** `INTERFACE.md`'s fourteen
@@ -750,10 +762,13 @@ def _check_planned_shapes(blocks: list[str]) -> list[str]:
                     f"INTERFACE {name}: PLANNED, and {module.__name__} now defines it -- "
                     f"hold its signature against the code in the change that landed it"
                 )
-    for name in sorted(_printed_shape_names(blocks) - set(SHAPES) - PLANNED_SHAPES):
+    # Merge of rows 8a and 8b: row 8a's report shapes are held against foundry.py by
+    # FOUNDRY_SHAPES, so they are listed, just in a second table.
+    listed = set(SHAPES) | set(FOUNDRY_SHAPES) | PLANNED_SHAPES
+    for name in sorted(_printed_shape_names(blocks) - listed):
         problems.append(
-            f"INTERFACE {name}: printed as a shape and listed in neither SHAPES nor "
-            f"PLANNED_SHAPES -- an unlisted shape is one this checker cannot see"
+            f"INTERFACE {name}: printed as a shape and listed in none of SHAPES, "
+            f"FOUNDRY_SHAPES or PLANNED_SHAPES -- an unlisted shape is one this checker cannot see"
         )
     return problems
 
@@ -1035,6 +1050,23 @@ def main() -> int:
         actual = set(cls.__dataclass_fields__)
         allowed = SPEC_OMITS.get(spec_name, set())
         for field in sorted(actual - printed - allowed):
+            problems.append(f"{spec_name}.{field}: returned by the code, absent from the spec")
+        for field in sorted(printed - actual):
+            problems.append(f"{spec_name}.{field}: printed by the spec, absent from the code")
+
+    from ontoloche import foundry as foundry_module
+
+    for spec_name, cls_name in FOUNDRY_SHAPES.items():
+        cls = getattr(foundry_module, cls_name, None)
+        if cls is None or not hasattr(cls, "__dataclass_fields__"):
+            problems.append(f"{spec_name}: foundry.py has no dataclass {cls_name}")
+            continue
+        printed = shape_fields(blocks, spec_name)
+        if printed is None:
+            problems.append(f"{spec_name}: INTERFACE.md 2.5a never prints its shape")
+            continue
+        actual = set(cls.__dataclass_fields__)
+        for field in sorted(actual - printed):
             problems.append(f"{spec_name}.{field}: returned by the code, absent from the spec")
         for field in sorted(printed - actual):
             problems.append(f"{spec_name}.{field}: printed by the spec, absent from the code")

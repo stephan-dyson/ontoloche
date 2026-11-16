@@ -605,3 +605,11 @@ async def load_cms_sample(registry, path: Path = FIXTURE) -> dict:
             await registry.record_use(spec["name"], by="cms_sample_loader")
         entries.append(entry)
     return {"facts": facts, "entries": entries}
+
+FOUNDRY_FIXTURES = FIXTURE.parent
+
+def foundry_fixture(name: str) -> dict:
+    """``foundry_fixture("faux_employee")`` -> the parsed ``foundry_faux_employee.json``."""
+    import json
+
+    return json.loads((FOUNDRY_FIXTURES / f"foundry_{name}.json").read_text(encoding="utf-8"))

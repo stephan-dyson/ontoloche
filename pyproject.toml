@@ -22,13 +22,16 @@ contract = ["pytest>=8"]
 # Postgres needs nothing new: psycopg v3 already ships AsyncConnection.
 aio = ["aiosqlite>=0.19"]
 contract-aio = ["pytest>=8", "pytest-asyncio>=0.23", "aiosqlite>=0.19"]
+# Row 8a, R106 route 2. Test-only: docs/tools/check_foundry_fixtures.py shape-checks the
+# committed Foundry fixtures against Palantir's published model. Never a runtime import.
+foundry-fixtures = ["foundry-platform-sdk==1.111.0"]
 
 [tool.setuptools.packages.find]
 include = ["ontoloche*"]
 
 [tool.setuptools.package-data]
 "ontoloche.backends" = ["migrations/sqlite/*.sql", "migrations/postgres/*.sql"]
-"ontoloche.contract" = ["fixtures/*.csv"]
+"ontoloche.contract" = ["fixtures/*.csv", "fixtures/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["ontoloche/contract", "ontoloche/aio/contract"]

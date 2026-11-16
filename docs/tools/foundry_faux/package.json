@@ -1,0 +1,17 @@
+{
+  "name": "ontoloche-foundry-faux-fixtures",
+  "private": true,
+  "description": "Generates row 8a's fullMetadata fixtures from Palantir's @osdk/faux. See generate.mts.",
+  "type": "module",
+  "dependencies": {
+    "@osdk/faux": "0.66.0",
+    "date-fns": "4.4.0",
+    "fast-deep-equal": "3.1.3",
+    "json-stable-stringify": "1.3.0",
+    "semver": "7.8.6",
+    "tiny-invariant": "1.3.3",
+    "tsx": "4.19.2",
+    "type-fest": "5.10.0",
+    "zod": "3.25.76"
+  }
+}

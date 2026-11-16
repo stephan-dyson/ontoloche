@@ -103,6 +103,10 @@ from .edges import (
     type_of,
 )
 from .errors import NotSupported, UnknownType
+from .foundry import FoundryImportReport, FoundryItem, LookAlike
+from .foundry import plan as foundry_plan
+from .foundry import replaces as foundry_replaces
+from .foundry import to_row as foundry_row
 from .policy import NamespacePolicy
 from .types import (
     WARNING_VALUES,
@@ -341,6 +345,24 @@ def _evidence_from_dict(d: dict) -> Evidence:
 def _iso(value: Any) -> str | None:
     """``EventRecord.detail`` is JSON on both reference backends, and a datetime is not."""
     return value.isoformat() if isinstance(value, datetime) else (value or None)
+
+
+def _import_refusal(warnings: Sequence[str]) -> str | None:
+    """Why ``import_types`` declined a row, read off the entry it returned, or ``None``.
+
+    ``import_types`` returns entries, not refusals, so a declined row is recognised by
+    its warnings: ``import_refused:<reason>`` from ``_refused_import``, or the standing
+    entry handed back with ``name_previously_retired`` / ``word_previously_retired:<w>``
+    (5.9, ``C12-05``, ``C12-21``). Row 8a's ``import_foundry`` reports it per item.
+    """
+    for warning in warnings:
+        if warning.startswith("import_refused:"):
+            return warning.split(":", 1)[1]
+        if warning == "name_previously_retired":
+            return warning
+        if warning.startswith("word_previously_retired:"):
+            return "word_previously_retired"
+    return None
 
 
 def _ts(value: Any) -> datetime | None:
@@ -5562,7 +5584,26 @@ class Registry:
             # per-iteration accumulator that exists before the first statement that could
             # fill it removes the hazard rather than relying on that.
             extra_import_warnings: list[str] = []
-            name = row["name"]
+            name = row.get("name")
+            row_kind = row.get("kind", kind)
+
+            # **Defect 3, row 8a** (`FOUNDRY-PARITY.md` §2, `C12-32`). A name outside
+            # NAME_RE reached `put_type`, so the sqlite CHECK raised a raw
+            # `IntegrityError` out of a call that returns entries, on one backend, with
+            # the rest of the batch unprocessed. Checked FIRST, because every later
+            # statement in this body reads the name as a word.
+            # `fullmatch`, because `$` matches before a final newline and `.match` let
+            # `"person\n"` be written (row 8a, round 1, `C12-46`).
+            if not isinstance(name, str) or not NAME_RE.fullmatch(name):
+                out.append(
+                    self._refused_import(
+                        namespace, str(name if name is not None else ""),
+                        f"{name!r} does not match {NAME_RE.pattern} (INTERFACE.md 2.1)",
+                        reason="name_invalid", kind=row_kind,
+                    )
+                )
+                continue
+
             foundry_status = (row.get("status") or "active").lower()
             predicates = list(row.get("predicates") or ())
             status, retire_reason = "active", None
@@ -5573,6 +5614,31 @@ class Registry:
                 status = "active"
                 if "experimental" not in predicates:
                     predicates.append("experimental")
+            elif foundry_status == "endorsed":
+                # **Defect 1, row 8a** (`C12-30`). ENDORSED fell through to plain
+                # `active`, so an owner's vetting vanished on arrival. `experimental`'s
+                # precedent: live, plus a predicate saying which kind of live.
+                if "endorsed" not in predicates:
+                    predicates.append("endorsed")
+            elif foundry_status != "active":
+                # **Defect 2, row 8a** (`C12-31`). Every other status fell through to
+                # `active` too, so a template's demo types entered the vocabulary as
+                # live types through the migration door. Nothing is guessed: the row is
+                # not written and says which rule held it.
+                out.append(
+                    self._refused_import(
+                        namespace, name,
+                        f"source status {row.get('status')!r} has no mapping "
+                        "(INTERFACE.md 2.5 maps active, endorsed, experimental, "
+                        "deprecated)",
+                        reason=(
+                            "foundry_example" if foundry_status == "example"
+                            else "status_unknown"
+                        ),
+                        kind=row_kind,
+                    )
+                )
+                continue
 
             attributes = dict(row.get("attributes") or {})
             for key in ("visibility", "groups"):
@@ -5684,7 +5750,18 @@ class Registry:
                             )
                         )
                         continue
-            if standing is not None and standing.status == "retired" and status != "retired":
+            # **Retired over retired is refused too** (row 8a, round 1, `C12-44`). The
+            # clause read `and status != "retired"`, so a Foundry `deprecated` row over
+            # a name this deployment retired went to `put_type` and rewrote the
+            # tombstone's `retire_reason`, `retired_by` and `retired_at` -- the harm
+            # the paragraph above names, reached by the ordinary re-run of a migration.
+            # Only the row THIS call would overwrite: a retired variant spelling, or a
+            # tombstone of another kind with the same name, found by the scan above is
+            # not touched by writing a retired `name` (`C12-20`, round 2's `C12-53`).
+            if standing is not None and standing.status == "retired" and (
+                status != "retired"
+                or (standing.name == name and standing.kind == row_kind)
+            ):
                 out.append(
                     self._entry(standing, extra_warnings=("name_previously_retired",))
                 )
@@ -5835,6 +5912,7 @@ class Registry:
                     declared_here = SimpleNamespace(
                         kind=incoming_kind, attributes=row.get("attributes") or {}
                     )
+                    refused_here = False
                     for word in incoming:
                         # **THE `why` IS READ, and dropping it was finding A3** (row 6d,
                         # round 3; ruling **R94**'s change 4). This read
@@ -5894,16 +5972,17 @@ class Registry:
                                         extra=extra_import_warnings,
                                     )
                                 )
+                                refused_here = True
                                 break
                         else:
                             continue
                         break
                     else:
                         pass
-                    if out and out[-1].warnings and any(
-                        w == "import_refused:action_declarations_diverge"
-                        for w in out[-1].warnings
-                    ):
+                    # **THIS row's refusal, not the last entry's** (row 8a, round 1,
+                    # `C12-48`). Reading `out[-1]` let the action row after a refused
+                    # one `continue` with no entry: three rows in, two entries out.
+                    if refused_here:
                         continue
                 # **The identity guards run FIRST, and the order is the finding.**
                 # `_alias_clash` asks *"is this word already spoken for by something
@@ -6005,6 +6084,35 @@ class Registry:
                 if tomb_why is not None:
                     extra_import_warnings.append("alias_check_incomplete:" + tomb_why)
 
+            # **Defect 4, row 8a, ruling R109** (`C12-33`). A missing definition was
+            # written as `"imported from <system>"` on a LIVE type, and INTERFACE.md 2.1
+            # says a type without a definition is how collision starts. The founder
+            # ruled `hold + override map`: nothing is written. An import over a STANDING
+            # row of the same kind is an update and keeps that row's definition, since
+            # whoever wrote that definition supplied it. `C12-06` and `C12-19` rely on
+            # it.
+            #
+            # **Checked LAST, after every guard** (`C17-09`). Run before them, it
+            # answered `definition_missing` for a row a guard refuses for a different
+            # reason, so a family declaration breach or a retired name stopped saying
+            # so. `8A-RUN.md` §0.5 item 3: the guards' answers are inherited unchanged.
+            supplied = row.get("definition")
+            definition = supplied if isinstance(supplied, str) and supplied.strip() else None
+            if definition is None:
+                kept = self.adapter.get_type(namespace, name, kind=row_kind)
+                if kept is not None and kept.definition:
+                    definition = kept.definition
+                else:
+                    out.append(
+                        self._refused_import(
+                            namespace, name,
+                            "the source row has no definition and none was supplied "
+                            "(ruling R109: pass one and import again)",
+                            reason="definition_missing", kind=row_kind,
+                        )
+                    )
+                    continue
+
             imported_from = {"system": system}
             for key in ("apiName", "rid"):
                 if key in row:
@@ -6027,7 +6135,7 @@ class Registry:
                 namespace=namespace,
                 kind=row.get("kind", kind),
                 name=name,
-                definition=row.get("definition") or f"imported from {system}",
+                definition=definition,
                 created_by="seed",
                 status=status,
                 predicates=tuple(predicates),
@@ -6108,6 +6216,188 @@ class Registry:
                     )
             out.append(self._written(self._entry(stored)))
         return out
+
+    def import_foundry(
+        self,
+        full_metadata: dict,
+        *,
+        namespace: str = "default",
+        dry_run: bool = True,
+        names: dict[str, str] | None = None,
+        definitions: dict[str, str] | None = None,
+        imported_by: str = "import:foundry",
+    ) -> FoundryImportReport:
+        """Import a Foundry ``OntologyFullMetadata`` document. Row 8a, INTERFACE.md 2.5a.
+
+        **Dry run by default**, because the first thing a migrating customer needs is
+        what *would* happen. ``ontoloche.foundry.plan`` parses and holds, this method
+        asks the store which names it already holds and what ``resolve_type`` says each
+        planned name looks like, and only with ``dry_run=False`` hands every row that is
+        not held to **one** ``import_types`` call. That call is this method's only
+        write, so every guard on the import door applies unchanged and no new door is
+        opened (``8A-RUN.md`` §0.5).
+
+        ``names`` and ``definitions`` are keyed by Foundry ``apiName``, and by
+        ``"<objectType apiName>.<link side apiName>"`` for a link. They lift the
+        ``name_invalid``, ``name_collision_after_conversion`` (R110) and
+        ``definition_missing`` (R109) holds.
+        """
+        planned, not_imported, unmatched = foundry_plan(
+            full_metadata, names=names, definitions=definitions
+        )
+
+        context = ResolveContext(source="import:foundry dry run")
+        # **The deployment's own near-duplicate line, not one this method invents.**
+        # `resolve_type`'s `alternatives` carries every scored name down to 0.0, so on a
+        # store holding only the seeded `equivalent_to` family every edge name came back
+        # "looking like" it at 0.08 to 0.32. [Observed, row 8a.] PACKAGE.md 2.6's
+        # `near_duplicate_threshold` is where this namespace already says what counts as
+        # a near duplicate, so that is the line a look-alike has to clear.
+        near = self.policy(namespace).near_duplicate_threshold
+        looks: list[LookAlike] = []
+        for p in planned:
+            if p.reason == "name_invalid":
+                continue
+            stored = self.adapter.get_type(namespace, p.name, kind=p.kind)
+            p.detail["standing"] = stored is not None
+            # **What the write would lose** (round 4). A live local row of the same
+            # name was overwritten, its predicates dropped from under a consumer's
+            # gate, and the item said plain `written`. Reported on a dry run too.
+            if stored is not None and stored.status != "retired" and p.reason is None:
+                lost = foundry_replaces(stored, foundry_row(p))
+                if lost is not None:
+                    p.detail["replaces"] = lost
+            # **What this backend would not keep** (round 6). The importer routes most
+            # of its mapping through attributes (properties, the interface mapping, link
+            # sides, the action carry), and on a backend declining `stores_attributes`
+            # every key outside `attribute_projections` was dropped while the item said
+            # `written`. Said on the item, on a dry run too. Reported, not held.
+            if p.reason is None:
+                not_stored = sorted(
+                    k for k in (p.row.get("attributes") or {})
+                    if not self.caps.stores_attribute(k)
+                )
+                if not_stored:
+                    p.detail["attributes_not_stored"] = not_stored
+            resolution = self.resolve_type(
+                p.name, context, kind=p.kind, namespace=namespace, tier="unspecified"
+            )
+            # `resolution.type`, when set, is also `alternatives[0]` at the same score,
+            # so reading both reported an alias match twice (round 2). One source.
+            for matched, score in resolution.alternatives:
+                if matched != p.name and score is not None and score >= near:
+                    looks.append(LookAlike(p.kind, p.name, matched, score))
+
+        sent = [p for p in planned if p.reason is None]
+        entries: list[TypeEntry] = []
+        if not dry_run and sent:
+            entries = self.import_types(
+                [foundry_row(p) for p in sent],
+                system="foundry",
+                namespace=namespace,
+                imported_by=imported_by,
+            )
+        results = dict(zip([id(p) for p in sent], entries))
+        self._foundry_unresolved(planned, results, namespace, dry_run)
+
+        items: list[FoundryItem] = []
+        for p in planned:
+            if p.reason is not None:
+                items.append(
+                    FoundryItem(p.kind, p.api_name, p.name, "held", p.reason,
+                                detail=p.detail, carried_properties=p.carried)
+                )
+                continue
+            if dry_run:
+                items.append(
+                    FoundryItem(p.kind, p.api_name, p.name, "would_write",
+                                detail=p.detail, carried_properties=p.carried)
+                )
+                continue
+            entry = results[id(p)]
+            refused = _import_refusal(entry.warnings)
+            items.append(
+                FoundryItem(
+                    p.kind, p.api_name, p.name,
+                    "refused" if refused else "written", refused,
+                    warnings=tuple(entry.warnings), detail=p.detail,
+                    carried_properties=p.carried,
+                )
+            )
+        ontology = full_metadata.get("ontology") or {}
+        return FoundryImportReport(
+            dry_run=dry_run,
+            namespace=namespace,
+            ontology={k: ontology.get(k) for k in ("apiName", "rid")},
+            items=tuple(items),
+            looks_like=tuple(looks),
+            not_imported=not_imported,
+            entries=tuple(entries),
+            unmatched=unmatched,
+        )
+
+    def _foundry_unresolved(
+        self, planned: list, results: dict, namespace: str, dry_run: bool
+    ) -> None:
+        """``detail["unresolved"]``: each predicate or endpoint entity an item points at
+        that is not live after this import. ``INTERFACE.md`` 2.5a, ``C12-45``, ``C12-52``.
+
+        **Reported, never held**: holding the dependent too would decide a refusal,
+        which is the founder's. Round 1 computed this from the document alone, so a
+        referent ``import_types`` then REFUSED, or a local tombstone, counted as there
+        (round 2). A reference resolves only to a row that is live afterwards:
+
+        * ``held:<reason>`` -- the planner held the referent;
+        * ``refused:<reason>`` -- the real run refused it;
+        * ``retired`` -- the store holds it retired, or this document deprecates it;
+        * ``not_in_document`` -- the document never defines it and the store has no row.
+
+        The store is asked first (round 3): a live stored row resolves the
+        reference, a retired one reads ``retired``, and only an absent row is
+        explained by the plan. A dry run cannot predict a guard's refusal (2.5a).
+        """
+        by_api = {(p.kind, p.api_name): p for p in planned}
+        for p in planned:
+            unresolved = []
+            for label, kind, api, word in p.refs:
+                target_kind = "predicate" if kind == "interface" else kind
+                target = by_api.get((target_kind, api))
+                # **The store first** (round 3). A referent the store holds live is
+                # resolved whatever the plan held or `import_types` refused: a re-run
+                # without `definitions=` holds a standing interface `definition_missing`
+                # while its row stays active, and a refused change leaves the standing
+                # row live. A retired row reads `retired` (the referent's own item
+                # carries any refusal). Only an absent row is explained by the plan.
+                stored = (
+                    self.adapter.get_type(namespace, word, kind=target_kind)
+                    if isinstance(word, str) and word
+                    else None
+                )
+                deprecated = (
+                    target is not None
+                    and target.reason is None
+                    and str(target.row.get("status") or "").upper() == "DEPRECATED"
+                )
+                refused = (
+                    _import_refusal(results[id(target)].warnings)
+                    if target is not None and id(target) in results
+                    else None
+                )
+                why = None
+                if dry_run and deprecated:
+                    why = "retired"
+                elif stored is not None:
+                    why = "retired" if stored.status == "retired" else None
+                elif target is None:
+                    why = "not_in_document"
+                elif target.reason is not None:
+                    why = f"held:{target.reason}"
+                elif refused is not None:
+                    why = f"refused:{refused}"
+                if why is not None:
+                    unresolved.append({label: word, "why": why})
+            if unresolved:
+                p.detail["unresolved"] = unresolved
 
     # ===================================================================== edges
     #

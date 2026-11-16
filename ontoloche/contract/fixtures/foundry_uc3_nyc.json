@@ -1,0 +1,100 @@
+{
+  "ontology": {
+    "apiName": "nyc-open-data",
+    "displayName": "nyc-open-data",
+    "description": "UC3 re-expressed as ONE Foundry ontology",
+    "rid": "ri.ontology.main.ontology.00000003-0000-4000-8000-000000000000"
+  },
+  "objectTypes": {
+    "StreetTree": {
+      "objectType": {
+        "apiName": "StreetTree",
+        "displayName": "StreetTree",
+        "pluralDisplayName": "StreetTrees",
+        "status": "ACTIVE",
+        "primaryKey": "treeId",
+        "titleProperty": "treeId",
+        "properties": {
+          "treeId": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00003100-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000031-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "a NYC census street tree"
+      },
+      "linkTypes": [
+        {
+          "apiName": "sharesTaxLotWith",
+          "displayName": "sharesTaxLotWith",
+          "status": "ACTIVE",
+          "objectTypeApiName": "ServiceRequest",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000031-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    },
+    "ServiceRequest": {
+      "objectType": {
+        "apiName": "ServiceRequest",
+        "displayName": "ServiceRequest",
+        "pluralDisplayName": "ServiceRequests",
+        "status": "ACTIVE",
+        "primaryKey": "uniqueKey",
+        "titleProperty": "uniqueKey",
+        "properties": {
+          "uniqueKey": {
+            "dataType": {
+              "type": "string"
+            },
+            "rid": "ri.ontology.main.property.00003200-0000-4000-8000-000000000000",
+            "typeClasses": []
+          }
+        },
+        "rid": "ri.ontology.main.object-type.00000032-0000-4000-8000-000000000000",
+        "visibility": "NORMAL",
+        "icon": {
+          "type": "blueprint",
+          "name": "cube",
+          "color": "blue"
+        },
+        "aliases": [],
+        "datasources": [],
+        "description": "a 311 request"
+      },
+      "linkTypes": [
+        {
+          "apiName": "sameTaxLot",
+          "displayName": "sameTaxLot",
+          "status": "ACTIVE",
+          "objectTypeApiName": "StreetTree",
+          "cardinality": "MANY",
+          "linkTypeRid": "ri.ontology.main.link-type.00000031-0000-4000-8000-000000000000"
+        }
+      ],
+      "implementsInterfaces": [],
+      "implementsInterfaces2": {},
+      "sharedPropertyTypeMapping": {}
+    }
+  },
+  "actionTypes": {},
+  "actionTypesFullMetadata": {},
+  "queryTypes": {},
+  "interfaceTypes": {},
+  "sharedPropertyTypes": {},
+  "valueTypes": {}
+}
