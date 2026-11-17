@@ -167,3 +167,65 @@ py docs/tools/check_skip_census.py
 `OO_POSTGRES_DSN=postgresql://postgres:openontology@localhost:55432/open_ontology` (container `oo-pg`). The full suite takes about 23 minutes (8A-RUN §1.6), so it runs in the background.
 
 ---
+
+## §1 — RESULTS, scored against §0
+
+Written after the build and before the adversarial loop. Commits `32427f6` (the §0.3 text fixes), `c291657` (C21 red), `fe29ede` (`properties.py`), `dd712ff` (the doors, the reader, the importer), `d620b99` (the spec and checker held as built, `PACKAGE.md` §6.2) and `48f0bd1` (the probe's `--assert`).
+
+### §1.1 — The suite and the gates
+
+**The full suite passes on all three legs** **[Observed]** at `d620b99`, `OO_POSTGRES_DSN` set: `py -m pytest` ran 2404 passed, 660 skipped, 0 failed in 24 min 17 s, sync and async halves. Coverage per leg (ruling R12): `sqlite` and `postgres` **472 ids exercised** each with 1 not exercisable, `sqlite_minimal` **150** with 323 not exercisable, plus 5 backend-independent ids run once (`C12-71` among them). From §0.1 item 3's 448: +25 ids (`C12-69` to `C12-76`, `C21-01` to `C21-17`), so `PACKAGE.md` §6.2 now enumerates **478** in twenty-one groups.
+
+**The five gates exit 0** **[Observed]** at `48f0bd1`: `check_links`, `check_spec_drift` (§5.4 at 45, §5.12 at 33, §2.10's three shapes, two view signatures and ten `BASE_TYPES` held against `ontoloche/properties.py`), `check_merge_guard`, `check_capability_matrix` (every optional capability declined alone conforms) and `check_skip_census`. `properties_baseline_probe.py --assert` exits 0 with all 19 reserved-rule lines at their recorded values, and exits 1 when one is changed (checked by editing one recorded value in memory).
+
+### §1.2 — The design tests
+
+| test | prediction | result |
+|---|---|---|
+| UC2 | 21 columns with a home, 22 slots, `ccn` shared once; `Location` and `Processing Date` still `not_a_type` | **hit** **[Observed]** `C21-16` on all three legs |
+| UC2 | `sqlite` and `postgres`: no warning, empty `why_absent` | **hit** `C21-16` |
+| UC2 | `sqlite_minimal`: `property_declaration_not_stored:properties` (and `:title_property` where declared), `primary_key` intact | **hit** `C21-16`, and the probe's D9 line prints `{'primary_key': ['ccn']}` with both warnings |
+| UC2 | `C13` passes unmodified | **hit** `test_c13_cms.py` and `_support.py` unchanged since `147d871` (`git diff --stat` is empty), suite green |
+| UC3 | items 1 to 4: `latitude` found in `dot`, proposed and `unregistered` in `dpr`, three `status` value sets stay three, no cross-namespace merge | **hit**, all four, `C21-17` |
+| UC1 | Tenshen-shaped entries unchanged and unwarned; `C14` unmodified | **hit** `C21-01`'s Tenshen case; `test_c14_tenshen.py` unchanged. Beacon's adapter not run, as §0.4 said |
+| Foundry 1 | all 110 properties accounted for, zero dropped | **hit** **[Observed]** dry-run `properties` report: `seen` 110, `slots` 110 (19, 75, 4, 2, 10), held entities' slots included; every other fact in `no_home` (`C12-74`) |
+| Foundry 2 | `legacy`: `foo_spt` written clean, `fullName` shared and found | **hit** `C12-69`, `C12-75` |
+| Foundry 3 | `employee`: `property_reference_unregistered:fullName:foo_spt`, written | **hit** `C12-75` |
+| Foundry 4 | `opaque`: 6 top-level in `employee`, 13 in `legacy`, struct arrays `item_type: "dict"` (3) | **hit**, with one landing §0 did not predict: the report counts `employee` 6 and `legacy` **16**, the extra 3 being `object_type_with_all_property_types`' `attachmentArray`, `geoPointArray` and `geoShapeArray` **[Observed]**, arrays whose item type is opaque, which land `base_type: "list"`, `item_type: "opaque"` with the whole array type in `source_type` (`C12-71`) |
+| Foundry 5 | 83 undescribed slots, written, no warning | **miss on the count, hit on the behaviour.** 83 is the number of *properties* with no description. Two of them (`fullName`, in `employee` and `legacy`) are **shared** slots, which by rule 2.10-3 carry no `description` at all, so **81** slots are undescribed (5, 60, 4, 2, 10). All written, no warning (`C12-72`) |
+| Foundry 6 | zero `attributes_schema_violation` on the five fixtures | **hit** `C12-76`, all three legs |
+| Foundry 7 | `foundry_uc2_cms.json`: the same 4 entities, each with its slot and key | **hit** `C12-76` |
+
+**Score: 18 predictions, 17 hits, 1 miss (the undescribed count), 0 untested.** The miss is §0's arithmetic, not the build: §0.1 item 4 counted properties and §0.4 called them slots.
+
+### §1.3 — Falsifiers
+
+- **F1, the carrier: not falsified.** Every design test above holds its facts in `attributes` under the reserved keys or the narrowed carry, and no shipped contract test changed result because of the reserved keys. The three `C12` tests that changed (below) changed because the importer mapping changed, which §0.2 item 5 and 6 announced.
+- **F3, the reader: not falsified** over the design-test stores. `C21-11` carries 8B-RUN §2.5 items 1, 2 and 6 as cases: an alias held by another kind is not a property, a dead end falls through to a live alias holder (the answer `resolve_type` gives at 1.0), and a capped chain answers *unknown*.
+
+### §1.4 — Kill row
+
+**Predicted zero new trips; zero so far.** `check_merge_guard.py` Part A **[Observed]** finds no new writer of `successor` or `aliases` (K1, K8), and the doors K2 to K6 are as §0.7 stated: the views and the reader write nothing, and the new validation only adds refusals. K7 stays open and reserved (Q103), pinned by the probe's D7 and D7b lines. The adversarial loop (§2) is the test of this, not this paragraph.
+
+### §1.5 — Deviations from §0, each with its reason
+
+1. **The rule 2.10-11 reader lives in `registry.py`** (`Registry._property_reference`), not in `properties.py` as §0.2 item 1 said. *Reason:* it needs `get_type`, the successor walk under `_IDENTITY_CHAIN_CAP` and the kind-filtered `_active_page` scan, all of which are adapter reads on `Registry`. Keeping it there leaves `properties.py` pure and importing nothing from the registry, which was item 1's actual purpose.
+2. **`properties.py` was written before the `C21` tests ran red against it.** The tests were committed first (`c291657`) and red was shown by running them with the module moved away, not by the commit order alone. Recorded so nobody reads the commit order as stronger evidence than it is.
+3. **`import_foundry` makes one mixed `import_types` call, ordered by kind** (predicate, property, entity, edge, action), not one call per kind as §0.2 item 5 said. *Reason:* the shipped importer already made one call (§0.2 item 5 described it wrongly), and `import_types` writes rows in order, so a shared property is still written before the entity that names it, which is all rule 2.10-10's import-order note needs.
+4. **Two `no_home` reasons §0.2 item 7 did not list:** `slot_name_invalid` (a property apiName that is not a legal slot name under rule 2.10-4, carried whole and never a slot) and `shared_word_invalid` (a `sharedPropertyTypeMapping` target that does not convert to a legal word). Neither fires on the five fixtures. *Reason:* without them such a property would be dropped, which §0.4 Foundry 1 forbids.
+5. **`C12-34`, `C12-35` and `C12-36` were changed deliberately.** They pinned the old R105 carry (properties verbatim in `foundry_properties`) and `not_imported` counting `sharedPropertyTypes`. §0.2 items 5 and 6 replaced both, so the old assertions were wrong by design. They now pin the narrowed carry and the counts without shared property types.
+6. **The view returns tuples, and §2.10 now prints `tuple[...]`.** *Reason:* the dataclasses are frozen, and a list field would make a frozen view mutable and unhashable.
+7. **`check_spec_drift.py`'s number words stopped at thirty-four**, so §5.4's count had gone unchecked since it passed that number. Extended to fifty, which is how the 45 is now checked. A pre-existing gap, found because this row moved the count.
+8. **The `C21` tests' `retire` calls pass `force=True`.** *Reason:* with `indexes_membership` declined, `retire` refuses `no_consumer_evidence` unforced, and `check_capability_matrix.py` showed that configuration failing two `C21` ids. The guard is not those tests' subject (`PACKAGE.md` §8b.5), and `C9`'s own tests force it the same way.
+9. **The probe's D7 and D9 seeds changed.** The old seeds declared a slot with no `base_type`, which rule 2.10-3 now refuses, so D7 had silently stopped measuring rule 2.10-20. Both now seed legal declarations.
+
+### §1.6 — Findings 13 and 14 of 8B-RUN §2.5, corrected here
+
+8B-RUN is landed, so these corrections live in this record (§0.3).
+
+- **Finding 13.** 8B-RUN §1.13 item 3 is incomplete. **[Observed]** in `foundry_faux_employee.json`, `Employee.bonusHistory` is an array of `struct` whose `reducers` is `[{"direction": "DESCENDING_NULLS_LAST", "field": "year"}]`, a reducer on a struct field, so array reducers appear on three properties, not two. And the fixture report's *"`vector.embeddingModel` never exercised"* is false: `Employee.skillSetEmbedding` is a `vector` with `embeddingModel: {"type": "lms", "value": "OPENAI_TEXT_EMBEDDING_ADA_002"}`. Both land as §2.10's table says, `bonusHistory` as `list` of `dict` with the reducer kept in `source_type`, and `skillSetEmbedding` as `opaque` with the whole type object in `source_type` (`C12-71`).
+- **Finding 14.** 8B-RUN §1.4 called `fooSpt` a dangling reference and used it as the strongest evidence for warn-not-refuse. Rescoped: **within the registry the reference dangles**, because `employee` defines no shared property type `fooSpt`, but `FooInterface.properties.fooSpt` in the same document defines it in full, so an importer reading interface property contracts could recover it. This row's importer does not (an interface's property contract is carried, reason `interface_property_contract`), so the import warns `property_reference_unregistered`. The warn-not-refuse case stands on Palantir's fixture being importable at all, not on the definition being unrecoverable.
+
+### §1.7 — What went to the founder
+
+**Nothing.** No choice in the build decided what the registry refuses or holds beyond §2.10's non-reserved rules. Rules 2.10-17 to 2.10-21 are today's behaviour, pinned by the probe.
