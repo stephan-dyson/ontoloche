@@ -115,6 +115,12 @@ from ontoloche.foundry import plan as foundry_plan
 from ontoloche.foundry import replaces as foundry_replaces
 from ontoloche.foundry import to_row as foundry_row
 from ontoloche.policy import NamespacePolicy
+from ontoloche.properties import ENTITY_KEYS as PROPERTY_ENTITY_KEYS
+from ontoloche.properties import PROPERTY_KEYS as PROPERTY_ENTRY_KEYS
+from ontoloche.properties import declaration_problem as property_declaration_problem
+from ontoloche.properties import missing_descriptions as property_missing_descriptions
+from ontoloche.properties import references as property_references
+from ontoloche.properties import shared_property_declaration
 from ontoloche.types import (
     WARNING_VALUES,
     Alternative,
@@ -2243,6 +2249,147 @@ class AsyncRegistry:
                 )
         return None
 
+    # ====================================================== 2.10 property declarations
+    def _property_declaration_refusal(
+        self, kind: str, attributes: dict | None, *, at_import: bool = False
+    ) -> Refusal | None:
+        """INTERFACE.md 2.10 rule 2.10-2: rules 2.10-1 and 2.10-3 to 2.10-9.
+
+        Called from ``propose_type``, ``approve`` and ``import_types``, beside
+        ``_edge_family_refusal`` and ``_action_family_refusal``, and for their reason:
+        **unconditional**, never through a deployment's ``AttributeSchema``, so it holds
+        whatever that schema's ``mode`` is. ``detail`` carries ``rule``, ``key`` and,
+        for a slot, ``slot``.
+
+        **A missing description is refused only away from the import door** (rule
+        2.10-3). At ``import_types`` it is rule 2.10-21's, reserved for founder question
+        Q106, and today such a slot is written as given.
+        """
+        if kind not in ("entity", "property"):
+            return None
+        attributes = attributes or {}
+        breach = property_declaration_problem(kind, attributes)
+        if breach is None and not at_import and kind == "entity":
+            missing = property_missing_descriptions(attributes)
+            if missing:
+                breach = (
+                    "2.10-3", "properties", missing[0],
+                    "a local slot declares a non-empty description (an empty or "
+                    "whitespace-only one is a missing one)",
+                )
+        if breach is None:
+            return None
+        rule, key, slot, why = breach
+        detail = {
+            "kind": kind,
+            "rule": rule,
+            "key": key,
+            "why": f"INTERFACE.md 2.10 rule {rule}: {why}",
+        }
+        if slot is not None:
+            detail["slot"] = slot
+        return Refusal("attributes_schema_violation", detail)
+
+    async def _property_reference(
+        self, namespace: str, word: str, kind: str
+    ) -> tuple[str, str | None]:
+        """INTERFACE.md 2.10 rule 2.10-11, the reader: ``(answer, identity)``.
+
+        ``answer`` is ``found``, ``redirected``, ``retired``, ``absent`` or
+        ``unknown``, and ``identity`` is the live row's name for the first two. **An
+        exact lookup, never ``resolve_type``**: no ``tier``, no ``ResolveContext``, no
+        deployment resolver, and only ``namespace`` and ``kind`` are read.
+
+        1. ``get_type``. A live row is *found*. A retired row's ``successor`` chain is
+           followed in ``kind``, capped at ``_IDENTITY_CHAIN_CAP`` and cycle-guarded: a
+           live end is *redirected*, and a walk that hits the cap or a cycle is
+           *unknown*, never *retired* (Rule U). A dead end does not answer yet.
+        2. The live rows of ``kind`` whose name or any alias has ``word`` as its
+           ``identity_key``. **Its own kind-filtered scan, not ``_alias_holder``**,
+           whose alias branch ignores kind (row 8b round 5, finding 1). The first by
+           name answers, so the answer is deterministic. A scan that could not finish
+           is *unknown*.
+        3. A dead end from step 1 is *retired*. Nothing at all is *absent*.
+        """
+        dead_end = False
+        rec = await self.adapter.get_type(namespace, word, kind=kind)
+        if rec is not None and rec.status == "active":
+            return "found", rec.name
+        if rec is not None and rec.status == "retired":
+            seen = {rec.name}
+            current = rec
+            while True:
+                nxt_name = current.successor
+                if not nxt_name:
+                    dead_end = True
+                    break
+                if nxt_name in seen or len(seen) > _IDENTITY_CHAIN_CAP:
+                    return "unknown", None
+                seen.add(nxt_name)
+                nxt = await self.adapter.get_type(namespace, nxt_name, kind=kind)
+                if nxt is None or nxt.status not in ("active", "retired"):
+                    dead_end = True
+                    break
+                if nxt.status == "active":
+                    return "redirected", nxt.name
+                current = nxt
+        records, why = await self._active_page(namespace)
+        holders = sorted(
+            {
+                r.name
+                for r in records
+                if r.kind == kind
+                and (
+                    identity_key(r.name) == word
+                    or any(identity_key(a) == word for a in (r.aliases or ()))
+                )
+            }
+        )
+        if holders:
+            return ("found" if holders[0] == word else "redirected"), holders[0]
+        if why is not None:
+            return "unknown", None
+        return ("retired" if dead_end else "absent"), None
+
+    async def _property_write_warnings(
+        self, namespace: str, kind: str, attributes: dict | None
+    ) -> list[str]:
+        """Rules 2.10-10 and 2.10-16 at a door that writes a declaration.
+
+        ``property_declaration_not_stored:<key>`` for each reserved key this backend
+        cannot keep, and one ``property_reference_*`` warning for each ``shared`` or
+        ``value_set`` word the reader does not answer *found*, read off the reader's
+        answer and never off a tombstone's ``successor`` field.
+        ``property_reference_undeclared`` reads the VIEW of the entry the reader lands
+        on, so neither a 2.10-9 breach nor a key the backend cannot store is called
+        undeclared (Rule U).
+        """
+        if kind not in ("entity", "property"):
+            return []
+        attributes = attributes or {}
+        out: list[str] = []
+        keys = PROPERTY_ENTITY_KEYS if kind == "entity" else PROPERTY_ENTRY_KEYS
+        for key in keys:
+            if attributes.get(key) is not None and not self.caps.stores_attribute(key):
+                out.append(f"property_declaration_not_stored:{key}")
+        for slot, word, ref_kind in property_references(kind, attributes):
+            answer, identity = await self._property_reference(namespace, word, ref_kind)
+            if answer == "redirected":
+                out.append(f"property_reference_redirected:{slot}:{word}:{identity}")
+            elif answer == "retired":
+                out.append(f"property_reference_retired:{slot}:{word}")
+            elif answer == "absent":
+                out.append(f"property_reference_unregistered:{slot}:{word}")
+            elif answer == "unknown":
+                out.append(f"property_reference_unknown:{slot}:{word}")
+            if ref_kind == "property" and answer in ("found", "redirected"):
+                landed = await self.adapter.get_type(namespace, identity, kind="property")
+                if landed is not None:
+                    view = shared_property_declaration(await self._entry(landed), self.caps)
+                    if view.base_type is None and not view.why_absent:
+                        out.append(f"property_reference_undeclared:{slot}:{word}")
+        return out
+
     async def propose_type(
         self,
         name: str,
@@ -2281,6 +2428,9 @@ class AsyncRegistry:
         action_refusal = await self._action_family_refusal(namespace, kind, attributes)
         if action_refusal is not None:
             return action_refusal
+        property_refusal = self._property_declaration_refusal(kind, attributes)
+        if property_refusal is not None:
+            return property_refusal
 
         existing = await self.adapter.get_type(namespace, name, kind=kind)
         if existing is None:
@@ -2443,6 +2593,9 @@ class AsyncRegistry:
         # at the door, to the caller who can still act on it. A warning and never a
         # refusal: 5.4 refuses two things and warns about everything else.
         warnings.extend(await self._declared_predicate_warnings(namespace, predicates))
+        # INTERFACE.md 2.10 rules 2.10-10 and 2.10-16: a reference is written and
+        # warned, never refused, and a reserved key the backend cannot keep is said.
+        warnings.extend(await self._property_write_warnings(namespace, kind, attributes))
         if kind == "predicate":
             # **Ruling R40, row 4c.** A capability predicate is the one kind where an
             # auto-approval policy approving is the `ROADMAP.md` kill row, and **two of
@@ -2648,6 +2801,29 @@ class AsyncRegistry:
             )
             if action_refusal is not None:
                 return action_refusal
+            # INTERFACE.md 2.10 rule 2.10-2, at the SECOND door, for the reason above.
+            property_refusal = self._property_declaration_refusal(
+                amended.kind, dict(amended.attributes or {})
+            )
+            if property_refusal is not None:
+                return property_refusal
+            # **Rule 2.10-10: `approve` recomputes the property warnings** from the
+            # store as it is now (ruling R38). A word absent when proposed may be
+            # registered by approval time, and the reverse.
+            amended = ProposalRecord(
+                **{
+                    **amended.__dict__,
+                    "warnings": tuple(
+                        w for w in amended.warnings
+                        if not w.startswith(("property_reference_", "property_declaration_"))
+                    )
+                    + tuple(
+                        await self._property_write_warnings(
+                            amended.namespace, amended.kind, dict(amended.attributes or {})
+                        )
+                    ),
+                }
+            )
             schema, violations = await self._check_attributes(
                 amended.namespace, amended.kind, amended.name, amended.attributes
             )
@@ -5333,6 +5509,21 @@ class AsyncRegistry:
                 )
                 continue
 
+            # INTERFACE.md 2.10 rule 2.10-2, at the THIRD door: declined, never raised,
+            # so one bad row never fails the import. A missing description is not
+            # checked here: that is rule 2.10-21's, reserved for Q106.
+            property_breach = self._property_declaration_refusal(
+                row.get("kind", kind), attributes, at_import=True
+            )
+            if property_breach is not None:
+                out.append(
+                    self._refused_import(
+                        namespace, name, property_breach.detail.get("why", ""),
+                        reason=property_breach.reason, kind=row.get("kind", kind),
+                    )
+                )
+                continue
+
             # **An import does not un-retire a local name.** A retired row is a
             # governance decision this deployment made; a foreign dump saying the word
             # is active is not a reversal of it, and overwriting the tombstone wiped
@@ -5821,6 +6012,12 @@ class AsyncRegistry:
                     # vocabulary arriving already decided and warning is all this call
                     # may do about a declaration (2.5).
                     + tuple(await self._declared_predicate_warnings(namespace, predicates))
+                    # INTERFACE.md 2.10 rules 2.10-10 and 2.10-16, at the import door.
+                    + tuple(
+                        await self._property_write_warnings(
+                            namespace, row.get("kind", kind), attributes
+                        )
+                    )
                     # Deduplicated: both the name-holder look and the alias look can
                     # report the same partial page, and a fact said twice is the
                     # `_merged_marker` defect one call along (row 4d, round 2).
@@ -5895,7 +6092,7 @@ class AsyncRegistry:
         ``name_invalid``, ``name_collision_after_conversion`` (R110) and
         ``definition_missing`` (R109) holds.
         """
-        planned, not_imported, unmatched = foundry_plan(
+        planned, not_imported, unmatched, properties = foundry_plan(
             full_metadata, names=names, definitions=definitions
         )
 
@@ -5952,6 +6149,13 @@ class AsyncRegistry:
             )
         results = dict(zip([id(p) for p in sent], entries))
         await self._foundry_unresolved(planned, results, namespace, dry_run)
+        # Row 8c: a shared slot whose property resolves to nothing, said per entity.
+        for p in planned:
+            counts = properties["entities"].get(p.api_name) if p.kind == "entity" else None
+            if counts is not None:
+                counts["unresolved_shared"] = [
+                    u for u in p.detail.get("unresolved", ()) if "shared" in u
+                ]
 
         items: list[FoundryItem] = []
         for p in planned:
@@ -5987,6 +6191,7 @@ class AsyncRegistry:
             not_imported=not_imported,
             entries=tuple(entries),
             unmatched=unmatched,
+            properties=properties,
         )
 
     async def _foundry_unresolved(

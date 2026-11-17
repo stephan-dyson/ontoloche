@@ -69,7 +69,12 @@ def _import(registry, rows, namespace="default"):
 
 
 def _prop_warnings(entry):
-    return [w for w in entry.warnings if w.startswith("property_")]
+    """The rule 2.10-10 reference warnings. 2.10-16's not_stored is read on its own."""
+    return [w for w in entry.warnings if w.startswith("property_reference_")]
+
+
+def _not_stored_warnings(entry):
+    return sorted(w for w in entry.warnings if w.startswith("property_declaration_not_stored"))
 
 
 def _refused(out, rule, key=None, slot=None):
@@ -455,7 +460,7 @@ def test_c21_14_a_key_the_backend_cannot_store_is_warned_and_named_not_stored(re
     expected = sorted(
         f"property_declaration_not_stored:{k}" for k in attrs if not registry.caps.stores_attribute(k)
     )
-    assert sorted(w for w in out.warnings if w.startswith("property_declaration_not_stored")) == expected
+    assert _not_stored_warnings(out) == expected
     stored = registry.adapter.get_type("default", "facility", kind="entity")
     view = entity_declaration(stored, registry.caps)
     assert view.why_absent == _not_stored(registry.caps, attrs)
@@ -474,6 +479,7 @@ def test_c21_14_a_degraded_backend_says_what_it_drops(adapter, make_registry):
 # ------------------------------------------------------------------ rule 2.10-22
 
 
+@pytest.mark.requires_capability("indexes_membership")
 def test_c21_15_property_is_a_kind_and_never_a_predicate(registry):
     assert "property" in types_module.KINDS
     assert "property" not in PROPOSABLE_KINDS
@@ -533,9 +539,10 @@ def test_c21_16_uc2_cms_twenty_one_columns_through_real_calls(registry):
         entry = _write(registry, name, attrs)
         assert isinstance(entry, TypeEntry), (name, entry)
         not_stored = sorted(f"property_declaration_not_stored:{k}" for k in attrs if not caps.stores_attribute(k))
-        assert sorted(entry.warnings) == not_stored or sorted(_prop_warnings(entry)) == not_stored, entry.warnings
+        assert _not_stored_warnings(entry) == not_stored and _prop_warnings(entry) == [], entry.warnings
         view = entity_declaration(registry.adapter.get_type("default", name, kind="entity"), caps)
-        assert view.why_absent == _not_stored(caps, attrs)
+        # Every key the backend cannot keep, declared or not: it cannot know which.
+        assert view.why_absent == _not_stored(caps, ("properties", "primary_key", "title_property"))
         if view.properties is not None:
             slots += len(view.properties)
     if caps.stores_attribute("properties"):
@@ -554,10 +561,10 @@ def test_c21_17_uc3_nyc_status_stays_three_things_and_coordinates_are_properties
     seed(registry, "longitude", kind="property", namespace="dot", attributes={"base_type": "float"})
     for ns, entity in (("dpr", "street_tree"), ("oti_311", "service_request"), ("dot", "parking_meter")):
         out = _write(registry, entity, {"properties": [_local("status", value_set="status")]}, namespace=ns)
-        assert _prop_warnings(out) == [w for w in _prop_warnings(out) if "not_stored" in w], out.warnings
+        assert _prop_warnings(out) == [], out.warnings
     dot = _write(registry, "sign", {"properties": [{"name": "latitude", "shared": "latitude"},
                                                     {"name": "longitude", "shared": "longitude"}]}, namespace="dot")
-    assert [w for w in _prop_warnings(dot) if "reference" in w] == []
+    assert _prop_warnings(dot) == []
     res = registry.resolve_type("latitude", CTX, kind="property", namespace="dot", tier="unspecified")
     assert res.outcome == "existing" and res.confidence == 1.0
     res = registry.resolve_type("latitude", CTX, kind="property", namespace="dpr", tier="unspecified")

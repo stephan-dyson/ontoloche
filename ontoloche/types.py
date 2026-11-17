@@ -50,7 +50,7 @@ __all__ = [
 
 # INTERFACE.md 2.2 -- an open vocabulary; v0 defines four. `value_set` was added
 # because the CMS data forced it (10.1).
-KINDS = ("entity", "predicate", "edge", "value_set")
+KINDS = ("entity", "predicate", "edge", "value_set", "property")
 
 STATUSES = ("proposed", "active", "retired")
 # INTERFACE.md 2.1. The first three are Tenshen's own `work_link_types` vocabulary,
@@ -491,6 +491,23 @@ WARNING_VALUES = (
     # for two facts is INTERFACE.md 2.3's Cause B. Standing rule (c), applied where the
     # register had been applying it to `name` alone.
     "word_previously_retired",
+    # INTERFACE.md 2.10 rule 2.10-10, row 8c. `TypeEntry` and `Proposal`, from
+    # `propose_type`, `approve` (recomputed, ruling R38) and `import_types`, when a
+    # declaration's `shared` or `value_set` word does not read *found* through rule
+    # 2.10-11's reader. A reference is written and warned, never refused (ruling R108).
+    # Carries `<slot>:<word>`, and `redirected` carries the live identity after it.
+    # Four values, one per answer, for INTERFACE.md 2.3's Cause B: *retired* and *never
+    # registered* and *could not finish looking* are three facts.
+    "property_reference_redirected",
+    "property_reference_retired",
+    "property_reference_unregistered",
+    "property_reference_unknown",
+    # Rule 2.10-10: a `shared` word that lands on a live `kind="property"` entry whose
+    # view has no base type and no `why_absent` -- a property declaring nothing.
+    "property_reference_undeclared",
+    # Rule 2.10-16: a reserved key the backend cannot store. Carries the key. The view
+    # then reads `why_absent[key] = "not_stored"`, never an empty declaration.
+    "property_declaration_not_stored",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
