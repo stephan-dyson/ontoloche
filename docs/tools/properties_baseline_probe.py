@@ -5,6 +5,14 @@ Row 8b is a spec row and ships no product code. This probe changes nothing in th
 package. It observes the current behaviour that the amendment's open doors (D2, D6,
 D7, D9) and contortion 10 are claims about, so those claims rest on output rather than
 on reading. Run: ``py docs/tools/properties_baseline_probe.py`` from the repo root.
+
+Row 8c built 2.10 and kept rules 2.10-17 to 2.10-21 as today's behaviour, because they
+are reserved for founder questions Q103 to Q106 (8C-RUN.md §0.2 item 8). Those rules are
+pinned here rather than by a contract id, since a contract id is what a third-party
+backend certifies. ``--assert`` exits 1 when any line in ``RESERVED`` prints a value other
+than the one recorded, so a change to reserved behaviour fails loudly instead of quietly.
+Row 8c also made the D7 and D9 seeds legal declarations: the old seeds named a slot with
+no ``base_type``, which rule 2.10-3 now refuses, so D7 had stopped measuring 2.10-20.
 """
 
 from __future__ import annotations
@@ -33,11 +41,46 @@ def seed(reg, name, *, kind="entity", attributes=None, ns="default"):
     return reg.approve(out.id, "user:sd")
 
 
+#: The reserved-rule lines and the value each prints today (row 8c). The rule each pins
+#: is the comment. Every other line is printed for the record and is not asserted.
+RESERVED = {
+    # 2.10-17: collapsing two differing properties or value sets.
+    "D2 merge, no acknowledgement": "definitions_diverge",
+    "D2 merge, acknowledged": "MergeResult",
+    "D2 retire(successor=), no acknowledgement": "retired",
+    "D12 alias import over a retired property, warnings": "()",
+    "D12 postal_code now": "{'base_type': 'int'}",
+    "D13 retire a referenced value set": "retired",
+    "D13 warnings": "()",
+    # 2.10-18: collapsing two entities whose declarations contradict.
+    "D11 retire(survey, successor=citation)": "retired",
+    "D11 warnings": "()",
+    "D12 alias import over a retired entity, warnings": "()",
+    # 2.10-19: retiring a property a slot still names; the predicate-member exception.
+    "D6 retire a used shared property": "retired",
+    "D6 warnings": "()",
+    "D10 retire a property a consumer gates on": "live_consumers",
+    # 2.10-20: an import replaces an active entry's whole attributes.
+    "D7 active entity attributes after re-import": "{'properties': []}",
+    "D7b property attributes after re-import": "{'base_type': 'int'}",
+    "D7b warnings": "()",
+    # 2.10-21: an undescribed local slot at import is written, no warning; a shared
+    # property entry with no definition is held by R109.
+    "Q106 import an undescribed local slot": "written",
+    "Q106 warnings": "()",
+    "Q106 import a property entry with no definition": "import_refused:definition_missing",
+}
+
+SEEN: dict[str, str] = {}
+
+
 def show(label, value):
+    SEEN[label] = str(value)
     print(f"{label:<48} {value}")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    check = "--assert" in (sys.argv[1:] if argv is None else argv)
     # Contortion 10: latitude, asked with no kind and with kind="property".
     reg = Registry(SQLiteAdapter(":memory:"))
     seed(reg, "street_tree", ns="dot")
@@ -53,7 +96,8 @@ def main() -> int:
 
     # D7: does import_types rewrite an ACTIVE entity's attributes?
     reg = Registry(SQLiteAdapter(":memory:"))
-    seed(reg, "facility", attributes={"primary_key": ["ccn"], "properties": [{"name": "ccn"}]})
+    seed(reg, "facility", attributes={"primary_key": ["ccn"], "properties": [
+        {"name": "ccn", "base_type": "str", "description": "the CMS certification number"}]})
     reg.import_types([{"name": "facility", "definition": "facility, re-imported",
                        "status": "active", "attributes": {"properties": []}}])
     after = reg.list_types().types
@@ -65,9 +109,10 @@ def main() -> int:
     store = str(Path(tempfile.mkdtemp(prefix="oo8b-")) / "host.db")
     MinimalSQLiteAdapter.create_host_schema(store)
     reg = Registry(MinimalSQLiteAdapter(store))
-    e = seed(reg, "facility", attributes={"primary_key": ["ccn"],
-                                          "properties": [{"name": "ccn"}],
-                                          "title_property": "provider_name"})
+    e = seed(reg, "facility", attributes={"primary_key": ["ccn"], "properties": [
+        {"name": "ccn", "base_type": "str", "description": "the CMS certification number"},
+        {"name": "provider_name", "base_type": "str", "description": "the provider's name"}],
+        "title_property": "provider_name"})
     show("D9 sqlite_minimal attributes after write", getattr(e, "attributes", e))
     show("D9 sqlite_minimal warnings", getattr(e, "warnings", None))
 
@@ -189,6 +234,31 @@ def main() -> int:
     show("D14 live alias holders of zip_code", holders)
     out = reg.reinstate("zip_code", "bring it back", reinstated_by="user:sd")
     show("D14 reinstate zip_code", getattr(out, "reason", None) or getattr(out, "status", None))
+
+    # 2.10-21 (Q106), row 8c: what import_types does with a missing description.
+    reg = Registry(SQLiteAdapter(":memory:"))
+    back = reg.import_types([{"name": "employee", "definition": "an employee", "status": "active",
+                              "attributes": {"properties": [{"name": "badge", "base_type": "str"}]}}])
+    show("Q106 import an undescribed local slot",
+         "written" if back and back[0].kind == "entity" and back[0].name == "employee" else back)
+    show("Q106 warnings", tuple(w for w in (back[0].warnings if back else ()) if "description" in w
+                                or w.startswith("property_")))
+    back = reg.import_types([{"name": "badge_code", "definition": "", "status": "active",
+                              "attributes": {"base_type": "str"}}], kind="property")
+    reasons = [w for w in (back[0].warnings if back else ()) if w.startswith("import_refused:")]
+    show("Q106 import a property entry with no definition", reasons[0] if reasons else back)
+
+    if not check:
+        return 0
+    drift = {k: (v, SEEN.get(k)) for k, v in RESERVED.items() if SEEN.get(k) != v}
+    if drift:
+        print()
+        print("RESERVED BEHAVIOUR MOVED (rules 2.10-17 to 2.10-21, Q103 to Q106):")
+        for label, (want, got) in drift.items():
+            print(f"  {label}: recorded {want!r}, now {got!r}")
+        return 1
+    print()
+    print(f"--assert: all {len(RESERVED)} reserved-rule lines print their recorded values.")
     return 0
 
 
