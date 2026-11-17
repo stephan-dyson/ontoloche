@@ -174,7 +174,7 @@ Written after the build and before the adversarial loop. Commits `32427f6` (the 
 
 ### §1.1 — The suite and the gates
 
-**The full suite passes on all three legs** **[Observed]** at `d620b99`, `OO_POSTGRES_DSN` set: `py -m pytest` ran 2404 passed, 660 skipped, 0 failed in 24 min 17 s, sync and async halves. Coverage per leg (ruling R12): `sqlite` and `postgres` **472 ids exercised** each with 1 not exercisable, `sqlite_minimal` **150** with 323 not exercisable, plus 5 backend-independent ids run once (`C12-71` among them). From §0.1 item 3's 448: +25 ids (`C12-69` to `C12-76`, `C21-01` to `C21-17`), so `PACKAGE.md` §6.2 now enumerates **478** in twenty-one groups.
+**The full suite passes on all three legs** **[Observed]** at `d620b99`, `OO_POSTGRES_DSN` set: `py -m pytest` ran 2404 passed, 660 skipped, 0 failed in 24 min 17 s, sync and async halves. Coverage per leg (ruling R12): `sqlite` and `postgres` **472 ids exercised** each with 1 not exercisable, `sqlite_minimal` **150** with 323 not exercisable, plus 5 backend-independent ids run once (`C12-71` among them). From the 453 ids `PACKAGE.md` §6.2 enumerated at `147d871` (§0.1 item 3's 448 is the per-leg *exercised* count, not the enumeration, corrected in round 2): +25 ids (`C12-69` to `C12-76`, `C21-01` to `C21-17`), so `PACKAGE.md` §6.2 now enumerates **478** in twenty-one groups.
 
 **The five gates exit 0** **[Observed]** at `48f0bd1`: `check_links`, `check_spec_drift` (§5.4 at 45, §5.12 at 33, §2.10's three shapes, two view signatures and ten `BASE_TYPES` held against `ontoloche/properties.py`), `check_merge_guard`, `check_capability_matrix` (every optional capability declined alone conforms) and `check_skip_census`. `properties_baseline_probe.py --assert` exits 0 with all 19 reserved-rule lines at their recorded values, and exits 1 when one is changed (checked by editing one recorded value in memory).
 
@@ -258,4 +258,27 @@ Stopping rule and cap as §0.9: three fresh lenses per round (A, the build imple
 | C6 | C | rule 2.10-21 still said 83 where §1.2 corrected the slot count to 81 | **fixed** |
 | C7 | C | the carry keeps `null`s verbatim while `source_type` omits them | **fixed in the text**: §2.5a says the carry is verbatim, nulls included. Nothing is lost, and `no_home` already skips null values |
 
-**Next:** round 2 must see the final text and code (§0.9), so it runs on the commit that applies these fixes.
+At `167da18` the full suite ran **2416 passed, 660 skipped, 0 failed** (24 min 27 s; `sqlite` and `postgres` 473 ids exercised each, `sqlite_minimal` 151), and the five gates and `properties_baseline_probe.py --assert` exited 0 **[Observed]**.
+
+### §2.2 — Round 2, at `167da18`
+
+**0 BLOCKING, 2 MAJOR, 10 MINOR.** Lens A (rules 2.10-1 to 2.10-16 and 2.10-22 on three legs, `C21` 83 passed, 7 skipped) and lens B (every K-door state, `check_merge_guard.py` and the probe `--assert` at 0, B1 and B3 confirmed honest) found no MAJOR. Lens C found two. An independent re-implementation of §2.10's table from its text matched the importer on all 110 properties, and every §1.2 number recomputed true. The kill row stays at twenty-three. The round fails the stopping rule, so round 3 runs.
+
+| # | lens | sev | finding | disposition |
+|---|---|---|---|---|
+| C2-1 | C | **MAJOR** | `unresolved_shared` resolved a shared slot by an exact `get_type`, row 8a's interface logic, while the entity's own rule 2.10-10 warning used rule 2.10-11's reader. A word reaching a live property by alias or by successor was reported `not_in_document` or `retired` beside a warning saying *redirected*, in one call | **fixed**: `_foundry_unresolved` asks the 2.10-11 reader for a shared slot. *found* and *redirected* resolve, *retired* and *unknown* are reported as the reader answers, and only an absent word takes the plan's reason. Pinned by a new `C12-75` case (alias and successor) and stated in §2.5a |
+| C2-2 | C | **MAJOR** | §1.1 said *"from 448, +25 ids, now 478"*. 448 + 25 = 473. The 448 is the per-leg exercised count, the enumeration was 453 | **fixed** in §1.1. §0.1 item 3's *"claims 448 ids"* is pre-registration and stays as committed. It names the exercised count |
+| C2-3 | C | MINOR | a shared property type's own facts with no field (`typeClasses`, `valueTypeApiName`, `valueFormatting`) were carried but not listed in `no_home` | **fixed**: listed as `no_slot_field:<key>` with `property: null`, pinned by a new `C12-74` case |
+| C2-4 | C | MINOR | §2.5a's report paragraph did not name `entities`, put `no_home` per object type, and did not say `opaque` and `undescribed` count local slots | **fixed** in §2.5a |
+| C2-5 | C | MINOR | §2.5a's unresolved paragraph showed no `shared` label | **fixed** |
+| C2-6 | C | MINOR | a blank or null `displayName` lands nowhere, unstated | **fixed** in §2.5a |
+| B2-1 | B | MINOR | rule 2.10-11 said the walk is capped at 16 hops. After A1 it is the first successor plus 16, as `resolve_type` | **fixed** in the rule and the reader's docstring |
+| B2-2 | B | MINOR | a document holding only `sharedPropertyTypes` raised *"not an OntologyFullMetadata document"*, failing closed | **fixed**: `sharedPropertyTypes` counts toward `_TYPE_MAPS`, pinned by the new `C12-74` case |
+| A2-1 | A | MINOR | on a backend projecting `display_name` but not `base_type`, the view overwrote `not_stored` with `breaches:2.10-9`, a false breach of data valid when written | **fixed**: a `kind="property"` entry with any key `not_stored` is not judged against 2.10-6 to 2.10-9. Pinned in `C21-14` and stated in the view's paragraph |
+| A2-2 | A | MINOR | rule 2.10-10 printed `why_absent["base_type"] == "breaches:2.10-9"` as the breach test, but a breach of 2.10-6, -7 or -8 names its own rule | **fixed in the text**: the value starts `breaches:` and names the rule, as the view's paragraph already said. The registry's own test (`not view.why_absent`) was right |
+| A2-3 | A | MINOR | on a backend that drops `properties`, reference warnings are still sent for references not kept | **fixed in the text, not the code.** Suppressing them was tried and turned five `sqlite_minimal` cases red per mirror, and would have made the Foundry report and the entity's warning disagree on that leg, the defect C2-1 just closed. The warning describes what the caller declared, and `not_stored` says apart that it was not kept. Rule 2.10-10 now says so, pinned by a `C21-14` case |
+| A2-4 | A | MINOR | with slots declared, a duplicate `primary_key` slot was reported as rule 2.10-1 | **fixed**: rule 2.10-5 when `properties` is present, 2.10-1 otherwise. Pinned by a `C21-05` case |
+
+Lens A's postgres probe left one throwaway schema `probe_<8 hex>` in the shared `open_ontology` database. It is not dropped, under the no-delete rule. It holds probe rows only.
+
+**Next:** round 3 runs on the commit that applies these fixes.

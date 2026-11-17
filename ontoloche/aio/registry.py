@@ -2301,7 +2301,8 @@ class AsyncRegistry:
         deployment resolver, and only ``namespace`` and ``kind`` are read.
 
         1. ``get_type``. A live row is *found*. A retired row's ``successor`` chain is
-           followed in ``kind``, capped at ``_IDENTITY_CHAIN_CAP`` and cycle-guarded: a
+           followed in ``kind``, capped at the first successor plus
+           ``_IDENTITY_CHAIN_CAP`` more hops (as ``resolve_type``) and cycle-guarded: a
            live end is *redirected*, and a walk that hits the cap or a cycle is
            *unknown*, never *retired* (Rule U). A dead end does not answer yet.
         2. The live rows of ``kind`` whose name or any alias has ``word`` as its
@@ -2377,6 +2378,9 @@ class AsyncRegistry:
         for key in keys:
             if attributes.get(key) is not None and not self.caps.stores_attribute(key):
                 out.append(f"property_declaration_not_stored:{key}")
+        # A reference is warned whether or not this backend keeps the key holding it:
+        # the warning is about what the caller declared, and not_stored says apart that
+        # it was not kept (round 2, lens A finding 3, INTERFACE.md rule 2.10-10).
         for slot, word, ref_kind in property_references(kind, attributes):
             answer, identity = await self._property_reference(namespace, word, ref_kind)
             if answer == "redirected":
@@ -6225,6 +6229,35 @@ class AsyncRegistry:
             for label, kind, api, word in p.refs:
                 target_kind = "predicate" if kind == "interface" else kind
                 target = by_api.get((target_kind, api))
+                if target_kind == "property" and isinstance(word, str) and word:
+                    # **Row 8c round 2 (lens C, MAJOR 1).** A shared slot is resolved
+                    # by rule 2.10-11's reader, so the report and the entity's own
+                    # `property_reference_*` warning give one answer: *found* and
+                    # *redirected* are resolved, a reader that could not finish is
+                    # `unknown`, and only an absent word is explained by the plan.
+                    answer, _ = await self._property_reference(namespace, word, "property")
+                    if answer in ("found", "redirected"):
+                        continue
+                    if answer in ("retired", "unknown"):
+                        unresolved.append({label: word, "why": answer})
+                        continue
+                    refused = (
+                        _import_refusal(results[id(target)].warnings)
+                        if target is not None and id(target) in results
+                        else None
+                    )
+                    if target is None:
+                        why = "not_in_document"
+                    elif target.reason is not None:
+                        why = f"held:{target.reason}"
+                    elif refused is not None:
+                        why = f"refused:{refused}"
+                    elif dry_run:
+                        continue  # planned and not yet written: a dry run resolves it
+                    else:
+                        why = "not_in_document"
+                    unresolved.append({label: word, "why": why})
+                    continue
                 # **The store first** (round 3). A referent the store holds live is
                 # resolved whatever the plan held or `import_types` refused: a re-run
                 # without `definitions=` holds a standing interface `definition_missing`

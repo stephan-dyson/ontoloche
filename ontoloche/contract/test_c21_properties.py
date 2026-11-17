@@ -247,6 +247,15 @@ def test_c21_05_key_and_title_name_declared_slots_and_a_key_slot_is_required(reg
         assert required == {"ccn": True, "survey_date": True, "note": False}
 
 
+def test_c21_05_a_duplicate_key_slot_among_declared_slots_is_rule_2_10_5(registry):
+    """Round 2, lens A finding 4: with slots declared, distinct key slots are 2.10-5's."""
+    _refused(
+        _propose(registry, "a", {"properties": [_local("x")], "primary_key": ["x", "x"]}),
+        "2.10-5", "primary_key",
+    )
+    _refused(_propose(registry, "a", {"primary_key": ["x", "x"]}), "2.10-1", "primary_key")
+
+
 def test_c21_05_a_breach_in_stored_data_nulls_the_key_never_the_slots(registry):
     entry = _entry(registry, "entity", {"properties": [_local("x")], "primary_key": ["y"], "title_property": "z"})
     view = entity_declaration(entry, _AllCaps())
@@ -498,6 +507,36 @@ def test_c21_14_a_degraded_backend_says_what_it_drops(adapter, make_registry):
     assert "property_declaration_not_stored:base_type" in out.warnings
     view = shared_property_declaration(out, reg.caps)
     assert view.why_absent.get("base_type") == "not_stored"
+
+
+def test_c21_14_a_dropped_base_type_is_never_read_as_a_breach(adapter, make_registry):
+    """Round 2, lens A finding 1: a display_name whose base_type the backend dropped
+    is not_stored, never breaches:2.10-9."""
+    reg = make_registry(DegradedAdapter(adapter, stores_attributes=False, attribute_projections={"display_name"}))
+    out = _write(reg, "zip_code", {"base_type": "str", "display_name": "Zip"}, kind="property")
+    assert "property_declaration_not_stored:base_type" in out.warnings
+    stored = reg.adapter.get_type("default", "zip_code", kind="property")
+    view = shared_property_declaration(stored, reg.caps)
+    assert view.why_absent.get("base_type") == "not_stored", view.why_absent
+    assert not any(v.startswith("breaches:") for v in view.why_absent.values()), view.why_absent
+
+
+def test_c21_14_a_reference_the_backend_drops_is_still_warned(adapter, make_registry):
+    """Round 2, lens A finding 3: the warning describes what the caller declared, and
+    not_stored says apart that it was not kept (rule 2.10-10)."""
+    reg = make_registry(DegradedAdapter(adapter, stores_attributes=False))
+    out = _write(reg, "employee", {"properties": [
+        {"name": "fullName", "shared": "foo_spt"}, _local("dept", value_set="departments"),
+    ]})
+    assert isinstance(out, TypeEntry), out
+    assert "property_declaration_not_stored:properties" in out.warnings
+    assert set(_prop_warnings(out)) == {
+        "property_reference_unregistered:fullName:foo_spt",
+        "property_reference_unregistered:dept:departments",
+    }
+    star = _write(reg, "dept_code", {"base_type": "str", "value_set": "nope"}, kind="property")
+    assert "property_declaration_not_stored:value_set" in star.warnings
+    assert _prop_warnings(star) == ["property_reference_unregistered:*:nope"]
 
 
 # ------------------------------------------------------------------ rule 2.10-22

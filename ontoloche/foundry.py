@@ -76,7 +76,10 @@ _OBJECT_TYPE_MAPPED = frozenset(
 )
 
 _NOT_IMPORTED = ("queryTypes", "valueTypes")
-_TYPE_MAPS = ("objectTypes", "interfaceTypes", "actionTypes", "actionTypesFullMetadata")
+_TYPE_MAPS = (
+    "objectTypes", "interfaceTypes", "actionTypes", "actionTypesFullMetadata",
+    "sharedPropertyTypes",  # row 8c round 2: imported, so it counts
+)
 
 
 def convert_name(api_name: str) -> str:
@@ -523,6 +526,12 @@ def plan(
         spt = spt if isinstance(spt, dict) else {}
         base, item, source, reasons = land(spt.get("dataType"))
         no_home.extend(_no_home(api, None, r) for r in reasons)
+        no_home.extend(
+            _no_home(api, None, f"no_slot_field:{k}")
+            for k, v in spt.items()
+            if k not in ("apiName", "rid", "description", "dataType", "displayName")
+            and v not in (None, [], {}, "")
+        )
         attributes = {
             "base_type": base,
             "display_name": spt.get("displayName") or None,

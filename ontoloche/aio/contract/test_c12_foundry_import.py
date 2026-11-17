@@ -3075,6 +3075,15 @@ async def test_c12_74_every_fixture_property_is_a_slot_or_has_a_reason(registry)
     assert "primary_key" not in attributes and attributes["foundry_properties"]["properties"]["bad-key"]
     assert declaration_problem("entity", attributes) is None
 
+async def test_c12_74_a_document_of_shared_property_types_alone_imports(registry):
+    """Round 2: lens B finding 2 (a document holding only sharedPropertyTypes is one)
+    and lens C finding 3 (a shared property type's facts with no field are in no_home)."""
+    spt = dict(foundry_fixture("faux_legacy")["sharedPropertyTypes"]["fooSpt"])
+    spt["valueTypeApiName"] = "some_value_type"
+    report = await registry.import_foundry({"sharedPropertyTypes": {"fooSpt": spt}}, namespace="c12_74_2")
+    assert _names(report, kind="property") == ["foo_spt"]
+    assert {"type": "fooSpt", "property": None, "reason": "no_slot_field:valueTypeApiName"} in report.properties["no_home"]
+
 async def test_c12_75_palantirs_dangling_mapping_is_written_and_warned(registry, adapter):
     """`employee` maps `fooSpt` onto `fullName` and never defines `fooSpt`."""
     report = await registry.import_foundry(foundry_fixture("faux_employee"), dry_run=False)
@@ -3102,6 +3111,29 @@ async def test_c12_76_no_fixture_breaches_a_declaration_rule_on_any_backend(regi
         assert stored is not None
         if await _stores(adapter, "primary_key"):
             assert entity_declaration(stored, await adapter.capabilities()).primary_key is not None
+
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+async def test_c12_75_a_shared_slot_reaching_a_live_property_is_resolved(registry):
+    """Round 2, lens C MAJOR 1: unresolved_shared asks rule 2.10-11's reader, so a word
+    answering to a live property by alias or by successor is resolved, exactly as the
+    entity's own warning says redirected."""
+    doc = foundry_fixture("faux_employee")
+
+    def row(name, **kw):
+        return {"name": name, "definition": f"the {name}", "status": "active",
+                "attributes": {"base_type": "str"}, **kw}
+
+    await registry.import_types([row("person_name", aliases=["foo_spt"])], kind="property",
+                          system="c12", namespace="c12_75_a", imported_by="import:c12")
+    await registry.import_types([row("foo_spt"), row("person_name")], kind="property",
+                          system="c12", namespace="c12_75_s", imported_by="import:c12")
+    await registry.retire("foo_spt", "renamed", retired_by="user:sd", successor="person_name",
+                    force=True, namespace="c12_75_s")
+    for namespace in ("c12_75_a", "c12_75_s"):
+        report = await registry.import_foundry(doc, dry_run=False, namespace=namespace)
+        employee = _items(report, kind="entity", name="employee")[0]
+        assert "property_reference_redirected:fullName:foo_spt:person_name" in employee.warnings
+        assert report.properties["entities"]["Employee"]["unresolved_shared"] == [], namespace
 
 async def test_c12_77_two_shared_property_types_converting_to_one_word_are_both_held(registry, adapter):
     """K6 in 8C-RUN.md 0.7, pinned (round 1, lens B finding 2): ruling R110 holds

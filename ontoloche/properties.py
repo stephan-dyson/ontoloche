@@ -138,8 +138,12 @@ def _key_shape_problem(attributes: dict) -> list[tuple[str, str, str | None, str
             or not all(isinstance(n, str) and n for n in pk)
             or len(set(pk)) != len(pk)
         ):
+            duplicate = (
+                isinstance(pk, list) and pk and all(isinstance(n, str) and n for n in pk)
+                and len(set(pk)) != len(pk) and _present(attributes, "properties")
+            )
             out.append((
-                "2.10-1", "primary_key", None,
+                "2.10-5" if duplicate else "2.10-1", "primary_key", None,
                 "primary_key must be a non-empty list of distinct non-empty strings",
             ))
     if _present(attributes, "title_property"):
@@ -446,7 +450,9 @@ def shared_property_declaration(entry: Any, caps: Any) -> SharedPropertyDeclarat
             held[key] = attributes[key]
     if caps.stores_attribute("required") and attributes.get("required") is not None:
         held["required"] = attributes["required"]
-    problem = property_problem(held)
+    # A key this backend cannot keep leaves the rest unjudgeable: a display_name with
+    # its base_type dropped is not a 2.10-9 breach (round 2, A2-1).
+    problem = None if why else property_problem(held)
     held.pop("required", None)
     if problem is not None:
         held = {}
