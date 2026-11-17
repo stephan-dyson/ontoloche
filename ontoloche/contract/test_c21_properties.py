@@ -256,6 +256,27 @@ def test_c21_05_a_duplicate_key_slot_among_declared_slots_is_rule_2_10_5(registr
     _refused(_propose(registry, "a", {"primary_key": ["x", "x"]}), "2.10-1", "primary_key")
 
 
+def test_c21_05_an_unhashable_key_beside_slots_is_refused_never_raised(registry):
+    """Round 3, lens A finding 1: a list or dict where a key name belongs is rule
+    2.10-1's refusal at every door, and one such row never fails an import."""
+    slots = [_local("ccn")]
+    _refused(_propose(registry, "a", {"properties": slots, "title_property": ["ccn"]}), "2.10-1", "title_property")
+    _refused(_propose(registry, "a", {"properties": slots, "primary_key": [["ccn"]]}), "2.10-1", "primary_key")
+    _refused(_propose(registry, "a", {"properties": slots, "primary_key": [{}]}), "2.10-1", "primary_key")
+    # A properties value that is not a list is not "present" (round 3, lens A finding 2).
+    _refused(_propose(registry, "a", {"properties": "x", "primary_key": ["a", "a"]}), "2.10-1", "primary_key")
+    rows = [
+        {"name": "good_one", "definition": "fine", "status": "active"},
+        {"name": "bad_one", "definition": "bad", "status": "active",
+         "attributes": {"properties": slots, "title_property": ["ccn"]}},
+    ]
+    out = _import(registry, rows, namespace="c21_05_u")
+    assert [e.name for e in out] == ["good_one", "bad_one"]
+    assert out[0].warnings == ()
+    assert out[1].warnings == ("import_refused:attributes_schema_violation",)
+    assert registry.adapter.get_type("c21_05_u", "bad_one", kind="entity") is None
+
+
 def test_c21_05_a_breach_in_stored_data_nulls_the_key_never_the_slots(registry):
     entry = _entry(registry, "entity", {"properties": [_local("x")], "primary_key": ["y"], "title_property": "z"})
     view = entity_declaration(entry, _AllCaps())

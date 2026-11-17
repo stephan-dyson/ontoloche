@@ -6235,6 +6235,15 @@ class AsyncRegistry:
                     # `property_reference_*` warning give one answer: *found* and
                     # *redirected* are resolved, a reader that could not finish is
                     # `unknown`, and only an absent word is explained by the plan.
+                    if (
+                        dry_run
+                        and target is not None
+                        and target.reason is None
+                        and str(target.row.get("status") or "").upper() == "DEPRECATED"
+                    ):
+                        # The real run writes it retired (round 3, lens B finding 1).
+                        unresolved.append({label: word, "why": "retired"})
+                        continue
                     answer, _ = await self._property_reference(namespace, word, "property")
                     if answer in ("found", "redirected"):
                         continue

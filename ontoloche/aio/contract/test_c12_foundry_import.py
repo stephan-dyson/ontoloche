@@ -3135,6 +3135,25 @@ async def test_c12_75_a_shared_slot_reaching_a_live_property_is_resolved(registr
         assert "property_reference_redirected:fullName:foo_spt:person_name" in employee.warnings
         assert report.properties["entities"]["Employee"]["unresolved_shared"] == [], namespace
 
+async def test_c12_75_a_deprecated_shared_property_type_reads_retired_dry_and_real(registry):
+    """Round 3, lens B finding 1: a dry run reports what the real run will, and a
+    blank displayName lands nowhere (lens C finding 2)."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_legacy"))
+    doc["sharedPropertyTypes"]["fooSpt"]["status"] = "DEPRECATED"
+    doc["sharedPropertyTypes"]["fooSpt"]["displayName"] = "   "
+    dry = await registry.import_foundry(doc, namespace="c12_75_d")
+    real = await registry.import_foundry(doc, dry_run=False, namespace="c12_75_d")
+    for report in (dry, real):
+        assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
+            {"shared": "foo_spt", "why": "retired"}
+        ]
+    stored = await registry.adapter.get_type("c12_75_d", "foo_spt", kind="property")
+    assert stored.status == "retired"
+    if await _stores(registry.adapter, "display_name"):
+        assert "display_name" not in (stored.attributes or {})
+
 async def test_c12_77_two_shared_property_types_converting_to_one_word_are_both_held(registry, adapter):
     """K6 in 8C-RUN.md 0.7, pinned (round 1, lens B finding 2): ruling R110 holds
     every member of a collision for kind="property" as for every other kind, nothing

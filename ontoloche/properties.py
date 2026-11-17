@@ -140,7 +140,7 @@ def _key_shape_problem(attributes: dict) -> list[tuple[str, str, str | None, str
         ):
             duplicate = (
                 isinstance(pk, list) and pk and all(isinstance(n, str) and n for n in pk)
-                and len(set(pk)) != len(pk) and _present(attributes, "properties")
+                and len(set(pk)) != len(pk) and isinstance(attributes.get("properties"), list)
             )
             out.append((
                 "2.10-5" if duplicate else "2.10-1", "primary_key", None,
@@ -297,11 +297,12 @@ def entity_problems(attributes: dict) -> list[tuple[str, str, str | None, str]]:
         slot_problems = _slot_problems(attributes["properties"])
         out.extend(slot_problems)
         if not slot_problems:
+            # A key whose shape breached rule 2.10-1 is removed BEFORE the membership
+            # check, never filtered after it: a list or dict title_property is not
+            # hashable, and `in slots` would raise (round 3, lens A finding 1).
             shaped = {k for _, k, _, _ in out}
-            membership = [
-                p for p in _key_membership_problem(attributes) if p[1] not in shaped
-            ]
-            out.extend(membership)
+            held = {k: v for k, v in attributes.items() if k not in shaped}
+            out.extend(_key_membership_problem(held))
     return out
 
 

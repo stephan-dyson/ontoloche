@@ -281,4 +281,22 @@ At `167da18` the full suite ran **2416 passed, 660 skipped, 0 failed** (24 min 2
 
 Lens A's postgres probe left one throwaway schema `probe_<8 hex>` in the shared `open_ontology` database. It is not dropped, under the no-delete rule. It holds probe rows only.
 
-**Next:** round 3 runs on the commit that applies these fixes.
+### §2.3 — Round 3, at `40bf5f2`
+
+**0 BLOCKING, 2 MAJOR, 5 MINOR.** Lens B found no MAJOR, `check_merge_guard.py` and the probe `--assert` exit 0, and the kill row stays at twenty-three. Lens C confirmed round 2's C2-1 fix: `unresolved_shared` agrees with the entity's warning in every case it ran (found, redirected by alias and by successor, retired, absent and held, absent and refused, absent and not in the document, dry and real), and every §1.2 number and the §6.2 id counts recompute (453, 478, 479). The round fails the stopping rule, so round 4 runs.
+
+The full suite started at `40bf5f2` was stopped at 27%, unread, once round 3 had a MAJOR, so its result never mixed with edited files. §1.1's run at `d620b99` and §2.1's at `167da18` stand, and the suite and gates are run again at round 3's fix commit (lens C finding 4).
+
+| # | lens | sev | finding | disposition |
+|---|---|---|---|---|
+| A3-1 | A | **MAJOR** | with `properties` a well-formed list, a `title_property` or `primary_key` holding a list or dict made the validator raise `TypeError`, since rule 2.10-5's membership check ran over the raw attributes and was filtered after. `propose_type` and `approve` raised, and `import_types` aborted the batch after earlier rows were written, breaking *"one bad row never fails the whole import"*. Reproduced on all three legs | **fixed**: a key whose shape breached rule 2.10-1 is removed before the membership check. Pinned by a `C21-05` case at `propose_type` and in an `import_types` batch whose good row still comes back written |
+| C3-1 | C | **MAJOR** | round 2's B2-2 fixed the code only. §2.5a still said `ValueError` when none of the four maps is present, so a document of shared property types alone, which now imports and writes, contradicted the text. §2.2 called B2-2 *fixed* | **fixed** in §2.5a. §2.2 stays as committed and this row corrects it |
+| A3-2 | A | MINOR | round 2's A2-4 test read any non-null `properties` as present, so a non-list `properties` with a duplicate key was labelled 2.10-5 | **fixed**: `isinstance(..., list)`, pinned in the new `C21-05` case |
+| B3-1 | B | MINOR | round 2's shared-slot branch dropped the old `dry_run and deprecated` check, so a dry run over a `DEPRECATED` shared property type not yet stored reported the slot resolved while the real run reported `retired` | **fixed**: the check is restored in that branch. Pinned by a `C12-75` dry-and-real case |
+| C3-2 | C | MINOR | a shared property type's whitespace `displayName` was written as `display_name`, though a slot's lands nowhere | **fixed**: the same blank test. Pinned in the same `C12-75` case and stated in §2.5a |
+| C3-3 | C | MINOR | neither table said a missing or unlisted `dataType` lands `opaque` | **fixed**: one sentence in §2.5a. `source_type` is the wire form, `{}` when absent **[Observed]** `land(None)`, `land({"type": "zzz"})` |
+| C3-4 | C | MINOR | §2.2 recorded no full-suite run after round 2's code fixes | **taken**: see the paragraph above |
+
+Lens B also noted B1 (§2.1) now covers the alias case: an unrelated live property aliased to a held shared property type's word resolves the slot, and the entity does warn `property_reference_redirected`. Recorded, no worse than B1. Lens A left one Postgres schema `oo_r3a_aa4f7ec0`, not dropped under the no-delete rule.
+
+**Next:** round 4 runs on the commit that applies these fixes.

@@ -534,7 +534,11 @@ def plan(
         )
         attributes = {
             "base_type": base,
-            "display_name": spt.get("displayName") or None,
+            "display_name": (
+                spt["displayName"]
+                if isinstance(spt.get("displayName"), str) and spt["displayName"].strip()
+                else None
+            ),
             "item_type": item,
             "source_type": source,
             "foundry_shared_property": {
