@@ -128,6 +128,11 @@ from ontoloche.types import (  # noqa: E402
     TypeEntry,
 )
 
+#: Part A parses the SYNC registry only. ``ontoloche/aio/registry.py`` is generated from
+#: it by ``tools/unasync.py`` (and ``unasync.py --check`` fails when it drifts), and
+#: ``ontoloche/foundry.py`` builds rows for ``import_types`` and writes nothing itself,
+#: so neither can hold a writer of ``successor`` or ``aliases`` this scan misses.
+#: Stated rather than implied (row 8c, round 1, lens B finding 5).
 REGISTRY_SOURCE = ROOT / "ontoloche" / "registry.py"
 
 #: The three fields on a stored `TypeRecord` that re-point what a name RESOLVES to.

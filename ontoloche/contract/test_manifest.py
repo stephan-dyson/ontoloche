@@ -30,7 +30,7 @@ EXPECTED_PER_GROUP = {
     9: 38,
     10: 27,
     11: 5,
-    12: 68,
+    12: 77,
     13: 5,
     14: 7,
     15: 13,
@@ -38,8 +38,10 @@ EXPECTED_PER_GROUP = {
     17: 53,
     18: 10,
     19: 108,
+    # Row 8c: INTERFACE.md 2.10, property declarations. C20 is INGEST.md's, still planned.
+    21: 17,
 }
-TOTAL = 453
+TOTAL = 479
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 

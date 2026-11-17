@@ -9,12 +9,15 @@ the existing import door, not a new door.
 The mapping is ``8A-RUN.md`` §0.2, fixed before the code:
 
 * interface type -> ``kind="predicate"``
+* shared property type -> ``kind="property"`` (row 8c, INTERFACE.md 2.10)
 * object type -> ``kind="entity"``, its implemented interfaces as predicates, and its
-  properties carried verbatim and marked not validated (R105's interim ``carry``)
+  properties as 2.10 slots: shared where ``sharedPropertyTypeMapping`` maps one onto
+  it, local otherwise. What a slot has no field for stays carried, verbatim and not
+  validated (R105's ``carry``, narrowed by row 8c)
 * link type -> ``kind="edge"``, one family per ``linkTypeRid``, both sides paired
 * action type -> ``kind="action"`` declaring **none** of ``ACTIONS.md`` §2.2's keys,
   with the ``Effect.op`` each logic rule *would* map to reported, not declared
-* query types, shared property types and value types -> counted, not imported
+* query types and value types -> counted, not imported
 
 Four holds happen here and write nothing: ``definition_missing`` (R109),
 ``name_collision_after_conversion`` (R110), ``name_invalid`` and
@@ -24,9 +27,12 @@ Four holds happen here and write nothing: ``definition_missing`` (R109),
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
+
+from ._resolve import identity_key
 
 #: INTERFACE.md 2.1's name rule. Restated rather than imported from ``registry`` so this
 #: module stays importable on its own. ``C12-37`` holds the two to the same answers.
@@ -46,8 +52,10 @@ HOLD_REASONS = (
 )
 
 #: The order rows are handed to ``import_types``: a predicate exists before the entity
-#: declaring it, and an entity before the edge family naming it as an endpoint.
-KIND_ORDER = ("predicate", "entity", "edge", "action")
+#: declaring it, a shared property before the entity whose slot names it (INTERFACE.md
+#: 2.10 rule 2.10-10's import-order note), and an entity before the edge family naming
+#: it as an endpoint.
+KIND_ORDER = ("predicate", "property", "entity", "edge", "action")
 
 #: Brief question 4, interim and REPORTED ONLY (``8A-RUN.md`` §0.7). Imported action
 #: families declare no effects, so nothing in this row refuses on this table.
@@ -67,8 +75,11 @@ _OBJECT_TYPE_MAPPED = frozenset(
      "primaryKey", "titleProperty"}
 )
 
-_NOT_IMPORTED = ("queryTypes", "sharedPropertyTypes", "valueTypes")
-_TYPE_MAPS = ("objectTypes", "interfaceTypes", "actionTypes", "actionTypesFullMetadata")
+_NOT_IMPORTED = ("queryTypes", "valueTypes")
+_TYPE_MAPS = (
+    "objectTypes", "interfaceTypes", "actionTypes", "actionTypesFullMetadata",
+    "sharedPropertyTypes",  # row 8c round 2: imported, so it counts
+)
 
 
 def convert_name(api_name: str) -> str:
@@ -143,6 +154,11 @@ class FoundryImportReport:
     #: ``names=`` and ``definitions=`` keys that matched no item (round 1). A key that
     #: matches nothing lifts nothing, and used to say nothing.
     unmatched: dict = field(default_factory=lambda: {"names": [], "definitions": []})
+    #: Row 8c, INTERFACE.md 2.5a: every object type property, as a slot or in
+    #: ``no_home`` with a reason. ``seen``, ``slots``, per-object-type ``entities``
+    #: counts (``local``, ``shared``, ``opaque``, ``undescribed``, ``held``,
+    #: ``unresolved_shared``), and ``no_home``.
+    properties: dict = field(default_factory=dict)
 
     def count(self, **match: Any) -> int:
         """``report.count(outcome="held", kind="edge")``."""
@@ -172,6 +188,198 @@ class _Planned:
 def _named(key: str, names: dict[str, str]) -> str:
     mapped = names.get(key)
     return mapped if mapped is not None else convert_name(key.rsplit(".", 1)[-1])
+
+
+# ------------------------------------------------------------ properties, row 8c
+#: Foundry scalar types: ``(base_type, source_type kept)``, INTERFACE.md 2.10's table.
+_SCALARS = {
+    "string": ("str", False),
+    "integer": ("int", False),
+    "long": ("int", True),
+    "short": ("int", True),
+    "byte": ("int", True),
+    "double": ("float", False),
+    "float": ("float", True),
+    "boolean": ("bool", False),
+    "date": ("date", False),
+    "timestamp": ("datetime", False),
+}
+#: Foundry types this registry cannot type: ``opaque``, with ``source_type`` always.
+OPAQUE_TYPES = frozenset(
+    {"geopoint", "geoshape", "attachment", "mediaReference", "timeseries",
+     "geotimeSeriesReference", "vector", "cipherText", "marking"}
+)
+#: The no-home reasons the dry-run ``properties`` report gives (``8C-RUN.md`` §0.2
+#: item 7). ``no_slot_field:<key>`` is open-ended, so it is a prefix.
+NO_HOME_REASONS = (
+    "interface_property_contract",
+    "struct_fields",
+    "array_reducers",
+    "implements_interfaces2",
+    "slot_name_invalid",
+    "shared_word_invalid",
+    "no_slot_field",
+)
+#: INTERFACE.md 2.10 rule 2.10-4, restated so this module stays importable alone.
+SLOT_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+#: Property keys a LOCAL slot gives a field to. Everything else is carried.
+_LOCAL_MAPPED = frozenset({"dataType", "description", "displayName"})
+#: A SHARED slot has only ``display_name`` (rule 2.10-3), so its own ``dataType`` and
+#: ``description`` are carried: the shared property's entry is their home.
+_SHARED_MAPPED = frozenset({"displayName"})
+#: Interface keys holding the property contract an implementing type must meet.
+_INTERFACE_PROPERTY_KEYS = ("properties", "propertiesV2", "allProperties", "allPropertiesV2")
+
+
+def _strip_nulls(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _strip_nulls(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [_strip_nulls(v) for v in value]
+    return value
+
+
+def source_type(data_type: Any) -> str:
+    """INTERFACE.md 2.10's ``source_type`` serialisation, for one Foundry type object.
+
+    The type's own name when that is all it has, and otherwise the **whole object** in
+    its wire form, every ``null`` omitted at every depth, as
+    ``json.dumps(obj, sort_keys=True, separators=(",", ":"))``.
+    """
+    # A value that is not a type object keeps ITS wire form, never "{}" (round 4,
+    # lens A finding 3 and lens C finding 3): only an absent type is "{}".
+    obj = _strip_nulls(data_type if data_type is not None else {})
+    if isinstance(obj, dict) and set(obj) == {"type"} and isinstance(obj["type"], str):
+        return obj["type"]
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def land(data_type: Any) -> tuple[str, str | None, str | None, list[str]]:
+    """``(base_type, item_type, source_type, no-home reasons)`` for one Foundry type.
+
+    INTERFACE.md 2.10's table. An unknown or missing type lands ``opaque`` with its
+    whole object as ``source_type``, so it says what it holds (rule 2.10-6). An array
+    of arrays has no ``item_type`` that rule 2.10-6 allows except ``opaque``, which it
+    takes, the whole array object saying what it is.
+    """
+    if data_type is not None and not isinstance(data_type, dict):
+        return "opaque", None, source_type(data_type), []
+    dt = data_type or {}
+    kind = dt.get("type") if isinstance(dt.get("type"), str) else None
+    stripped = _strip_nulls(dt)
+    if kind in _SCALARS:
+        base, keep = _SCALARS[kind]
+        return base, None, (source_type(dt) if keep or set(stripped) != {"type"} else None), []
+    if kind == "decimal":
+        return "decimal", None, source_type(dt), []
+    if kind == "struct":
+        return "dict", None, source_type(dt), ["struct_fields"]
+    if kind == "array":
+        sub_base, _, sub_source, sub_reasons = land(dt.get("subType"))
+        item = "opaque" if sub_base == "list" else sub_base
+        reasons = list(sub_reasons)
+        if dt.get("reducers"):
+            reasons.append("array_reducers")
+        keep = sub_source is not None or bool(dt.get("reducers")) or sub_base == "list"
+        return "list", item, (source_type(dt) if keep else None), reasons
+    return "opaque", None, source_type(dt), []
+
+
+def _bare_word(word: str) -> bool:
+    """Rule 2.10-8: the name pattern, and its own ``identity_key``."""
+    return bool(NAME_RE.fullmatch(word)) and identity_key(word) == word
+
+
+def _no_home(owner: str, prop: str | None, reason: str) -> dict:
+    return {"type": owner, "property": prop, "reason": reason}
+
+
+def _object_type_properties(
+    api: str, full: dict, shared_words: dict[str, str], names: dict[str, str]
+) -> tuple[dict, dict, list[dict], dict]:
+    """One object type's properties as slots. ``(declaration, carry, no_home, counts)``.
+
+    ``declaration`` holds ``properties``, ``primary_key`` and ``title_property``
+    (INTERFACE.md 2.10 rule 2.10-1). ``carry`` is the narrowed R105 carry: per property
+    apiName, every key the slot gives no field to, verbatim. Every property is a slot
+    or is in ``no_home`` as ``slot_name_invalid``, never neither.
+    """
+    ot = full.get("objectType") or {}
+    props = ot.get("properties") or {}
+    if not isinstance(props, dict):
+        raise TypeError(f"objectType {api!r}: properties is not a map (round 4)")
+    mapping = {
+        prop: spt
+        for spt, prop in (full.get("sharedPropertyTypeMapping") or {}).items()
+        if isinstance(prop, str)
+    }
+    slots: list[dict] = []
+    carry: dict[str, dict] = {}
+    no_home: list[dict] = []
+    counts = {"local": 0, "shared": 0, "opaque": 0, "undescribed": 0}
+    for prop_api, prop in props.items():
+        if prop is not None and not isinstance(prop, dict):
+            prop = {"dataType": prop}  # lands opaque, its wire form in source_type
+        prop = prop or {}
+        if not SLOT_NAME_RE.fullmatch(prop_api):
+            carry[prop_api] = dict(prop)
+            no_home.append(_no_home(api, prop_api, "slot_name_invalid"))
+            continue
+        slot: dict = {"name": prop_api}
+        if isinstance(prop.get("displayName"), str) and prop["displayName"].strip():
+            slot["display_name"] = prop["displayName"]
+        spt = mapping.get(prop_api)
+        word = (shared_words.get(spt) or _named(spt, names)) if spt else None
+        if spt and not _bare_word(word):
+            no_home.append(_no_home(api, prop_api, "shared_word_invalid"))
+            word = None
+        if word is not None:
+            slot["shared"] = word
+            mapped = _SHARED_MAPPED
+            counts["shared"] += 1
+        else:
+            base, item, source, reasons = land(prop.get("dataType"))
+            slot["base_type"] = base
+            if item is not None:
+                slot["item_type"] = item
+            if source is not None:
+                slot["source_type"] = source
+            description = prop.get("description")
+            if isinstance(description, str) and description.strip():
+                slot["description"] = description
+            else:
+                counts["undescribed"] += 1
+            if "opaque" in (base, item):
+                counts["opaque"] += 1
+            no_home.extend(_no_home(api, prop_api, r) for r in reasons)
+            mapped = _LOCAL_MAPPED
+            counts["local"] += 1
+        kept = {k: v for k, v in prop.items() if k not in mapped}
+        if kept:
+            carry[prop_api] = kept
+            for key, value in kept.items():
+                if value not in (None, [], {}, ""):
+                    no_home.append(_no_home(api, prop_api, f"no_slot_field:{key}"))
+        slots.append(slot)
+    declared = {s["name"] for s in slots}
+    declaration: dict = {"properties": slots}
+    raw_pk = ot.get("primaryKey")
+    pk = [raw_pk] if isinstance(raw_pk, str) else raw_pk
+    if isinstance(pk, list) and pk and all(isinstance(k, str) and k in declared for k in pk):
+        declaration["primary_key"] = list(pk)
+    elif raw_pk not in (None, [], ""):
+        # Naming no slot, or of any other shape: carried, never lost (round 4, C4-4).
+        carry["$primaryKey"] = raw_pk
+        no_home.append(_no_home(api, None, "no_slot_field:primaryKey"))
+    title = ot.get("titleProperty")
+    if isinstance(title, str) and title in declared:
+        declaration["title_property"] = title
+    elif title not in (None, ""):
+        carry["$titleProperty"] = title
+        no_home.append(_no_home(api, None, "no_slot_field:titleProperty"))
+    if full.get("implementsInterfaces2"):
+        no_home.append(_no_home(api, None, "implements_interfaces2"))
+    return declaration, carry, no_home, counts
 
 
 def _definition(source: Any, key: str, definitions: dict[str, str]) -> str | None:
@@ -267,8 +475,9 @@ def plan(
 ) -> tuple[list[_Planned], dict]:
     """Every Foundry type in ``doc`` as a planned item, holds applied, in KIND_ORDER.
 
-    Returns ``(planned, not_imported, unmatched)``. A held item carries ``reason`` and no row is
-    sent for it.
+    Returns ``(planned, not_imported, unmatched, properties)``. A held item carries
+    ``reason`` and no row is sent for it. ``properties`` is the dry-run report's
+    section of that name (row 8c).
     """
     # **Not a full-metadata document** (round 3). A dict with none of the type maps
     # (a pydantic `model_dump()` without `by_alias=True` gives `object_types`) read as
@@ -309,6 +518,60 @@ def plan(
         )
 
     iface_names = {p.api_name: p.name for p in planned}
+    no_home: list[dict] = []
+    for api, iface in sorted((doc.get("interfaceTypes") or {}).items()):
+        contract: dict = {}
+        for key in _INTERFACE_PROPERTY_KEYS:
+            if isinstance(iface.get(key), dict):
+                contract.update(dict.fromkeys(iface[key]))
+        no_home.extend(_no_home(api, p, "interface_property_contract") for p in contract)
+
+    # **Shared property types are `kind="property"` entries** (row 8c, INTERFACE.md
+    # 2.10). Their description is their definition, so R109's hold applies unchanged.
+    shared_words: dict[str, str] = {}
+    for api, spt in sorted((doc.get("sharedPropertyTypes") or {}).items()):
+        spt = spt if isinstance(spt, dict) else {}
+        base, item, source, reasons = land(spt.get("dataType"))
+        no_home.extend(_no_home(api, None, r) for r in reasons)
+        no_home.extend(
+            _no_home(api, None, f"no_slot_field:{k}")
+            for k, v in spt.items()
+            if k not in ("apiName", "rid", "description", "dataType", "displayName", "status")
+            and v not in (None, [], {}, "")
+        )
+        attributes = {
+            "base_type": base,
+            "display_name": (
+                spt["displayName"]
+                if isinstance(spt.get("displayName"), str) and spt["displayName"].strip()
+                else None
+            ),
+            "item_type": item,
+            "source_type": source,
+            "foundry_shared_property": {
+                "validated": False,
+                **{k: v for k, v in spt.items()
+                   if k not in ("apiName", "rid", "description", "dataType", "displayName")},
+            },
+        }
+        name = _named(api, names)
+        shared_words[api] = name
+        planned.append(
+            _Planned(
+                kind="property", api_name=api, key=api, name=name,
+                row={
+                    "definition": _definition(spt.get("description"), api, definitions),
+                    "status": spt.get("status"),
+                    "apiName": api,
+                    **({"rid": spt["rid"]} if "rid" in spt else {}),
+                    "attributes": {k: v for k, v in attributes.items() if v is not None},
+                },
+                detail={},
+            )
+        )
+
+    entity_counts: dict[str, dict] = {}
+    seen = 0
     entity_names: dict[str, str] = {}
     for api, full in sorted((doc.get("objectTypes") or {}).items()):
         ot = full.get("objectType") or {}
@@ -322,13 +585,18 @@ def plan(
         declared += [i for i in (full.get("implementsInterfaces2") or {}) if i not in declared]
         predicates = [iface_names.get(i, _named(i, names)) for i in declared]
         properties = ot.get("properties") or {}
+        declaration, carry, owned, counts = _object_type_properties(
+            api, full, shared_words, names
+        )
+        seen += len(properties)
+        no_home.extend(owned)
+        entity_counts[api] = {**counts, "name": name, "held": None, "unresolved_shared": []}
         attributes = {
-            "foundry_properties": {
-                "validated": False,
-                "primaryKey": ot.get("primaryKey"),
-                "titleProperty": ot.get("titleProperty"),
-                "properties": properties,
-            },
+            **declaration,
+            # **R105's carry, narrowed** (row 8c, 8C-RUN.md §0.2 item 6): per property,
+            # only what the slot has no field for. Type, display name, description,
+            # key and title now have a home and are not said twice.
+            "foundry_properties": {"validated": False, "properties": carry},
             "foundry_object_type": {
                 k: v for k, v in ot.items() if k not in _OBJECT_TYPE_MAPPED
             },
@@ -362,8 +630,15 @@ def plan(
                     "attributes": attributes,
                 },
                 detail={"predicates": predicates},
-                refs=[("predicate", "interface", i, n) for i, n in zip(declared, predicates)],
-                carried=len(properties),
+                refs=[("predicate", "interface", i, n) for i, n in zip(declared, predicates)]
+                + [
+                    ("shared", "property", spt, s["shared"])
+                    for s in declaration["properties"] if "shared" in s
+                    for spt, prop in (full.get("sharedPropertyTypeMapping") or {}).items()
+                    if prop == s["name"]
+                ],
+                # `$primaryKey` / `$titleProperty` are not properties (round 1, C4).
+                carried=sum(1 for k in carry if not k.startswith("$")),
             )
         )
 
@@ -465,7 +740,16 @@ def plan(
         "names": sorted(k for k in names if k not in name_keys),
         "definitions": sorted(k for k in definitions if k not in keys),
     }
-    return planned, not_imported, unmatched
+    for p in planned:
+        if p.kind == "entity" and p.api_name in entity_counts:
+            entity_counts[p.api_name]["held"] = p.reason
+    report = {
+        "seen": seen,
+        "slots": sum(c["local"] + c["shared"] for c in entity_counts.values()),
+        "entities": entity_counts,
+        "no_home": no_home,
+    }
+    return planned, not_imported, unmatched, report
 
 
 def _hold(planned: list[_Planned]) -> None:

@@ -1666,7 +1666,8 @@ def test_c12_34_a_dry_run_over_palantirs_employee_ontology_writes_nothing(
     unpaired = [i.name for i in _items(report, kind="edge") if i.detail.get("inverse_label") is None]
     assert unpaired == ["visited_offices"]
     assert sum(i.carried_properties for i in report.items) == 19
-    assert report.not_imported == {"queryTypes": 0, "sharedPropertyTypes": 0, "valueTypes": 0}
+    # Row 8c: shared property types are imported now (`C12-69`), so not counted here.
+    assert report.not_imported == {"queryTypes": 0, "valueTypes": 0}
     assert report.looks_like == ()
     employee = _items(report, name="employee")[0]
     assert employee.detail["predicates"] == ["foo_interface"]
@@ -1683,7 +1684,9 @@ def test_c12_35_a_dry_run_over_palantirs_legacy_ontology(registry):
         "object_with_timestamp_primary_key", "office",
     ]
     assert report.count(outcome="would_write", kind="action") == 11
-    assert report.count(outcome="would_write") == 19
+    # Row 8c: `fooSpt` is the twentieth, a `kind="property"` entry (`C12-69`).
+    assert report.count(outcome="would_write", kind="property") == 1
+    assert report.count(outcome="would_write") == 20
     assert report.count(outcome="held", reason="definition_missing") == 16
     assert _names(report, kind="entity", reason="definition_missing") == [
         "bgao_nfl_player", "equipment", "person", "task", "todo",
@@ -1699,7 +1702,7 @@ def test_c12_35_a_dry_run_over_palantirs_legacy_ontology(registry):
     ], "§1.1's unpaired link sides (round 4)"
     assert report.count(outcome="held") == 16, "no collision, no bad name, no odd status"
     assert sum(i.carried_properties for i in report.items) == 75
-    assert report.not_imported == {"queryTypes": 21, "sharedPropertyTypes": 1, "valueTypes": 0}
+    assert report.not_imported == {"queryTypes": 21, "valueTypes": 0}
     assert report.looks_like == (), "the [Observed] legacy cell of §1.1 (round 2)"
     ops = [e["op"] for i in _items(report, outcome="would_write", kind="action")
            for e in i.detail["effects"]]
@@ -1734,16 +1737,16 @@ def test_c12_36_a_real_import_writes_the_would_write_set_and_carries_properties(
     assert provenance.imported_from["system"] == "foundry"
     assert "Employee" not in (employee.aliases or ())
 
-    # R105's interim `carry`: verbatim, marked not validated. Nothing reads it as a
-    # schema, because row 8b decides what properties become. A backend that declines
-    # `stores_attributes` has nowhere to put it, which `C12-04` already covers.
+    # R105's `carry`, marked not validated, and narrowed by row 8c to what a slot has
+    # no field for: the key and title moved to `primary_key` and `title_property`
+    # (`C12-70`), and what stays per property is `C12-73`'s.
     if adapter.capabilities().stores_attributes:
         carried = employee.attributes["foundry_properties"]
         source = doc["objectTypes"]["Employee"]["objectType"]
         assert carried["validated"] is False
-        assert carried["primaryKey"] == source["primaryKey"]
-        assert carried["titleProperty"] == source["titleProperty"]
-        assert carried["properties"] == source["properties"]
+        assert "primaryKey" not in carried and "titleProperty" not in carried
+        assert employee.attributes["primary_key"] == [source["primaryKey"]]
+        assert employee.attributes["title_property"] == source["titleProperty"]
 
 
 def test_c12_37_a_converted_name_collision_is_held_whole_and_names_resolves_it(
@@ -2149,7 +2152,7 @@ def _every(registry):
     }
 
 
-KIND_ORDER_FOR_TESTS = ("predicate", "entity", "edge", "action")
+KIND_ORDER_FOR_TESTS = ("predicate", "property", "entity", "edge", "action")
 
 
 def test_c12_49_a_real_import_is_one_import_types_call_and_writes_nothing_else(
@@ -2980,3 +2983,343 @@ def test_c12_68_a_changed_value_is_a_loss_and_a_held_item_reports_none(
             item = _items(reg.import_foundry(held_doc, dry_run=dry_run), api_name="Solo")[0]
             assert (item.outcome, item.reason) == ("held", "definition_missing")
             assert "replaces" not in item.detail and "attributes_not_stored" not in item.detail
+
+
+# ================================================================ row 8c: properties
+# INTERFACE.md 2.10 through the Foundry importer. `8C-RUN.md` §0.6 named these ids
+# before they were written. Each runs on all three backends; what a backend that keeps
+# no attributes cannot hold, it is asked only to say (rule 2.10-16).
+
+from ..foundry import NO_HOME_REASONS, land  # noqa: E402
+from ..foundry import source_type as foundry_source_type  # noqa: E402
+from ..properties import declaration_problem, entity_declaration  # noqa: E402
+
+FIXTURES = ("faux_employee", "faux_legacy", "uc2_cms", "uc3_nyc", "edge_cases")
+
+
+def _stores(adapter, key):
+    return adapter.capabilities().stores_attribute(key)
+
+
+def _slots(report_or_doc_planned, api):
+    from ..foundry import plan
+
+    planned, *_ = plan(report_or_doc_planned)
+    return next(p for p in planned if p.kind == "entity" and p.api_name == api).row["attributes"]
+
+
+def test_c12_69_shared_property_types_import_as_property_entries_first(registry, adapter):
+    doc = foundry_fixture("faux_legacy")
+    dry = registry.import_foundry(doc)
+    kinds = [i.kind for i in dry.items]
+    assert kinds.index("property") < kinds.index("entity") and kinds.index("property") > kinds.index("predicate")
+    (foo,) = _items(dry, kind="property")
+    assert (foo.api_name, foo.name, foo.outcome) == ("fooSpt", "foo_spt", "would_write")
+
+    real = registry.import_foundry(doc, dry_run=False)
+    (written,) = _items(real, kind="property")
+    assert written.outcome == "written"
+    assert not [w for w in written.warnings if w.startswith("property_reference")]
+    entry = adapter.get_type("default", "foo_spt", kind="property")
+    assert entry.definition == "A foo"
+    if _stores(adapter, "base_type"):
+        assert entry.attributes["base_type"] == "str" and entry.attributes["display_name"] == "Foo"
+        assert entry.attributes["foundry_shared_property"] == {"validated": False, "typeClasses": []}
+    else:
+        assert "property_declaration_not_stored:base_type" in written.warnings
+
+    # R109 at the property door: no description, no definition, held; `definitions=` lifts it.
+    bare = {"objectTypes": {}, "sharedPropertyTypes": {"barSpt": {"apiName": "barSpt", "dataType": {"type": "long"}}}}
+    held = _items(registry.import_foundry(bare, dry_run=False), kind="property")[0]
+    assert (held.outcome, held.reason) == ("held", "definition_missing")
+    assert adapter.get_type("default", "bar_spt", kind="property") is None
+    lifted = _items(
+        registry.import_foundry(bare, dry_run=False, definitions={"barSpt": "a bar count"}), kind="property"
+    )[0]
+    assert lifted.outcome == "written"
+
+
+def test_c12_70_object_type_properties_become_local_and_shared_slots(registry, adapter):
+    doc = foundry_fixture("faux_legacy")
+    source = doc["objectTypes"]["Employee"]["objectType"]
+    attributes = _slots(doc, "Employee")
+    slots = attributes["properties"]
+    assert [s["name"] for s in slots] == list(source["properties"])
+    assert {s["name"]: s.get("shared") for s in slots if "shared" in s} == {"fullName": "foo_spt"}
+    full_name = next(s for s in slots if s["name"] == "fullName")
+    assert set(full_name) <= {"name", "shared", "display_name"}
+    assert attributes["primary_key"] == [source["primaryKey"]]
+    assert attributes["title_property"] == source["titleProperty"]
+    assert declaration_problem("entity", attributes) is None
+
+    registry.import_foundry(doc, dry_run=False)
+    stored = adapter.get_type("default", "employee", kind="entity")
+    view = entity_declaration(stored, adapter.capabilities())
+    if _stores(adapter, "properties"):
+        assert [p.name for p in view.properties] == list(source["properties"])
+        assert next(p for p in view.properties if p.name == "fullName").shared == "foo_spt"
+    else:
+        assert view.why_absent["properties"] == "not_stored"
+    if _stores(adapter, "primary_key"):
+        assert view.primary_key == (source["primaryKey"],)
+
+
+@pytest.mark.parametrize(
+    "data_type, expected",
+    [
+        ({"type": "string"}, ("str", None, None)),
+        ({"type": "integer"}, ("int", None, None)),
+        ({"type": "long"}, ("int", None, "long")),
+        ({"type": "short"}, ("int", None, "short")),
+        ({"type": "byte"}, ("int", None, "byte")),
+        ({"type": "double"}, ("float", None, None)),
+        ({"type": "float"}, ("float", None, "float")),
+        ({"type": "decimal"}, ("decimal", None, "decimal")),
+        ({"type": "decimal", "precision": 10, "scale": 2},
+         ("decimal", None, '{"precision":10,"scale":2,"type":"decimal"}')),
+        ({"type": "decimal", "precision": None, "scale": None}, ("decimal", None, "decimal")),
+        ({"type": "boolean"}, ("bool", None, None)),
+        ({"type": "date"}, ("date", None, None)),
+        ({"type": "timestamp"}, ("datetime", None, None)),
+        ({"type": "array", "subType": {"type": "string"}, "reducers": []}, ("list", "str", None)),
+        ({"type": "array", "subType": {"type": "double"}, "reducers": [{"direction": "DESCENDING_NULLS_LAST"}]},
+         ("list", "float",
+          '{"reducers":[{"direction":"DESCENDING_NULLS_LAST"}],"subType":{"type":"double"},"type":"array"}')),
+        ({"type": "array", "subType": {"type": "long"}, "reducers": []},
+         ("list", "int", '{"reducers":[],"subType":{"type":"long"},"type":"array"}')),
+        ({"type": "array", "subType": {"type": "geopoint"}, "reducers": []},
+         ("list", "opaque", '{"reducers":[],"subType":{"type":"geopoint"},"type":"array"}')),
+        ({"type": "array", "subType": {"type": "array", "subType": {"type": "string"}}},
+         ("list", "opaque", '{"subType":{"subType":{"type":"string"},"type":"array"},"type":"array"}')),
+        ({"type": "struct", "structFieldTypes": [{"apiName": "a", "dataType": {"type": "string"}, "rid": None}],
+          "mainValue": None},
+         ("dict", None, '{"structFieldTypes":[{"apiName":"a","dataType":{"type":"string"}}],"type":"struct"}')),
+        ({"type": "vector", "dimension": 3, "embeddingModel": None}, ("opaque", None, '{"dimension":3,"type":"vector"}')),
+        *[({"type": t}, ("opaque", None, t)) for t in (
+            "geopoint", "geoshape", "attachment", "mediaReference", "timeseries",
+            "geotimeSeriesReference", "vector", "cipherText", "marking")],
+        ({"type": "notYetPublished", "x": 1}, ("opaque", None, '{"type":"notYetPublished","x":1}')),
+        # Round 4: not a type object, or a type that is not a str, keeps its wire form.
+        (None, ("opaque", None, "{}")),
+        ("string", ("opaque", None, '"string"')),
+        (["string"], ("opaque", None, '["string"]')),
+        ({"type": ["string"]}, ("opaque", None, '{"type":["string"]}')),
+        ({"type": "array", "subType": {"type": {"k": 1}}}, ("list", "opaque", '{"subType":{"type":{"k":1}},"type":"array"}')),
+    ],
+)
+def test_c12_71_the_type_table_and_the_source_type_wire_form(data_type, expected):
+    base, item, source, _ = land(data_type)
+    assert (base, item, source) == expected
+    slot = {"name": "x", "base_type": base, "description": "d"}
+    slot.update({k: v for k, v in (("item_type", item), ("source_type", source)) if v is not None})
+    assert declaration_problem("entity", {"properties": [slot]}) is None, "every landing is a legal slot (2.10-6)"
+    assert foundry_source_type({"type": "geopoint", "srid": None}) == "geopoint"
+
+
+def test_c12_72_an_undescribed_property_is_written_with_no_description_and_no_warning(registry, adapter):
+    """Rule 2.10-21 as today, measured: `reserved: Q106`. Not filled, not warned."""
+    doc = foundry_fixture("faux_legacy")
+    dry = registry.import_foundry(doc)
+    assert sum(e["undescribed"] for e in dry.properties["entities"].values()) == 60
+    report = registry.import_foundry(doc, dry_run=False)
+    assert report.count(outcome="refused") == 0
+    for item in _items(report, kind="entity", outcome="written"):
+        assert not [w for w in item.warnings if w.startswith("property_reference")], item.warnings
+    blank = _slots(doc, "Employee")["properties"]
+    source = doc["objectTypes"]["Employee"]["objectType"]["properties"]
+    for slot in blank:
+        if "shared" in slot:
+            continue
+        said = (source[slot["name"]].get("description") or "").strip()
+        assert ("description" in slot) == bool(said)
+    if _stores(adapter, "properties"):
+        office = adapter.get_type("default", "office", kind="entity")
+        assert any("description" not in s for s in office.attributes["properties"])
+
+
+def test_c12_73_the_narrowed_carry_keeps_only_what_has_no_field(registry, adapter):
+    doc = foundry_fixture("faux_legacy")
+    source = doc["objectTypes"]["Employee"]["objectType"]["properties"]
+    attributes = _slots(doc, "Employee")
+    carry = attributes["foundry_properties"]
+    assert carry["validated"] is False and set(carry) == {"validated", "properties"}
+    for name, prop in source.items():
+        slot = next(s for s in attributes["properties"] if s["name"] == name)
+        mapped = {"displayName"} if "shared" in slot else {"dataType", "description", "displayName"}
+        assert carry["properties"].get(name, {}) == {k: v for k, v in prop.items() if k not in mapped}, name
+    assert carry["properties"]["fullName"]["dataType"] == {"type": "string"}, "a shared slot's own type is kept"
+    registry.import_foundry(doc, dry_run=False)
+    if _stores(adapter, "foundry_properties"):
+        stored = adapter.get_type("default", "employee", kind="entity").attributes["foundry_properties"]
+        assert stored == carry
+
+
+def test_c12_74_every_fixture_property_is_a_slot_or_has_a_reason(registry):
+    seen = slots = shared = undescribed = 0
+    for i, name in enumerate(FIXTURES):
+        report = registry.import_foundry(foundry_fixture(name), namespace=f"c12_74_{i}")
+        props = report.properties
+        invalid = sum(1 for n in props["no_home"] if n["reason"] == "slot_name_invalid")
+        assert props["seen"] == props["slots"] + invalid, name
+        for entry in props["no_home"]:
+            assert entry["reason"].split(":", 1)[0] in NO_HOME_REASONS, entry
+        seen += props["seen"]
+        slots += props["slots"]
+        shared += sum(e["shared"] for e in props["entities"].values())
+        undescribed += sum(e["undescribed"] for e in props["entities"].values())
+    assert (seen, slots, shared, undescribed) == (110, 110, 2, 81)
+
+    legacy = registry.import_foundry(foundry_fixture("faux_legacy"), namespace="c12_74_x").properties
+    assert {e["name"] for e in legacy["entities"].values() if e["held"] == "definition_missing"} == {
+        "bgao_nfl_player", "equipment", "person", "task", "todo",
+    }
+    reasons = {(n["type"], n["property"], n["reason"]) for n in legacy["no_home"]}
+    assert ("Employee", None, "implements_interfaces2") in reasons
+    assert ("Employee", "bonusHistory", "struct_fields") in reasons
+    assert ("Employee", "performanceScores", "array_reducers") in reasons
+    assert ("Employee", "fullName", "no_slot_field:dataType") in reasons
+    assert any(r == "interface_property_contract" and t == "FooInterface" for t, _, r in reasons)
+
+    odd = {"objectTypes": {"Thing": {"objectType": {
+        "apiName": "Thing", "description": "a thing", "primaryKey": "bad-key",
+        "properties": {"bad-key": {"dataType": {"type": "string"}}, "ok": {"dataType": {"type": "string"}}},
+    }}}}
+    report = registry.import_foundry(odd, namespace="c12_74_odd")
+    assert report.properties["seen"] == 2 and report.properties["slots"] == 1
+    assert {n["reason"] for n in report.properties["no_home"]} == {"slot_name_invalid", "no_slot_field:primaryKey"}
+    attributes = _slots(odd, "Thing")
+    assert "primary_key" not in attributes and attributes["foundry_properties"]["properties"]["bad-key"]
+    assert declaration_problem("entity", attributes) is None
+
+
+def test_c12_74_a_document_of_shared_property_types_alone_imports(registry):
+    """Round 2: lens B finding 2 (a document holding only sharedPropertyTypes is one)
+    and lens C finding 3 (a shared property type's facts with no field are in no_home)."""
+    spt = dict(foundry_fixture("faux_legacy")["sharedPropertyTypes"]["fooSpt"])
+    spt["valueTypeApiName"] = "some_value_type"
+    report = registry.import_foundry({"sharedPropertyTypes": {"fooSpt": spt}}, namespace="c12_74_2")
+    assert _names(report, kind="property") == ["foo_spt"]
+    assert {"type": "fooSpt", "property": None, "reason": "no_slot_field:valueTypeApiName"} in report.properties["no_home"]
+
+
+def test_c12_75_palantirs_dangling_mapping_is_written_and_warned(registry, adapter):
+    """`employee` maps `fooSpt` onto `fullName` and never defines `fooSpt`."""
+    report = registry.import_foundry(foundry_fixture("faux_employee"), dry_run=False)
+    employee = _items(report, kind="entity", name="employee")[0]
+    assert employee.outcome == "written"
+    assert "property_reference_unregistered:fullName:foo_spt" in employee.warnings
+    assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
+        {"shared": "foo_spt", "why": "not_in_document"}
+    ]
+    legacy = registry.import_foundry(foundry_fixture("faux_legacy"), dry_run=False, namespace="c12_75")
+    item = _items(legacy, kind="entity", name="employee")[0]
+    assert not [w for w in item.warnings if w.startswith("property_reference")]
+    assert legacy.properties["entities"]["Employee"]["unresolved_shared"] == []
+
+
+def test_c12_74_no_shape_of_a_property_key_or_title_is_lost(registry):
+    """Round 4 (lens A 2 and 3, lens C 4 and 6): a property that is not an object lands
+    opaque with its wire form, a key or title of any shape is carried, a shared property
+    type's status is its lifecycle and not no_home, and a properties list is refused."""
+    doc = {
+        "objectTypes": {"Thing": {"objectType": {
+            "apiName": "Thing", "description": "t", "primaryKey": 5, "titleProperty": ["x"],
+            "properties": {"x": ["oops"], "y": {"dataType": {"type": "string"}, "description": "d"}},
+        }}},
+        "sharedPropertyTypes": {"aSpt": {
+            "apiName": "aSpt", "description": "a", "dataType": {"type": "string"}, "status": "ACTIVE",
+        }},
+    }
+    report = registry.import_foundry(doc, namespace="c12_74_3")
+    thing = _items(report, kind="entity", name="thing")[0]
+    assert thing.outcome == "would_write", thing
+    no_home = report.properties["no_home"]
+    assert {"type": "Thing", "property": None, "reason": "no_slot_field:primaryKey"} in no_home
+    assert {"type": "Thing", "property": None, "reason": "no_slot_field:titleProperty"} in no_home
+    assert not [e for e in no_home if e["type"] == "aSpt"], no_home
+    assert land(["oops"]) == ("opaque", None, '["oops"]', [])
+    bad = {"objectTypes": {"Thing": {"objectType": {"apiName": "Thing", "description": "t", "properties": ["x"]}}}}
+    with pytest.raises(TypeError, match="Thing"):
+        registry.import_foundry(bad, namespace="c12_74_3")
+
+
+def test_c12_76_no_fixture_breaches_a_declaration_rule_on_any_backend(registry, adapter):
+    for i, name in enumerate(FIXTURES):
+        report = registry.import_foundry(foundry_fixture(name), dry_run=False, namespace=f"c12_76_{i}")
+        assert report.count(outcome="refused") == 0, (name, [(x.name, x.reason) for x in _items(report, outcome="refused")])
+        for entry in report.entries:
+            assert "import_refused:attributes_schema_violation" not in entry.warnings
+    cms = registry.import_foundry(foundry_fixture("uc2_cms"), namespace="c12_76_2")
+    assert _names(cms, kind="entity") == sorted(e["name"] for e in cms.properties["entities"].values())
+    for item in _items(cms, kind="entity"):
+        stored = adapter.get_type("c12_76_2", item.name, kind="entity")
+        assert stored is not None
+        if _stores(adapter, "primary_key"):
+            assert entity_declaration(stored, adapter.capabilities()).primary_key is not None
+
+
+# stores_events: the forced retire that builds the successor case records an override.
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
+def test_c12_75_a_shared_slot_reaching_a_live_property_is_resolved(registry):
+    """Round 2, lens C MAJOR 1: unresolved_shared asks rule 2.10-11's reader, so a word
+    answering to a live property by alias or by successor is resolved, exactly as the
+    entity's own warning says redirected."""
+    doc = foundry_fixture("faux_employee")
+
+    def row(name, **kw):
+        return {"name": name, "definition": f"the {name}", "status": "active",
+                "attributes": {"base_type": "str"}, **kw}
+
+    registry.import_types([row("person_name", aliases=["foo_spt"])], kind="property",
+                          system="c12", namespace="c12_75_a", imported_by="import:c12")
+    registry.import_types([row("foo_spt"), row("person_name")], kind="property",
+                          system="c12", namespace="c12_75_s", imported_by="import:c12")
+    registry.retire("foo_spt", "renamed", retired_by="user:sd", successor="person_name",
+                    force=True, namespace="c12_75_s")
+    for namespace in ("c12_75_a", "c12_75_s"):
+        report = registry.import_foundry(doc, dry_run=False, namespace=namespace)
+        employee = _items(report, kind="entity", name="employee")[0]
+        assert "property_reference_redirected:fullName:foo_spt:person_name" in employee.warnings
+        assert report.properties["entities"]["Employee"]["unresolved_shared"] == [], namespace
+
+
+def test_c12_75_a_deprecated_shared_property_type_reads_retired_dry_and_real(registry):
+    """Round 3, lens B finding 1: a dry run reports what the real run will, and a
+    blank displayName lands nowhere (lens C finding 2)."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_legacy"))
+    doc["sharedPropertyTypes"]["fooSpt"]["status"] = "DEPRECATED"
+    doc["sharedPropertyTypes"]["fooSpt"]["displayName"] = "   "
+    dry = registry.import_foundry(doc, namespace="c12_75_d")
+    real = registry.import_foundry(doc, dry_run=False, namespace="c12_75_d")
+    for report in (dry, real):
+        assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
+            {"shared": "foo_spt", "why": "retired"}
+        ]
+    stored = registry.adapter.get_type("c12_75_d", "foo_spt", kind="property")
+    assert stored.status == "retired"
+    if _stores(registry.adapter, "display_name"):
+        assert "display_name" not in (stored.attributes or {})
+
+
+def test_c12_77_two_shared_property_types_converting_to_one_word_are_both_held(registry, adapter):
+    """K6 in 8C-RUN.md 0.7, pinned (round 1, lens B finding 2): ruling R110 holds
+    every member of a collision for kind="property" as for every other kind, nothing
+    of that kind is written, and the slot that names the word says why it is unresolved."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_legacy"))
+    twin = dict(doc["sharedPropertyTypes"]["fooSpt"], apiName="foo_spt", rid="ri.spt.twin")
+    doc["sharedPropertyTypes"]["foo_spt"] = twin
+    report = registry.import_foundry(doc, dry_run=False, namespace="c12_77")
+    held = _items(report, kind="property")
+    assert sorted(i.api_name for i in held) == ["fooSpt", "foo_spt"]
+    assert {(i.outcome, i.reason) for i in held} == {("held", "name_collision_after_conversion")}
+    assert adapter.get_type("c12_77", "foo_spt", kind="property") is None
+    assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
+        {"shared": "foo_spt", "why": "held:name_collision_after_conversion"}
+    ]
+    employee = _items(report, kind="entity", name="employee")[0]
+    assert "property_reference_unregistered:fullName:foo_spt" in employee.warnings
+

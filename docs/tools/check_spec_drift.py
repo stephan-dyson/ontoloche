@@ -112,6 +112,33 @@ FOUNDRY_SHAPES = {
     "LookAlike": "LookAlike",
 }
 
+#: INTERFACE.md 2.10's three shapes, printed by row 8b as PLANNED and landed by row 8c
+#: in ``ontoloche/properties.py``. Moved out of ``PLANNED_SHAPES`` in the change that
+#: landed them, which is what that table's own check demanded.
+PROPERTIES_SHAPES = {
+    "PropertySpec": "PropertySpec",
+    "EntityDeclaration": "EntityDeclaration",
+    "SharedPropertyDeclaration": "SharedPropertyDeclaration",
+}
+
+#: 2.10's two view functions: the exact signature line 2.10 prints, and the parameter
+#: names ``ontoloche.properties`` must take. Round 3 of row 8b's loop found that dropping
+#: ``caps`` from the printed line passed every check, so the line is held whole.
+PROPERTY_FUNCTIONS = {
+    "entity_declaration":
+        "def entity_declaration(entry: TypeEntry, caps: Capabilities) -> EntityDeclaration: ...",
+    "shared_property_declaration":
+        "def shared_property_declaration(entry: TypeEntry, caps: Capabilities) "
+        "-> SharedPropertyDeclaration: ...",
+}
+
+#: Row 8b finding 9: 2.10 states ``BASE_TYPES``' ten values in a sentence, and a closed
+#: vocabulary stated in prose and derived by nothing is the one that quietly opens.
+_BASE_TYPES_SENTENCE = re.compile(
+    r"`BASE_TYPES`, a tuple in `ontoloche/properties\.py`, is closed and has (\w+) values: "
+    r"((?:`\w+`(?:, )?)+)\."
+)
+
 #: `EDGES.md`'s four printed CALL signatures, against `Registry`. **Row 4c, and the gap
 #: is the same one deviation D-4b-2 recorded for a primitive:** `INTERFACE.md`'s fourteen
 #: calls have been held against the code since row 3c and `PACKAGE.md`'s eighteen
@@ -380,6 +407,13 @@ _WORDS = {
     "twenty-five": 25, "twenty-six": 26, "twenty-seven": 27, "twenty-eight": 28,
     "twenty-nine": 29, "thirty": 30, "thirty-one": 31, "thirty-two": 32,
     "thirty-three": 33, "thirty-four": 34,
+    # Row 8c. The table stopped at thirty-four, so 5.4's "thirty-nine values" heading
+    # read as an unknown word and its count went UNCHECKED from the thirty-fifth value
+    # on: `said is None` skips the comparison. Ten is 2.10's `BASE_TYPES` count.
+    "ten": 10, "thirty-five": 35, "thirty-six": 36, "thirty-seven": 37,
+    "thirty-eight": 38, "thirty-nine": 39, "forty": 40, "forty-one": 41,
+    "forty-two": 42, "forty-three": 43, "forty-four": 44, "forty-five": 45,
+    "forty-six": 46, "forty-seven": 47, "forty-eight": 48, "forty-nine": 49, "fifty": 50,
 }
 
 
@@ -515,6 +549,9 @@ R31_INTERFACE_SECTIONS = {
     "5.4.1": "#### 5.4.1",
     # Ruling R54 again, at `list_types`' `predicate=` filter.
     "5.6.1": "#### 5.6.1",
+    # Ruling R108 -- property declarations. Printed PLANNED by row 8b, built by row 8c,
+    # and moved here in the change that made the suite claim its ids.
+    "2.10": "### 2.10",
 }
 
 #: `EDGES.md` sections that must carry an R31 rule table, and the heading that opens
@@ -622,6 +659,17 @@ def _check_one_document(
                             f"claims that id"
                         )
                 continue
+            # Row 8c: an implemented section may still hold a rule the founder has not
+            # ruled. It names its question, and the question must exist.
+            if _RESERVED_CELL.match(exercised):
+                q = re.search(r"Q\d+", exercised).group(0)
+                decisions = DECISIONS.read_text(encoding="utf-8") if DECISIONS.exists() else ""
+                if not re.search(rf"^### \d+ · `{q}`", decisions, re.M):
+                    problems.append(
+                        f"{document} {number}: reserved for {q}, and DECISIONS-OPEN.md asks "
+                        f"no item headed `{q}` -- a reserved rule must name a question that exists"
+                    )
+                continue
             if exercised.startswith("`prose-only:`") or exercised.startswith("prose-only:"):
                 reason = exercised.split("prose-only:", 1)[1].strip(" `")
                 if len(reason) < 20:
@@ -668,23 +716,14 @@ def _check_one_document(
 # with a reason. A `C21` id the suite starts claiming fails, because then the section
 # belongs in `R31_INTERFACE_SECTIONS` and should be checked as implemented.
 
-PLANNED_SHAPES = {
-    # INTERFACE.md 2.10, row 8b, ruling R108. Build row: the properties build row.
-    "PropertySpec",
-    "EntityDeclaration",
-    "SharedPropertyDeclaration",
-}
+#: Empty since row 8c landed 2.10's three (now ``PROPERTIES_SHAPES``). The mechanism
+#: stays for the next spec row that prints a shape ahead of its code.
+PLANNED_SHAPES: set[str] = set()
 
 #: The two planned view functions 2.10 prints, held to their printed signature line.
 #: Round 3 of row 8b's loop found that dropping `caps` from the printed signature passed
 #: every check. Each value is the exact signature text 2.10 must print.
-PLANNED_FUNCTIONS = {
-    "entity_declaration":
-        "def entity_declaration(entry: TypeEntry, caps: Capabilities) -> EntityDeclaration: ...",
-    "shared_property_declaration":
-        "def shared_property_declaration(entry: TypeEntry, caps: Capabilities) "
-        "-> SharedPropertyDeclaration: ...",
-}
+PLANNED_FUNCTIONS: dict[str, str] = {}
 
 #: Every importable ``ontoloche`` module is a place a build row could put a planned
 #: shape -- the precedent puts views in their own module (`edges.py`, `actions.py`), so a
@@ -711,10 +750,8 @@ def _planned_homes() -> list:
 
 DECISIONS = ROOT / "docs" / "DECISIONS-OPEN.md"
 
-PLANNED_R31_INTERFACE_SECTIONS = {
-    # Ruling R108 -- property declarations, governed and never validated against data.
-    "2.10": ("### 2.10", "C21"),
-}
+#: Empty since row 8c moved 2.10 to ``R31_INTERFACE_SECTIONS``.
+PLANNED_R31_INTERFACE_SECTIONS: dict[str, tuple[str, str]] = {}
 
 _SHAPE_HEAD = re.compile(r"^([A-Z]\w*):")
 _PLANNED_CELL = re.compile(r"^`?planned:\s*((?:`?C\d+-\d+`?[,\s]*)+)`?$")
@@ -764,11 +801,11 @@ def _check_planned_shapes(blocks: list[str]) -> list[str]:
                 )
     # Merge of rows 8a and 8b: row 8a's report shapes are held against foundry.py by
     # FOUNDRY_SHAPES, so they are listed, just in a second table.
-    listed = set(SHAPES) | set(FOUNDRY_SHAPES) | PLANNED_SHAPES
+    listed = set(SHAPES) | set(FOUNDRY_SHAPES) | set(PROPERTIES_SHAPES) | PLANNED_SHAPES
     for name in sorted(_printed_shape_names(blocks) - listed):
         problems.append(
             f"INTERFACE {name}: printed as a shape and listed in none of SHAPES, "
-            f"FOUNDRY_SHAPES or PLANNED_SHAPES -- an unlisted shape is one this checker cannot see"
+            f"FOUNDRY_SHAPES, PROPERTIES_SHAPES or PLANNED_SHAPES -- an unlisted shape is one this checker cannot see"
         )
     return problems
 
@@ -1071,6 +1108,60 @@ def main() -> int:
         for field in sorted(printed - actual):
             problems.append(f"{spec_name}.{field}: printed by the spec, absent from the code")
 
+    # --- INTERFACE.md 2.10's shapes, functions and BASE_TYPES. Row 8c.
+    from ontoloche import properties as properties_module
+
+    for spec_name, cls_name in PROPERTIES_SHAPES.items():
+        cls = getattr(properties_module, cls_name, None)
+        if cls is None or not hasattr(cls, "__dataclass_fields__"):
+            problems.append(f"{spec_name}: properties.py has no dataclass {cls_name}")
+            continue
+        printed = shape_fields(blocks, spec_name)
+        if printed is None:
+            problems.append(f"{spec_name}: INTERFACE.md 2.10 never prints its shape")
+            continue
+        actual = set(cls.__dataclass_fields__)
+        for field in sorted(actual - printed):
+            problems.append(f"{spec_name}.{field}: returned by the code, absent from the spec")
+        for field in sorted(printed - actual):
+            problems.append(f"{spec_name}.{field}: printed by the spec, absent from the code")
+    printed_text = "\n".join(blocks)
+    for name, signature in sorted(PROPERTY_FUNCTIONS.items()):
+        import inspect
+
+        function = getattr(properties_module, name, None)
+        if function is None:
+            problems.append(f"INTERFACE {name}: 2.10 prints it and properties.py has no such function")
+            continue
+        if signature not in printed_text:
+            problems.append(
+                f"INTERFACE {name}: 2.10 no longer prints `{signature}` -- change the spec "
+                f"and PROPERTY_FUNCTIONS together"
+            )
+        said = set(re.findall(r"(\w+):", signature.split("(", 1)[1].split(")", 1)[0]))
+        actual = set(inspect.signature(function).parameters)
+        if said != actual:
+            problems.append(
+                f"INTERFACE {name}: 2.10 prints parameters {sorted(said)} and the code "
+                f"takes {sorted(actual)}"
+            )
+    m = _BASE_TYPES_SENTENCE.search(text)
+    if m is None:
+        problems.append("INTERFACE 2.10: could not find the BASE_TYPES sentence")
+    else:
+        printed_values = re.findall(r"`(\w+)`", m.group(2))
+        if tuple(printed_values) != tuple(properties_module.BASE_TYPES):
+            problems.append(
+                f"INTERFACE 2.10: BASE_TYPES is printed as {printed_values} and the code "
+                f"has {list(properties_module.BASE_TYPES)} -- contents and order"
+            )
+        said = _WORDS.get(m.group(1).lower())
+        if said != len(properties_module.BASE_TYPES):
+            problems.append(
+                f"INTERFACE 2.10 says {m.group(1)!r} BASE_TYPES values; the code has "
+                f"{len(properties_module.BASE_TYPES)}"
+            )
+
     for call in CALLS:
         method = getattr(registry_module.Registry, call, None)
         if method is None:
@@ -1349,9 +1440,14 @@ def main() -> int:
         f"row to change rules in this document since R31 landed, and constraint 8 binds "
         f"every spec rather than one.\n"
         f"INTERFACE.md: {len(PLANNED_SHAPES)} PLANNED shapes are printed and not yet built, "
-        f"every printed shape is listed, and every rule in "
-        f"{', '.join(sorted(PLANNED_R31_INTERFACE_SECTIONS))} is planned, reserved or tagged "
-        f"(row 8b, ruling R108)."
+        f"every printed shape is listed, and "
+        + (
+            f"every rule in {', '.join(sorted(PLANNED_R31_INTERFACE_SECTIONS))} is planned, "
+            f"reserved or tagged."
+            if PLANNED_R31_INTERFACE_SECTIONS
+            else "no section is planned (row 8c built 2.10's: 3 shapes, 2 view functions "
+            "and BASE_TYPES held against ontoloche/properties.py)."
+        )
     )
     return 0
 
