@@ -299,4 +299,25 @@ The full suite started at `40bf5f2` was stopped at 27%, unread, once round 3 had
 
 Lens B also noted B1 (§2.1) now covers the alias case: an unrelated live property aliased to a held shared property type's word resolves the slot, and the entity does warn `property_reference_redirected`. Recorded, no worse than B1. Lens A left one Postgres schema `oo_r3a_aa4f7ec0`, not dropped under the no-delete rule.
 
-**Next:** round 4 runs on the commit that applies these fixes.
+### §2.4 — Round 4, at `16205c7`
+
+**0 BLOCKING, 1 MAJOR, 11 MINOR.** Lens A ran 63 malformed declaration shapes through every door and both views and nothing raised. Lens B ran 520 more, every batch returning one result per row, and found no MAJOR: `check_merge_guard.py` and the probe `--assert` exit 0, and the kill row stays at twenty-three. Lens C recomputed every number in §1 and §2.1 to §2.3 true, and found every round 3 *fixed* item in both the code and the text. The round fails the stopping rule on one MAJOR, so round 5 runs.
+
+The full suite started at `16205c7` was stopped at 27%, unread, once round 4 had a MAJOR, for the reason given in §2.3. C3-4 is therefore still open, and closes with the run at round 4's fix commit, recorded in §2.5.
+
+| # | lens | sev | finding | disposition |
+|---|---|---|---|---|
+| C4-1 | C | **MAJOR** | a `names=` key naming a shared property type the document does not define still renames the slot's stored `shared` word, while the report lists the key in `unmatched`. §2.5a did not say `names=` reaches a word that only a reference holds. Row 8a's interface case behaves the same way | **fixed in the text**: §2.5a now says `unmatched` counts items, not references, and that such a key still renames the predicate or `shared` word. *Reason:* the behaviour is the useful one (a caller renaming a word renames every pointer to it), it is row 8a's for interfaces, and counting the key as matched would hide that no item carried it. A report-field choice, so not the founder's |
+| C4-2 | C | MINOR | rule 2.10-10 said *"`import_types` takes one `kind` per call"*. It reads `kind` per row, and §1.5 deviation 3 relies on that | **fixed** in rule 2.10-10 |
+| C4-3, A4-3 | C, A | MINOR | a `dataType` that is not a type object, or a property whose value is not an object, landed `source_type: "{}"`, and the value appeared nowhere | **fixed**: `source_type` is the value's wire form, and a non-object property lands `opaque` with its value as the `dataType`. Pinned in `C12-71` (five new cases) and a `C12-74` case |
+| A4-2 | A | MINOR | a `dataType` whose `type` is a list or dict raised `TypeError: unhashable`, a list-valued `properties` raised `AttributeError`, and 1200 nested arrays raised `RecursionError`, all before any write | **fixed for the first two**: a non-`str` `type` lands `opaque`, and a `properties` that is not a map raises a `TypeError` naming the object type, stated in §2.5a and pinned. **Recorded for the third**: no SDK document nests arrays that deep, nothing is written, and the error is Python's own |
+| C4-4 | C | MINOR | a `primaryKey` neither `str` nor list, or a `titleProperty` not a `str`, was neither a slot field, carried, nor in `no_home` | **fixed**: carried under `$primaryKey` / `$titleProperty` with its `no_home` entry. Pinned in the `C12-74` case |
+| C4-5 | C | MINOR | two shared property types mapped onto one property (the slot takes the last), and a mapping onto a property the object type lacks, were not in `no_home` | **recorded in the text**: §2.5a names both. Each stays verbatim in `foundry_object_type_metadata`, so nothing is lost, and the SDK does not produce either |
+| C4-6 | C | MINOR | a shared property type's `status` is read as the entry's lifecycle (B3-1 relies on it) but was listed in `no_home` and unstated | **fixed**: named in §2.5a's row and left out of `no_home`. Pinned in the `C12-74` case |
+| C4-7 | C | MINOR | C3-4 was marked *taken* with no result recorded | **taken**: the paragraph above, and §2.5 |
+| A4-1 | A | MINOR | §2.10 said a view is hashable. `why_absent` is a `dict`, so it is not | **fixed in the text**. The printed shape (`dict[str, str]`) is unchanged |
+| B4-1 | B | MINOR | a dry run calls a `DEPRECATED` shared property type's slot `retired`, while the real run's retire can be refused `live_consumers` and leave it live | **recorded**: a dry run does not predict an import refusal, which is inherited for every kind, and the refusal shows on the real run's item |
+
+**B3 corollary** *(lens B, round 4)*: an active re-import that drops a gated property's predicate membership, followed by a `DEPRECATED` import, retires the property with no `live_consumers` refusal, in two calls. This is inherited for every kind, sits inside K7, and Q103's answer should account for it with B3's.
+
+**Next:** round 5 runs on the commit that applies these fixes, and the full suite and gates run on the same commit.

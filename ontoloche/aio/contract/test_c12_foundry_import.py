@@ -2992,6 +2992,12 @@ async def test_c12_70_object_type_properties_become_local_and_shared_slots(regis
             "geopoint", "geoshape", "attachment", "mediaReference", "timeseries",
             "geotimeSeriesReference", "vector", "cipherText", "marking")],
         ({"type": "notYetPublished", "x": 1}, ("opaque", None, '{"type":"notYetPublished","x":1}')),
+        # Round 4: not a type object, or a type that is not a str, keeps its wire form.
+        (None, ("opaque", None, "{}")),
+        ("string", ("opaque", None, '"string"')),
+        (["string"], ("opaque", None, '["string"]')),
+        ({"type": ["string"]}, ("opaque", None, '{"type":["string"]}')),
+        ({"type": "array", "subType": {"type": {"k": 1}}}, ("list", "opaque", '{"subType":{"type":{"k":1}},"type":"array"}')),
     ],
 )
 def test_c12_71_the_type_table_and_the_source_type_wire_form(data_type, expected):
@@ -3097,6 +3103,31 @@ async def test_c12_75_palantirs_dangling_mapping_is_written_and_warned(registry,
     item = _items(legacy, kind="entity", name="employee")[0]
     assert not [w for w in item.warnings if w.startswith("property_reference")]
     assert legacy.properties["entities"]["Employee"]["unresolved_shared"] == []
+
+async def test_c12_74_no_shape_of_a_property_key_or_title_is_lost(registry):
+    """Round 4 (lens A 2 and 3, lens C 4 and 6): a property that is not an object lands
+    opaque with its wire form, a key or title of any shape is carried, a shared property
+    type's status is its lifecycle and not no_home, and a properties list is refused."""
+    doc = {
+        "objectTypes": {"Thing": {"objectType": {
+            "apiName": "Thing", "description": "t", "primaryKey": 5, "titleProperty": ["x"],
+            "properties": {"x": ["oops"], "y": {"dataType": {"type": "string"}, "description": "d"}},
+        }}},
+        "sharedPropertyTypes": {"aSpt": {
+            "apiName": "aSpt", "description": "a", "dataType": {"type": "string"}, "status": "ACTIVE",
+        }},
+    }
+    report = await registry.import_foundry(doc, namespace="c12_74_3")
+    thing = _items(report, kind="entity", name="thing")[0]
+    assert thing.outcome == "would_write", thing
+    no_home = report.properties["no_home"]
+    assert {"type": "Thing", "property": None, "reason": "no_slot_field:primaryKey"} in no_home
+    assert {"type": "Thing", "property": None, "reason": "no_slot_field:titleProperty"} in no_home
+    assert not [e for e in no_home if e["type"] == "aSpt"], no_home
+    assert land(["oops"]) == ("opaque", None, '["oops"]', [])
+    bad = {"objectTypes": {"Thing": {"objectType": {"apiName": "Thing", "description": "t", "properties": ["x"]}}}}
+    with pytest.raises(TypeError, match="Thing"):
+        await registry.import_foundry(bad, namespace="c12_74_3")
 
 async def test_c12_76_no_fixture_breaches_a_declaration_rule_on_any_backend(registry, adapter):
     for i, name in enumerate(FIXTURES):

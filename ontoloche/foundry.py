@@ -246,10 +246,12 @@ def source_type(data_type: Any) -> str:
     its wire form, every ``null`` omitted at every depth, as
     ``json.dumps(obj, sort_keys=True, separators=(",", ":"))``.
     """
-    obj = _strip_nulls(data_type if isinstance(data_type, dict) else {})
-    if set(obj) == {"type"} and isinstance(obj["type"], str):
+    # A value that is not a type object keeps ITS wire form, never "{}" (round 4,
+    # lens A finding 3 and lens C finding 3): only an absent type is "{}".
+    obj = _strip_nulls(data_type if data_type is not None else {})
+    if isinstance(obj, dict) and set(obj) == {"type"} and isinstance(obj["type"], str):
         return obj["type"]
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"))
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def land(data_type: Any) -> tuple[str, str | None, str | None, list[str]]:
@@ -260,8 +262,10 @@ def land(data_type: Any) -> tuple[str, str | None, str | None, list[str]]:
     of arrays has no ``item_type`` that rule 2.10-6 allows except ``opaque``, which it
     takes, the whole array object saying what it is.
     """
-    dt = data_type if isinstance(data_type, dict) else {}
-    kind = dt.get("type")
+    if data_type is not None and not isinstance(data_type, dict):
+        return "opaque", None, source_type(data_type), []
+    dt = data_type or {}
+    kind = dt.get("type") if isinstance(dt.get("type"), str) else None
     stripped = _strip_nulls(dt)
     if kind in _SCALARS:
         base, keep = _SCALARS[kind]
@@ -302,6 +306,8 @@ def _object_type_properties(
     """
     ot = full.get("objectType") or {}
     props = ot.get("properties") or {}
+    if not isinstance(props, dict):
+        raise TypeError(f"objectType {api!r}: properties is not a map (round 4)")
     mapping = {
         prop: spt
         for spt, prop in (full.get("sharedPropertyTypeMapping") or {}).items()
@@ -312,7 +318,9 @@ def _object_type_properties(
     no_home: list[dict] = []
     counts = {"local": 0, "shared": 0, "opaque": 0, "undescribed": 0}
     for prop_api, prop in props.items():
-        prop = prop if isinstance(prop, dict) else {}
+        if prop is not None and not isinstance(prop, dict):
+            prop = {"dataType": prop}  # lands opaque, its wire form in source_type
+        prop = prop or {}
         if not SLOT_NAME_RE.fullmatch(prop_api):
             carry[prop_api] = dict(prop)
             no_home.append(_no_home(api, prop_api, "slot_name_invalid"))
@@ -355,21 +363,20 @@ def _object_type_properties(
         slots.append(slot)
     declared = {s["name"] for s in slots}
     declaration: dict = {"properties": slots}
-    pk = ot.get("primaryKey")
-    pk = [pk] if isinstance(pk, str) else pk
-    if isinstance(pk, list) and pk:
-        if all(isinstance(k, str) and k in declared for k in pk):
-            declaration["primary_key"] = list(pk)
-        else:
-            carry["$primaryKey"] = ot.get("primaryKey")
-            no_home.append(_no_home(api, None, "no_slot_field:primaryKey"))
+    raw_pk = ot.get("primaryKey")
+    pk = [raw_pk] if isinstance(raw_pk, str) else raw_pk
+    if isinstance(pk, list) and pk and all(isinstance(k, str) and k in declared for k in pk):
+        declaration["primary_key"] = list(pk)
+    elif raw_pk not in (None, [], ""):
+        # Naming no slot, or of any other shape: carried, never lost (round 4, C4-4).
+        carry["$primaryKey"] = raw_pk
+        no_home.append(_no_home(api, None, "no_slot_field:primaryKey"))
     title = ot.get("titleProperty")
-    if isinstance(title, str) and title:
-        if title in declared:
-            declaration["title_property"] = title
-        else:
-            carry["$titleProperty"] = title
-            no_home.append(_no_home(api, None, "no_slot_field:titleProperty"))
+    if isinstance(title, str) and title in declared:
+        declaration["title_property"] = title
+    elif title not in (None, ""):
+        carry["$titleProperty"] = title
+        no_home.append(_no_home(api, None, "no_slot_field:titleProperty"))
     if full.get("implementsInterfaces2"):
         no_home.append(_no_home(api, None, "implements_interfaces2"))
     return declaration, carry, no_home, counts
@@ -529,7 +536,7 @@ def plan(
         no_home.extend(
             _no_home(api, None, f"no_slot_field:{k}")
             for k, v in spt.items()
-            if k not in ("apiName", "rid", "description", "dataType", "displayName")
+            if k not in ("apiName", "rid", "description", "dataType", "displayName", "status")
             and v not in (None, [], {}, "")
         )
         attributes = {
