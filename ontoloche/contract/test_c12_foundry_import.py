@@ -3258,7 +3258,8 @@ def test_c12_76_no_fixture_breaches_a_declaration_rule_on_any_backend(registry, 
             assert entity_declaration(stored, adapter.capabilities()).primary_key is not None
 
 
-@pytest.mark.requires_capability("stores_aliases", "indexes_membership")
+# stores_events: the forced retire that builds the successor case records an override.
+@pytest.mark.requires_capability("stores_aliases", "indexes_membership", "stores_events")
 def test_c12_75_a_shared_slot_reaching_a_live_property_is_resolved(registry):
     """Round 2, lens C MAJOR 1: unresolved_shared asks rule 2.10-11's reader, so a word
     answering to a live property by alias or by successor is resolved, exactly as the

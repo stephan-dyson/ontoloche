@@ -320,4 +320,44 @@ The full suite started at `16205c7` was stopped at 27%, unread, once round 4 had
 
 **B3 corollary** *(lens B, round 4)*: an active re-import that drops a gated property's predicate membership, followed by a `DEPRECATED` import, retires the property with no `live_consumers` refusal, in two calls. This is inherited for every kind, sits inside K7, and Q103's answer should account for it with B3's.
 
-**Next:** round 5 runs on the commit that applies these fixes, and the full suite and gates run on the same commit.
+### §2.5 — Round 5, at `02c28d0`: the loop ends
+
+**0 BLOCKING, 0 MAJOR, 15 MINOR. The stopping rule (§0.9) is met: a full round of three fresh lenses on the final text and code found no in-scope MAJOR.** Lens A and lens C each re-ran the planner at `16205c7` and `02c28d0` over all five fixtures and found the rows, the `properties` report and all 267 `dataType` landings byte-identical, so round 4's malformed-shape fixes moved no well-formed landing. Lens B found `check_merge_guard.py` and the probe `--assert` at 0, confirmed round 4's documented `names=` behaviour (C4-1) collapses nothing and passes no guard, and found B1, B3 with its corollary and B4-1 honest. The kill row stays at **twenty-three**. Round 6 is not run, since it exists only for a MAJOR at the cap.
+
+**Every round 5 finding is recorded, none fixed.** *Reason:* §0.9 requires the last round to see the final text and code, and any fix now would need a sixth round to see it. None is reachable over UC1, UC2, UC3, the five fixtures or SDK output (each needs a hand-built document, a Python caller, or a `DegradedAdapter` projection no backend ships), none loses a stored fact silently except on such a hand-built document, and none bypasses a guard. They are a follow-up, not this row's to close.
+
+| # | lens | finding | why recorded |
+|---|---|---|---|
+| B5-1 | B | an **absent** shared property type (or interface) whose apiName converts to the same word as a different one the document defines binds the slot (or predicate) to that other row with no warning. R110 compares planned items only. Inherited byte for byte from row 8a's interface path | K6 holds for two **defined** twins (`C12-77`). This one needs the employee fixture's dangling `fooSpt` *and* a hand-added `FooSpt`. No row merges and no alias or successor is written. It widens B1: unlike B1 the plan holds the evidence (apiNames differ), so a later row can report it. The interface case hands an entity a capability predicate, and is the one worth that row's attention |
+| B5-2 | B | in that case the dry run says `not_in_document` and the real run resolves | the same case as B5-1, closed with it |
+| A5-1 | A | round 4's `{"dataType": value}` wrapper for a non-object property leaks into the carry on a shared or invalid-name property | hand-built shape only. The value is kept, with an invented key name |
+| A5-2, C5-2 | A, C | a non-`str` `description` or `displayName` lands nowhere (slots and, for `displayName`, shared property types) | hand-built shape only. The SDK types both as `str` |
+| C5-3 | C | a shared property type whose value is not an object lands `opaque`, `source_type` `"{}"`, its value nowhere | hand-built shape only |
+| A5-3, C5-7 | A, C | a list `primaryKey` repeating a declared name plans a row its own validator refuses (dry `would_write`, real `refused`) | the SDK's `primaryKey` is one `str`. The refusal is visible on the real run |
+| C5-1 | C | a property whose apiName is `$primaryKey` is overwritten in the carry by an unmatched key. §2.5a's *"no property apiName can collide"* is false for that name | hand-built shape. [unverified] whether Foundry permits `$` in an apiName |
+| C5-4 | C | two shared property types mapped onto one property list the surviving word twice in `unresolved_shared` | the case §2.5a already names (C4-5) |
+| C5-5 | C | a non-`str` `sharedPropertyTypeMapping` target is a third unlisted mapping fact | kept in `foundry_object_type_metadata`, nothing lost |
+| C5-6 | C | an empty or false non-map `properties` (`[]`, `""`, `0`) reads as empty, not the `TypeError` §2.5a names | hand-built shape. Nothing is written for it either way |
+| A5-4 | A | with `properties` stored and `primary_key` not, the view says `required=False` for a key slot | reachable only by `DegradedAdapter(attribute_projections=("properties",))`. `sqlite_minimal` is the reverse |
+| A5-5 | A | `source_type` serialises with `default=str`, which §2.10's printed serialisation omits | no JSON-parsed value reaches it. Only a Python caller can |
+| C5-8 | C | §1.5 deviation 6 says a list field would make the view *"mutable and unhashable"*. After A4-1 the view is already unhashable | corrected here: the reason is mutability alone |
+
+**The §2.10 banner is removed.** It said it came off only when this loop ended clean on that text, which round 5 did. That is the only edit after round 5, and it changes no rule.
+
+### §2.6 — The landing run, at the final commit
+
+**[Observed]** on the landing tree (`02c28d0` plus this commit), `OO_POSTGRES_DSN` set: `py -m pytest` ran **2472 passed, 662 skipped, 0 failed** in 24 min 2 s, sync and async halves. `sqlite` and `postgres` exercised 473 ids each (1 not exercisable, listed), `sqlite_minimal` 151, with 5 backend-independent ids run once, 479 enumerated in `PACKAGE.md` §6.2. `check_links`, `check_spec_drift`, `check_merge_guard`, `check_capability_matrix` and `check_skip_census` exit 0, `properties_baseline_probe.py --assert` exits 0 with all 19 reserved-rule lines at their recorded values, and `tools/unasync.py --check` reports 26 generated files current.
+
+**One fix after round 5, test scaffolding only.** The run at `02c28d0` gave 2471 passed and 1 failed, the failure being the test that runs `check_capability_matrix`: with `stores_events` declined, round 2's new `C12-75` case could not build its successor case, because a forced `retire` is refused `cannot_record_override` without events. The case now also requires `stores_events` (`PACKAGE.md` §8b.5, as §1.5 deviation 8). No code or spec changed. The gap went unseen through rounds 2 to 4 because each of those rounds' full runs was stopped unread (§2.3, §2.4), which is the cost of that choice, recorded here.
+
+### §2.7 — The loop, in one table
+
+| round | at | BLOCKING | MAJOR | MINOR | fixed | recorded |
+|---|---|---|---|---|---|---|
+| 1 | `464579a` | 0 | 0 | 17 | 15 | 2 |
+| 2 | `167da18` | 0 | 2 | 10 | 12 | 0 |
+| 3 | `40bf5f2` | 0 | 2 | 5 | 7 | 0 |
+| 4 | `16205c7` | 0 | 1 | 11 | 8 | 4 |
+| 5 | `02c28d0` | 0 | 0 | 15 | 0 | 15 |
+
+Five MAJORs in all, every one fixed and seen by a later round: C2-1 (the Foundry report and the warning disagreed), C2-2 (§1.1's arithmetic), A3-1 (the validator raised on an unhashable key name and could abort an import), C3-1 (a code fix the spec did not follow), C4-1 (`unmatched` misread for a renamed reference). **Nothing went to the founder**: no finding decided what the registry refuses or holds beyond §2.10's non-reserved rules, and the reserved rules 2.10-17 to 2.10-21 are unchanged, pinned by the probe.
