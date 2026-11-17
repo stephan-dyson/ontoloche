@@ -117,7 +117,10 @@ def test_c21_01_an_entry_declaring_nothing_and_the_pre_amendment_shape_are_uncha
     keyed = _write(registry, "survey", {"primary_key": ["ccn", "survey_date", "survey_type"]})
     assert isinstance(keyed, TypeEntry), keyed
     assert _prop_warnings(keyed) == []
-    assert entity_declaration(keyed, registry.caps).primary_key == ("ccn", "survey_date", "survey_type")
+    if registry.caps.stores_attribute("primary_key"):
+        assert entity_declaration(keyed, registry.caps).primary_key == ("ccn", "survey_date", "survey_type")
+    else:
+        assert entity_declaration(keyed, registry.caps).why_absent["primary_key"] == "not_stored"
 
     # ...but its shape is checked (2.10-1), and `properties: []` is present.
     _refused(_write(registry, "citation", {"primary_key": []}), "2.10-1", "primary_key")
@@ -353,8 +356,13 @@ def test_c21_10_retired_and_redirected(registry):
     seed(registry, "zip_code", kind="property", attributes={"base_type": "str"})
     seed(registry, "postal_code", kind="property", attributes={"base_type": "str"})
     seed(registry, "old_code", kind="property", attributes={"base_type": "str"})
-    assert not isinstance(registry.retire("zip_code", "renamed", retired_by="user:sd", successor="postal_code"), Refusal)
-    assert not isinstance(registry.retire("old_code", "gone", retired_by="user:sd"), Refusal)
+    # force=True: the identity guard is not this test's subject, and a backend that
+    # declines indexes_membership refuses it unforced (no_consumer_evidence).
+    assert not isinstance(
+        registry.retire("zip_code", "renamed", retired_by="user:sd", successor="postal_code", force=True),
+        Refusal,
+    )
+    assert not isinstance(registry.retire("old_code", "gone", retired_by="user:sd", force=True), Refusal)
     out = _write(registry, "a", {"properties": [{"name": "z", "shared": "zip_code"}, {"name": "o", "shared": "old_code"}]})
     assert set(_prop_warnings(out)) == {
         "property_reference_redirected:z:zip_code:postal_code",
@@ -390,15 +398,14 @@ def test_c21_11_the_reader_stays_in_its_kind_and_reads_name_or_alias_spellings(r
     assert _prop_warnings(out) == ["property_reference_redirected:b:borough:borough_"]
 
 
-@pytest.mark.requires_capability("stores_events")
-@pytest.mark.requires_capability("stores_aliases")
+@pytest.mark.requires_capability("stores_events", "stores_aliases")
 def test_c21_11_a_dead_end_falls_through_to_a_live_alias_holder(registry):
     """Row 8b finding 2: the reader must not say *retired* while resolve_type answers
     the alias holder at 1.0."""
     seed(registry, "zip_code", kind="property", attributes={"base_type": "str"})
     seed(registry, "postal_code", kind="property", attributes={"base_type": "str"})
-    registry.retire("zip_code", "renamed", retired_by="user:sd", successor="postal_code")
-    registry.retire("postal_code", "gone", retired_by="user:sd")
+    registry.retire("zip_code", "renamed", retired_by="user:sd", successor="postal_code", force=True)
+    registry.retire("postal_code", "gone", retired_by="user:sd", force=True)
     registry.import_types(
         [{"name": "post_code", "kind": "property", "definition": "a post code", "aliases": ["zip_code"],
           "attributes": {"base_type": "str"}}],
