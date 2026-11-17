@@ -176,6 +176,18 @@ async def test_c21_03_the_stored_shape_is_closed_and_a_missing_description_is_re
             slot["description"] = description
         _refused(await _propose(registry, "c", {"properties": [slot]}), "2.10-3", "properties", "y")
 
+async def test_c21_03_a_blank_description_on_a_shared_slot_is_a_missing_one(registry):
+    """Round 1, lens A finding 3: a blank description is missing at every door, so a
+    shared slot carrying "" or whitespace carries nothing and is not refused."""
+    await seed(registry, "ccn", kind="property", attributes={"base_type": "str"})
+    for blank in ("", "   "):
+        out = await _write(registry, f"site{len(blank)}", {"properties": [
+            {"name": "ccn", "shared": "ccn", "description": blank}]})
+        assert isinstance(out, TypeEntry), out
+    back = await registry.import_types([{"name": "site9", "definition": "a site", "status": "active",
+                                   "attributes": {"properties": [{"name": "ccn", "shared": "ccn", "description": ""}]}}])
+    assert not [w for w in back[0].warnings if w.startswith("import_refused")], back[0].warnings
+
 async def test_c21_03_a_missing_description_is_not_a_breach_to_the_view(registry):
     entry = await _entry(registry, "entity", {"properties": [{"name": "y", "base_type": "str", "description": ""}]})
     view = entity_declaration(entry, _AllCaps())
@@ -252,7 +264,11 @@ async def test_c21_09_a_property_entry_declares_nothing_or_a_base_type(registry)
         assert view.base_type is None and view.why_absent["base_type"] == "not_stored"
     _refused(await _propose(registry, "a", {"display_name": "A"}, kind="property"), "2.10-9")
     _refused(await _propose(registry, "a", {"base_type": "str", "required": True}, kind="property"), "2.10-9", "required")
-    _refused(await _propose(registry, "a", {"base_type": "list"}, kind="property"), "2.10-6")
+    # detail.key names the offending key itself on a property entry (round 1, A4).
+    _refused(await _propose(registry, "a", {"base_type": "list"}, kind="property"), "2.10-6", "item_type")
+    _refused(await _propose(registry, "a", {"base_type": "opaque"}, kind="property"), "2.10-6", "source_type")
+    _refused(await _propose(registry, "a", {"base_type": "float", "value_set": "v"}, kind="property"), "2.10-7", "value_set")
+    _refused(await _propose(registry, "a", {"base_type": "str", "value_set": "V"}, kind="property"), "2.10-8", "value_set")
     with pytest.raises(ValueError):
         shared_property_declaration(dataclasses.replace(bare, kind="entity"), registry.caps)
 
@@ -495,5 +511,12 @@ async def test_c21_17_uc3_nyc_status_stays_three_things_and_coordinates_are_prop
     assert res.outcome == "existing" and res.confidence == 1.0
     res = await registry.resolve_type("latitude", CTX, kind="property", namespace="dpr", tier="unspecified")
     assert res.outcome == "proposal" and res.proposal.kind == "property"
+    # 8C-RUN.md 0.4 UC3 items 2 and 3 through a write, not only through resolve_type
+    # (round 1, lens C finding 1): the reader never crosses a namespace.
+    tree = await _write(registry, "tree_pit", {"properties": [{"name": "latitude", "shared": "latitude"}]}, namespace="dpr")
+    assert _prop_warnings(tree) == ["property_reference_unregistered:latitude:latitude"], tree.warnings
+    await seed(registry, "borough", kind="value_set", namespace="dot")
+    pit = await _write(registry, "pit", {"properties": [_local("borough", value_set="borough")]}, namespace="dpr")
+    assert _prop_warnings(pit) == ["property_reference_unregistered:borough:borough"], pit.warnings
     merged = await registry.merge_types("status", "status", "same", merged_by="user:sd", namespace="dpr", into_namespace="dot")
     assert isinstance(merged, Refusal) and merged.reason == "cross_namespace_merge", merged

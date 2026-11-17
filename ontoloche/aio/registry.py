@@ -2323,7 +2323,9 @@ class AsyncRegistry:
                 if not nxt_name:
                     dead_end = True
                     break
-                if nxt_name in seen or len(seen) > _IDENTITY_CHAIN_CAP:
+                # The same bound as resolve_type's walk: the first successor, then
+                # _IDENTITY_CHAIN_CAP more (round 1, lens A finding 1).
+                if nxt_name in seen or len(seen) > _IDENTITY_CHAIN_CAP + 1:
                     return "unknown", None
                 seen.add(nxt_name)
                 nxt = await self.adapter.get_type(namespace, nxt_name, kind=kind)
@@ -2345,10 +2347,13 @@ class AsyncRegistry:
                 )
             }
         )
-        if holders:
-            return ("found" if holders[0] == word else "redirected"), holders[0]
+        # A scan that could not finish answers unknown even when its partial page holds
+        # a match: the first holder by name is only deterministic over the whole set
+        # (rule 2.10-11, round 1, lens A finding 2).
         if why is not None:
             return "unknown", None
+        if holders:
+            return ("found" if holders[0] == word else "redirected"), holders[0]
         return ("retired" if dead_end else "absent"), None
 
     async def _property_write_warnings(

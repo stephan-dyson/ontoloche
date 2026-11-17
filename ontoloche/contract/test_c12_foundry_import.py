@@ -3214,3 +3214,25 @@ def test_c12_76_no_fixture_breaches_a_declaration_rule_on_any_backend(registry, 
         assert stored is not None
         if _stores(adapter, "primary_key"):
             assert entity_declaration(stored, adapter.capabilities()).primary_key is not None
+
+
+def test_c12_77_two_shared_property_types_converting_to_one_word_are_both_held(registry, adapter):
+    """K6 in 8C-RUN.md 0.7, pinned (round 1, lens B finding 2): ruling R110 holds
+    every member of a collision for kind="property" as for every other kind, nothing
+    of that kind is written, and the slot that names the word says why it is unresolved."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_legacy"))
+    twin = dict(doc["sharedPropertyTypes"]["fooSpt"], apiName="foo_spt", rid="ri.spt.twin")
+    doc["sharedPropertyTypes"]["foo_spt"] = twin
+    report = registry.import_foundry(doc, dry_run=False, namespace="c12_77")
+    held = _items(report, kind="property")
+    assert sorted(i.api_name for i in held) == ["fooSpt", "foo_spt"]
+    assert {(i.outcome, i.reason) for i in held} == {("held", "name_collision_after_conversion")}
+    assert adapter.get_type("c12_77", "foo_spt", kind="property") is None
+    assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
+        {"shared": "foo_spt", "why": "held:name_collision_after_conversion"}
+    ]
+    employee = _items(report, kind="entity", name="employee")[0]
+    assert "property_reference_unregistered:fullName:foo_spt" in employee.warnings
+

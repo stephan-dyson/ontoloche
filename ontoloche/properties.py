@@ -155,33 +155,41 @@ def _key_shape_problem(attributes: dict) -> list[tuple[str, str, str | None, str
 def _type_problem(
     spec: dict, *, slot: str | None, key: str, rule_for_base: str
 ) -> tuple[str, str, str | None, str] | None:
-    """Rules 2.10-6, 2.10-7, 2.10-8 over one local slot or one property entry."""
+    """Rules 2.10-6, 2.10-7, 2.10-8 over one local slot or one property entry.
+
+    On a slot every breach names ``properties`` (the reserved key that holds it) and the
+    slot. On a property entry it names the offending key itself, ``item_type``,
+    ``source_type`` or ``value_set`` (row 8c round 1, lens A finding 4).
+    """
+    def at(own: str) -> str:
+        return key if slot is not None else own
+
     base = spec.get("base_type")
     if base not in BASE_TYPES:
         return (
-            rule_for_base, key, slot,
+            rule_for_base, at("base_type"), slot,
             f"base_type must be one of {', '.join(BASE_TYPES)}; got {base!r}",
         )
     item = spec.get("item_type")
     if base == "list":
         if item is None:
-            return ("2.10-6", key, slot, "a list declares an item_type")
+            return ("2.10-6", at("item_type"), slot, "a list declares an item_type")
         if item not in BASE_TYPES or item == "list":
-            return ("2.10-6", key, slot, f"item_type must be a BASE_TYPES value other than list; got {item!r}")
+            return ("2.10-6", at("item_type"), slot, f"item_type must be a BASE_TYPES value other than list; got {item!r}")
     elif item is not None:
-        return ("2.10-6", key, slot, "item_type is present exactly when base_type is list")
+        return ("2.10-6", at("item_type"), slot, "item_type is present exactly when base_type is list")
     if "opaque" in (base, item) and _blank(spec.get("source_type")):
-        return ("2.10-6", key, slot, "opaque requires a non-empty source_type")
+        return ("2.10-6", at("source_type"), slot, "opaque requires a non-empty source_type")
     if spec.get("value_set") is not None:
         typed = item if base == "list" else base
         if typed not in VALUE_SET_TYPES:
             return (
-                "2.10-7", key, slot,
+                "2.10-7", at("value_set"), slot,
                 f"a value_set may be declared on str, int, decimal or date; got {typed!r}",
             )
         if not _word_ok(spec["value_set"]):
             return (
-                "2.10-8", key, slot,
+                "2.10-8", at("value_set"), slot,
                 f"value_set must be a bare word that is its own identity_key; got {spec['value_set']!r}",
             )
     return None
@@ -225,7 +233,12 @@ def _slot_problems(slots: Any) -> list[tuple[str, str, str | None, str]]:
             continue
         seen.add(name)
         if slot.get("shared") is not None:
-            carried = [k for k in _SHARED_FORBIDS if slot.get(k) is not None]
+            # A blank description is a MISSING one at every door (rule 2.10-3), so a
+            # shared slot carrying "" or whitespace carries nothing (round 1, A3).
+            carried = [
+                k for k in _SHARED_FORBIDS
+                if slot.get(k) is not None and not (k == "description" and _blank(slot[k]))
+            ]
             if carried:
                 out.append((
                     "2.10-3", "properties", label,

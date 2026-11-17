@@ -229,3 +229,33 @@ Written after the build and before the adversarial loop. Commits `32427f6` (the 
 ### §1.7 — What went to the founder
 
 **Nothing.** No choice in the build decided what the registry refuses or holds beyond §2.10's non-reserved rules. Rules 2.10-17 to 2.10-21 are today's behaviour, pinned by the probe.
+
+## §2 — The adversarial loop
+
+Stopping rule and cap as §0.9: three fresh lenses per round (A, the build implementer; B, the door adversary; C, the use-case and Foundry fidelity reviewer), read-only, each MAJOR backed by a reproduction the lens ran. Nothing reviewed was edited while a lens ran.
+
+### §2.1 — Round 1, at `464579a`
+
+**0 BLOCKING, 0 MAJOR, 17 MINOR.** Every K-door state in §0.7 survived real calls (lens B). `check_merge_guard.py` and `properties_baseline_probe.py --assert` exit 0 (lens B), the async mirror is current (lens A, `unasync.py --check`), and every Foundry number in §0.1 and §1.2 recomputed true except the one in C2 (lens C). Lens C also confirmed against `foundry_sdk` 1.111.0 that all 22 `ObjectPropertyType` variants are mapped and that `sharedPropertyTypeMapping` is read in its declared direction, SPT apiName to property apiName.
+
+| # | lens | finding | disposition |
+|---|---|---|---|
+| A1 | A | the reader's successor walk stopped one hop short of `resolve_type`'s (16 vs 1 + 16), so a 17-hop chain read *unknown* where `resolve_type` answered the live end | **fixed**: the same bound as `resolve_type` |
+| A2 | A | a page-capped scan holding a match answered *redirected* from a partial page, against rule 2.10-11's *"could not finish … unknown"* | **fixed**: `why` is checked before the holders |
+| A3 | A | a shared slot carrying a blank `description` was refused, though rule 2.10-3 makes a blank description a missing one at every door | **fixed**, pinned by a new `C21-03` case at `propose_type` and `import_types` |
+| A4 | A | on a `kind="property"` entry, `detail.key` named `base_type` for a breach of `item_type`, `source_type` or `value_set` | **fixed**, pinned in `C21-09` |
+| A5 | A | rule 2.10-1's *"unchanged in every respect"* contradicted 2.10-9's refusal of `required` on a property entry | **fixed**: 2.10-1 names the exception |
+| B1 | B | a shared property type the plan **holds** (R109, R110) still binds an entity's slot to a live, unrelated local `kind="property"` row of the same word, with no warning and an empty `unresolved_shared` | **recorded, not fixed.** It is row 8a's round-3 *"the store first"* rule in `_foundry_unresolved`, inherited unchanged and identical for interfaces. That rule exists because a re-run without `definitions=` holds a standing type while its row stays live, which is the same thing and must resolve. Telling *the same thing re-imported* from *an unrelated local row* needs a provenance comparison this row does not build. No guard is bypassed and both holds stand |
+| B2 | B | K6 (R110 holds both colliding shared property types) had no pin | **fixed**: `C12-77` |
+| B3 | B | §0.7 K7 names the `attributes` replacement only; an active re-import also drops the property's predicate membership out from under a consumer's gate, reported only in `detail.replaces.predicates_dropped` | **recorded**: K7 is reserved (rule 2.10-20, Q103), and this is §2.5's inherited re-import behaviour, which Q103 covers. Stated here so Q103's answer accounts for it |
+| B4 | B | a word held under two kinds also makes `resolve_type` with no `kind` raise `AmbiguousKind`, which 2.10-15 did not list; a Foundry interface and shared property type converting to one word both land, one per kind, with no warning | **fixed** in 2.10-15's text. The safe direction: nothing collapses |
+| B5 | B | `check_merge_guard.py` Part A parses `ontoloche/registry.py` only | **fixed**: its scope and why the async mirror and `foundry.py` cannot hide a writer are stated in the tool. Lens B checked by hand that neither adds one |
+| C1 | C | `C21-17` never writes the `dpr` slot sharing `latitude` or a slot whose value set exists only in another namespace (§0.4 UC3 items 2 and 3), so §1.2 cited a test that did not observe them | **fixed**: both writes added to `C21-17` |
+| C2 | C | §0.1 item 4 and §1.2 count **3** struct arrays; there are **4** struct-array slots, because `Employee.bonusHistory` is in both `employee` and `legacy` (1 and 3) | **corrected here**. §0 is pre-registration and is left as committed, and the Foundry 4 row in §1.2 is scored on it: the prediction counted distinct properties, the build lands 4 slots |
+| C3 | C | §2.5a's report paragraph omits each entity's `name`, `no_home` entries on a shared property type or interface, and `property: null` | **fixed** in §2.5a |
+| C4 | C | a `primaryKey` or `titleProperty` naming no slot was carried under `$primaryKey` / `$titleProperty` undocumented, and counted in `carried_properties` | **fixed**: documented in §2.5a, and no longer counted |
+| C5 | C | §2.10's type table said nothing about an array of arrays | **fixed**: one sentence in the `array` row |
+| C6 | C | rule 2.10-21 still said 83 where §1.2 corrected the slot count to 81 | **fixed** |
+| C7 | C | the carry keeps `null`s verbatim while `source_type` omits them | **fixed in the text**: §2.5a says the carry is verbatim, nulls included. Nothing is lost, and `no_home` already skips null values |
+
+**Next:** round 2 must see the final text and code (§0.9), so it runs on the commit that applies these fixes.

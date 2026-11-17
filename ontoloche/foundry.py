@@ -617,7 +617,8 @@ def plan(
                     for spt, prop in (full.get("sharedPropertyTypeMapping") or {}).items()
                     if prop == s["name"]
                 ],
-                carried=len(carry),
+                # `$primaryKey` / `$titleProperty` are not properties (round 1, C4).
+                carried=sum(1 for k in carry if not k.startswith("$")),
             )
         )
 
