@@ -118,6 +118,7 @@ from .ingest import (
     InstanceContext,
     InstanceLookup,
     InstanceResolution,
+    MatchPolicy,
     condition_from_mapping,
     condition_problem,
     entry_declaration_problem,
@@ -11911,6 +11912,8 @@ class Registry:
         judged: Preflight | None = None,
         approval_mode: str | None = None,
         warnings: Sequence[str] = (),
+        match_policy: MatchPolicy | Mapping[str, Any] | None = None,
+        governed_by: str | None = None,
     ) -> Invocation | Refusal:
         """ACTIONS.md 6.2 -- what happened. The ledger, and it files a report.
 
@@ -11948,6 +11951,49 @@ class Registry:
                 f"{approval_mode!r} (ACTIONS.md 6.2, amendment A3)"
             )
         carried_warnings = tuple(warnings)
+        # Amendment A5 (row 7c, INGEST.md rule 5-7, `I-7`): the thresholds that decided a
+        # proposal and the entry they came from, both or neither -- thresholds with no
+        # entry, or an entry with no thresholds, cannot answer *which numbers produced
+        # this row*.
+        match_policy_of_record: dict | None = None
+        if (match_policy is None) != (governed_by is None):
+            raise ValueError(
+                "match_policy= and governed_by= are given together or not at all: one "
+                "without the other cannot say which entry's thresholds governed "
+                "(ACTIONS.md 6.2, amendment A5)"
+            )
+        if match_policy is not None:
+            terms = (
+                {
+                    "match_at": match_policy.match_at,
+                    "propose_below": match_policy.propose_below,
+                    "ambiguity_margin": match_policy.ambiguity_margin,
+                    "why": match_policy.why,
+                }
+                if isinstance(match_policy, MatchPolicy)
+                else match_policy
+            )
+            problem = match_policy_problem(terms)
+            if problem is not None:
+                raise ValueError(
+                    f"match_policy= is not a MatchPolicy INGEST.md 5 accepts: {problem}"
+                )
+            if (
+                not isinstance(governed_by, str)
+                or governed_by.count(":") != 1
+                or not all(part.strip() for part in governed_by.split(":"))
+            ):
+                raise ValueError(
+                    f"governed_by= is '<namespace>:<entry>', as InstanceResolution."
+                    f"governed_by prints it; got {governed_by!r} (amendment A5)"
+                )
+            parsed = match_policy_from_mapping(terms)
+            match_policy_of_record = {
+                "governed_by": governed_by,
+                "match_at": parsed.match_at,
+                "propose_below": parsed.propose_below,
+                "ambiguity_margin": parsed.ambiguity_margin,
+            }
         for w in carried_warnings:
             if not isinstance(w, str) or w.split(":", 1)[0] not in CARRIED_WARNINGS:
                 raise ValueError(
@@ -12042,6 +12088,8 @@ class Registry:
                     "approval_mode_declared": declared_mode,
                 }
         warnings.extend(carried_warnings)
+        if match_policy_of_record is not None:
+            policy_of_record = {**policy_of_record, "match_policy": match_policy_of_record}
 
         # ACTIONS.md 3.2 / 5.2 -- **never FABRICATED and never DISCARDED**, judged against
         # the POLICY OF RECORD so an approval the gate granted survives a later

@@ -358,6 +358,7 @@ If `record_invocation` **refused** a report because the host observed an effect 
 | 3-7 | The copy is taken from **what the gate judged**: `family_version` is stamped on `Preflight` and `Invocation`, `record_invocation(judged=…)` records that declaration and that policy, and a version mismatch is `declaration_amended:<from>:<to>` | `C19-56` |
 | 3-8 | `declared_policy` carries `approval_mode`, `min_auto_tier`, `reversibility` and the precondition kinds, for the reason rule 3-1 carries the effects | `C19-57` |
 | 3-9 | `Invocation.results` (amendment **A2**, row 7c) carries what the host reports it minted, keyed by input name, derived from `invocation_recorded` events `record_result` appends, never from an effect's `why` and never from `inputs`. The latest report for a name wins and the record is never rewritten | `C19-109` |
+| 3-10 | `declared_policy["match_policy"]` (amendment **A5**, row 7c) carries the thresholds that decided a proposal and the entry that governed them, `{governed_by, match_at, propose_below, ambiguity_margin}`, copied as the gate judged them. It is written only from `record_invocation(match_policy=, governed_by=)`, both or neither, and is absent otherwise | `C19-110` |
 
 ### 3.1 `Invocation` — one use of one verb
 
@@ -674,8 +675,14 @@ def record_invocation(
     warnings: Sequence[str] = (),          # AMENDMENT A3: only CARRIED_WARNINGS -- INGEST
                                            #   §4's two and the four a resolution carries.
                                            #   Anything else is a ValueError
+    match_policy: MatchPolicy | Mapping | None = None,  # AMENDMENT A5 (row 7c): the
+    governed_by: str | None = None,        #   thresholds that decided a proposal and the
+                                           #   entry they came from, both or neither.
+                                           #   Copied into declared_policy["match_policy"]
 ) -> Invocation | Refusal: ...
 ```
+
+**`match_policy=` and `governed_by=` are amendment A5, landed by row 7c** ([`INGEST.md`](INGEST.md) §4.4, rule 5-7). `declared_policy` carried the family's approval policy and not the thresholds that decided the proposal, so a reviewer draining the queue could not tell which entry's numbers produced the row in front of them (`INGEST.md` `I-7`). The two travel together, because thresholds with no entry, or an entry with no thresholds, cannot answer that question, and they land as `declared_policy["match_policy"] = {"governed_by", "match_at", "propose_below", "ambiguity_margin"}`, **copied** for rule 3-8's reason: an amendment to the entry afterwards must not re-describe an old proposal. A malformed policy, a `governed_by` that is not `<namespace>:<entry>`, or one without the other, is a `ValueError`.
 
 **`approval_mode=` and `warnings=` are amendment A3, landed by row 7c** ([`INGEST.md`](INGEST.md) §4.4). F3 found `declared_policy` copied from the family, so the only shipped route to `review` for one ambiguous proposal was a governance act that moved **every later row** of the family there. `approval_mode=` raises one invocation's mode of record (`auto` < `review` < `human`) and is ignored when it would lower it, and the record keeps the family's declared mode beside it as `approval_mode_declared`, or a reviewer could not tell a review-mode family from an auto family raised once. `warnings=` is a closed subset, `actions.CARRIED_WARNINGS`: §4's `instance_ambiguous_at_proposal` and `instance_proposal_pending`, and the four read-side values a resolution carries. Every other warning is a finding the registry makes **about** the host (`effect_undeclared`, `approval_unrecorded`, `declaration_amended`), and a host that could write one could write it where it is false.
 
