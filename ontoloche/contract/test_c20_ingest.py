@@ -2138,6 +2138,7 @@ def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
 # Each was committed red before the code that turns it green (7C-RUN 0.3).
 
 from ..actions import Effect, InputSpec, parse_ref, ref_key  # noqa: E402
+from ..edges import InstanceRef  # noqa: E402
 from ._support import action_family  # noqa: E402
 
 NEEDS_LEDGER = pytest.mark.requires_capability("stores_attributes", "stores_invocations")
@@ -2171,3 +2172,30 @@ def test_c20_69_a_proposed_thing_is_named_by_a_candidate_ref_with_no_id(adapter,
     back = parse_ref(rec.inputs["instance"])
     assert back == cand and isinstance(back, CandidateRef), back
     assert "#" not in rec.inputs["instance"].split('"label"')[0], rec.inputs
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_29_the_minted_ref_is_recorded_in_results_under_the_effective_type(
+    adapter, make_registry
+):
+    """Rule **4-3**. The `InstanceRef` the host minted is recorded in `results`
+    (amendment A2), never in an effect's `why` and never in `inputs`, and the type it
+    is written under is the EFFECTIVE one the resolution reports (`I-3`)."""
+    registry = _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=_rows())
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("a result is an event, and this backend keeps none")
+    res = _resolve(registry, NOTHING, type_name="facility")
+    assert res.outcome == "proposal", res
+    assert res.candidate.type.name == "ltc_facility", "the EFFECTIVE type, not the declared"
+    _ingest_family(registry)
+    rec = registry.record_invocation("propose_facility", {"instance": res.candidate},
+                                     actor="ai:ingest", outcome="applied",
+                                     observed_effects=[_HOST_WRITE])
+    minted = InstanceRef(res.candidate.type, "995001")
+    out = registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    assert not isinstance(out, Refusal), out
+    assert out.results == {"instance": minted}
+    assert out.results["instance"].type.name == "ltc_facility"
+    assert all(ref_key(minted) not in e.why for e in out.observed_effects)
+    assert parse_ref(out.inputs["instance"]) == res.candidate

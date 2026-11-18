@@ -5117,3 +5117,98 @@ async def test_c19_111_a_candidate_is_a_fourth_reference_shape_validated_at_both
             "propose_facility", {"instance": instance}, actor="ai:ingest", outcome="applied",
         )
         assert isinstance(wrong_rec, Refusal) and wrong_rec.reason == "input_kind_mismatch"
+
+@NEEDS_INVOCATIONS
+async def test_c19_109_results_carry_what_the_host_minted_and_nothing_else_does(
+    adapter, make_registry
+):
+    """Rule **3-9**, amendment **A2** (`INGEST.md` 4.4, rule 4-3).
+
+    `Invocation` had no field that carries a RESULT. F2's route A (the ref in the
+    `host_state` effect's `why`) made a correct run warn `effect_undeclared`, and route B
+    (an optional input used as an output) is one container meaning two things. The slot
+    is filled by a LATER act, `record_result`, because the host writes after the
+    proposal is recorded and the store never rewrites a row: it rides an
+    `invocation_recorded` event, which is 3.5's own sentence for a correction.
+    """
+    from ontoloche.actions import Invocation
+
+    assert "results" in Invocation.__dataclass_fields__
+    registry = await make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("a result is an event, and this backend keeps none")
+    await seed(registry, "facility")
+    await _propose_family(registry)
+    cand = _candidate()
+    minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+    rec = await registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        observed_effects=[Effect(op="host_state", why=f"wrote {ref_key(minted)}")],
+    )
+    assert not isinstance(rec, Refusal), rec
+    assert rec.results == {}, "nothing is minted until the host says so"
+    assert not any(w.startswith("effect_undeclared") for w in rec.warnings), rec.warnings
+
+    out = registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    assert not isinstance(out, Refusal), out
+    assert out.results == {"instance": minted}, out.results
+    assert parse_ref(out.inputs["instance"]) == cand, "the input is still the candidate"
+    assert out.observed_effects == rec.observed_effects, "the record is never rewritten"
+    assert any(
+        e.event == "invocation_recorded" and "results" in e.detail
+        for e in out.provenance.history
+    ), out.provenance.history
+
+    # Read back through the ledger, not only from the writer's return value.
+    listed = [i for i in (await registry.invocations(family="propose_facility")).invocations
+              if i.invocation_id == rec.invocation_id]
+    assert listed and listed[0].results == {"instance": minted}
+
+    # Append-only: a second result is recorded and the latest reads back.
+    later = InstanceRef(TypeRef("default", "entity", "facility"), "015010")
+    again = registry.record_result(rec.invocation_id, {"instance": later}, actor="host:cms")
+    assert again.results == {"instance": later}, again.results
+
+@NEEDS_INVOCATIONS
+async def test_c19_114_record_result_is_the_slots_only_writer_and_refuses_what_it_cannot_keep(
+    adapter, make_registry
+):
+    """Rule **6-17**, amendment **A2**'s writer. A sixth call, for R73's reason: a
+    result is a later act, so it is a call and not a parameter."""
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    await _propose_family(registry)
+    cand = _candidate()
+    minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+    rec = await registry.record_invocation("propose_facility", {"instance": cand},
+                                     actor="ai:ingest", outcome="applied")
+    assert not isinstance(rec, Refusal), rec
+
+    with pytest.raises(ValueError):
+        registry.record_result(rec.invocation_id, {"instance": minted}, actor=" ")
+    for bad_id, ns in (("no-such-invocation", "default"), (rec.invocation_id, "elsewhere")):
+        out = registry.record_result(bad_id, {"instance": minted}, actor="host:cms",
+                                     namespace=ns)
+        assert isinstance(out, Refusal) and out.reason == "unknown_invocation", out
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        as_cand = registry.record_result(rec.invocation_id, {"instance": cand},
+                                         actor="host:cms")
+        assert isinstance(as_cand, Refusal) and as_cand.reason == "input_kind_mismatch"
+        undeclared = registry.record_result(rec.invocation_id, {"other": minted},
+                                            actor="host:cms")
+        assert isinstance(undeclared, Refusal)
+        assert undeclared.reason == "input_kind_mismatch", undeclared
+
+    eventless = await make_registry(AsyncDegradedAdapter(
+        adapter, stores_invocation_events=False,
+        why={"stores_invocation_events": "the host owns the schema and has no event table"},
+    ))
+    kept = await eventless.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied")
+    out = eventless.record_result(kept.invocation_id, {"instance": minted}, actor="host:cms")
+    assert isinstance(out, Refusal) and out.reason == "cannot_record_override", out
+
+    blind = await make_registry(AsyncDegradedAdapter(adapter, stores_invocations=False,
+                                          why=NO_INVOCATIONS))
+    out = blind.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    assert isinstance(out, Refusal) and out.reason == "action_store_absent", out
