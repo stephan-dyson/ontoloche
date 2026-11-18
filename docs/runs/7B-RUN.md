@@ -265,7 +265,13 @@ ING11 said rule 3-19's cost was unmeasured. Over the 14,624 CMS rows, split 7,31
 
 ### §1.8 — Gates and the suite
 
-Filled at landing, from the final run on the landing commit.
+Filled at landing, from the final run on 86ac3f1, whose code and tests are the landing commit's (the landing commit adds only this section). **[Observed]**
+
+- **The full suite,** `ontoloche.contract` and `ontoloche.aio.contract` on all three legs, Postgres DSN set: 3152 passed, 888 skipped, exit 0, in 23 minutes 16 seconds.
+- **The five gates:** check_links, check_spec_drift, check_merge_guard, check_capability_matrix and check_skip_census all exit 0.
+- **The mutation sweep:** 135 mutations, 135 killed, 0 survived, 0 not applied, in three batches of 45 (memory). It covers all 77 in-scope C20 ids plus finding 2.
+- **The probe:** `ingest_build_probe.py --assert`, 24/24.
+- **The loop:** six rounds, stopped at the cap with round 6 confirming (§2.6), including the departure stated there.
 
 ## §2 — THE ADVERSARIAL LOOP
 
