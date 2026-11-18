@@ -5561,3 +5561,46 @@ def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
     seed(registry, "unscored")
     unscored = registry.invocations(unwritten_for=_candidate("x", name="unscored"))
     assert not unscored.complete and unscored.why_incomplete, unscored
+
+
+@NEEDS_INVOCATIONS
+def test_c19_110_the_match_policy_that_governed_is_recorded_with_its_entry(
+    adapter, make_registry
+):
+    """Rule **3-10**, amendment **A5** (`INGEST.md` 4.4, rule 5-7, `I-7`).
+
+    `declared_policy` carried the family's approval policy and not the thresholds that
+    decided a proposal, so a reviewer could not tell which entry's numbers produced the
+    row in front of them. `match_policy=` and `governed_by=` travel together, both or
+    neither, and land copied as the gate judged them, for rule 3-8's reason.
+    """
+    from ..ingest import MatchPolicy
+
+    registry = make_registry(adapter)
+    seed(registry, "facility")
+    _propose_family(registry)
+    policy = MatchPolicy(0.97, 0.80, 0.02, "the kit's thresholds")
+    rec = registry.record_invocation(
+        "propose_facility", {"instance": _candidate()}, actor="ai:ingest",
+        outcome="applied", match_policy=policy, governed_by="default:ltc_facility",
+    )
+    assert not isinstance(rec, Refusal), rec
+    expected = {"governed_by": "default:ltc_facility", "match_at": 0.97,
+                "propose_below": 0.80, "ambiguity_margin": 0.02}
+    assert rec.declared_policy["match_policy"] == expected
+    listed = [i for i in registry.invocations(family="propose_facility").invocations
+              if i.invocation_id == rec.invocation_id]
+    assert listed and listed[0].declared_policy["match_policy"] == expected
+
+    plain = registry.record_invocation("propose_facility", {"instance": _candidate()},
+                                       actor="ai:ingest", outcome="applied")
+    assert "match_policy" not in plain.declared_policy
+
+    for kwargs in ({"match_policy": policy}, {"governed_by": "default:facility"},
+                   {"match_policy": {"match_at": 2.0, "propose_below": 0.8,
+                                     "ambiguity_margin": 0.02, "why": "x"},
+                    "governed_by": "default:facility"},
+                   {"match_policy": policy, "governed_by": "no-colon"}):
+        with pytest.raises(ValueError):
+            registry.record_invocation("propose_facility", {"instance": _candidate()},
+                                       actor="ai:ingest", outcome="applied", **kwargs)

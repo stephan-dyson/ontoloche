@@ -40,6 +40,7 @@ from ..ingest import (
     condition_from_mapping,
     condition_problem,
     evaluate,
+    match_policy_from_mapping,
     match_policy_problem,
     norm,
     similar,
@@ -824,6 +825,22 @@ def test_c20_41_the_policy_in_force_is_recorded(adapter, make_registry):
     ns, name = answer.governed_by.split(":")
     entry = adapter.get_type(ns, name, kind="entity")
     assert entry.attributes[MATCH_POLICY_KEY] == POLICY
+    if not registry.caps.stores_invocations:
+        return
+    # The invocation half (row 7c, amendment A5): the thresholds that governed travel
+    # onto the record WITH the entry that governed them, copied, so the reviewer of a
+    # proposal can say which entry's numbers produced it (`I-7`).
+    _ingest_family(registry)
+    rec = registry.record_invocation(
+        "propose_facility", {"instance": _resolve(registry, NOTHING).candidate},
+        actor="ai:ingest", outcome="applied",
+        match_policy=match_policy_from_mapping(POLICY), governed_by=answer.governed_by,
+    )
+    assert not isinstance(rec, Refusal), rec
+    assert rec.declared_policy["match_policy"] == {
+        "governed_by": "default:facility", "match_at": 0.97, "propose_below": 0.80,
+        "ambiguity_margin": 0.02,
+    }, rec.declared_policy
 
 
 @NEEDS_ATTRIBUTES
