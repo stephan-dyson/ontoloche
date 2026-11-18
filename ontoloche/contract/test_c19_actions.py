@@ -5430,3 +5430,56 @@ def test_c19_114_record_result_is_the_slots_only_writer_and_refuses_what_it_cann
                                           why=NO_INVOCATIONS))
     out = blind.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
     assert isinstance(out, Refusal) and out.reason == "action_store_absent", out
+
+
+@NEEDS_INVOCATIONS
+def test_c19_112_one_invocation_can_be_raised_to_review_and_warnings_are_a_closed_set(
+    adapter, make_registry
+):
+    """Rule **6-16**, amendment **A3** (`INGEST.md` 4.4, rule 4-5).
+
+    F3: `declared_policy` was copied from the family, so the only shipped route to
+    `review` was a governance act moving EVERY later row there. `approval_mode=` raises
+    ONE invocation's mode of record and never lowers it, and `warnings=` takes only what
+    a host may carry from a resolution, so the registry's own detectors cannot be forged.
+    """
+    registry = make_registry(adapter)
+    seed(registry, "facility")
+    _propose_family(registry)
+    cand = _candidate(resolution="ambiguous")
+    carried = ("instance_ambiguous_at_proposal:instance:2", "consumers_unregistered")
+    raised = registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        approval_mode="review", warnings=carried,
+    )
+    assert not isinstance(raised, Refusal), raised
+    assert raised.declared_policy["approval_mode"] == "review"
+    assert raised.declared_policy["approval_mode_declared"] == "auto"
+    for w in carried:
+        assert w in raised.warnings, raised.warnings
+    plain = registry.record_invocation("propose_facility", {"instance": _candidate()},
+                                       actor="ai:ingest", outcome="applied")
+    assert plain.declared_policy["approval_mode"] == "auto", "ONE row, not every later one"
+    assert "approval_mode_declared" not in plain.declared_policy
+
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        queue = {i.invocation_id for i in registry.invocations(unreviewed=True).invocations}
+        assert raised.invocation_id in queue and plain.invocation_id not in queue
+
+    # Never lowers.
+    _propose_family(registry, "careful_propose", mode="human")
+    lowered = registry.record_invocation("careful_propose", {"instance": cand},
+                                         actor="ai:ingest", outcome="applied",
+                                         approval_mode="auto")
+    assert lowered.declared_policy["approval_mode"] == "human", lowered.declared_policy
+
+    for bad_mode in ("maybe", ""):
+        with pytest.raises(ValueError):
+            registry.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied",
+                                       approval_mode=bad_mode)
+    for forged in (("effect_undeclared:host_state:x",), ("declaration_amended:1:2",),
+                   ("approval_unrecorded",), ("made_up_value",)):
+        with pytest.raises(ValueError):
+            registry.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied", warnings=forged)
