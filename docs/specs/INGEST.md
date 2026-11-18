@@ -1174,8 +1174,8 @@ derives goes stale.
 | `instance_type_succeeded:<successor>` | `warnings` | 47 | minted, row 7b | §3.4a rule 3-14's handle, K6's retired-type case, one per HOP of the closure |
 | `consumers_unregistered` | `warnings` | 48 | minted, row 7b | §7 rule 7-1's handle, Q87's default |
 | `no_tenancy_predicate` | `warnings` | 49 | minted, row 7b | §7 rule 7-4's handle |
-| `instance_ambiguous_at_proposal:<input_name>:<n>` | `warnings` | 50 | reserved, row 7c | §4.3's mechanical handle. The `<input_name>` segment was added by round 1's F7 |
-| `instance_proposal_pending:<invocation_id>` | `warnings` | 51 | reserved, row 7c | §4.3 rule 4-11's handle, the pending-proposal question K4 forced |
+| `instance_ambiguous_at_proposal:<input_name>:<n>` | `warnings` | 50 | minted, row 7c | §4.3's mechanical handle. The `<input_name>` segment was added by round 1's F7 |
+| `instance_proposal_pending:<invocation_id>` | `warnings` | 51 | minted, row 7c | §4.3 rule 4-11's handle, the pending-proposal question K4 forced |
 
 **A malformed `Condition` mints nothing**: it is refused with **`attributes_schema_violation`**, which
 `ACTIONS.md` rule 2.4-6 already uses for a malformed `Precondition` declaration. **Minting a value for the

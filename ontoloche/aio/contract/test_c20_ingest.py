@@ -1991,3 +1991,22 @@ async def test_c20_29_the_minted_ref_is_recorded_in_results_under_the_effective_
     assert out.results["instance"].type.name == "ltc_facility"
     assert all(ref_key(minted) not in e.why for e in out.observed_effects)
     assert parse_ref(out.inputs["instance"]) == res.candidate
+
+@NEEDS_LEDGER
+async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_family_says(
+    adapter, make_registry
+):
+    """Rule **4-5**, through the ledger (amendment A3). A proposal made over an
+    `ambiguous` resolution carries `instance_ambiguous_at_proposal:<input_name>:<n>` and
+    is recorded in `review` mode in an `auto` family, and the next proposal is not."""
+    registry = await _world(adapter, make_registry)
+    res = await _resolve(registry, BAND)
+    assert res.outcome == "ambiguous" and res.complete, res
+    await _ingest_family(registry, mode="auto")
+    warning = f"instance_ambiguous_at_proposal:instance:{res.known}"
+    rec = await registry.record_invocation("propose_facility", {"instance": res.candidate},
+                                     actor="ai:ingest", outcome="applied",
+                                     approval_mode="review", warnings=(warning,))
+    assert not isinstance(rec, Refusal), rec
+    assert rec.declared_policy["approval_mode"] == "review"
+    assert warning in rec.warnings

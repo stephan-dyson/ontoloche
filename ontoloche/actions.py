@@ -69,6 +69,7 @@ __all__ = [
     "EVALUATORS",
     "REF_SHAPES",
     "CANDIDATE_RESOLUTIONS",
+    "CARRIED_WARNINGS",
     "ACTION_PAYLOAD_KIND",
     "ADMISSION_RULE",
     "family_declaration_problem",
@@ -181,6 +182,19 @@ REF_SHAPES = ("type", "instance", "edge", "candidate")
 #: INGEST.md 3.1's two outcomes that produce a ``CandidateRef``. A candidate carrying any
 #: other resolution names something the resolution did not say could be proposed.
 CANDIDATE_RESOLUTIONS = ("proposal", "ambiguous")
+
+#: Amendment **A3** (row 7c, INGEST.md 4.4) -- the warnings a host may hand
+#: ``record_invocation(warnings=)``: §4's two, which the ingest act computes from a
+#: resolution, and the four read-side values a resolution carries. Every other value is
+#: a finding the registry makes ABOUT the host and is never accepted from it.
+CARRIED_WARNINGS = (
+    "instance_ambiguous_at_proposal",
+    "instance_proposal_pending",
+    "instance_narrowed_proposal",
+    "instance_type_succeeded",
+    "consumers_unregistered",
+    "no_tenancy_predicate",
+)
 
 #: ACTIONS.md 2.7, ruling **R10**, row 6b -- the ``AttributeSchema.kind`` an invocation's
 #: INPUTS schema is keyed under, and it is **not** ``"action"``.

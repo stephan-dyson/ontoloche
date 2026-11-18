@@ -519,8 +519,7 @@ WARNING_VALUES = (
     # then reads `why_absent[key] = "not_stored"`, never an empty declaration.
     "property_declaration_not_stored",
     # INGEST.md v0, row 7b -- the read side's four, reserved in INGEST.md §9 and minted
-    # in the change that emits them (Q85, R11). §4's two (`instance_ambiguous_at_
-    # proposal`, `instance_proposal_pending`) stay reserved for row 7c.
+    # in the change that emits them (Q85, R11). §4's two follow, minted by row 7c.
     # Rule 2-13: a `proposal` decided over a host_filter-narrowed read. Carries the keys.
     "instance_narrowed_proposal",
     # Rule 3-14: one per HOP of the successor closure. Carries the successor's name.
@@ -530,6 +529,14 @@ WARNING_VALUES = (
     "consumers_unregistered",
     # Rule 7-4: the entry declares no tenancy predicate, so the read ran unfiltered.
     "no_tenancy_predicate",
+    # INGEST.md §4, row 7c -- the write side's two, reserved in INGEST.md §9 by row 7b
+    # and minted in the change that emits them. Carrier: `Invocation`, handed in through
+    # `record_invocation(warnings=)` (amendment A3) by the ingest act.
+    # Rule 4-5: a proposal over an `ambiguous` resolution. `<input_name>:<n>`.
+    "instance_ambiguous_at_proposal",
+    # Rule 4-11: a proposal for an identity whose earlier proposal's row is unwritten.
+    # Carries the holder's `<invocation_id>`.
+    "instance_proposal_pending",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

@@ -585,6 +585,7 @@ So, concretely, for the one host that exists:
 | 6-13 | `review_invocation` **honours its `namespace`**: an invocation stored in another scope is `unknown_invocation`, not a silent cross-tenant drain; and an empty `reviewed_by` is a `ValueError`, as an empty `reason` is at `retire` *(row 6c, round 1)* | `C19-85` |
 | 6-14 | `ref="candidate"` (amendment **A1**, row 7c) is validated at both doors: a candidate where another shape is declared, and the reverse, is `input_kind_mismatch`, and so are a non-`entity` type, a `resolution` outside `proposal` / `ambiguous`, and an empty `label` or `act_id`. Its flat form round-trips through `parse_ref` | `C19-111` |
 | 6-15 | `record_result` (amendment **A2**'s writer, row 7c) is the `results` slot's only writer. It refuses `unknown_invocation` (no invocation under that id in that namespace), `action_store_absent`, `cannot_record_override` on a backend that cannot keep the event, and `input_kind_mismatch` for a result keyed by an input the invocation did not carry or naming a `CandidateRef`; an empty `actor` is a `ValueError` | `C19-114` |
+| 6-16 | `record_invocation(approval_mode=, warnings=)` (amendment **A3**, row 7c): `approval_mode` raises one invocation's mode of record and never lowers it, keeping the family's as `declared_policy["approval_mode_declared"]`, and the next invocation is not raised. `warnings` accepts only `CARRIED_WARNINGS`; a registry-detected value, or one outside the vocabulary, is a `ValueError`, and so is an `approval_mode` outside `APPROVAL_MODES` | `C19-112` |
 
 Signatures are Python-shaped because deliverable #2 is a Python package. They are **not** a module layout.
 
@@ -665,8 +666,17 @@ def record_invocation(
                                            #   the declaration and the policy on the record
                                            #   come from HERE, and a `family_version`
                                            #   mismatch is `declaration_amended:<from>:<to>`
+    approval_mode: str | None = None,      # AMENDMENT A3 (row 7c): RAISES this one row's
+                                           #   mode of record, never lowers it. When it
+                                           #   raises, declared_policy keeps the family's
+                                           #   as `approval_mode_declared`
+    warnings: Sequence[str] = (),          # AMENDMENT A3: only CARRIED_WARNINGS -- INGEST
+                                           #   §4's two and the four a resolution carries.
+                                           #   Anything else is a ValueError
 ) -> Invocation | Refusal: ...
 ```
+
+**`approval_mode=` and `warnings=` are amendment A3, landed by row 7c** ([`INGEST.md`](INGEST.md) §4.4). F3 found `declared_policy` copied from the family, so the only shipped route to `review` for one ambiguous proposal was a governance act that moved **every later row** of the family there. `approval_mode=` raises one invocation's mode of record (`auto` < `review` < `human`) and is ignored when it would lower it, and the record keeps the family's declared mode beside it as `approval_mode_declared`, or a reviewer could not tell a review-mode family from an auto family raised once. `warnings=` is a closed subset, `actions.CARRIED_WARNINGS`: §4's `instance_ambiguous_at_proposal` and `instance_proposal_pending`, and the four read-side values a resolution carries. Every other warning is a finding the registry makes **about** the host (`effect_undeclared`, `approval_unrecorded`, `declaration_amended`), and a host that could write one could write it where it is false.
 
 Refuses with `action_family_unknown` (no such family), `action_store_absent` (`stores_invocations=False`), or `attributes_schema_violation` (the inputs fail the family's `payload_schema` in `enforce` mode — `PACKAGE.md` §5.3's existing value, not a new one).
 

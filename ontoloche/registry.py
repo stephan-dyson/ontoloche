@@ -57,7 +57,9 @@ from .actions import (
     ACTION_ATTRIBUTE_KEYS,
     ACTION_PAYLOAD_KIND,
     ADMISSION_RULE,
+    APPROVAL_MODES,
     CANDIDATE_RESOLUTIONS,
+    CARRIED_WARNINGS,
     EVALUATORS,
     GATE_VERDICTS,
     OUTCOMES,
@@ -11907,8 +11909,19 @@ class Registry:
         refusal: Refusal | None = None,
         compensates: str | None = None,
         judged: Preflight | None = None,
+        approval_mode: str | None = None,
+        warnings: Sequence[str] = (),
     ) -> Invocation | Refusal:
         """ACTIONS.md 6.2 -- what happened. The ledger, and it files a report.
+
+        **Amendment A3** (row 7c, INGEST.md 4.4). ``approval_mode=`` RAISES this one
+        invocation's mode of record (``auto`` < ``review`` < ``human``) and never lowers
+        it; when it raises, ``declared_policy["approval_mode_declared"]`` keeps the mode
+        the family declared, so the record says both. ``warnings=`` carries what a host
+        may forward from a resolution -- ``CARRIED_WARNINGS``, a closed subset -- and
+        anything else is a ``ValueError``, because the registry's own detectors
+        (``effect_undeclared``, ``approval_unrecorded``...) are findings ABOUT the host and
+        a host that could write them could forge their absence's opposite.
 
         **It does not refuse on ``effect_undeclared``, on a stale precondition, or on a
         ``gate_verdict`` of ``refused``.** All three are recorded, warned where 2.5 says
@@ -11929,6 +11942,19 @@ class Registry:
         """
         if outcome not in OUTCOMES:
             raise ValueError(f"outcome must be one of {list(OUTCOMES)}; got {outcome!r}")
+        if approval_mode is not None and approval_mode not in APPROVAL_MODES:
+            raise ValueError(
+                f"approval_mode must be one of {list(APPROVAL_MODES)} or None; got "
+                f"{approval_mode!r} (ACTIONS.md 6.2, amendment A3)"
+            )
+        carried_warnings = tuple(warnings)
+        for w in carried_warnings:
+            if not isinstance(w, str) or w.split(":", 1)[0] not in CARRIED_WARNINGS:
+                raise ValueError(
+                    f"warnings= takes only {list(CARRIED_WARNINGS)} -- what a host may "
+                    f"carry from a resolution. {w!r} is a finding the registry makes "
+                    f"itself, or not a warning at all (ACTIONS.md 6.2, amendment A3)"
+                )
         if gate_verdict not in GATE_VERDICTS:
             raise ValueError(
                 f"gate_verdict must be one of {list(GATE_VERDICTS)}; got {gate_verdict!r}"
@@ -12003,6 +12029,19 @@ class Registry:
                 "tier_order": list(self.policy(namespace).tier_order.tiers),
             }
             version = judged.family_version
+        if approval_mode is not None:
+            declared_mode = policy_of_record.get("approval_mode")
+            rank = {m: i for i, m in enumerate(APPROVAL_MODES)}
+            if rank[approval_mode] > rank.get(declared_mode, 0):
+                # Amendment A3: ONE row raised, never the family. The declared mode stays
+                # on the record beside it, or a reviewer could not tell a review-mode
+                # family from an auto family whose host asked for review this once.
+                policy_of_record = {
+                    **policy_of_record,
+                    "approval_mode": approval_mode,
+                    "approval_mode_declared": declared_mode,
+                }
+        warnings.extend(carried_warnings)
 
         # ACTIONS.md 3.2 / 5.2 -- **never FABRICATED and never DISCARDED**, judged against
         # the POLICY OF RECORD so an approval the gate granted survives a later
