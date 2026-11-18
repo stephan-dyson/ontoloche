@@ -40,6 +40,8 @@ from ..ingest import (
     condition_problem,
     evaluate,
     match_policy_problem,
+    norm,
+    similar,
 )
 from ..registry import Registry
 from ..types import Consumer, Refusal, ResolveContext, TypeEntry
@@ -1372,3 +1374,238 @@ def test_c20_62_r1_not_an_instance_carries_the_namespace_warnings(adapter, make_
     assert answer.outcome == "not_an_instance"
     assert "no_tenancy_predicate" in answer.warnings
     assert "consumers_unregistered" in answer.warnings
+
+
+# ============================================================ round 2 of the loop
+#
+# 7B-RUN.md 2.2. As round 1: each test is a construction a round-2 lens ran against
+# a27a4df, kept so the shape cannot come back.
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_05_r2_an_integer_host_id_reads_back_at_both_doors(adapter, make_registry):
+    """Rule 2-2 with standing rule (e) (round 2, build lens M1): the host's id column
+    holds integers. Primitive 23 mints ref `#42`; primitive 22 asked for "42" must find
+    that row, never call it absent."""
+    rows = [{"host_id": 42, "label": "BURNS NURSING HOME, INC.", "state": "AL"}]
+    host_instances(adapter, rows, type_name="facility", id_type="NUMBER")
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes=_governed())
+    answer = _resolve(registry, EXACT)
+    assert answer.outcome == "existing" and answer.ref.id == "42", answer
+    assert adapter.get_instance("default", "entity", "facility", "42") is not None
+    lookup = registry.get_instance_checked("facility", "42")
+    assert isinstance(lookup, InstanceLookup) and lookup.record is not None, lookup
+    assert lookup.ref == answer.ref
+
+
+def _chain_world(adapter, make_registry, rows):
+    """a -> b -> c on one host table typed by a column, every entry governed alike."""
+    for name in ("a", "b", "c"):
+        host_instances(adapter, rows, type_name=name, type_column="kind_name")
+    registry = make_registry(adapter)
+    for name in ("a", "b", "c"):
+        seed(registry, name, attributes=_governed())
+    for old, new in (("a", "b"), ("b", "c")):
+        retired = registry.retire(old, "renamed", retired_by="user:sd", successor=new)
+        assert isinstance(retired, TypeEntry), retired
+    return registry
+
+
+@NEEDS_RETIRE
+def test_c20_89_r2_the_ref_never_depends_on_the_declared_name(adapter, make_registry):
+    """Rule 2-17, "resolved under the name the closure resolves to" (round 2, build
+    lens M2). 015009 is held under `a` and `b`, identically, and not under `c`. Round 2
+    found `a#015009` from one caller and `b#015009` from another."""
+    burns = {"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL"}
+    rows = [dict(burns, kind_name="a"), dict(burns, kind_name="b"),
+            {"host_id": "015010", "label": "COOSA VALLEY HEALTHCARE CENTER", "state": "AL",
+             "kind_name": "c"}]
+    registry = _chain_world(adapter, make_registry, rows)
+    refs = set()
+    for name in ("a", "b", "c"):
+        answer = _resolve(registry, EXACT, type_name=name)
+        assert answer.outcome == "existing", (name, answer)
+        refs.add(answer.ref)
+        lookup = registry.get_instance_checked(name, "015009")
+        assert isinstance(lookup, InstanceLookup) and lookup.record is not None, lookup
+        refs.add(lookup.ref)
+    assert {r.type.name for r in refs} == {"c"}, refs
+
+
+@NEEDS_RETIRE
+def test_c20_89_r2_disagreeing_copies_none_current_decide_nothing(adapter, make_registry):
+    """Rule 2-17's build-side branch (round 2, door lens): two copies that differ, none
+    under the effective name. No copy is current, so neither door chooses one."""
+    burns = {"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL"}
+    rows = [dict(burns, kind_name="a"), dict(burns, kind_name="b", state="CA")]
+    registry = _chain_world(adapter, make_registry, rows)
+    answer = _resolve(registry, EXACT, type_name="c")
+    assert answer.outcome == "unknowable" and "2-17" in answer.why_incomplete, answer
+    door = registry.get_instance_checked("c", "015009")
+    assert isinstance(door, Refusal) and door.detail["problem"] == "lookup_incomplete", door
+
+
+@NEEDS_RETIRE
+def test_c20_79_r2_a_margin_only_change_is_a_change(adapter, make_registry):
+    """Rules 3-18 and 5-10 (round 2, door lens 1): the THREE thresholds, the margin one."""
+    registry = _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=[],
+                                new_governed=_governed({**POLICY, "ambiguity_margin": 0.5}))
+    answer = _resolve(registry, EXACT)
+    assert answer.outcome == "unknowable" and "MatchPolicy" in answer.why_incomplete
+
+
+@NEEDS_RETIRE
+def test_c20_79_r2_one_value_by_equality_is_not_a_change(adapter, make_registry):
+    """E10 under the equality `evaluate` uses (round 2, build lens 2): `not_in [1]` and
+    `not_in [1.0]` exclude the same rows, so they are one predicate."""
+    old = {"op": "not_in", "attribute": "state", "value": [1], "why": "w"}
+    new = {"op": "not_in", "attribute": "state", "value": [1.0], "why": "w"}
+    registry = _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=[],
+                                old_governed=_governed(condition=old),
+                                new_governed=_governed(condition=new))
+    assert _resolve(registry, EXACT).outcome == "existing"
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_73_r2_exactly_at_match_at_is_existing(adapter, make_registry):
+    """Rule 5-8, "at or above" (round 2, door lens 2)."""
+    s = similar(norm(BAND), norm("BURNS NURSING HOME, INC."))
+    registry = _world(adapter, make_registry, policy={**POLICY, "match_at": s})
+    answer = _resolve(registry, BAND)
+    assert answer.outcome == "existing", (s, answer)
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_73_r2_a_hair_below_match_at_is_not_existing(adapter, make_registry):
+    """The other side of the same edge (round 2, build lens 1): no tolerance on a
+    threshold. Round 1's epsilon made 0.9 count as at 0.9 + 5e-10."""
+    s = similar(norm(BAND), norm("BURNS NURSING HOME, INC."))
+    registry = _world(adapter, make_registry, policy={**POLICY, "match_at": s + 5e-10})
+    assert _resolve(registry, BAND).outcome == "ambiguous"
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_17_r2_a_second_candidate_exactly_at_match_at_ties(adapter, make_registry):
+    """Rule 3-3 (round 2, door lens 3): at `match_at` and outside the margin, still tied."""
+    rows = _rows() + [{"host_id": "999", "label": "Burns Nursing Home", "state": "AL"}]
+    s2 = similar(norm(EXACT), norm("Burns Nursing Home"))
+    registry = _world(adapter, make_registry, rows, policy={**POLICY, "match_at": s2})
+    answer = _resolve(registry, EXACT)
+    assert answer.outcome == "ambiguous", (s2, answer)
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_74_r2_a_top_exactly_at_propose_below_is_ambiguous(adapter, make_registry):
+    """Rule 5-9 (round 2, door lens 4)."""
+    s = similar(norm(BAND), norm("BURNS NURSING HOME, INC."))
+    registry = _world(adapter, make_registry, policy={**POLICY, "propose_below": s})
+    answer = _resolve(registry, BAND)
+    assert answer.outcome == "ambiguous", (s, answer)
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_90_r2_the_floor_is_inclusive(adapter, make_registry):
+    """Rule 5-12 (round 2, door lens 5): a second candidate exactly at `propose_below`,
+    inside the margin, is in the tied set."""
+    rows = _rows() + [{"host_id": "999", "label": "Burns Nursing Home Incs", "state": "AL"}]
+    s2 = similar(norm(EXACT), norm("Burns Nursing Home Incs"))
+    pol = {**POLICY, "match_at": 1.0, "propose_below": s2, "ambiguity_margin": 0.05}
+    registry = _world(adapter, make_registry, rows, policy=pol)
+    answer = _resolve(registry, EXACT)
+    assert answer.outcome == "ambiguous", (s2, answer)
+
+
+def test_c20_42_r2_a_nested_term_outside_the_vocabulary_is_refused(adapter):
+    """Rule 6-1, recursively (round 2, door lens 6)."""
+    bad = {"op": "all_of", "why": "w",
+           "terms": [{"op": "startswith", "attribute": "state", "value": "A", "why": "w"}]}
+    assert condition_problem(bad)
+
+
+def test_c20_45_r2_is_null_over_an_unreadable_attribute_is_unknowable(adapter):
+    """Rule 6-4 (round 2, door lens 7): absent is not null."""
+    c = condition_from_mapping({"op": "is_null", "attribute": "zip", "why": "w"})
+    assert evaluate(c, {"state": "AL"}).holds is None
+    c = condition_from_mapping({"op": "is_not_null", "attribute": "zip", "why": "w"})
+    assert evaluate(c, {"state": "AL"}).holds is None
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_66_r2_primitive_22_refuses_a_dangling_closure(adapter, make_registry):
+    """Rules 2-15 and 3-15 at primitive 22's door (round 2, door lens 8)."""
+    registry = _world(adapter, make_registry)
+    _rewrite(adapter, "facility", status="retired", successor="ghost")
+    answer = registry.get_instance_checked("facility", "015009")
+    assert isinstance(answer, Refusal), answer
+    assert answer.detail["problem"] == "closure_incomplete"
+
+
+@NEEDS_RETIRE
+def test_c20_66_r2_primitive_22_refuses_changed_governed_facts(adapter, make_registry):
+    """Rule 3-18 at primitive 22's door (round 2, door lens 9)."""
+    registry = _successor_world(adapter, make_registry, old_rows=[], new_rows=_rows(),
+                                new_governed=_governed(condition=AL_ONLY))
+    answer = registry.get_instance_checked("facility", "015009")
+    assert isinstance(answer, Refusal), answer
+    assert answer.detail["problem"] == "governed_facts_changed"
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_64_r2_the_host_filter_reaches_primitive_23(adapter, make_registry):
+    """Rule 2-13 (round 2, door lens): the narrowing happens, not only its warning."""
+    rows = _rows() + [{"host_id": "999", "label": "BURNS NURSING HOME, INC", "state": "CA"}]
+    registry = _world(adapter, make_registry, rows, filter_columns=("state",))
+    assert _resolve(registry, EXACT).outcome == "ambiguous"
+    narrowed = _resolve(registry, EXACT, host_filter={"state": "AL"})
+    assert narrowed.outcome == "existing", narrowed
+    assert narrowed.scanned == len([r for r in rows if r["state"] == "AL"])
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_23_r2_a_scored_answer_carries_its_score(adapter, make_registry):
+    """Rule 3-9 (round 2, door lens): `None` means did not score, so an answer that
+    scored carries the top score."""
+    registry = _world(adapter, make_registry)
+    for label, outcome in ((BAND, "ambiguous"), (NOTHING, "proposal")):
+        answer = _resolve(registry, label)
+        assert answer.outcome == outcome, (label, answer)
+        assert answer.confidence is not None, answer
+        if answer.candidates:
+            assert answer.confidence == answer.candidates[0].score
+
+
+def test_c20_11_r2_the_hosts_page_size_caps_a_larger_limit(adapter):
+    """Rule 2-11 with the binding's ceiling (round 2, door lens): a page never holds
+    more than the host serves, whatever `limit` asks for."""
+    host_instances(adapter, _rows(), type_name="facility", page_size=2)
+    page = adapter.find_instance_candidates(CandidateQuery(
+        namespace="default", kind="entity", type_name="facility", label=EXACT, limit=10))
+    assert len(page.records) == 2 and page.next_after is not None, page
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_14_r2_a_cursor_that_never_repeats_still_ends(adapter, make_registry):
+    """Rule 2-11 (round 2, build lens 3): empty pages, a fresh cursor every time."""
+
+    class Endless:
+        def __init__(self, inner):
+            self.inner = inner
+            self.calls = 0
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def find_instance_candidates(self, q):
+            self.calls += 1
+            if self.calls > 200:
+                raise AssertionError("the registry kept paging past its page cap")
+            return CandidatePage(records=(), known=0, complete=False,
+                                 next_after=f"c{self.calls}", why_incomplete="")
+
+    host_instances(adapter, _rows(), type_name="facility")
+    registry = make_registry(Endless(adapter))
+    registry.INSTANCE_READ_PAGES_MAX = 50
+    seed(registry, "facility", attributes=_governed())
+    answer = _resolve(registry, EXACT)
+    assert answer.outcome == "unknowable" and answer.complete is False, answer

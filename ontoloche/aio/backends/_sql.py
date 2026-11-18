@@ -342,10 +342,14 @@ class AsyncBaseSqlAdapter:
                 f"no host instance table is bound for {namespace}:{kind}:{type_name}"
             )
         ph = self.d.ph
-        where = [f'"{binding.id_column}" = {ph}']
+        # The id is compared AS THE TEXT `_instance_record` mints, never as the stored
+        # value: an integer 42 in an untyped (or INTEGER) column is ref `#42` at
+        # primitive 23, so `get_instance(..., "42")` must find it (rule 2-2, standing
+        # rule (e); round 2, build lens M1). The cost is the id column's index.
+        where = [f'CAST("{binding.id_column}" AS TEXT) = {ph}']
         params: list[Any] = [instance_id]
         if binding.type_column is not None:
-            where.append(f'"{binding.type_column}" = {ph}')
+            where.append(f'CAST("{binding.type_column}" AS TEXT) = {ph}')
             params.append(type_name)
         rows = await self._fetchall(
             f'SELECT {self._instance_select(binding)} FROM "{binding.table}" '
@@ -383,7 +387,7 @@ class AsyncBaseSqlAdapter:
         where: list[str] = []
         params: list[Any] = []
         if binding.type_column is not None:
-            where.append(f'"{binding.type_column}" = {ph}')
+            where.append(f'CAST("{binding.type_column}" AS TEXT) = {ph}')
             params.append(q.type_name)
         undeclared: list[str] = []
         for key in sorted((q.host_filter or {}).keys()):

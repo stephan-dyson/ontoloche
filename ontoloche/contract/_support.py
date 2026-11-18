@@ -139,6 +139,7 @@ def host_instances(
     type_column: str | None = None,
     scan_cap: int | None = None,
     page_size: int = 500,
+    id_type: str = "TEXT",
 ) -> None:
     """Act as the HOST: create a table of instances and bind it. INGEST.md 2, row 7b.
 
@@ -149,6 +150,10 @@ def host_instances(
     that is the host's database -- the adapter issues no DDL for it (7B-RUN 0.2 item 4).
     """
     if EXTERNAL_INSTANCE_HOST is not None:
+        if id_type != "TEXT":
+            import pytest
+
+            pytest.skip("an external host is not asked to build a typed id column")
         EXTERNAL_INSTANCE_HOST(
             adapter, rows, type_name=type_name, namespace=namespace,
             attribute_columns=tuple(attribute_columns),
@@ -167,6 +172,11 @@ def host_instances(
         )
     from ..backends import HostInstanceTable
 
+    if id_type == "NUMBER":
+        # A host whose ids are numbers as the database stores them: INTEGER where
+        # the column type converts nothing (Postgres), and a BLOB-affinity column on
+        # SQLite, whose INTEGER affinity would quietly convert '42' to 42.
+        id_type = "BLOB" if getattr(target.d, "name", "") == "sqlite" else "INTEGER"
     _HOST_TABLE_SEQ[0] += 1
     table = f"host_{type_name}_{_HOST_TABLE_SEQ[0]}"
     columns = ["host_id", "label"]
@@ -176,7 +186,8 @@ def host_instances(
     if type_column is not None:
         columns.append(type_column)
     target._execute(
-        f"CREATE TABLE {table} (" + ", ".join(f"{c} TEXT" for c in columns) + ")"
+        f"CREATE TABLE {table} ("
+        + ", ".join(f"{c} {id_type if c == 'host_id' else 'TEXT'}" for c in columns) + ")"
     )
     marks = ", ".join([target.d.ph] * len(columns))
     for row in rows:

@@ -132,10 +132,8 @@ MUTATIONS = (
              "            except NotSupported as exc:\n                continue\n"
              "                # `I-1` at primitive 22's", required=True),
     Mutation("2-2 primitive 22 honours the type column", "c20_05", SQL,
-             "        where = [f'\"{binding.id_column}\" = {ph}']\n"
              "        params: list[Any] = [instance_id]\n"
              "        if binding.type_column is not None:",
-             "        where = [f'\"{binding.id_column}\" = {ph}']\n"
              "        params: list[Any] = [instance_id]\n"
              "        if False:", required=True),
     Mutation("7-4 not_an_instance carries no_tenancy_predicate", "c20_62", REG,
@@ -143,6 +141,69 @@ MUTATIONS = (
              '                warnings.append("no_tenancy_predicate")\n'
              "            warnings.extend(self._instance_consumers_warning(namespace))\n",
              "", required=True),
+    # ---- round 2 of the loop (7B-RUN.md 2.2) ------------------------------------------
+    Mutation("2-2 primitive 22 matches the id the read side mints", "c20_05", SQL,
+             """where = [f'CAST("{binding.id_column}" AS TEXT) = {ph}']""",
+             """where = [f'"{binding.id_column}" = {ph}']""", required=True),
+    Mutation("2-17 copies resolve under the effective name", "c20_89", REG,
+             "chosen = dataclasses.replace(chosen, type_name=effective)", "pass",
+             required=True),
+    Mutation("2-17 disagreeing copies, none current, decide nothing", "c20_89", REG,
+             "            if len(distinct) > 1:", "            if False:", required=True),
+    Mutation("2-11 a cursor that never repeats still ends", "c20_14", REG,
+             "if len(seen_cursors) >= self.INSTANCE_READ_PAGES_MAX:", "if False:",
+             required=True),
+    Mutation("3-18 / 5-10 the margin is one of the three", "c20_79", REG,
+             '''for k in ("match_at", "propose_below",
+                                                "ambiguity_margin"))''',
+             '''for k in ("match_at", "propose_below"))''', required=True),
+    Mutation("E10 in-values compare by equality", "c20_79", REG,
+             "                value = frozenset(members)",
+             "                value = tuple(sorted({repr(m) for m in members}))",
+             required=True),
+    Mutation("5-8 at match_at is existing", "c20_73", REG,
+             "if tied and raw[0] >= policy.match_at:", "if tied and raw[0] > policy.match_at:",
+             required=True),
+    Mutation("5-8 no tolerance below match_at", "c20_73", REG,
+             "if tied and raw[0] >= policy.match_at:",
+             "if tied and raw[0] >= policy.match_at - 1e-9:", required=True),
+    Mutation("3-3 a candidate at match_at ties", "c20_17", REG,
+             "at_or_above = score >= policy.match_at", "at_or_above = score > policy.match_at",
+             required=True),
+    Mutation("5-9 at propose_below is ambiguous", "c20_74", REG,
+             "if scored and raw[0] >= policy.propose_below:",
+             "if scored and raw[0] > policy.propose_below:", required=True),
+    Mutation("5-12 the floor is inclusive", "c20_90", REG,
+             "score >= policy.propose_below)                   # rule 5-12 floor",
+             "score > policy.propose_below)                   # rule 5-12 floor",
+             required=True),
+    Mutation("6-1 a nested term is checked", "c20_42", ING,
+             "            problem = condition_problem(term, _path=f\"{_path}.terms[{i}]\")\n"
+             "            if problem:\n                return problem",
+             "            pass", required=True),
+    Mutation("6-4 absent is not null", "c20_45", ING,
+             '''    attribute = cond.attribute or ""
+    if attribute not in attributes:''',
+             '''    attribute = cond.attribute or ""
+    if cond.op in ("is_null", "is_not_null"):
+        missing = attributes.get(attribute) is None
+        return ConditionResult(missing if cond.op == "is_null" else not missing, "")
+    if attribute not in attributes:''', required=True),
+    Mutation("2-15 / 3-15 primitive 22 refuses a dangling closure", "c20_66", REG,
+             '''        if not closure["complete"]:
+            return refuse("closure_incomplete", closure["why"])''',
+             "        pass", required=True),
+    Mutation("3-18 primitive 22 refuses changed governed facts", "c20_66", REG,
+             '''        if changed:
+            return refuse("governed_facts_changed", changed)''',
+             "        pass", required=True),
+    Mutation("2-13 the host filter reaches primitive 23", "c20_64", REG,
+             "host_filter=dict(host_filter) if host_filter else None,",
+             "host_filter=None,", required=True),
+    Mutation("7-1 not_an_instance carries consumers_unregistered", "c20_62", REG,
+             '''            warnings.extend(self._instance_consumers_warning(namespace))
+            return answer(''',
+             "            return answer(", required=True),
     # ---- the rest of the read side ---------------------------------------------------
     Mutation("1-3 the capability refuses first", "c20_03", REG,
              "        if self.caps.resolves_instances:\n            return None",
@@ -195,14 +256,14 @@ MUTATIONS = (
              'if float(declared["propose_below"]) > float(declared["match_at"]):',
              "if False:"),
     Mutation("5-9 the band is ambiguous", "c20_74", REG,
-             "if scored and raw[0] >= policy.propose_below - _SCORE_EPS:",
+             "if scored and raw[0] >= policy.propose_below:",
              "if False:"),
     Mutation("5-11 governed_by is the effective entry", "c20_85", REG,
              'governed_by = f"{namespace}:{effective}"',
              'governed_by = f"{namespace}:{type_name}"'),
     Mutation("5-12 the tied set has a floor", "c20_90", REG,
-             "score >= policy.propose_below - _SCORE_EPS)      # rule 5-12 floor",
-             "True)      # rule 5-12 floor"),
+             "score >= policy.propose_below)                   # rule 5-12 floor",
+             "True)                   # rule 5-12 floor"),
     Mutation("6-12 all_of is Kleene", "c20_53", ING,
              'holds = False if False in vals else (None if None in vals else True)',
              'holds = False if False in vals else True'),

@@ -9281,6 +9281,10 @@ class AsyncRegistry:
     #: follows `next_after` to the end either way (rule 2-11), so this bounds a page and
     #: never the read.
     INSTANCE_READ_PAGE = 500
+    #: Rule 2-11 exhausts the cursor; a backend that hands back a fresh cursor forever
+    #: never exhausts. Past this many pages under one member the read did not finish
+    #: (round 2, build lens 3). 10,000 pages of 500 is five million rows.
+    INSTANCE_READ_PAGES_MAX = 10_000
 
     def _instance_absent(self, detail: dict | None = None) -> Refusal | None:
         """INGEST.md rule 1-3 / 2-9: the capability, before anything. Never an empty set."""
@@ -9676,6 +9680,12 @@ class AsyncRegistry:
                             f"{read_type!r}: the read cannot be exhausted")
                         break
                     seen_cursors.add(page.next_after)
+                    if len(seen_cursors) >= self.INSTANCE_READ_PAGES_MAX:
+                        complete, why_incomplete = False, (
+                            f"the read under {read_type!r} passed "
+                            f"{self.INSTANCE_READ_PAGES_MAX} pages without exhausting "
+                            "the cursor")
+                        break
                     after = page.next_after
                 if not complete:
                     break
@@ -9774,11 +9784,12 @@ class AsyncRegistry:
         if scored:
             top = raw[0]
             for score, c in zip(raw, scored):
-                # `_SCORE_EPS` absorbs float subtraction only: 0.98 - 0.96 is
-                # 0.020000000000000018, inside a 0.02 margin (rules 3-3, 5-8, round 1).
-                at_or_above = score >= policy.match_at - _SCORE_EPS
+                # `_SCORE_EPS` absorbs the float SUBTRACTION only: 0.98 - 0.96 is
+                # 0.020000000000000018, inside a 0.02 margin (rule 3-3, round 1). The
+                # thresholds are compared exactly, "at or above" (round 2).
+                at_or_above = score >= policy.match_at
                 near_top = (top - score) <= policy.ambiguity_margin + _SCORE_EPS and (
-                    score >= policy.propose_below - _SCORE_EPS)      # rule 5-12 floor
+                    score >= policy.propose_below)                   # rule 5-12 floor
                 if at_or_above or near_top:
                     tied.append(c)
 
@@ -9793,12 +9804,12 @@ class AsyncRegistry:
                 "ambiguous", None, candidate_ref("ambiguous"), tied[0].score,
                 f"{len(tied)} host rows answer to {candidate!r} and nothing here "
                 "separates them", tied, True, "", scanned)
-        if tied and raw[0] >= policy.match_at - _SCORE_EPS:          # rule 5-8
+        if tied and raw[0] >= policy.match_at:                       # rule 5-8
             return answer(
                 "existing", tied[0].ref, None, tied[0].score,
                 f"exactly one host row answers to {candidate!r}", tied, True, "",
                 scanned)
-        if scored and raw[0] >= policy.propose_below - _SCORE_EPS:   # rule 5-9
+        if scored and raw[0] >= policy.propose_below:                # rule 5-9
             return answer(
                 "ambiguous", None, candidate_ref("ambiguous"), scored[0].score,
                 f"the best candidate scored {scored[0].score}, between propose_below "
