@@ -38,10 +38,32 @@ EXPECTED_PER_GROUP = {
     17: 53,
     18: 10,
     19: 108,
-    # Row 8c: INTERFACE.md 2.10, property declarations. C20 is INGEST.md's, still planned.
+    # Row 7b: INGEST.md's read side. 77 of the 90 ids its rule tables name; the other
+    # thirteen are section 4's, row 7c's, and are listed in PLANNED_IDS below.
+    20: 77,
+    # Row 8c: INTERFACE.md 2.10, property declarations.
     21: 17,
 }
-TOTAL = 479
+TOTAL = 556
+
+#: Ids a spec's rule table names that a LATER row builds, so a group's numbering has
+#: gaps. Row 7b: INGEST.md 4 (the propose-at-ingest contract) is row 7c's, and its ids
+#: were minted by row 7a in rule order, interleaved with the read side's. A group's
+#: enumerated ids are ``1..count + len(planned)`` minus the planned ones, so a planned id
+#: the suite claims is an EXTRA here, and `check_spec_drift.py` fails it too.
+PLANNED_IDS: dict[int, frozenset[int]] = {
+    20: frozenset({27, 28, 29, 30, 31, 32, 33, 34, 69, 70, 71, 72, 81}),
+}
+
+
+def enumerated_ids() -> set[str]:
+    """Every id PACKAGE.md 6.2 enumerates, gaps for planned ids included."""
+    return {
+        f"C{group}-{index:02d}"
+        for group, count in EXPECTED_PER_GROUP.items()
+        for index in range(1, count + len(PLANNED_IDS.get(group, ())) + 1)
+        if index not in PLANNED_IDS.get(group, ())
+    }
 
 _TEST_NAME = re.compile(r"^def (test_c(\d+)_(\d+)_\w+)", re.M)
 
@@ -59,11 +81,8 @@ def implemented_ids() -> dict[str, str]:
 def test_the_suite_implements_every_enumerated_contract_id():
     found = implemented_ids()
 
-    expected = {
-        f"C{group}-{index:02d}"
-        for group, count in EXPECTED_PER_GROUP.items()
-        for index in range(1, count + 1)
-    }
+    expected = enumerated_ids()
+    assert len(expected) == TOTAL
     assert sum(EXPECTED_PER_GROUP.values()) == TOTAL
 
     missing = sorted(expected - set(found))

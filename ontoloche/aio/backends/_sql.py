@@ -37,11 +37,15 @@ from ontoloche.aio.adapter import (
 )
 import re
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from ontoloche.aio.adapter import (
+    CandidatePage,
+    CandidateQuery,
     Capabilities,
     EdgePage,
     EdgeQuery,
+    InstanceRecord,
     InvocationPage,
     ProposalPage,
     ProposalQuery,
@@ -52,6 +56,7 @@ from ontoloche.errors import (
     AlreadyExists,
     AmbiguousKind,
     HostTransactionRequired,
+    NotSupported,
     SavepointOutOfOrder,
     SchemaMismatch,
     StoreVersionUnknown,
@@ -67,6 +72,7 @@ from ontoloche.backends._sql import (
     Dialect,
     EDGE_COLUMNS,
     EVENT_COLUMNS,
+    HostInstanceTable,
     INVOCATION_COLUMNS,
     PROPOSAL_COLUMNS,
     SqlStore,
@@ -75,8 +81,10 @@ from ontoloche.backends._sql import (
     _SAVEPOINT_STACKS,
     decode_cursor,
     decode_edge_cursor,
+    decode_instance_cursor,
     encode_cursor,
     encode_edge_cursor,
+    encode_instance_cursor,
     load_migrations,
     split_statements,
 )
@@ -127,6 +135,9 @@ class AsyncBaseSqlAdapter:
         #: orphaned it forever. Refusing to corrupt the CONNECTION is not enough if the
         #: adapter's own state is left corrupt.
         self._scope_broken: str | None = None
+        #: INGEST.md 2, row 7b. ``{(namespace, type_name): HostInstanceTable}`` -- the
+        #: host tables primitives 22 and 23 read. Empty means ``resolves_instances=False``.
+        self._instance_tables: dict[tuple[str, str], HostInstanceTable] = {}
 
     # ------------------------------------------------------------------ subclass API
     async def _execute(self, sql: str, params: tuple | list = ()) -> Any:
@@ -192,6 +203,11 @@ class AsyncBaseSqlAdapter:
             stores_invocations=True,
             stores_invocation_events=True,
             indexes_invocations_by_family=True,
+            # INGEST.md 2.3, row 7b. True only when the host has bound a table: this
+            # adapter holds no instances of its own, so with nothing bound it answers no
+            # instance query and says so (rule 1-3), rather than an empty page.
+            resolves_instances=bool(self._instance_tables),
+            instance_filters=self._instance_filter_keys(),
             why=dict(self._why()),
             transaction_scope="savepoint" if self._borrowed else "owned",
             edge_transaction_scope="savepoint" if self._borrowed else "owned",
@@ -250,7 +266,222 @@ class AsyncBaseSqlAdapter:
             why["action_transaction_scope"] = self.BORROWED_ACTION_WHY
         if not self._owns_schema:
             why["owns_schema"] = self.HOST_SCHEMA_WHY
+        if not self._instance_tables:
+            why["resolves_instances"] = self.NO_INSTANCE_TABLE_WHY
         return why
+
+    #: INGEST.md 2.3 / rule 1-3. The sentence `instance_source_absent` carries.
+    NO_INSTANCE_TABLE_WHY = (
+        "this adapter holds no instances (INGEST.md 1, R78) and the host has bound no "
+        "instance table to it, so it answers no instance-candidate query; bind one with "
+        "bind_instance_table() to make the host's rows readable"
+    )
+
+    # ------------------------------------------------------------ INGEST.md 2.3
+    def bind_instance_table(self, binding: HostInstanceTable) -> None:
+        """Point primitives 22 and 23 at a table the HOST created. Issues no DDL.
+
+        Bound before the ``AsyncRegistry`` is constructed, because the registry reads
+        ``capabilities()`` once. Rebinding one ``(namespace, type_name)`` replaces it.
+        """
+        if not isinstance(binding, HostInstanceTable):
+            raise TypeError("bind_instance_table takes a HostInstanceTable")
+        self._instance_tables[(binding.namespace, binding.type_name)] = binding
+
+    def _instance_filter_keys(self) -> frozenset[str]:
+        """The keys EVERY bound table honours. An intersection, and that is the point.
+
+        ``instance_filters`` is one declaration for the adapter. A key one table honours
+        and another does not cannot be declared honoured, or a read against the second
+        would apply-look and not apply (rule 2-7's failure). Per-table reporting of an
+        undeclared key still happens in ``find_instance_candidates``.
+        """
+        keys: frozenset[str] | None = None
+        for binding in self._instance_tables.values():
+            mine = frozenset(binding.filter_columns)
+            keys = mine if keys is None else keys & mine
+        return keys or frozenset()
+
+    def _instance_select(self, binding: HostInstanceTable) -> str:
+        # The id is selected AS TEXT, by the same conversion primitive 22 compares
+        # with, so the ref primitive 23 mints is the id primitive 22 finds. Round 3
+        # (build lens M1): Python's `str()` and SQL's cast disagree on REAL and BLOB
+        # ids (`1e+20` against `1.0e+20`, `b'015009'` against `015009`).
+        cols = [f'CAST("{binding.id_column}" AS TEXT)',
+                *(f'"{c}"' for c in (binding.label_column, *binding.attribute_columns))]
+        return ", ".join(cols)
+
+    async def _fetch_instance_rows(self, binding: HostInstanceTable, sql: str, params) -> list:
+        # Round 5 (build lens minor 1): a SQLite BLOB id that is not UTF-8 cannot be
+        # cast to the text a ref holds, and the driver raised a raw decode error out of
+        # both primitives. It is a row this surface cannot reference (rule 2-2), said
+        # as `NotSupported`, which the registry reads as an unfinished read.
+        try:
+            return await self._fetchall(sql, params)
+        except Exception as exc:
+            if "decode" not in str(exc).lower():
+                raise
+            raise NotSupported(
+                f"a row of {binding.table!r} carries an id this backend cannot render as "
+                f"text ({exc}): it cannot be referenced (rule 2-2)") from exc
+
+    def _instance_record(self, binding: HostInstanceTable, row: tuple) -> InstanceRecord:
+        # The host's id as the opaque ``str`` an InstanceRef holds. The database cast
+        # it (`_instance_select`); `str()` here only covers a driver handing back a
+        # non-str for a TEXT expression (EDGES.md contortion E4).
+        label = row[1]
+        return InstanceRecord(
+            namespace=binding.namespace,
+            kind=binding.kind,
+            type_name=binding.type_name,
+            instance_id=str(row[0]),
+            label="" if label is None else str(label),
+            attributes={c: row[2 + i] for i, c in enumerate(binding.attribute_columns)},
+        )
+
+    def _instance_binding(self, namespace: str, kind: str, type_name: str):
+        binding = self._instance_tables.get((namespace, type_name))
+        if binding is not None and kind == binding.kind:
+            return binding
+        if not self._instance_tables:
+            raise NotSupported(self.NO_INSTANCE_TABLE_WHY)
+        return None
+
+    # 22
+    async def get_instance(
+        self, namespace: str, kind: str, type_name: str, instance_id: str
+    ) -> InstanceRecord | None:
+        """INGEST.md 2, primitive 22. ``None`` for absent, never a manufactured record.
+
+        An unbound type is ``NotSupported``, never ``None``: *"absent"* is a fact about
+        a table this adapter read, and it read none (rule 2-2).
+        """
+        binding = self._instance_binding(namespace, kind, type_name)
+        if binding is None:
+            raise NotSupported(
+                f"no host instance table is bound for {namespace}:{kind}:{type_name}"
+            )
+        ph = self.d.ph
+        # The id is compared AS THE TEXT `_instance_record` mints, never as the stored
+        # value: an integer 42 in an untyped (or INTEGER) column is ref `#42` at
+        # primitive 23, so `get_instance(..., "42")` must find it (rule 2-2, standing
+        # rule (e); round 2, build lens M1). The cost is the id column's index.
+        where = [f'CAST("{binding.id_column}" AS TEXT) = {ph}']
+        params: list[Any] = [instance_id]
+        if binding.type_column is not None:
+            where.append(f'CAST("{binding.type_column}" AS TEXT) = {ph}')
+            params.append(type_name)
+        rows = await self._fetch_instance_rows(
+            binding,
+            f'SELECT {self._instance_select(binding)} FROM "{binding.table}" '
+            f"WHERE {' AND '.join(where)} LIMIT 2",
+            params,
+        )
+        if not rows:
+            return None
+        if len(rows) > 1:
+            # Two host rows under one id: the id does not name one thing, and returning
+            # one of them would be choosing (rule 2-6). Raised, never picked.
+            raise NotSupported(
+                f"more than one host row in {binding.table!r} carries id "
+                f"{instance_id!r}; primitive 22 cannot return one of them without choosing"
+            )
+        return self._instance_record(binding, rows[0])
+
+    # 23
+    async def find_instance_candidates(self, q: CandidateQuery) -> CandidatePage:
+        """INGEST.md 2, primitive 23. Pages under R58; scores nothing (rule 2-6).
+
+        ``label`` is ignored, which is the blessed case: it may order a page and may
+        never omit a record (rule 2-8), and an order by similarity would be scoring.
+        """
+        binding = self._instance_binding(q.namespace, q.kind, q.type_name)
+        if binding is None:
+            return CandidatePage(
+                records=(), known=0, complete=False, next_after=None,
+                why_incomplete=(
+                    f"no host instance table is bound for "
+                    f"{q.namespace}:{q.kind}:{q.type_name}, so this read saw none of it"
+                ),
+            )
+        ph = self.d.ph
+        where: list[str] = []
+        params: list[Any] = []
+        if binding.type_column is not None:
+            where.append(f'CAST("{binding.type_column}" AS TEXT) = {ph}')
+            params.append(q.type_name)
+        undeclared: list[str] = []
+        for key in sorted((q.host_filter or {}).keys()):
+            if key not in binding.filter_columns:
+                undeclared.append(str(key))  # rule 2-7: report, never ignore silently
+                continue
+            where.append(f'"{key}" = {ph}')
+            params.append(q.host_filter[key])
+        offset = 0 if q.after is None else decode_instance_cursor(q.after)
+        # `page_size` is the HOST's ceiling on one page, and a `limit` asks for at most
+        # that many: a page is never larger than either. The registry asks for 500 and
+        # follows the cursor (rule 2-11), so a host serving one row a page is paged.
+        size = binding.page_size if q.limit is None else min(max(int(q.limit), 0), binding.page_size)
+        # One row past the page says whether there is more, without a COUNT.
+        want = size + 1
+        if binding.scan_cap is not None:
+            want = min(want, max(binding.scan_cap - offset, 0))
+        order_cols = [binding.id_column, binding.label_column, *binding.attribute_columns]
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        sql = (
+            f'SELECT {self._instance_select(binding)} FROM "{binding.table}"{clause}'
+            " ORDER BY " + ", ".join(f'"{c}"' for c in order_cols)
+            + f" LIMIT {int(want)} OFFSET {int(offset)}"
+        )
+        rows = await self._fetch_instance_rows(binding, sql, params) if want > 0 else []
+        more = len(rows) > size
+        page_rows = rows[:size]
+        end = offset + len(page_rows)
+        capped = False
+        if not more and binding.scan_cap is not None and end >= binding.scan_cap:
+            # The cap was reached: did it cut anything off? Ask for one row past it.
+            probe = (
+                f'SELECT 1 FROM "{binding.table}"{clause}'
+                f" LIMIT 1 OFFSET {int(binding.scan_cap)}"
+            )
+            capped = bool(await self._fetchall(probe, params))
+        records = tuple(self._instance_record(binding, r) for r in page_rows)
+        if any(r[0] is None for r in page_rows):
+            # Rule 2-2 (round 4, build lens M1): a row whose id is NULL cannot be
+            # referenced, and `str(None)` minted the ref `#None` that primitive 22
+            # then read back as absent. Dropping the row would shrink the extent, so
+            # the read says it is incomplete instead.
+            kept = tuple(rec for r, rec in zip(page_rows, records) if r[0] is not None)
+            return CandidatePage(
+                records=kept, known=len(kept), complete=False, next_after=None,
+                why_incomplete=(
+                    f"a row of {binding.table!r} carries no id: it cannot be referenced, "
+                    "and leaving it out would shrink the extent (rule 2-2)"
+                ),
+            )
+        if undeclared:
+            return CandidatePage(
+                records=records, known=len(records), complete=False, next_after=None,
+                why_incomplete=(
+                    "host_filter keys this backend does not declare for "
+                    f"{binding.table!r}: {', '.join(undeclared)}"
+                ),
+            )
+        if capped:
+            return CandidatePage(
+                records=records, known=len(records), complete=False, next_after=None,
+                why_incomplete=(
+                    f"the host scan cap of {binding.scan_cap} rows was reached; the rest "
+                    f"of {binding.table!r} cannot be read from this surface"
+                ),
+            )
+        return CandidatePage(
+            records=records,
+            known=len(records),
+            complete=not more,
+            why_incomplete=None,
+            next_after=encode_instance_cursor(end) if more else None,
+        )
 
     # -------------------------------------------------------------------- 2 migrate
     def _migration_sql(self) -> list[tuple[int, str, str]]:

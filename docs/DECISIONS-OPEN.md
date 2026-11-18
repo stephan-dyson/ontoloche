@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**10 open · 16 ruled · 7 FYI** *(2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**11 open · 16 ruled · 7 FYI** *(2026-11-18: item 31 added, Q108, a refusal question row 7b's review found; non-blocking, the current behaviour is the default in force. 2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 10 items
+## A. Decide when you want to — 11 items
 
 ### 28 · `Q87` — should the ingest loop refuse to propose when no consumer is registered for the namespace?
 
@@ -55,6 +55,20 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 - Silent inheritance, reading (b), is refused by the spec and not offered.
 
 **Ask: `unknowable` or `warn`.** Default in force: `unknowable`. Row 7b builds that and pins it.
+
+### 31 · `Q108` — should `resolve_instance` serve a retired type that has no successor?
+
+*New 2026-11-18, found by row 7b's adversarial review (round 3) and routed by the supervisor as a refusal question.*
+
+**TL;DR.** When an entity type is retired with no successor, and no live entity type holds its name as an alias, `resolve_instance` still reads the retired type's own host rows. **[Observed]** it answers `existing legacy_home#015009` for a known label, proposes a new instance under `legacy_home` for an unknown one, and `get_instance_checked("legacy_home", "015009")` returns the row. `resolve_type("legacy_home")` answers `proposal` for the same word, so the two doors disagree about whether the retired type is still in service.
+
+**Why it is yours.** It decides whether the registry keeps serving a retired type, which is what the registry refuses or holds. INGEST.md 3.4a governs a retired entry only through its successor chain, and no rule row says what happens when there is none. The build's reading is that rules 3-14, 3-15 and 3-19 put a retired member's rows in the extent [Inferred].
+
+- **`serve`** — as today: answer from the tombstone's own rows, including proposals under the retired name.
+- **`unknowable`** — decline under Rule U until the host names a successor or an alias holder.
+- **`refuse`** — a `Refusal` saying the type is retired, so a caller cannot mistake it for an empty or undecided read.
+
+**Ask: `serve`, `unknowable` or `refuse`.** Default in force: `serve` (current behaviour). Non-blocking: row 7b lands with it and pins it in `C20-80` r4 ([`7B-RUN.md` §2.4](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/7B-RUN.md)).
 
 ### 22 · `Q106` — a Foundry property with no description: import it with a warning, or decline it?
 

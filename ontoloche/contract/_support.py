@@ -10,7 +10,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
-from ..adapter import ProposalQuery, TypeQuery
+from ..adapter import EdgeQuery, ProposalQuery, TypeQuery
+from ..errors import NotSupported
 from ..types import Evidence, TypeEntry
 
 #: Set by ``run_contract_suite`` when a third party runs the suite against their own
@@ -115,6 +116,110 @@ EXTERNAL_BORROWED: Callable[[], Any] | None = None
 #: says so rather than printing a clean verdict over it.
 EXTERNAL_SCHEMA_HARNESS: Callable[[], Any] | None = None
 
+#: Set by a third-party backend's harness. ``host(adapter, rows, *, type_name,
+#: namespace, attribute_columns, filter_columns, type_column, scan_cap, page_size)``
+#: makes ``rows`` the host's instances of ``type_name`` and points primitives 22 and 23
+#: at them. ``None`` means the reference path below: a backend exposing
+#: ``bind_instance_table`` gets a host-created table, and any other backend's C20 tests
+#: that need host rows skip with a reason, because the suite cannot be the host for a
+#: store it does not know (INGEST.md 1, ruling R78: the host holds the instances).
+EXTERNAL_INSTANCE_HOST: Callable[..., Any] | None = None
+
+_HOST_TABLE_SEQ = [0]
+
+
+def host_instances(
+    adapter,
+    rows: Sequence[dict],
+    *,
+    type_name: str,
+    namespace: str = "default",
+    attribute_columns: Sequence[str] = ("state",),
+    filter_columns: Sequence[str] = (),
+    type_column: str | None = None,
+    scan_cap: int | None = None,
+    page_size: int = 500,
+    id_type: str = "TEXT",
+) -> None:
+    """Act as the HOST: create a table of instances and bind it. INGEST.md 2, row 7b.
+
+    Each row is ``{"host_id": ..., "label": ..., <attribute columns>...}``, plus the
+    ``type_column`` value when one is named. **Bind before ``make_registry``**: the
+    registry reads ``capabilities()`` once, and ``resolves_instances`` turns on with the
+    first binding. The table is created through the adapter's own connection because
+    that is the host's database -- the adapter issues no DDL for it (7B-RUN 0.2 item 4).
+    """
+    if EXTERNAL_INSTANCE_HOST is not None:
+        if id_type != "TEXT":
+            import pytest
+
+            pytest.skip("an external host is not asked to build a typed id column")
+        EXTERNAL_INSTANCE_HOST(
+            adapter, rows, type_name=type_name, namespace=namespace,
+            attribute_columns=tuple(attribute_columns),
+            filter_columns=tuple(filter_columns), type_column=type_column,
+            scan_cap=scan_cap, page_size=page_size,
+        )
+        return
+    target = getattr(adapter, "inner", adapter)
+    if not hasattr(target, "bind_instance_table"):
+        import pytest
+
+        pytest.skip(
+            "PENDING -- this backend exposes no host-table binding and no "
+            "EXTERNAL_INSTANCE_HOST was supplied, so the suite cannot act as its host "
+            "(INGEST.md 1: the host holds the instances)"
+        )
+    from ..backends import HostInstanceTable
+
+    if id_type in ("NUMBER", "INTEGER"):
+        # A host whose ids are numbers as the database stores them. On SQLite a
+        # BLOB-affinity column, whose INTEGER affinity would quietly convert '42' to 42
+        # and hide the defect round 2 found. Elsewhere "INTEGER" is an integer column
+        # (round 2's case) and "NUMBER" a float one, which holds 1e20 (round 3's).
+        if getattr(target.d, "name", "") == "sqlite":
+            id_type = "BLOB"
+        else:
+            id_type = "INTEGER" if id_type == "INTEGER" else "DOUBLE PRECISION"
+    _HOST_TABLE_SEQ[0] += 1
+    table = f"host_{type_name}_{_HOST_TABLE_SEQ[0]}"
+    columns = ["host_id", "label"]
+    for c in (*attribute_columns, *filter_columns):
+        if c not in columns:
+            columns.append(c)
+    if type_column is not None:
+        columns.append(type_column)
+    target._execute(
+        f"CREATE TABLE {table} ("
+        + ", ".join(f"{c} {id_type if c == 'host_id' else 'TEXT'}" for c in columns) + ")"
+    )
+    marks = ", ".join([target.d.ph] * len(columns))
+    for row in rows:
+        target._execute(
+            f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({marks})",
+            tuple(row.get(c) for c in columns),
+        )
+    target.bind_instance_table(
+        HostInstanceTable(
+            namespace, type_name, table, "host_id", "label",
+            attribute_columns=tuple(c for c in columns[2:] if c != type_column),
+            filter_columns=tuple(filter_columns), type_column=type_column,
+            scan_cap=scan_cap, page_size=page_size,
+        )
+    )
+    if not adapter.capabilities().resolves_instances:
+        import pytest
+
+        # A double that DECLINES the flag over a backend that has it: the table is
+        # bound and the adapter says it cannot read it, which PACKAGE.md 3.2 calls
+        # conformant. `C20-03` and `C20-12` are the ids whose subject that is.
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend declares resolves_instances=False, which "
+            "3.2 says is conformant. This test needs host rows as scaffolding: "
+            + adapter.capabilities().reason("resolves_instances")
+        )
+
+
 #: The 400-row public CMS sample. Present or the C13 group skips (PACKAGE.md 8.4).
 FIXTURE_NAME = "cms_sample_400.csv"
 
@@ -144,6 +249,21 @@ def snapshot(adapter) -> str:
         for rec in page.records:
             if rec.namespace == namespace:
                 parts.append(repr(adapter.get_usage(namespace, rec.kind, rec.name)))
+        # Row 7b, round 1 (door lens E): the seam check (`C20-01`) compared five tables
+        # and could not see an attribute observation, an edge or an invocation written
+        # on the side. Every store a backend declares is read; one it declines is not.
+        try:
+            parts.extend(repr(r) for r in adapter.read_attr_observed(namespace))
+        except (NotSupported, AttributeError):
+            pass
+    try:
+        parts.extend(repr(r) for r in adapter.find_edges(EdgeQuery(include_retracted=True)).records)
+    except (NotSupported, AttributeError):
+        pass
+    try:
+        parts.extend(repr(r) for r in adapter.find_invocations().records)
+    except (NotSupported, AttributeError):
+        pass
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 

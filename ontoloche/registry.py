@@ -21,11 +21,13 @@ import re
 import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from ._clock import Clock, SystemClock
 from ._resolve import DeterministicResolver, identity_key, same_word, Resolver
 from .adapter import (
+    CandidateQuery,
+    InstanceRecord,
     InvocationRecord,
     AttrObservedRecord,
     AttrSchemaRecord,
@@ -103,6 +105,26 @@ from .edges import (
     type_of,
 )
 from .errors import NotSupported, UnknownType
+from .ingest import (
+    INSTANCE_CHAIN_CAP,
+    INSTANCE_CONDITION_KEY,
+    MATCH_POLICY_KEY,
+    CandidateRef,
+    InstanceCandidate,
+    InstanceContext,
+    InstanceLookup,
+    InstanceResolution,
+    condition_from_mapping,
+    condition_problem,
+    entry_declaration_problem,
+    evaluate,
+    match_policy_from_mapping,
+    match_policy_problem,
+    names_a_class,
+    norm,
+    record_ref,
+    similar,
+)
 from .foundry import FoundryImportReport, FoundryItem, LookAlike
 from .foundry import plan as foundry_plan
 from .foundry import replaces as foundry_replaces
@@ -519,6 +541,95 @@ def _answers_to(rec, word: str) -> bool:
     return same_word(rec.name, word) or any(
         same_word(alias, word) for alias in (getattr(rec, "aliases", None) or ())
     )
+
+
+#: Float subtraction only (`top - score`), never a tolerance on a threshold: a score
+#: is a ratio of two small integers, so a real difference is many orders larger.
+_SCORE_EPS = 1e-9
+
+
+def _policy_terms(policy: Any) -> Any:
+    """E10: a `MatchPolicy` compared by its three thresholds, never its `why`."""
+    if not isinstance(policy, Mapping):
+        return policy
+    try:
+        return tuple(float(policy[k]) for k in ("match_at", "propose_below",
+                                                "ambiguity_margin"))
+    except (KeyError, TypeError, ValueError):
+        return ("malformed", repr(sorted(policy.items(), key=repr)))
+
+
+def _condition_terms(condition: Any) -> Any:
+    """E10 under rule 6-18: a `Condition` compared by its TERMS, never its prose.
+
+    `why` is dropped from every Condition (never from inside an operand), an `in` /
+    `not_in` value list is a set under Python equality (the equality `evaluate` uses),
+    and the terms of `all_of` / `any_of` are a set, because Kleene `and` and `or` depend
+    on neither order nor repetition. Anything else is compared as written.
+    """
+    if not isinstance(condition, Mapping):
+        return _value_terms(condition)
+    out = []
+    for key in sorted(condition):
+        if key == "why":                 # the Condition's prose; never inside a value
+            continue
+        value = condition[key]
+        if key == "terms" and isinstance(value, (list, tuple)):
+            value = frozenset(_condition_terms(t) for t in value)
+        elif key == "value" and condition.get("op") in ("in", "not_in") and isinstance(
+                value, (list, tuple)):
+            members = [_value_terms(v) for v in value]
+            try:
+                # The equality `evaluate` uses: 1 and 1.0 are one member, "1" another.
+                value = frozenset(members)
+            except TypeError:
+                value = tuple(members)
+        else:
+            value = _value_terms(value)
+        out.append((key, value))
+    return tuple(out)
+
+
+def _value_terms(value: Any) -> Any:
+    """An operand made comparable, as written: nothing inside it is prose."""
+    if isinstance(value, Mapping):
+        return tuple((k, _value_terms(value[k])) for k in sorted(value, key=repr))
+    if isinstance(value, (list, tuple)):
+        return tuple(_value_terms(v) for v in value)
+    return value
+
+
+def _one_copy_per_identity(records, effective: str):
+    """Rule 2-17, shared by both doors: records sharing ``(namespace, kind, id)`` under
+    DIFFERENT member names are one identity, kept under the effective name.
+
+    Where the host holds no copy under the effective name and the copies it holds
+    disagree, no copy is the current one, and choosing would be deciding: the answer is
+    a ``why``. Rule 2-16's question (two rows under ONE name) is not this one, and the
+    caller has already asked it.
+    """
+    groups: dict[tuple, list] = {}
+    for rec in records:
+        groups.setdefault((rec.namespace, rec.kind, rec.instance_id), []).append(rec)
+    kept = []
+    for key, copies in groups.items():
+        chosen = next((r for r in copies if r.type_name == effective), None)
+        if chosen is None:
+            distinct = {(r.label, repr(sorted((r.attributes or {}).items(), key=repr)))
+                        for r in copies}
+            if len(distinct) > 1:
+                names = sorted({r.type_name for r in copies})
+                return [], (
+                    f"id {key[2]!r} is held under {names} with different contents and "
+                    f"not under {effective!r}: no copy is the current one (rule 2-17)")
+            chosen = copies[0]
+            if len(copies) > 1:
+                # "resolved under the name the closure resolves to" (rule 2-17): the
+                # identity's ref never depends on which member the caller declared
+                # (round 2, build lens M2). One copy under one name is that name's row.
+                chosen = dataclasses.replace(chosen, type_name=effective)
+        kept.append(chosen)
+    return kept, ""
 
 
 class Registry:
@@ -2787,6 +2898,10 @@ class Registry:
         property_refusal = self._property_declaration_refusal(kind, attributes)
         if property_refusal is not None:
             return property_refusal
+        # INGEST.md §5 / §6 (row 7b): a malformed MatchPolicy or Condition mints nothing.
+        instance_refusal = self._instance_declaration_refusal(kind, attributes)
+        if instance_refusal is not None:
+            return instance_refusal
 
         existing = self.adapter.get_type(namespace, name, kind=kind)
         if existing is None:
@@ -3163,6 +3278,13 @@ class Registry:
             )
             if property_refusal is not None:
                 return property_refusal
+            # INGEST.md §5 / §6 (row 7b), at the SECOND door: an amendment at approval
+            # is a declaration too.
+            instance_refusal = self._instance_declaration_refusal(
+                amended.kind, dict(amended.attributes or {})
+            )
+            if instance_refusal is not None:
+                return instance_refusal
             # **Rule 2.10-10: `approve` recomputes the property warnings** from the
             # store as it is now (ruling R38). A word absent when proposed may be
             # registered by approval time, and the reverse.
@@ -5870,7 +5992,7 @@ class Registry:
             # checked here: that is rule 2.10-21's, reserved for Q106.
             property_breach = self._property_declaration_refusal(
                 row.get("kind", kind), attributes, at_import=True
-            )
+            ) or self._instance_declaration_refusal(row.get("kind", kind), attributes)
             if property_breach is not None:
                 out.append(
                     self._refused_import(
@@ -6870,6 +6992,77 @@ class Registry:
         cache[key] = (successors, why)
         return successors, why
 
+    def _word_map(
+        self, namespace: str, kind: str, cache: dict
+    ) -> tuple[dict[str, tuple[str, ...]], str | None]:
+        """``{identity_key -> every entry of this kind, any status, written that way}``.
+
+        Row 7B round 5: what `_alias_target` reads when an alias's own spelling names
+        no entry. Paged to exhaustion and memoised like `_successor_map`; the `why` is
+        Rule U's, a scan that did not finish has not said the word names nothing.
+        """
+        key = ("words", namespace, kind)
+        if key in cache:
+            return cache[key]
+        words: dict[str, list[str]] = {}
+        why: str | None = None
+        for status in ("active", "retired"):
+            after: str | None = None
+            cursors: set[str] = set()
+            while True:
+                page = self.adapter.find_types(
+                    TypeQuery(namespace=namespace, kind=kind, status=status,
+                              include_retired=True, after=after)
+                )
+                for rec in page.records:
+                    k = identity_key(rec.name)
+                    if k and rec.name not in words.setdefault(k, []):
+                        words[k].append(rec.name)
+                if not page.complete and page.next_after is None:
+                    why = why or page.why_incomplete or (
+                        f"the backend could not page this namespace's {status} types")
+                    break
+                after = page.next_after
+                if after is None:
+                    break
+                if after in cursors:
+                    why = why or (
+                        "this backend returned a pagination cursor it had already "
+                        "returned, so the types cannot be read to exhaustion")
+                    break
+                cursors.add(after)
+        result = ({k: tuple(sorted(v)) for k, v in words.items()}, why)
+        cache[key] = result
+        return result
+
+    def _alias_target(
+        self, namespace: str, kind: str, alias: str, cache: dict
+    ) -> tuple[str | None, str | None]:
+        """``(the entry this alias names, why that could not be decided)``.
+
+        The exact spelling first; otherwise the one entry `identity_key` says the word
+        is. Two entries under one key is a choice, and choosing would be deciding.
+        """
+        if self.adapter.get_type(namespace, alias, kind=kind) is not None:
+            return alias, None
+        k = identity_key(alias)
+        if not k:
+            return None, None
+        words, why = self._word_map(namespace, kind, cache)
+        named = words.get(k, ())
+        if len(named) > 1:
+            return None, (
+                f"the alias {alias!r} names {len(named)} entries by identity_key "
+                f"({', '.join(named)}): which one it absorbs cannot be decided "
+                "(rule 3-21, Rule U)")
+        if named:
+            return named[0], None
+        if why:
+            return None, (
+                f"the alias {alias!r} names no entry by its own spelling, and the look "
+                f"for one under another spelling did not finish: {why}")
+        return None, None
+
     def _alias_map(
         self, namespace: str, kind: str, cache: dict
     ) -> tuple[dict[str, str], str | None]:
@@ -7052,7 +7245,19 @@ class Registry:
                     joined.append(successors[name])
                 rec = self.adapter.get_type(ref.namespace, name, kind=ref.kind)
                 if rec is not None and rec.status == "active":
-                    joined.extend(alias for alias in rec.aliases if alias != name)
+                    # Round 5 (row 7B, build and door lenses, MAJOR): an alias is matched
+                    # to the entry it names by `identity_key`, the way `_alias_map`
+                    # matches the other direction. Looked up as exact bytes, an alias
+                    # written "Legacy Home" joined the closure from `legacy_home` and not
+                    # from `facility`: one identity, two extents (rules 3-20, 3-21).
+                    for alias in rec.aliases or ():
+                        target, target_why = self._alias_target(
+                            ref.namespace, ref.kind, alias, cache)
+                        if target_why:
+                            complete = False
+                            why = why or target_why
+                        elif target is not None and target != name:
+                            joined.append(target)
                 # ...and the row that answers to THIS word as one of its aliases.
                 holder = alias_holders.get(identity_key(name)) if identity_key(name) else None
                 if holder is not None and holder != name:
@@ -9461,6 +9666,24 @@ class Registry:
                 return other.name, None
         return None, why
 
+    def _entity_alias_holders(
+        self, namespace: str, word: str
+    ) -> tuple[tuple[str, ...], str | None]:
+        """Every ACTIVE entity entry holding ``word`` as one of its ALIASES, sorted.
+
+        The instance closure's alias hop (rule 3-21, row 7B rounds 3 and 4). Narrower
+        than :meth:`_alias_holder`, which also answers for another kind and for a
+        `same_word` NAME: neither moves an entity identity. ``why`` as everywhere: a
+        look that did not finish is not "no holder" (Rule U).
+        """
+        records, why = self._active_page(namespace)
+        found = sorted({
+            o.name for o in records
+            if o.kind == "entity" and o.name != word
+            and any(same_word(a, word) for a in (o.aliases or ()))
+        })
+        return tuple(found), why
+
     def _alias_clash(
         self, namespace: str, name: str, kind: str, aliases: Sequence[str]
     ) -> tuple[tuple[str, ...], str | None]:
@@ -9579,6 +9802,580 @@ class Registry:
             # paths apart by the shape of the list.
             warnings=(f"import_refused:{reason}",) + tuple(dict.fromkeys(extra)),
         )
+
+    # ------------------------------------------------- INGEST.md v0, the read side
+    # Row 7b. Two doors, both READS: `resolve_instance` and `get_instance_checked`.
+    # Neither writes a row of any table, so neither is a door to the kill row (7B-RUN
+    # §0.7, K1 and K2). Both walk ONE closure, `_instance_closure`, because two doors
+    # resolving one identity two ways is the shape `I-3` and `I-8` took (standing rule
+    # (e)). Written from the throwaway kit's ordering, `docs/tools/ingest_probe_kit.py`.
+
+    #: The page size the identity read asks for. A backend may return fewer; the read
+    #: follows `next_after` to the end either way (rule 2-11), so this bounds a page and
+    #: never the read.
+    INSTANCE_READ_PAGE = 500
+    #: Rule 2-11 exhausts the cursor; a backend that hands back a fresh cursor forever
+    #: never exhausts. Past this many pages under one member the read did not finish
+    #: (round 2, build lens 3). 10,000 pages of 500 is five million rows.
+    INSTANCE_READ_PAGES_MAX = 10_000
+
+    def _instance_absent(self, detail: dict | None = None) -> Refusal | None:
+        """INGEST.md rule 1-3 / 2-9: the capability, before anything. Never an empty set."""
+        if self.caps.resolves_instances:
+            return None
+        return Refusal(
+            "instance_source_absent",
+            {**(detail or {}), "problem": "capability",
+             "why": self.caps.reason("resolves_instances")},
+        )
+
+    def _instance_declaration_refusal(
+        self, kind: str, attributes: dict | None
+    ) -> Refusal | None:
+        """INGEST.md §5 and §6: a malformed ``match_policy`` or ``instance_condition``.
+
+        Called from ``propose_type``, ``approve`` and ``import_types``, beside the
+        property declaration check and for its reason: unconditional, never through a
+        deployment's ``AttributeSchema``. ``attributes_schema_violation`` is §9's value
+        (*a malformed `Condition` mints nothing*), and a malformed ``MatchPolicy`` is
+        the identical failure one key along.
+        """
+        breach = entry_declaration_problem(kind, attributes)
+        if breach is None:
+            return None
+        return Refusal(
+            "attributes_schema_violation",
+            {"kind": kind, "why": f"INGEST.md: {breach}"},
+        )
+
+    def _instance_closure(self, namespace: str, type_name: str) -> dict:
+        """INGEST.md 3.4a, rules 3-14 to 3-22. The CHAIN, not one hop.
+
+        Returns ``{effective, entry, hops, members, complete, why}``. ``members`` is
+        every written name of the identity: the forward chain, the backward chain and
+        the aliases of both -- **`_identity_closure`'s three relations, adopted** (R87,
+        rules 3-20 and 3-21). ``members[0]`` is the name the caller gave.
+
+        **Two declines of `_identity_closure`, per ING12.** That function *continues*
+        past a cycle and a dangling successor with ``complete=True``, which is right for
+        `neighbors` and is `I-2` here: an identity read that silently stops at a cycle
+        has decided over a set it did not finish. So the FORWARD walk is this method's
+        own, and it stops with ``complete=False`` and a ``why`` on a cycle (3-17), a
+        successor no entry declares (3-15, and the predecessor's entry is never kept as
+        a fallback), the hop cap (3-16) and a successor NAME carrying ``:`` or ``#``
+        (3-22). The membership walk then reuses `_identity_closure` unchanged.
+        """
+        entry = self.adapter.get_type(namespace, type_name, kind="entity")
+        out = {
+            "effective": type_name, "entry": entry, "hops": (), "members": (type_name,),
+            "complete": True, "why": "",
+        }
+
+        def stop(why: str) -> dict:
+            return {**out, "complete": False, "why": why}
+
+        if entry is None:
+            return stop(
+                f"no kind='entity' entry declares {type_name!r} in {namespace!r}, so "
+                "there is no MatchPolicy or predicate to judge an instance by"
+            )
+        effective, current = type_name, entry
+        seen = {type_name}
+        hops: list[str] = []
+        while current is not None and current.status == "retired":
+            nxt = current.successor
+            if not nxt:
+                # Rule 3-21: a hand-written alias is a member AND a hop. A retired word
+                # another live entry answers to is that entry's word, as `resolve_type`
+                # reads it; without this, the tombstone stayed its own effective entry
+                # and the ref, `governed_by` and a proposal's type all depended on which
+                # name the caller declared (round 3, door lens 1).
+                # Round 4 (build lens 2-4): an ENTITY entry, holding the word as an
+                # ALIAS (never by `same_word` name, which no entry claimed and which the
+                # holder's own closure would not walk back), and exactly one of them.
+                holders, look_why = self._entity_alias_holders(namespace, effective)
+                if look_why:
+                    return stop(
+                        f"{effective!r} is retired with no successor, and the look for "
+                        f"a live entry answering to it did not finish: {look_why}")
+                if len(holders) > 1:
+                    return stop(
+                        f"{effective!r} is retired with no successor and {len(holders)} "
+                        f"live entity entries hold it as an alias ({', '.join(holders)}): "
+                        "choosing one would be deciding (rule 3-21, Rule U)")
+                if not holders or self.adapter.get_type(
+                        namespace, holders[0], kind="entity") is None:
+                    break
+                nxt = holders[0]
+            out = {**out, "effective": effective, "entry": current, "hops": tuple(hops)}
+            if nxt in seen:
+                return stop(
+                    f"the successor chain from {type_name!r} cycles at {nxt!r}; this "
+                    "identity cannot be resolved to one type (rule 3-17)"
+                )
+            if len(hops) >= INSTANCE_CHAIN_CAP:
+                return stop(
+                    f"the successor chain from {type_name!r} passed the cap of "
+                    f"{INSTANCE_CHAIN_CAP} hops without reaching a live type (rule 3-16)"
+                )
+            if ":" in nxt or "#" in nxt:
+                return stop(
+                    f"{effective!r} was retired toward {nxt!r}, which contains ':' or "
+                    "'#': ref_key would write a string parse_ref reads back as a "
+                    "different reference (rule 3-22)"
+                )
+            nxt_entry = self.adapter.get_type(namespace, nxt, kind="entity")
+            if nxt_entry is None:
+                return stop(
+                    f"{effective!r} was retired toward {nxt!r} and no entry declares "
+                    f"{nxt!r} in {namespace!r}: the extent this identity would be "
+                    "decided over is not readable (rule 3-15)"
+                )
+            hops.append(nxt)
+            seen.add(nxt)
+            effective, current = nxt, nxt_entry
+        out = {**out, "effective": effective, "entry": current, "hops": tuple(hops)}
+        members, complete, why = self._identity_closure(
+            TypeRef(namespace, "entity", type_name), {}
+        )
+        names = [type_name] + [h for h in hops]
+        for m in members:
+            if m.name not in names:
+                names.append(m.name)
+        out["members"] = tuple(names)
+        if not complete:
+            return stop(why or "the identity closure could not be resolved to the end")
+        return out
+
+    def _governed_facts(self, rec) -> tuple[Any, Any]:
+        attrs = dict(rec.attributes or {}) if rec is not None else {}
+        return attrs.get(MATCH_POLICY_KEY), attrs.get(INSTANCE_CONDITION_KEY)
+
+    def _governed_change(self, namespace: str, type_name: str, closure: dict) -> str:
+        """Rule 3-18 (K1): EVERY member of the closure, never only the two endpoints.
+
+        A successor does not inherit its predecessor's ``MatchPolicy`` or predicate
+        (rules 5-10, 6-18; Q91's default). Any member whose entry declares different
+        governed facts from the declared entry makes the extent someone else's to judge.
+        """
+        declared = self.adapter.get_type(namespace, type_name, kind="entity")
+        mine = self._governed_facts(declared)
+        for member in closure["members"]:
+            if member == type_name:
+                continue
+            rec = self.adapter.get_type(namespace, member, kind="entity")
+            if rec is None:
+                continue
+            theirs = self._governed_facts(rec)
+            # E10 (INGEST.md 5.3): "different" is the THREE THRESHOLDS and the
+            # predicate's TERMS. A reworded `why`, or an `in` list in another order,
+            # is the same governed fact. Round 1 found the raw mappings compared.
+            changed = [
+                label for label, a, b in (
+                    ("MatchPolicy", _policy_terms(mine[0]), _policy_terms(theirs[0])),
+                    ("tenancy predicate", _condition_terms(mine[1]),
+                     _condition_terms(theirs[1])),
+                ) if a != b
+            ]
+            if changed:
+                return (
+                    f"{type_name!r} resolves through {member!r}, which declares a "
+                    f"different {' and a different '.join(changed)}: the extent this "
+                    "would be decided over is not the extent the caller declared "
+                    "(rule 3-18)"
+                )
+        return ""
+
+    def _instance_consumers_warning(self, namespace: str) -> list[str]:
+        """Rule 7-1, Q87's default (warn): a namespace with no registered consumer."""
+        try:
+            found = self.adapter.find_consumers(namespace)
+        except NotSupported:
+            found = []
+        return [] if found else ["consumers_unregistered"]
+
+    def get_instance_checked(
+        self, type_name: str, instance_id: str, *, namespace: str = "default"
+    ) -> InstanceLookup | Refusal:
+        """Primitive 22 through the closure and the EFFECTIVE entry's predicate.
+
+        INGEST.md rule 2-15, and §8.1a finding 2 (E2): the kit called primitive 22 once,
+        under the declared name, and judged the row with the declared entry's predicate,
+        so one identity was found under its old name and absent under its new one while
+        ``resolve_instance`` answered ``unknowable`` for both. This door walks the same
+        closure ``resolve_instance`` walks, looks the id up under EVERY member (rule
+        3-19's extent), collapses one row under two names to one (rule 2-17), and judges
+        it by the effective entry. A lookup it cannot finish, governed facts that
+        changed across the closure, and a predicate it cannot decide are refusals --
+        never a silent pass and never a ``None``, which would read as *absent*.
+        """
+        absent = self._instance_absent({"type_name": type_name, "instance_id": instance_id})
+        if absent is not None:
+            return absent
+        if not isinstance(instance_id, str):
+            raise TypeError(
+                f"instance_id is an opaque str (EDGES.md 2.1); got "
+                f"{type(instance_id).__name__} {instance_id!r}"
+            )
+        closure = self._instance_closure(namespace, type_name)
+        governed_by = f"{namespace}:{closure['effective']}"
+        warnings = [f"instance_type_succeeded:{h}" for h in closure["hops"]]
+
+        def refuse(problem: str, why: str) -> Refusal:
+            return Refusal(
+                "instance_source_absent",
+                {"problem": problem, "type_name": type_name, "instance_id": instance_id,
+                 "governed_by": governed_by, "why": why},
+                warnings=tuple(warnings),
+            )
+
+        if not closure["complete"]:
+            return refuse("closure_incomplete", closure["why"])
+        changed = self._governed_change(namespace, type_name, closure)
+        if changed:
+            return refuse("governed_facts_changed", changed)
+        found: list[InstanceRecord] = []
+        for member in closure["members"]:
+            try:
+                rec = self.adapter.get_instance(namespace, "entity", member, instance_id)
+            except NotSupported as exc:
+                # `I-1` at primitive 22's door: one member could not be read, so a row
+                # found under another is a decision over a partial extent.
+                return refuse(
+                    "lookup_incomplete",
+                    f"the lookup under {member!r} could not be made: {exc}",
+                )
+            if rec is not None:
+                problem = flat_form_problem(record_ref(rec).type) if isinstance(
+                    rec, InstanceRecord) else None
+                if problem:
+                    return refuse("unfaithful_reference", problem)
+                found.append(rec)
+        if not found:
+            return InstanceLookup(
+                record=None, ref=None,
+                why=(f"no host row carries id {instance_id!r} under any of "
+                     f"{list(closure['members'])} in {namespace!r}"),
+                governed_by=governed_by, warnings=tuple(warnings),
+            )
+        # Rule 2-17: one host row under two names of one identity is ONE row, kept
+        # under the name the closure resolves to. The SAME helper as resolve_instance,
+        # so the two doors judge the same copy (round 1).
+        kept, copies_why = _one_copy_per_identity(found, closure["effective"])
+        if copies_why:
+            return refuse("lookup_incomplete", copies_why)
+        record = kept[0]
+        _policy, condition = self._governed_facts(closure["entry"])
+        if condition is None:
+            warnings.append("no_tenancy_predicate")
+            return InstanceLookup(record, record_ref(record), "", governed_by,
+                                  tuple(warnings))
+        problem = condition_problem(condition)
+        if problem is not None:
+            # A malformed predicate is one this registry cannot decide, so the row is
+            # not handed out as if none were declared (fail closed, as resolve_instance
+            # answers unknowable).
+            return refuse("predicate_undecidable",
+                          f"{governed_by}'s declared predicate is malformed: {problem}")
+        verdict = evaluate(condition_from_mapping(condition), record.attributes)
+        if verdict.holds is True:
+            return InstanceLookup(record, record_ref(record), "", governed_by,
+                                  tuple(warnings))
+        if verdict.holds is False:
+            return InstanceLookup(
+                record=None, ref=None,
+                why=(f"{governed_by}'s declared predicate excludes this row: "
+                     f"{condition.get('why', '')}"),
+                governed_by=governed_by, warnings=tuple(warnings),
+            )
+        return refuse(
+            "predicate_undecidable",
+            f"the declared predicate could not be decided on this row: {verdict.why}",
+        )
+
+    def resolve_instance(
+        self,
+        candidate: str,
+        context: InstanceContext,
+        *,
+        type_name: str,
+        namespace: str = "default",
+        tier: str,
+        host_filter: Mapping[str, Any] | None = None,
+    ) -> InstanceResolution | Refusal:
+        """INGEST.md §3. Five outcomes, and completeness is checked before ANY of them.
+
+        No ``min_confidence`` and no ``predicate``: both are the entry's (rules 3-10,
+        5-1, 6-14). The ORDER below is the rule: the capability; the closure; is this
+        an instance at all; the exhaustive read over the whole closure; the flat-form
+        guard; distinct ids; the predicate; then Rule U's absorbers BEFORE the candidate
+        set is interpreted (rule 3-5); then the tied set with its floor; then the bands.
+        """
+        absent = self._instance_absent({"type_name": type_name})
+        if absent is not None:
+            return absent
+        if host_filter is not None and not isinstance(host_filter, Mapping):
+            # Rule 2-12: a mapping of declared keys. A free-form expression cannot be
+            # governed by `instance_filters`, so it is a caller's mistake, raised.
+            raise TypeError(
+                "host_filter is a mapping of declared keys to opaque values (INGEST.md "
+                f"rule 2-12); got {type(host_filter).__name__}"
+            )
+        if not isinstance(tier, str) or not tier:
+            raise TypeError("tier is required and is echoed back (INGEST.md rule 3-11)")
+        if not isinstance(candidate, str):
+            raise TypeError(f"candidate is a str; got {type(candidate).__name__}")
+
+        warnings: list[str] = []
+        closure = self._instance_closure(namespace, type_name)
+        effective = closure["effective"]
+        governed_by = f"{namespace}:{effective}"
+        warnings.extend(f"instance_type_succeeded:{h}" for h in closure["hops"])
+
+        def answer(outcome, ref, cand, confidence, reason, candidates, complete, why,
+                   scanned) -> InstanceResolution:
+            return InstanceResolution(
+                outcome=outcome, ref=ref, candidate=cand, confidence=confidence,
+                reason=reason, candidates=tuple(candidates), known=len(candidates),
+                complete=complete, why_incomplete=why, scanned=scanned,
+                warnings=tuple(dict.fromkeys(warnings)), tier=tier,
+                governed_by=governed_by,
+            )
+
+        # --- rule 3-8: is this an instance at all? No host read ------------------
+        if names_a_class(candidate):
+            # Rules 7-1 and 7-4 say "the resolution carries" them, this one included.
+            if self._governed_facts(closure["entry"])[1] is None:
+                warnings.append("no_tenancy_predicate")
+            warnings.extend(self._instance_consumers_warning(namespace))
+            return answer(
+                "not_an_instance", None, None, None,
+                f"{candidate!r} names a class or a column, not one thing of that class",
+                (), True, "", 0,
+            )
+
+        # --- the governed facts, read off the EFFECTIVE entry ---------------------
+        governed_why = (
+            self._governed_change(namespace, type_name, closure)
+            if closure["complete"] else ""
+        )
+        policy_raw, condition_raw = self._governed_facts(closure["entry"])
+        policy_why = ""
+        if closure["complete"]:
+            if policy_raw is None:
+                stored = self.caps.stores_attribute(MATCH_POLICY_KEY)
+                policy_why = (
+                    f"{governed_by} declares no MatchPolicy, so nothing can be scored "
+                    "against a threshold the entry never stated (INGEST.md §5)"
+                    + ("" if stored else
+                       f"; this backend cannot store it: "
+                       f"{self.caps.reason('stores_attributes')}")
+                )
+            elif match_policy_problem(policy_raw) is not None:
+                policy_why = (f"{governed_by}'s MatchPolicy is malformed: "
+                              f"{match_policy_problem(policy_raw)}")
+        condition = None
+        if condition_raw is not None:
+            problem = condition_problem(condition_raw)
+            if problem is not None:
+                policy_why = policy_why or (
+                    f"{governed_by}'s predicate is malformed: {problem}")
+            else:
+                condition = condition_from_mapping(condition_raw)
+
+        # --- rules 2-3 / 2-11 / 3-19: the read exhausts, over the WHOLE closure ---
+        key = norm(candidate)
+        scanned = 0
+        records: list[InstanceRecord] = []
+        complete = closure["complete"]
+        why_incomplete = closure["why"]
+        if complete and not governed_why and not policy_why:
+            for read_type in closure["members"]:
+                after: str | None = None
+                seen_cursors: set[str] = set()
+                while True:
+                    try:
+                        page = self.adapter.find_instance_candidates(
+                            CandidateQuery(
+                                namespace=namespace, kind="entity", type_name=read_type,
+                                label=candidate,
+                                host_filter=dict(host_filter) if host_filter else None,
+                                limit=self.INSTANCE_READ_PAGE, after=after,
+                            )
+                        )
+                    except NotSupported as exc:
+                        complete, why_incomplete = False, (
+                            f"the read under {read_type!r} could not be made: {exc}")
+                        break
+                    scanned += len(page.records)
+                    records.extend(page.records)
+                    uncounted = page.known is None and not page.complete
+                    miscounted = page.known is not None and page.known != len(page.records)
+                    if uncounted or miscounted:
+                        # 3.4's third absorber is `known=None` AND `complete=False`
+                        # together: a backend that finished hands over every record and
+                        # they are counted here. A `known` that is not the page's own
+                        # count, over or under, cannot be counted into an extent
+                        # (rule 2-5, round 1).
+                        complete, why_incomplete = False, (
+                            page.why_incomplete
+                            or f"the backend could not count a page under {read_type!r} "
+                               f"(known={page.known!r} for {len(page.records)} records)")
+                        break
+                    if not page.complete and page.next_after is None:
+                        complete, why_incomplete = False, (
+                            page.why_incomplete or "the identity read did not finish")
+                        break
+                    if page.next_after is None:
+                        break
+                    if page.next_after in seen_cursors:
+                        # Rule 2-11 exhausts the cursor; a cursor handed back twice
+                        # never exhausts, and the read did not finish (round 1).
+                        complete, why_incomplete = False, (
+                            f"the backend returned a cursor it had already returned under "
+                            f"{read_type!r}: the read cannot be exhausted")
+                        break
+                    seen_cursors.add(page.next_after)
+                    if len(seen_cursors) >= self.INSTANCE_READ_PAGES_MAX:
+                        complete, why_incomplete = False, (
+                            f"the read under {read_type!r} passed "
+                            f"{self.INSTANCE_READ_PAGES_MAX} pages without exhausting "
+                            "the cursor")
+                        break
+                    after = page.next_after
+                if not complete:
+                    break
+
+        # --- rule 2-14: the flat-form guard, at the surface handing out refs -----
+        for rec in records:
+            problem = flat_form_problem(record_ref(rec).type)
+            if problem:
+                return Refusal(
+                    "instance_source_absent",
+                    {"problem": "unfaithful_reference", "type_name": type_name,
+                     "why": f"rule 2-14: {problem}"},
+                    warnings=tuple(warnings),
+                )
+
+        # --- rule 2-16: two DIFFERENT rows under ONE name and one id --------------
+        dup_why = ""
+        seen_ids: dict[tuple, int] = {}
+        for rec in records:
+            k = (rec.namespace, rec.kind, rec.type_name, rec.instance_id)
+            seen_ids[k] = seen_ids.get(k, 0) + 1
+        dups = sorted(k[3] for k, n in seen_ids.items() if n > 1)
+        if dups:
+            dup_why = (
+                f"the identity read returned {len(dups)} instance_id(s) more than once "
+                f"({', '.join(dups[:3])}): the host's ids do not distinguish its own "
+                "rows, so the extent of this identity cannot be counted (rule 2-16)")
+
+        # --- rule 2-17: one row under two member names is ONE candidate -----------
+        # BEFORE the predicate, and with the helper primitive 22's door uses: one
+        # identity is one copy, the effective name's. Round 1 found the predicate run
+        # over both copies first, so a stale copy decided where the current one failed.
+        one_copy, copies_why = _one_copy_per_identity(records, effective)
+
+        # --- rules 6-15 / 6-16: the ENTRY's predicate, evaluated here -------------
+        undecided: list[str] = []
+        survivors: list[InstanceRecord] = []
+        if condition is None:
+            warnings.append("no_tenancy_predicate")
+            survivors = list(one_copy)
+        else:
+            for rec in one_copy:
+                verdict = evaluate(condition, rec.attributes)
+                if verdict.holds is True:
+                    survivors.append(rec)
+                elif verdict.holds is None:
+                    undecided.append(verdict.why)
+        warnings.extend(self._instance_consumers_warning(namespace))
+        if host_filter:
+            warnings.append(
+                "instance_narrowed_proposal:" + ",".join(sorted(map(str, host_filter))))
+
+        # The bands are decided on the UNROUNDED score; four places is display only
+        # (round 1: 226/233 = 0.96996 rounded up across `match_at` 0.97).
+        pairs = sorted(
+            ((similar(key, norm(rec.label)), rec) for rec in survivors),
+            key=lambda p: (-p[0], str(record_ref(p[1]))),
+        )
+        raw = [score for score, _ in pairs]
+        scored = [
+            InstanceCandidate(ref=record_ref(rec), label=rec.label, score=round(score, 4),
+                              discriminators=dict(rec.attributes))
+            for score, rec in pairs
+        ]
+
+        def unknowable(reason: str, why: str) -> InstanceResolution:
+            return answer("unknowable", None, None, None, reason, scored[:5], False,
+                          why, scanned)
+
+        # --- §3.4, Rule U: six absorbers, BEFORE the set is interpreted -----------
+        if not complete:                                             # `I-1`, `I-2`
+            return unknowable(
+                f"the identity read did not finish: {why_incomplete}", why_incomplete)
+        if governed_why:                                             # `I-7`
+            return unknowable(
+                f"the governed facts changed under the caller: {governed_why}",
+                governed_why)
+        if policy_why:
+            return unknowable(f"nothing was scored: {policy_why}", policy_why)
+        if dup_why:                                                  # `I-6`
+            return unknowable(f"the extent is not countable: {dup_why}", dup_why)
+        if copies_why:                                               # rule 2-17
+            return unknowable(f"the extent is not countable: {copies_why}", copies_why)
+        if undecided:                                                # rule 6-16
+            return unknowable(
+                f"the host predicate was undecidable on {len(undecided)} of "
+                f"{len(records)} candidates", undecided[0])
+        if scanned == 0:                                             # rule 3-13
+            return unknowable(
+                "the candidate space was empty: this read saw no rows at all, which is "
+                "not evidence that nothing like this exists", "scanned=0")
+
+        # --- rules 3-3 / 5-8 / 5-9 / 5-12: the tied SET, then the bands ----------
+        policy = match_policy_from_mapping(policy_raw)
+        tied: list[InstanceCandidate] = []
+        if scored:
+            top = raw[0]
+            for score, c in zip(raw, scored):
+                # `_SCORE_EPS` absorbs the float SUBTRACTION only: 0.98 - 0.96 is
+                # 0.020000000000000018, inside a 0.02 margin (rule 3-3, round 1). The
+                # thresholds are compared exactly, "at or above" (round 2).
+                at_or_above = score >= policy.match_at
+                near_top = (top - score) <= policy.ambiguity_margin + _SCORE_EPS and (
+                    score >= policy.propose_below)                   # rule 5-12 floor
+                if at_or_above or near_top:
+                    tied.append(c)
+
+        def candidate_ref(resolution: str) -> CandidateRef:
+            return CandidateRef(
+                type=TypeRef(namespace, "entity", effective), label=candidate,
+                resolution=resolution, act_id=context.act_id,
+            )
+
+        if len(tied) > 1:                                            # rules 3-3, 3-4
+            return answer(
+                "ambiguous", None, candidate_ref("ambiguous"), tied[0].score,
+                f"{len(tied)} host rows answer to {candidate!r} and nothing here "
+                "separates them", tied, True, "", scanned)
+        if tied and raw[0] >= policy.match_at:                       # rule 5-8
+            return answer(
+                "existing", tied[0].ref, None, tied[0].score,
+                f"exactly one host row answers to {candidate!r}", tied, True, "",
+                scanned)
+        if scored and raw[0] >= policy.propose_below:                # rule 5-9
+            return answer(
+                "ambiguous", None, candidate_ref("ambiguous"), scored[0].score,
+                f"the best candidate scored {scored[0].score}, between propose_below "
+                f"{policy.propose_below} and match_at {policy.match_at}: not confident "
+                "enough to be the same thing", scored[:5], True, "", scanned)
+        return answer(
+            "proposal", None, candidate_ref("proposal"),
+            scored[0].score if scored else None,
+            f"nothing in {scanned} scanned host rows answers to {candidate!r}",
+            scored[:5], True, "", scanned)
 
     # ------------------------------------------------------------------ attributes
     def register_attribute_schema(self, schema: AttributeSchema) -> AttributeSchema:

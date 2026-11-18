@@ -23,7 +23,7 @@ from __future__ import annotations
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Mapping, Protocol, runtime_checkable
 
 __all__ = [
     "Capabilities",
@@ -82,6 +82,11 @@ CAPABILITY_FLAGS = (
     "stores_invocations",
     "stores_invocation_events",
     "indexes_invocations_by_family",
+    # INGEST.md 2.3, row 7b. ONE flag here, and the second (`instance_filters`) is a
+    # projection set beside `attribute_projections`, not a bool: U3's shape exactly.
+    # An ordinary flag for the edge four's reason -- C0-01 requires its `why`, and
+    # `check_capability_matrix.py` declines it one flag at a time off this tuple.
+    "resolves_instances",
 )
 
 #: ACTIONS.md 8's three, named separately for the places that must talk about the
@@ -157,6 +162,13 @@ class Capabilities:
     stores_invocations: bool = False
     stores_invocation_events: bool = False
     indexes_invocations_by_family: bool = False
+    #: INGEST.md 2.3, row 7b -- and the default is **False** for the load-bearing reason
+    #: `stores_edges` and `stores_invocations` default False. An adapter written against
+    #: the twenty-one-primitive protocol answers no instance-candidate query, and a True
+    #: default would make every such adapter claim it. The honest answer for a backend
+    #: that predates this row is `instance_source_absent` (rule 1-3, `C20-03`), never an
+    #: empty candidate page, which would read as *"there is nothing like this"*.
+    resolves_instances: bool = False
     why: dict[str, str] = field(default_factory=dict)
     #: Ruling R5 / PACKAGE.md 3.5. ``"owned"`` -- this adapter owns the connection and
     #: ``transaction()`` commits at depth 0. ``"savepoint"`` -- the connection is the
@@ -185,6 +197,12 @@ class Capabilities:
     #: blob: `stores_edge_attributes=True` would silently lose arbitrary keys and False
     #: alone would disclaim two the backend round-trips perfectly.
     edge_attribute_projections: frozenset[str] = frozenset()
+    #: INGEST.md 2.3, row 7b. The `host_filter` KEYS primitive 23 honours faithfully --
+    #: U3's shape exactly: a key listed here is applied; a key NOT listed comes back with
+    #: `complete=False` and a `why` naming it, never applied-looking and never silently
+    #: dropped (rules 2-7 and 2-10). This is why `host_filter` is a named mapping (rule
+    #: 2-12): a set of names cannot govern an opaque expression.
+    instance_filters: frozenset[str] = frozenset()
     #: True when the edge store and the type store are the same store on one connection.
     #: The reference backends put `oo_edge` in the same schema as `oo_type`, so it is
     #: True there; a host-owned edge table beside a package-owned registry sets it False
@@ -660,6 +678,64 @@ class InvocationPage:
 # -------------------------------------------------------------------------- protocol
 
 
+# ------------------------------------------------------------- INGEST.md 2, row 7b
+
+
+@dataclass(frozen=True)
+class InstanceRecord:
+    """One HOST row, as primitive 22 or 23 returns it. INGEST.md 2.
+
+    Flat, and deciding nothing: ``instance_id`` is the host's identifier and opaque to
+    this project (rule 1-1), ``attributes`` are the host's own columns, carried so the
+    REGISTRY can discriminate and evaluate a declared condition, never interpreted here.
+    """
+
+    namespace: str
+    kind: str
+    type_name: str
+    instance_id: str
+    label: str
+    attributes: dict
+    source_version: str | None = None
+
+
+@dataclass(frozen=True)
+class CandidateQuery:
+    """Primitive 23's one argument. INGEST.md 2.
+
+    **No tenant field** (rule 6-17, `C20-58`): tenancy is the host's predicate, declared
+    on the entry and evaluated by the registry (R59). ``label`` is a hint that may ORDER
+    a page and may never OMIT a record (rule 2-8). ``host_filter`` is a MAPPING of
+    declared keys to opaque values (rule 2-12); ``after`` is an opaque cursor whose
+    encoding is the backend's (R58).
+    """
+
+    namespace: str
+    kind: str
+    type_name: str
+    label: str | None = None
+    host_filter: Mapping[str, Any] | None = None
+    limit: int | None = None
+    after: str | None = None
+
+
+@dataclass(frozen=True)
+class CandidatePage:
+    """R58's one rule: ``known`` counts THIS page, ``complete`` is about the SET.
+
+    A backend that cannot count says ``known=None`` -- never ``0`` (rule 2-5, `C20-08`).
+    A truncated read is ``complete=False`` with ``next_after=None`` and a
+    ``why_incomplete`` (rule 2-4), distinguishable from a page by the report alone.
+    """
+
+    records: tuple[InstanceRecord, ...]
+    known: int | None
+    complete: bool
+    why_incomplete: str | None
+    next_after: str | None
+
+
+
 @runtime_checkable
 class StorageAdapter(Protocol):
     """The fifteen primitives -- PACKAGE.md 3.4.
@@ -817,6 +893,25 @@ class StorageAdapter(Protocol):
 
     # 18
     def find_edges(self, q: EdgeQuery) -> EdgePage: ...
+
+    # ------------------------------------------------------------------ 22 and 23
+    # INGEST.md 2, row 7b. TWO, both READS, and the count is the argument (rule 2-1,
+    # `C20-04`): instances are the HOST's (R78), so there is no `put` -- a protocol that
+    # needed one would be an instance store with a different name. Counting is
+    # `CandidatePage.known`; writing is the host's. Neither gets a primitive.
+    #
+    # The `stores_edges=False` treatment: `resolves_instances=False` raises
+    # `NotSupported`, and the registry checks the capability first and never calls them.
+    # **The adapter scores nothing** (rule 2-6, `C20-09`): it returns records and the
+    # registry scores them, which C0-04's source inspection polices.
+
+    # 22
+    def get_instance(
+        self, namespace: str, kind: str, type_name: str, instance_id: str
+    ) -> InstanceRecord | None: ...
+
+    # 23
+    def find_instance_candidates(self, q: CandidateQuery) -> CandidatePage: ...
 
 
 # ---------------------------------------------------------------- optional extension

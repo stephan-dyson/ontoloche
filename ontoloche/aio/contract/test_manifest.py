@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ontoloche.contract.test_manifest import EXPECTED_PER_GROUP, TOTAL
+from ontoloche.contract.test_manifest import TOTAL, enumerated_ids
 from ontoloche.contract.test_manifest import implemented_ids as sync_implemented_ids
 
 _TEST_NAME = re.compile(r"^(?:async )?def (test_c(\d+)_(\d+)_\w+)", re.M)
@@ -34,11 +34,9 @@ def implemented_ids() -> dict[str, str]:
 def test_the_async_suite_implements_every_enumerated_contract_id():
     found = implemented_ids()
 
-    expected = {
-        f"C{group}-{index:02d}"
-        for group, count in EXPECTED_PER_GROUP.items()
-        for index in range(1, count + 1)
-    }
+    # The sync manifest's enumeration, planned ids' gaps included (row 7b: INGEST.md 4's
+    # ids are row 7c's). One definition, so the two suites cannot disagree on what is owed.
+    expected = enumerated_ids()
     missing = sorted(expected - set(found))
     extra = sorted(set(found) - expected)
     assert not missing, f"contract ids with no async test: {missing}"
