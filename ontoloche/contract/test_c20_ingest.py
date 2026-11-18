@@ -2155,7 +2155,7 @@ def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
 # Each was committed red before the code that turns it green (7C-RUN 0.3).
 
 from ..actions import Effect, InputSpec, parse_ref, ref_key  # noqa: E402
-from ..edges import InstanceRef  # noqa: E402
+from ..edges import InstanceRef, TypeRef  # noqa: E402
 from ._support import action_family  # noqa: E402
 
 NEEDS_LEDGER = pytest.mark.requires_capability("stores_attributes", "stores_invocations")
@@ -2280,6 +2280,22 @@ def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unreviewed
                            {"instance": InstanceRef(res.candidate.type, "995001")},
                            actor="host:cms")
     assert registry.invocations(unwritten_for=again.candidate).invocations == ()
+
+    # Through the act: a second act's landing of a held identity is `pending`, carries
+    # the holder, and mints no second identity.
+    other = "yyyy wwww elsewhere"
+    holder = _act(registry, "act-71a").land(other, type_name="facility")
+    assert holder.outcome == "proposed", holder
+    second = _act(registry, "act-71b").land(other.upper(), type_name="facility")
+    assert second.outcome == "pending", second
+    assert (f"instance_proposal_pending:{holder.invocation.invocation_id}"
+            in second.invocation.warnings)
+    held = registry.invocations(unwritten_for=second.candidate)
+    assert [i.invocation_id for i in held.invocations] == [holder.invocation.invocation_id], (
+        "the pending row is itself a holder: two permissions for one identity")
+    registry.review_invocation(holder.invocation.invocation_id, reviewed_by="user:sd")
+    third = _act(registry, "act-71c").land(other, type_name="facility")
+    assert third.outcome == "pending", "draining the queue stood the guard down (I-5)"
 
 
 # ---------------------------------------------------------------- §4 through the act
@@ -2470,3 +2486,54 @@ def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
     assert blind.outcome == "unknowable" and blind.invocation is None, blind
     assert not any(w.startswith("instance_ambiguous_at_proposal")
                    for w in (blind.resolution.warnings if blind.resolution else ()))
+
+
+@NEEDS_LEDGER
+def test_c20_70_within_one_act_an_identity_is_resolved_once_under_the_gates_key(
+    adapter, make_registry
+):
+    """Rule **4-10**. The key is the gate's: the closure of the type and the label under
+    the gate's own RELATION (`similar(norm(a), norm(b)) >= match_at`), not the raw label
+    (`I-4`) and not the label without its type (B1)."""
+    registry = _world(adapter, make_registry)
+    host_instances(adapter, _rows(), type_name="clinic")
+    seed(registry, "clinic", attributes=_governed())
+    _ingest_family(registry)
+    act = _act(registry)
+
+    first = act.land(EXACT, type_name="facility")
+    assert first.outcome == "existing"
+    again = act.land(EXACT.upper(), type_name="facility")
+    assert again.outcome == "reused" and again.ref == first.ref and again.resolution is None
+
+    minted = act.land(NOTHING, type_name="facility")
+    assert minted.outcome == "proposed"
+    for variant in (NOTHING.upper(), "  " + NOTHING + "!", "zzzz qqqq unrelatd"):
+        reused = act.land(variant, type_name="facility")
+        assert reused.outcome == "reused", (variant, reused)
+        assert reused.candidate == minted.candidate and reused.invocation is None
+
+    other_type = act.land(NOTHING, type_name="clinic")
+    assert other_type.outcome == "proposed", "B1: a second type's landing reused the first's"
+    assert other_type.candidate.type.name == "clinic"
+    assert len(_ledger(registry)) == 2
+
+
+@NEEDS_LEDGER
+def test_c20_81_the_per_act_memory_is_written_on_every_branch_that_answers(
+    adapter, make_registry
+):
+    """Rule **4-13** (finding B5). The pending branch binds the act as the minting one
+    does, so the same identity landing again in that act is `reused`, not a second
+    pending invocation. `existing` binds it too (B7)."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("rule 4-11's read needs invocation events to be complete")
+    _ingest_family(registry)
+    _act(registry, "act-a").land(NOTHING, type_name="facility")
+    b = _act(registry, "act-b")
+    pending = b.land(NOTHING, type_name="facility")
+    assert pending.outcome == "pending", pending
+    again = b.land(NOTHING, type_name="facility")
+    assert again.outcome == "reused" and again.candidate == pending.candidate
+    assert len(_ledger(registry)) == 2, "the pending branch left the act unbound"
