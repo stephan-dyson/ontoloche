@@ -5483,3 +5483,79 @@ def test_c19_112_one_invocation_can_be_raised_to_review_and_warnings_are_a_close
         with pytest.raises(ValueError):
             registry.record_invocation("propose_facility", {"instance": cand},
                                        actor="ai:ingest", outcome="applied", warnings=forged)
+
+
+_A4_POLICY = {"match_at": 0.97, "propose_below": 0.80, "ambiguity_margin": 0.02,
+              "why": "C19-113: the kit's thresholds"}
+
+
+@NEEDS_INVOCATIONS
+def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
+    adapter, make_registry
+):
+    """Rule **6-17**, amendment **A4** (`INGEST.md` 4.4, rule 4-11).
+
+    B2: the shipped read returns the OLDEST 100 rows and `complete=False` for any
+    filter, so rule 4-11's question could not be asked. `unwritten_for=` is a scoped
+    read: rule 4-10's key (namespace, kind, the closure's effective entry, the label
+    under the gate's own normaliser at that entry's `match_at`), paged to exhaustion,
+    keeping only proposals that still HOLD a permission (no result, applied, not
+    compensated, not themselves `pending`). It combines with nothing.
+    """
+    from ..ingest import MATCH_POLICY_KEY
+
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes={MATCH_POLICY_KEY: _A4_POLICY})
+    seed(registry, "clinic", attributes={MATCH_POLICY_KEY: _A4_POLICY})
+    _propose_family(registry)
+    cand = _candidate("Burns Nursing Home Inc")
+
+    def record(c, **kw):
+        out = registry.record_invocation("propose_facility", {"instance": c},
+                                         actor="ai:ingest", outcome=kw.pop("outcome", "applied"),
+                                         **kw)
+        assert not isinstance(out, Refusal), out
+        return out
+
+    # Noise first: 120 unrelated proposals so the holder is NOT in the oldest 100 (B2).
+    for n in range(120):
+        record(_candidate(f"Unrelated Facility {n:03d}"))
+    holder = record(_candidate("BURNS NURSING HOME, INC."))   # same key under norm
+    record(_candidate("Burns Nursing Home Inc", name="clinic"))  # another type: no
+    record(_candidate("Burns Nursing Home Inc"), outcome="refused",
+           refusal=Refusal("precondition_unmet", {"why": "x"}))  # holds nothing
+
+    with pytest.raises(ValueError):
+        registry.invocations(unwritten_for=cand, family="propose_facility")
+    with pytest.raises(ValueError):
+        registry.invocations(unwritten_for=cand, unreviewed=True)
+
+    found = registry.invocations(unwritten_for=cand)
+    assert not isinstance(found, Refusal), found
+    assert found.complete, found.why_incomplete
+    assert [i.invocation_id for i in found.invocations] == [holder.invocation_id]
+    assert found.known == 1
+
+    # Reviewed is NOT written: draining the queue must not stand the guard down (I-5).
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        registry.review_invocation(holder.invocation_id, reviewed_by="user:sd")
+        still = registry.invocations(unwritten_for=cand)
+        assert [i.invocation_id for i in still.invocations] == [holder.invocation_id]
+        # Written is: once the host reports the row, the proposal holds nothing.
+        minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+        registry.record_result(holder.invocation_id, {"instance": minted}, actor="host:cms")
+        gone = registry.invocations(unwritten_for=cand)
+        assert gone.complete and gone.invocations == () and gone.known == 0
+        # A row that is itself `pending` holds nothing either.
+        record(_candidate("Burns Nursing Home Inc"),
+               warnings=(f"instance_proposal_pending:{holder.invocation_id}",))
+        assert registry.invocations(unwritten_for=cand).invocations == ()
+    else:
+        # The `written` half cannot be read: a confident `no holder` would fail open.
+        blind = registry.invocations(unwritten_for=cand)
+        assert not blind.complete and blind.why_incomplete, blind
+
+    # An entry with no MatchPolicy cannot say what counts as the same label.
+    seed(registry, "unscored")
+    unscored = registry.invocations(unwritten_for=_candidate("x", name="unscored"))
+    assert not unscored.complete and unscored.why_incomplete, unscored
