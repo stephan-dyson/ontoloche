@@ -226,15 +226,15 @@ All five outcomes are reached on real labels.
 
 ### §1.4 — The falsifiers
 
-- **F1, the seam: not falsified.** After the UC2 walk-through, every registry table's row count is unchanged, and the only table outside the registry's schema is the host's.
-- **F2, the kit as the reference: not falsified.** The build and the kit agree, on outcome and on `known`, on every UC2 label and on every group of the gate batch.
-- **F3, the Q86 and Q92 contortions: Q92 did not bite where §0.5 predicted.** On the un-deduplicated gate host, each of the 13 `ambiguous` answers is a tie between service requests at one address. The host is narrowed to one ZIP code, so the tied rows share every bound attribute, and `row_attributes` would not have separated them even if it were asked to. Whether Q92 bites on a host whose tied rows *do* differ in a bound attribute is not measured here.
+- **F1, the seam: not falsified.** On all four stores the UC2 walk-through builds (full, 745040 held out, and the two scan caps), every registry table's content digest is unchanged by the resolutions made over it, and no table exists outside the registry's schema and the host's. **[Observed]** Round 1 found the first version compared row counts on one store of four, which cannot see an UPDATE; the check now digests every row (§2.1).
+- **F2, the kit as the reference: not falsified.** The build and the kit agree, on outcome and on `known`, on all seven UC2 labels (the two scan-capped answers included, after round 1 added them) and on every group of the gate batch. **[Observed]**
+- **F3, the Q86 and Q92 contortions: could not be exercised here, so Q92 did not bite where §0.5 predicted.** On the un-deduplicated gate host, each of the 13 `ambiguous` answers is a tie between service requests at one address. The host is narrowed to one ZIP code, so the tied rows share every bound attribute, and `row_attributes` would not have separated them even if it were asked to. Whether Q92 bites on a host whose tied rows *do* differ in a bound attribute is not measured here.
 
 ### §1.5 — Q93: rule 3-19's read cost, measured
 
 ING11 said rule 3-19's cost was unmeasured. Over the 14,624 CMS rows, split 7,312 / 7,312 between `facility` and its successor `ltc_facility`, the two-member closure read 14,624 rows. That equals the one-member read over one table, and it found the same answer (`existing`).
 
-**The cost is the extent, not a multiple of it.** Wall time was 443 ms against 449 ms on this machine, one run each, so any difference between them is noise [guess]. The closure multiplies the number of primitive 23 *calls* by its size, not the rows read. That answers Q93 for a closure whose members partition the rows. A host that stores the same rows under both names pays twice, and rule 2-17 collapses them back to one.
+**The cost is the extent, not a multiple of it, in rows and in calls.** **[Observed]** The probe counts primitive 23 calls: 30 for the one-member read and 30 for the two-member read. The call count is about ceil(rows / page) per member, so a closure adds at most one call per extra member, for that member's last partial page. Wall time was 438 ms against 432 ms, one warm run each, so any difference is noise [guess]. The first version of this section said the closure "multiplies the number of calls by its size", which the round-1 fidelity lens measured as false (§2.1). That answers Q93 for a closure whose members partition the rows. A host that stores the same rows under both names would read them twice before rule 2-17 collapses them back to one [guess: not measured here].
 
 ### §1.6 — Contortions and departures recorded here, not routed
 
@@ -266,3 +266,42 @@ ING11 said rule 3-19's cost was unmeasured. Over the 14,624 CMS rows, split 7,31
 ### §1.8 — Gates and the suite
 
 Filled at landing, from the final run on the landing commit.
+
+## §2 — THE ADVERSARIAL LOOP
+
+Row 6j's stopping rule (§0.9): three lenses per round, build, door and fidelity, each fresh. The loop stops when a round finds nothing MAJOR, and the round after it confirms. Cap 5 rounds, round 6 confirming. Nothing a lens is reviewing is edited while it runs.
+
+### §2.1 — Round 1, on 6891fbb
+
+**Build lens. 2 MAJOR, 6 minor.**
+
+1. **MAJOR, E10.** `_governed_change` compared the raw mappings, so a reworded `why` stopped the closure, and so did an `in` list in another order. INGEST.md 5.3 says "different" is the three thresholds and the predicate's terms. **Fixed:** `_policy_terms` compares the thresholds as floats, and `_condition_terms` drops `why` at every level and treats `in` / `not_in` values and `all_of` / `any_of` terms as sets. Tests `C20-79` r1 (both directions). Mutation shown red.
+2. **MAJOR, rule 2-17.** `resolve_instance` ran the predicate over every copy and collapsed after, so a stale copy that passed decided `existing` where the current copy failed, while `get_instance_checked` collapsed first and excluded the row. The two doors judged different copies. **Fixed:** one helper, `_one_copy_per_identity`, used by both doors before the predicate, keeps the effective name's copy. Where the host holds no copy under the effective name and the copies differ, no copy is current: the read door answers `unknowable` and the lookup door refuses `lookup_incomplete`. Tests `C20-89` r1 (two). Two mutations shown red.
+3. **Minor, 3.4's third absorber.** It was `known is None`, which also caught a finished read that cannot count. The spec's absorber is `known=None` and `complete=False` together. **Fixed**, and the `C20-08` "none" branch, which never seeded a policy and so was red for the wrong reason, is replaced by two r1 tests (finished, and not). Mutation shown red.
+4. **Minor, rule 2-11.** A cursor handed back twice looped forever. **Fixed:** a seen-cursor set per member ends the read `unknowable`. Test `C20-14` r1. Mutation shown red.
+5. **Minor, rules 3-3 and 5-8.** `0.98 - 0.96` is `0.020000000000000018`, outside a 0.02 margin. **Fixed** with a 1e-9 epsilon on float subtraction only. Test `C20-17` r1. Mutation shown red.
+6. **Minor, rule 5-9.** The bands were tested on the score rounded to four places, so 226/233 = 0.96996 crossed `match_at` 0.97. **Fixed:** bands read the raw score, rounding is display only. Test `C20-74` r1. Mutation shown red.
+7. **Minor, recorded, not fixed and not routed.** A retired entry with no policy whose successor has one is locked out (`unknowable`). That is the Q91 family, and Q91's default (`unknowable`) is in force on this row, so it is a departure under that default, not a new ruling.
+8. **Minor, rules 7-1 and 7-4.** `not_an_instance` carried neither `no_tenancy_predicate` nor `consumers_unregistered`, and both rules say every resolution carries them. **Fixed.** Test `C20-62` r1. Mutation shown red.
+
+**Door lens. 1 MAJOR (the same as build 2), 5 test gaps, 5 near-miss mutations.** K5 and K6 came back clean.
+
+- `I-1` at primitive 22's door was untested: only the successor's table bound gives `lookup_incomplete` (T1), and a CCN on two rows refuses (T2). Tests `C20-66` r1 (two). Mutation shown red for T1.
+- `C20-05` never exercised the type-column binding (T5). Test added; mutation on the SQL type-column clause shown red.
+- `C20-08` had no over-count. `DegradedAdapter` gained `instance_known="over"`; test added; mutation shown red.
+- The seam's `snapshot` (`ontoloche/contract/_support.py`) read five tables. It now also reads attribute observations, edges and invocations, each guarded so a backend without the store is not asked. Test `C20-01` r1.
+- `C20-18`'s widest tie was three. Test with eight added.
+- The near-misses G, I, J, K and L are closed by `C20-04` r1, `C20-58` r1, `C20-63` r1, the `C20-89` r1 effective-copy test and `C20-25` r1.
+
+**Fidelity lens. 1 MAJOR, 6 minor.** Every number in §1 except one recomputed exactly.
+
+- **MAJOR.** §1.5 said the closure multiplies primitive 23 calls. The lens measured 30 against 30. **Fixed:** the probe now prints call counts, and §1.5 says what they show.
+- F1 compared counts on one store of four (fixed, §1.4). F2 omitted the capped pairs (added). The probe docstring said "gate-batch label" (now "group"). F3 now leads with "could not be exercised". The paging control compares refs and candidate ids too. The Q93 timings are labelled one warm run each.
+
+**After the fixes. [Observed]**
+
+- The 20 r1 tests: 9 were red on 6891fbb before any code change, and the other 11 were green and are kept as guards. All 20 are now green on SQLite, sync and aio.
+- The mutation sweep (`docs/tools/ingest_mutation_sweep.py`): 49 mutations, 49 killed. That is 11 new ones for round 1, plus 6 older ones re-anchored because the rewrite moved the text they named.
+- The probe (`docs/tools/ingest_build_probe.py --assert`): 24/24 checks pass.
+- aio was regenerated with `tools/unasync.py`. Its first run refused a lambda in `snapshot`, which would have needed an `await`; the reads are now written without lambdas.
+- **Found by the full SQLite run, not by a lens.** On 6891fbb, `ontoloche/aio/contract/test_manifest.py` still expected `C20-01` to `C20-77` and did not know about `PLANNED_IDS`, so it reported row 7c's twelve ids as missing. That file is hand-written, not generated by unasync. It now uses the sync manifest's `enumerated_ids()`. Both manifest tests pass. **[Observed]** The rest of the run: 1,727 passed, 1,964 skipped (Postgres legs off), 1 failed (this test).

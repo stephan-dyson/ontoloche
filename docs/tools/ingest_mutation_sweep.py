@@ -70,8 +70,8 @@ MUTATIONS = (
              "instance_id, instance_id, {}, None)\n        if len(rows) > 1:",
              required=True),
     Mutation("2-5 known=None or a dishonest 0 is uncountable", "c20_08", REG,
-             "if page.known is None or page.known != len(page.records):",
-             "if False:", required=True),
+             "                    if uncounted or miscounted:",
+             "                    if False:", required=True),
     Mutation("3-4 ambiguous carries no ref", "c20_18", REG,
              '"ambiguous", None, candidate_ref("ambiguous"), tied[0].score,',
              '"ambiguous", tied[0].ref, candidate_ref("ambiguous"), tied[0].score,',
@@ -103,6 +103,46 @@ MUTATIONS = (
              "            # A malformed predicate",
              "        problem = condition_problem(condition)\n        if False:\n"
              "            # A malformed predicate", required=True),
+    # ---- round 1 of the loop (7B-RUN.md 2.1): each fix, shown red with it removed ----
+    Mutation("3-18 / E10 a reworded why is not a change", "c20_79", REG,
+             "_policy_terms(mine[0]), _policy_terms(theirs[0])",
+             "mine[0], theirs[0]", required=True),
+    Mutation("2-17 one copy per identity BEFORE the predicate", "c20_89", REG,
+             "one_copy, copies_why = _one_copy_per_identity(records, effective)",
+             "one_copy, copies_why = list(records), \"\"", required=True),
+    Mutation("2-17 the kept copy is the effective name's", "c20_89", REG,
+             "chosen = next((r for r in copies if r.type_name == effective), None)",
+             "chosen = None", required=True),
+    Mutation("2-11 a repeated cursor ends the read", "c20_14", REG,
+             "if page.next_after in seen_cursors:", "if False:", required=True),
+    Mutation("3-3 the margin is inclusive at its edge", "c20_17", REG,
+             "<= policy.ambiguity_margin + _SCORE_EPS", "<= policy.ambiguity_margin",
+             required=True),
+    Mutation("5-9 the bands read the unrounded score", "c20_74", REG,
+             "raw = [score for score, _ in pairs]",
+             "raw = [round(score, 4) for score, _ in pairs]", required=True),
+    Mutation("2-5 an over-count is uncountable", "c20_08", REG,
+             "page.known is not None and page.known != len(page.records)",
+             "page.known is not None and page.known < len(page.records)", required=True),
+    Mutation("2-5 a finished uncountable read is counted here", "c20_08", REG,
+             "uncounted = page.known is None and not page.complete",
+             "uncounted = page.known is None", required=True),
+    Mutation("2-15 an unreadable member refuses", "c20_66", REG,
+             "            except NotSupported as exc:\n                # `I-1` at primitive 22's",
+             "            except NotSupported as exc:\n                continue\n"
+             "                # `I-1` at primitive 22's", required=True),
+    Mutation("2-2 primitive 22 honours the type column", "c20_05", SQL,
+             "        where = [f'\"{binding.id_column}\" = {ph}']\n"
+             "        params: list[Any] = [instance_id]\n"
+             "        if binding.type_column is not None:",
+             "        where = [f'\"{binding.id_column}\" = {ph}']\n"
+             "        params: list[Any] = [instance_id]\n"
+             "        if False:", required=True),
+    Mutation("7-4 not_an_instance carries no_tenancy_predicate", "c20_62", REG,
+             '            if self._governed_facts(closure["entry"])[1] is None:\n'
+             '                warnings.append("no_tenancy_predicate")\n'
+             "            warnings.extend(self._instance_consumers_warning(namespace))\n",
+             "", required=True),
     # ---- the rest of the read side ---------------------------------------------------
     Mutation("1-3 the capability refuses first", "c20_03", REG,
              "        if self.caps.resolves_instances:\n            return None",
@@ -123,10 +163,11 @@ MUTATIONS = (
     Mutation("2-16 duplicate ids are uncountable", "c20_75", REG,
              "        if dup_why:", "        if False:"),
     Mutation("2-17 one row under two names is one", "c20_89", REG,
-             "k = (rec.namespace, rec.kind, rec.instance_id)",
-             "k = (rec.namespace, rec.kind, rec.type_name, rec.instance_id)"),
+             "groups.setdefault((rec.namespace, rec.kind, rec.instance_id), []).append(rec)",
+             "groups.setdefault((rec.namespace, rec.kind, rec.type_name, rec.instance_id),"
+             " []).append(rec)"),
     Mutation("3-3 the margin ties", "c20_17", REG,
-             "near_top = (top - c.score) <= policy.ambiguity_margin and (",
+             "near_top = (top - score) <= policy.ambiguity_margin + _SCORE_EPS and (",
              "near_top = False and ("),
     Mutation("3-5 an unfinished read is unknowable", "c20_19", REG,
              "        if not complete:                                             # `I-1`",
@@ -154,14 +195,14 @@ MUTATIONS = (
              'if float(declared["propose_below"]) > float(declared["match_at"]):',
              "if False:"),
     Mutation("5-9 the band is ambiguous", "c20_74", REG,
-             "if scored and scored[0].score >= policy.propose_below:",
+             "if scored and raw[0] >= policy.propose_below - _SCORE_EPS:",
              "if False:"),
     Mutation("5-11 governed_by is the effective entry", "c20_85", REG,
              'governed_by = f"{namespace}:{effective}"',
              'governed_by = f"{namespace}:{type_name}"'),
     Mutation("5-12 the tied set has a floor", "c20_90", REG,
-             "c.score >= policy.propose_below)                 # rule 5-12 floor",
-             "True)                 # rule 5-12 floor"),
+             "score >= policy.propose_below - _SCORE_EPS)      # rule 5-12 floor",
+             "True)      # rule 5-12 floor"),
     Mutation("6-12 all_of is Kleene", "c20_53", ING,
              'holds = False if False in vals else (None if None in vals else True)',
              'holds = False if False in vals else True'),
@@ -172,8 +213,8 @@ MUTATIONS = (
              'return [] if found else ["consumers_unregistered"]', "return []"),
     Mutation("7-4 no predicate says so", "c20_62", REG,
              '        if condition is None:\n            warnings.append("no_tenancy_predicate")\n'
-             "            survivors = list(records)",
-             "        if condition is None:\n            survivors = list(records)"),
+             "            survivors = list(one_copy)",
+             "        if condition is None:\n            survivors = list(one_copy)"),
 )
 
 

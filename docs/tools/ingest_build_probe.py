@@ -12,7 +12,7 @@ made before the code existed:
   truncated live scan;
 * **Paging**: a 7-row host page against the unpaged control, and R58's three states;
 * **F1** (the seam: no instance row in the registry's tables), **F2** (the build and
-  the kit agree on every UC2 label and every gate-batch label), and **Q93**, rule
+  the kit agree on every UC2 label and every gate-batch group), and **Q93**, rule
   3-19's read cost, measured.
 
 Run::
@@ -147,15 +147,41 @@ def kit_answer(facilities, label, *, exclude=(), scan_cap=None):
                                 tier="small")
 
 
+def registry_state(adapter) -> dict[str, str]:
+    """Every registry table's CONTENT, digested: an UPDATE shows, not only an INSERT.
+    Round 1 (fidelity lens 2): F1 compared row counts on one adapter of four."""
+    import hashlib
+
+    out = {}
+    for (table,) in adapter._fetchall(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'oo_%'"):
+        rows = sorted(repr(r) for r in adapter._fetchall(f'SELECT * FROM "{table}"'))
+        out[table] = hashlib.sha256("\n".join(rows).encode("utf-8")).hexdigest()
+    return out
+
+
+class CallCounter:
+    """Counts primitive 23 calls on one adapter (Q93, round 1 fidelity lens 1)."""
+
+    def __init__(self, adapter) -> None:
+        self.calls = 0
+        inner = adapter.find_instance_candidates
+
+        def counted(q):
+            self.calls += 1
+            return inner(q)
+
+        adapter.find_instance_candidates = counted
+
+
 # ------------------------------------------------------------------------------- UC2
 def uc2(facilities) -> None:
     print(f"\nUC2 CMS -- {len(facilities)} host rows, one per CCN, from {CMS_CACHE.name}")
     ids = sorted(facilities)
     adapter = fresh()
     reg = registry_over(adapter, "facility", "cms", CMS_POLICY, rows=rows_of(facilities))
-    before = {t: adapter._fetchall(f'SELECT COUNT(*) FROM "{t}"')[0][0]
-              for (t,) in adapter._fetchall(
-                  "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'oo_%'")}
+    states: list[tuple[str, object, dict[str, str]]] = [
+        ("full", adapter, registry_state(adapter))]
 
     burns = resolve(reg, "BURNS NURSING HOME, INC.")
     check("BURNS NURSING HOME, INC. is existing at 1.0, ref #015009, known=1",
@@ -175,6 +201,7 @@ def uc2(facilities) -> None:
     held = fresh()
     held_reg = registry_over(held, "facility", "cms", CMS_POLICY,
                              rows=rows_of(facilities, exclude={"745040"}))
+    states.append(("745040 held out", held, registry_state(held)))
     sarah = resolve(held_reg, "THE SARAH ROBERTS FRENCH HOME")
     check("THE SARAH ROBERTS FRENCH HOME with 745040 held out is a proposal over "
           f"{len(ids) - 1} rows",
@@ -186,6 +213,7 @@ def uc2(facilities) -> None:
     capped = fresh()
     capped_reg = registry_over(capped, "facility", "cms", CMS_POLICY,
                                rows=rows_of(facilities), scan_cap=pos)
+    states.append(("capped short of 745057", capped, registry_state(capped)))
     cut = resolve(capped_reg, tuskegee)
     control = resolve(reg, tuskegee)
     check("Tuskegee with a scan cap one row short of 745057 is unknowable, never proposal",
@@ -198,6 +226,7 @@ def uc2(facilities) -> None:
     m_cap = fresh()
     m_reg = registry_over(m_cap, "facility", "cms", CMS_POLICY, rows=rows_of(facilities),
                           scan_cap=first + 1)
+    states.append(("capped past the first Miller", m_cap, registry_state(m_cap)))
     m_cut = resolve(m_reg, "MILLER'S MERRY MANOR")
     check("MILLER'S MERRY MANOR capped one row past its first is unknowable, never "
           "existing (I-1)", m_cut.outcome == "unknowable", m_cut.outcome)
@@ -206,13 +235,13 @@ def uc2(facilities) -> None:
     check("all five outcomes are reached on real CMS labels",
           outcomes == set(INSTANCE_OUTCOMES), str(sorted(outcomes)))
 
-    after = {t: adapter._fetchall(f'SELECT COUNT(*) FROM "{t}"')[0][0] for t in before}
-    tables = sorted(t for (t,) in adapter._fetchall(
-        "SELECT name FROM sqlite_master WHERE type='table'"))
-    check("F1: every resolution left the registry's own tables unchanged, and the only "
-          "non-registry table is the host's",
-          before == after and [t for t in tables if not t.startswith("oo_")] ==
-          [t for t in tables if t.startswith("host_")], f"{len(tables)} tables")
+    changed = [label for label, ad, before in states if registry_state(ad) != before]
+    foreign = [t for _, ad, _ in states for (t,) in ad._fetchall(
+        "SELECT name FROM sqlite_master WHERE type='table'")
+        if not t.startswith(("oo_", "host_", "sqlite_"))]
+    check("F1: on all four stores, every registry table's content is unchanged by the "
+          "resolutions made over it, and no table but the registry's and the host's exists",
+          not changed and not foreign, f"changed={changed} foreign={foreign}")
 
     kit_pairs = [
         ("BURNS NURSING HOME, INC.", burns, kit_answer(facilities, "BURNS NURSING HOME, INC.")),
@@ -221,14 +250,19 @@ def uc2(facilities) -> None:
         ("THE SARAH ROBERTS FRENCH HOME", sarah,
          kit_answer(facilities, "THE SARAH ROBERTS FRENCH HOME", exclude={"745040"})),
         (tuskegee, control, kit_answer(facilities, tuskegee)),
+        (f"{tuskegee} (capped)", cut, kit_answer(facilities, tuskegee, scan_cap=pos)),
+        ("MILLER'S MERRY MANOR (capped)", m_cut,
+         kit_answer(facilities, "MILLER'S MERRY MANOR", scan_cap=first + 1)),
     ]
     disagree = [(label, b.outcome, k.outcome) for label, b, k in kit_pairs
                 if b.outcome != k.outcome or b.known != k.known]
-    check("F2: the build and the kit agree on every UC2 label (outcome and known)",
+    check(f"F2: the build and the kit agree on all {len(kit_pairs)} UC2 labels, the two "
+          "capped ones included (outcome and known)",
           not disagree, str(disagree))
 
     # --- Q93: rule 3-19's read cost --------------------------------------------------
     print("\nQ93 -- rule 3-19's read cost, measured")
+    one_calls = CallCounter(adapter)
     t0 = time.perf_counter()
     one = resolve(reg, "BURNS NURSING HOME, INC.")
     single_ms = (time.perf_counter() - t0) * 1000
@@ -243,12 +277,16 @@ def uc2(facilities) -> None:
     seed(sreg, "ltc_facility", namespace="cms", attributes={MATCH_POLICY_KEY: CMS_POLICY})
     sreg.retire("facility", "renamed", retired_by="user:sd", namespace="cms",
                 successor="ltc_facility")
+    resolve(sreg, "BURNS NURSING HOME, INC.")          # warm, as the one-member read was
+    two_calls = CallCounter(split)
     t0 = time.perf_counter()
     two = resolve(sreg, "BURNS NURSING HOME, INC.")
     closure_ms = (time.perf_counter() - t0) * 1000
-    print(f"  one-member closure: scanned={one.scanned}, {single_ms:.0f} ms")
+    print(f"  one-member closure, one table: scanned={one.scanned}, "
+          f"{one_calls.calls} primitive 23 calls, {single_ms:.0f} ms (one warm run)")
     print(f"  two-member closure (rows split {half}/{len(ids) - half}): "
-          f"scanned={two.scanned}, {closure_ms:.0f} ms, outcome {two.outcome}")
+          f"scanned={two.scanned}, {two_calls.calls} primitive 23 calls, "
+          f"{closure_ms:.0f} ms (one warm run), outcome {two.outcome}")
     check("Q93: the two-member closure reads the same number of rows as the one-member "
           "read over the same rows, and finds the same answer",
           two.scanned == one.scanned and two.outcome == one.outcome == "existing",
@@ -413,7 +451,10 @@ def paging(all_facilities) -> None:
     diffs = []
     for label in labels:
         a, b = resolve(paged, label), resolve(whole, label)
-        if (a.outcome, a.known, a.confidence) != (b.outcome, b.known, b.confidence):
+        if ((a.outcome, a.known, a.confidence, a.ref,
+             sorted(str(c.ref) for c in a.candidates))
+                != (b.outcome, b.known, b.confidence, b.ref,
+                    sorted(str(c.ref) for c in b.candidates))):
             diffs.append(label)
     check(f"a 7-row host page answers every one of {len(labels)} labels as the unpaged "
           "control does (R58: a guard never reads a page)", not diffs, str(diffs[:3]))

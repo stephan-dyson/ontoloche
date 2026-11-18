@@ -178,9 +178,11 @@ from ontoloche.registry import (
     _EDGE_PAGE_SIZE,
     _IDENTITY_CHAIN_CAP,
     _NEAR_MISS_CAP,
+    _SCORE_EPS,
     _answers_to,
     _asserts_domain_semantic,
     _aware,
+    _condition_terms,
     _created_by,
     _edge_from_record,
     _edge_to_record,
@@ -189,6 +191,8 @@ from ontoloche.registry import (
     _has_external_doc,
     _import_refusal,
     _iso,
+    _one_copy_per_identity,
+    _policy_terms,
     _prov_from_dict,
     _prov_to_dict,
     _ts,
@@ -9403,10 +9407,14 @@ class AsyncRegistry:
             if rec is None:
                 continue
             theirs = self._governed_facts(rec)
+            # E10 (INGEST.md 5.3): "different" is the THREE THRESHOLDS and the
+            # predicate's TERMS. A reworded `why`, or an `in` list in another order,
+            # is the same governed fact. Round 1 found the raw mappings compared.
             changed = [
                 label for label, a, b in (
-                    ("MatchPolicy", mine[0], theirs[0]),
-                    ("tenancy predicate", mine[1], theirs[1]),
+                    ("MatchPolicy", _policy_terms(mine[0]), _policy_terms(theirs[0])),
+                    ("tenancy predicate", _condition_terms(mine[1]),
+                     _condition_terms(theirs[1])),
                 ) if a != b
             ]
             if changed:
@@ -9491,8 +9499,12 @@ class AsyncRegistry:
                 governed_by=governed_by, warnings=tuple(warnings),
             )
         # Rule 2-17: one host row under two names of one identity is ONE row, kept
-        # under the name the closure resolves to where the host holds it there.
-        record = next((r for r in found if r.type_name == closure["effective"]), found[0])
+        # under the name the closure resolves to. The SAME helper as resolve_instance,
+        # so the two doors judge the same copy (round 1).
+        kept, copies_why = _one_copy_per_identity(found, closure["effective"])
+        if copies_why:
+            return refuse("lookup_incomplete", copies_why)
+        record = kept[0]
         _policy, condition = self._governed_facts(closure["entry"])
         if condition is None:
             warnings.append("no_tenancy_predicate")
@@ -9572,6 +9584,10 @@ class AsyncRegistry:
 
         # --- rule 3-8: is this an instance at all? No host read ------------------
         if names_a_class(candidate):
+            # Rules 7-1 and 7-4 say "the resolution carries" them, this one included.
+            if self._governed_facts(closure["entry"])[1] is None:
+                warnings.append("no_tenancy_predicate")
+            warnings.extend(await self._instance_consumers_warning(namespace))
             return answer(
                 "not_an_instance", None, None, None,
                 f"{candidate!r} names a class or a column, not one thing of that class",
@@ -9616,6 +9632,7 @@ class AsyncRegistry:
         if complete and not governed_why and not policy_why:
             for read_type in closure["members"]:
                 after: str | None = None
+                seen_cursors: set[str] = set()
                 while True:
                     try:
                         page = await self.adapter.find_instance_candidates(
@@ -9632,9 +9649,14 @@ class AsyncRegistry:
                         break
                     scanned += len(page.records)
                     records.extend(page.records)
-                    if page.known is None or page.known != len(page.records):
-                        # Rule 2-5's third absorber: a page that cannot count its own
-                        # records cannot be counted into an extent.
+                    uncounted = page.known is None and not page.complete
+                    miscounted = page.known is not None and page.known != len(page.records)
+                    if uncounted or miscounted:
+                        # 3.4's third absorber is `known=None` AND `complete=False`
+                        # together: a backend that finished hands over every record and
+                        # they are counted here. A `known` that is not the page's own
+                        # count, over or under, cannot be counted into an extent
+                        # (rule 2-5, round 1).
                         complete, why_incomplete = False, (
                             page.why_incomplete
                             or f"the backend could not count a page under {read_type!r} "
@@ -9646,6 +9668,14 @@ class AsyncRegistry:
                         break
                     if page.next_after is None:
                         break
+                    if page.next_after in seen_cursors:
+                        # Rule 2-11 exhausts the cursor; a cursor handed back twice
+                        # never exhausts, and the read did not finish (round 1).
+                        complete, why_incomplete = False, (
+                            f"the backend returned a cursor it had already returned under "
+                            f"{read_type!r}: the read cannot be exhausted")
+                        break
+                    seen_cursors.add(page.next_after)
                     after = page.next_after
                 if not complete:
                     break
@@ -9674,14 +9704,20 @@ class AsyncRegistry:
                 f"({', '.join(dups[:3])}): the host's ids do not distinguish its own "
                 "rows, so the extent of this identity cannot be counted (rule 2-16)")
 
+        # --- rule 2-17: one row under two member names is ONE candidate -----------
+        # BEFORE the predicate, and with the helper primitive 22's door uses: one
+        # identity is one copy, the effective name's. Round 1 found the predicate run
+        # over both copies first, so a stale copy decided where the current one failed.
+        one_copy, copies_why = _one_copy_per_identity(records, effective)
+
         # --- rules 6-15 / 6-16: the ENTRY's predicate, evaluated here -------------
         undecided: list[str] = []
         survivors: list[InstanceRecord] = []
         if condition is None:
             warnings.append("no_tenancy_predicate")
-            survivors = list(records)
+            survivors = list(one_copy)
         else:
-            for rec in records:
+            for rec in one_copy:
                 verdict = evaluate(condition, rec.attributes)
                 if verdict.holds is True:
                     survivors.append(rec)
@@ -9692,23 +9728,18 @@ class AsyncRegistry:
             warnings.append(
                 "instance_narrowed_proposal:" + ",".join(sorted(map(str, host_filter))))
 
-        # --- rule 2-17: one row under two member names is ONE candidate -----------
-        by_identity: dict[tuple, InstanceRecord] = {}
-        for rec in survivors:
-            k = (rec.namespace, rec.kind, rec.instance_id)
-            prev = by_identity.get(k)
-            if prev is None or rec.type_name == effective:
-                by_identity[k] = rec
-        survivors = list(by_identity.values())
-
-        scored = sorted(
-            (InstanceCandidate(
-                ref=record_ref(rec), label=rec.label,
-                score=round(similar(key, norm(rec.label)), 4),
-                discriminators=dict(rec.attributes))
-             for rec in survivors),
-            key=lambda c: (-c.score, str(c.ref)),
+        # The bands are decided on the UNROUNDED score; four places is display only
+        # (round 1: 226/233 = 0.96996 rounded up across `match_at` 0.97).
+        pairs = sorted(
+            ((similar(key, norm(rec.label)), rec) for rec in survivors),
+            key=lambda p: (-p[0], str(record_ref(p[1]))),
         )
+        raw = [score for score, _ in pairs]
+        scored = [
+            InstanceCandidate(ref=record_ref(rec), label=rec.label, score=round(score, 4),
+                              discriminators=dict(rec.attributes))
+            for score, rec in pairs
+        ]
 
         def unknowable(reason: str, why: str) -> InstanceResolution:
             return answer("unknowable", None, None, None, reason, scored[:5], False,
@@ -9726,6 +9757,8 @@ class AsyncRegistry:
             return unknowable(f"nothing was scored: {policy_why}", policy_why)
         if dup_why:                                                  # `I-6`
             return unknowable(f"the extent is not countable: {dup_why}", dup_why)
+        if copies_why:                                               # rule 2-17
+            return unknowable(f"the extent is not countable: {copies_why}", copies_why)
         if undecided:                                                # rule 6-16
             return unknowable(
                 f"the host predicate was undecidable on {len(undecided)} of "
@@ -9739,11 +9772,13 @@ class AsyncRegistry:
         policy = match_policy_from_mapping(policy_raw)
         tied: list[InstanceCandidate] = []
         if scored:
-            top = scored[0].score
-            for c in scored:
-                at_or_above = c.score >= policy.match_at
-                near_top = (top - c.score) <= policy.ambiguity_margin and (
-                    c.score >= policy.propose_below)                 # rule 5-12 floor
+            top = raw[0]
+            for score, c in zip(raw, scored):
+                # `_SCORE_EPS` absorbs float subtraction only: 0.98 - 0.96 is
+                # 0.020000000000000018, inside a 0.02 margin (rules 3-3, 5-8, round 1).
+                at_or_above = score >= policy.match_at - _SCORE_EPS
+                near_top = (top - score) <= policy.ambiguity_margin + _SCORE_EPS and (
+                    score >= policy.propose_below - _SCORE_EPS)      # rule 5-12 floor
                 if at_or_above or near_top:
                     tied.append(c)
 
@@ -9758,12 +9793,12 @@ class AsyncRegistry:
                 "ambiguous", None, candidate_ref("ambiguous"), tied[0].score,
                 f"{len(tied)} host rows answer to {candidate!r} and nothing here "
                 "separates them", tied, True, "", scanned)
-        if tied and tied[0].score >= policy.match_at:                # rule 5-8
+        if tied and raw[0] >= policy.match_at - _SCORE_EPS:          # rule 5-8
             return answer(
                 "existing", tied[0].ref, None, tied[0].score,
                 f"exactly one host row answers to {candidate!r}", tied, True, "",
                 scanned)
-        if scored and scored[0].score >= policy.propose_below:       # rule 5-9
+        if scored and raw[0] >= policy.propose_below - _SCORE_EPS:   # rule 5-9
             return answer(
                 "ambiguous", None, candidate_ref("ambiguous"), scored[0].score,
                 f"the best candidate scored {scored[0].score}, between propose_below "

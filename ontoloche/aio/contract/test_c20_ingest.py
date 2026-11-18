@@ -240,11 +240,13 @@ async def test_c20_08_a_backend_that_cannot_count_says_none_never_zero(adapter, 
     page = await adapter.find_instance_candidates(_q())
     assert page.known == len(page.records) == 5
 
-    for known in ("zero", "none"):
+    # Round 1: the "none" case here was never seeded with a policy, so it answered
+    # unknowable for the missing declaration, not for the count. The two `known=None`
+    # cases (finished, and not) are the `_r1` tests below; "over" is too.
+    for known in ("zero",):
         degraded = AsyncDegradedAdapter(adapter, instance_known=known)
         registry = await make_registry(degraded)
-        if known == "zero":
-            await seed(registry, "facility", attributes=_governed())
+        await seed(registry, "facility", attributes=_governed())
         answer = await _resolve(registry, EXACT)
         assert answer.outcome == "unknowable", (known, answer)
         assert answer.complete is False and answer.why_incomplete
@@ -996,3 +998,253 @@ async def test_c20_84_a_successor_declares_its_own_governed_facts(adapter, make_
     same = await _successor_world(adapter, make_registry, old_rows=[], new_rows=_rows(),
                             old="home", new="ltc_home")
     assert (await _resolve(same, EXACT, type_name="home")).outcome == "existing"
+
+@NEEDS_RETIRE
+async def test_c20_79_r1_a_reworded_why_on_identical_facts_is_not_a_change(adapter, make_registry):
+    """Rule 3-18 under E10 (INGEST.md 5.3): "different" is the three thresholds and the
+    predicate's TERMS, never the prose. Round 1 found the raw mappings compared, so a
+    reworded `why` stopped the loop, and an `in` list in another order did too."""
+    reworded = {**POLICY, "why": "same numbers, reworded by the other team"}
+    same_terms = {"op": "in", "attribute": "state", "value": ["AL", "GA"],
+                  "why": "one deployment, two states"}
+    other_order = {"op": "in", "attribute": "state", "value": ["GA", "AL"],
+                   "why": "reworded, and the states listed the other way round"}
+    registry = await _successor_world(
+        adapter, make_registry, old_rows=_rows(), new_rows=[],
+        old_governed=_governed(condition=same_terms),
+        new_governed=_governed(policy=reworded, condition=other_order))
+    for name in ("facility", "ltc_facility"):
+        answer = await _resolve(registry, EXACT, type_name=name)
+        assert answer.outcome == "existing", (name, answer)
+        lookup = await registry.get_instance_checked(name, "015009")
+        assert isinstance(lookup, InstanceLookup) and lookup.record is not None, lookup
+
+@NEEDS_RETIRE
+async def test_c20_79_r1_a_changed_threshold_is_still_a_change(adapter, make_registry):
+    """The control for the test above: one threshold moved is a different MatchPolicy."""
+    moved = {**POLICY, "match_at": 0.98}
+    registry = await _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=[],
+                                new_governed=_governed(policy=moved))
+    answer = await _resolve(registry, EXACT, type_name="ltc_facility")
+    assert answer.outcome == "unknowable" and "MatchPolicy" in answer.why_incomplete
+
+@NEEDS_RETIRE
+async def test_c20_89_r1_the_two_doors_judge_the_same_copy(adapter, make_registry):
+    """Rule 2-17, standing rule (e). Mid-migration the host holds 055001 under both
+    names and the copies DIFFER: the stale `facility` row says CA, the migrated
+    `ltc_facility` row says CO. Round 1 found resolve_instance judging both copies by
+    the predicate first and collapsing after, so the stale CA copy decided `existing`
+    while get_instance_checked, which collapses first, excluded the row. One identity
+    must be one copy, the effective name's, at both doors."""
+    ca_only = {"op": "eq", "attribute": "state", "value": "CA",
+               "why": "this deployment serves California only"}
+    stale = {"host_id": "055001", "label": "WILLOWBROOKE CT SKILLED CARE CENTER",
+             "state": "CA", "kind_name": "facility"}
+    moved = dict(stale, state="CO", kind_name="ltc_facility")
+    registry = await _successor_world(
+        adapter, make_registry, old_rows=None, new_rows=None,
+        type_column_rows=[stale, moved],
+        old_governed=_governed(condition=ca_only), new_governed=_governed(condition=ca_only))
+    for name in ("facility", "ltc_facility"):
+        answer = await _resolve(registry, "Willowbrooke Ct Skilled Care Center", type_name=name)
+        assert answer.outcome != "existing", (name, answer)
+        assert all(c.ref.type.name == "ltc_facility" for c in answer.candidates), answer
+        lookup = await registry.get_instance_checked(name, "055001")
+        assert isinstance(lookup, InstanceLookup) and lookup.record is None, lookup
+
+@NEEDS_RETIRE
+async def test_c20_89_r1_the_kept_copy_is_the_effective_names(adapter, make_registry):
+    """Rule 2-17's other half, at primitive 22's door: with both copies present the
+    lookup returns the effective name's copy, never the first one found."""
+    stale = {"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL",
+             "kind_name": "facility"}
+    moved = dict(stale, label="BURNS NURSING HOME", kind_name="ltc_facility")
+    registry = await _successor_world(adapter, make_registry, old_rows=None, new_rows=None,
+                                type_column_rows=[stale, moved])
+    for name in ("facility", "ltc_facility"):
+        lookup = await registry.get_instance_checked(name, "015009")
+        assert lookup.record.type_name == "ltc_facility", (name, lookup)
+        assert lookup.record.label == "BURNS NURSING HOME"
+        assert lookup.ref.type.name == "ltc_facility"
+
+@NEEDS_RETIRE
+async def test_c20_66_r1_an_unreadable_member_refuses_never_hands_out(adapter, make_registry):
+    """Rule 2-15, `I-1` at primitive 22's door (round 1, door lens T1). The host binds
+    only the successor's table, so the lookup under the retired name cannot be made:
+    the row found under the other is a decision over a partial extent."""
+    await host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed())
+    retired = await registry.retire("facility", "CMS renamed the class", retired_by="user:sd",
+                              successor="ltc_facility")
+    assert isinstance(retired, TypeEntry), retired
+    for name in ("facility", "ltc_facility"):
+        lookup = await registry.get_instance_checked(name, "015009")
+        assert isinstance(lookup, Refusal), (name, lookup)
+        assert lookup.detail["problem"] == "lookup_incomplete"
+        assert (await _resolve(registry, EXACT, type_name=name)).outcome == "unknowable"
+
+async def test_c20_66_r1_a_repeated_id_refuses_never_reads_absent(adapter, make_registry):
+    """Rule 2-15 with rule 2-16 (door lens T2): a citations-shaped host carries CCN
+    015009 on two rows. The lookup refuses; an id present twice is never `absent`."""
+    rows = _rows() + [dict(_rows()[0], label="BURNS NURSING HOME INC (2023 survey)")]
+    await host_instances(adapter, rows, type_name="facility")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    lookup = await registry.get_instance_checked("facility", "015009")
+    assert isinstance(lookup, Refusal), lookup
+    assert lookup.detail["problem"] == "lookup_incomplete"
+
+async def test_c20_05_r1_a_type_column_binding_never_manufactures(adapter, make_registry):
+    """Rule 2-2 on the type-column path (door lens T5): one host table, rows typed by a
+    column. An id held only as a `facility` is absent as a `hospital`."""
+    rows = [dict(r, kind_name="facility") for r in _rows()] + [
+        {"host_id": "019999", "label": "A HOSPITAL", "state": "AL", "kind_name": "hospital"}]
+    for name in ("facility", "hospital"):
+        await host_instances(adapter, rows, type_name=name, type_column="kind_name")
+    assert await adapter.get_instance("default", "entity", "hospital", "015009") is None
+    assert (await adapter.get_instance("default", "entity", "hospital", "019999")).label == "A HOSPITAL"
+    registry = await make_registry(adapter)
+    await seed(registry, "hospital")
+    absent = await registry.get_instance_checked("hospital", "015009")
+    assert isinstance(absent, InstanceLookup) and absent.record is None, absent
+
+@NEEDS_ATTRIBUTES
+async def test_c20_18_r1_every_tied_candidate_however_many(adapter, make_registry):
+    """Rule 3-4 (door lens C): the suite's widest tie was three, so a set capped at five
+    survived. MILLER'S MERRY MANOR is twelve CCNs; here are eight."""
+    rows = [{"host_id": f"01{n:04d}", "label": "MILLER'S MERRY MANOR", "state": "AL"}
+            for n in range(8)]
+    registry = await _world(adapter, make_registry, rows)
+    answer = await _resolve(registry, "MILLER'S MERRY MANOR")
+    assert answer.outcome == "ambiguous" and answer.ref is None
+    assert answer.known == 8 and len(answer.candidates) == 8
+
+@NEEDS_ATTRIBUTES
+async def test_c20_17_r1_the_margin_is_inclusive_at_its_edge(adapter, make_registry):
+    """Rules 3-3 and 5-8 (build lens 5): 0.98 and 0.96 are within a 0.02 margin, and
+    `0.98 - 0.96` is 0.020000000000000018 in floating point. Two candidates, one set."""
+    rows = [{"host_id": "000001", "label": "a" * 49 + "b", "state": "AL"},   # 0.98
+            {"host_id": "000002", "label": "a" * 48 + "bb", "state": "AL"}]  # 0.96
+    registry = await _world(adapter, make_registry, rows)
+    answer = await _resolve(registry, "a" * 50)
+    assert answer.outcome == "ambiguous", answer
+    assert answer.known == 2
+
+@NEEDS_ATTRIBUTES
+async def test_c20_74_r1_the_threshold_is_tested_before_rounding(adapter, make_registry):
+    """Rule 5-9 (build lens 7): 226/233 = 0.96996 is below `match_at` 0.97 and rounds
+    to 0.97 at four places. The band decides on the score, not on its display."""
+    rows = [{"host_id": "000001", "label": "a" * 113 + "bbbb", "state": "AL"}]
+    registry = await _world(adapter, make_registry, rows)
+    answer = await _resolve(registry, "a" * 116)
+    assert answer.outcome == "ambiguous", answer
+
+@NEEDS_ATTRIBUTES
+async def test_c20_14_r1_a_repeating_cursor_ends_the_read_never_loops(adapter, make_registry):
+    """Rule 2-11 (build lens 4): a backend handing back the same cursor forever."""
+
+    class Stuck:
+        """Forwards everything; hands back the same cursor on every page."""
+
+        def __init__(self, inner):
+            self.inner = inner
+            self.calls = 0
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        async def find_instance_candidates(self, q):
+            self.calls += 1
+            if self.calls > 50:
+                raise AssertionError("the registry kept paging a cursor it had seen")
+            page = await self.inner.find_instance_candidates(dataclasses.replace(q, after=None))
+            return dataclasses.replace(page, records=page.records[:1], known=1,
+                                       complete=False, next_after="stuck")
+
+    await host_instances(adapter, _rows(), type_name="facility")
+    registry = await make_registry(Stuck(adapter))
+    await seed(registry, "facility", attributes=_governed())
+    answer = await _resolve(registry, EXACT)
+    assert answer.outcome == "unknowable" and answer.complete is False, answer
+
+@NEEDS_ATTRIBUTES
+async def test_c20_08_r1_an_over_count_is_as_uncountable_as_an_under_count(adapter, make_registry):
+    """Rule 2-5 (door lens D): `known` as the host's total on a page that holds fewer.
+    Read as an extent it would be a decision over part of the rows (`I-1`)."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    registry = await make_registry(AsyncDegradedAdapter(adapter, instance_known="over"))
+    await seed(registry, "facility", attributes=_governed())
+    answer = await _resolve(registry, "Mesa Vista Care")
+    assert answer.outcome == "unknowable" and answer.complete is False, answer
+
+@NEEDS_ATTRIBUTES
+async def test_c20_08_r1_a_finished_read_that_cannot_count_is_counted_here(adapter, make_registry):
+    """Rule 2-5 with 3.4's third absorber, which is `known=None` AND `complete=False`
+    together (build lens 3). A backend that finished but cannot count hands over every
+    record, and the registry counts them."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    finished = await make_registry(AsyncDegradedAdapter(adapter, instance_known="none"))
+    await seed(finished, "facility", attributes=_governed())
+    answer = await _resolve(finished, EXACT)
+    assert answer.outcome == "existing" and answer.known == 1, answer
+
+@NEEDS_ATTRIBUTES
+async def test_c20_08_r1_an_unfinished_read_that_cannot_count_is_unknowable(adapter, make_registry):
+    """The absorber itself: `known=None` and `complete=False` together."""
+    await host_instances(adapter, _rows(), type_name="facility", page_size=2)
+    registry = await make_registry(AsyncDegradedAdapter(adapter, instance_known="none",
+                                             instance_page_cap=2))
+    await seed(registry, "facility", attributes=_governed())
+    answer = await _resolve(registry, EXACT)
+    assert answer.outcome == "unknowable" and answer.complete is False, answer
+
+def test_c20_01_r1_the_snapshot_sees_every_registry_table(adapter, make_registry):
+    """Rule 1-1 (door lens E): the seam check's snapshot read five tables and could not
+    see an attribute observation, an edge or an invocation written on the side."""
+    from ontoloche.contract import _support
+
+    source = inspect.getsource(_support.snapshot)
+    for read in ("find_edges", "find_invocations", "read_attr_observed"):
+        assert read in source, f"snapshot does not read {read}"
+
+def test_c20_04_r1_no_protocol_method_but_the_two_takes_or_returns_an_instance(adapter):
+    """Rule 2-1 (door lens G): a write primitive need not have "instance" in its name."""
+    for name in dir(AsyncStorageAdapter):
+        if name.startswith("_") or name in ("get_instance", "find_instance_candidates"):
+            continue
+        member = getattr(AsyncStorageAdapter, name)
+        if not callable(member):
+            continue
+        hints = str(inspect.signature(member))
+        assert "InstanceRecord" not in hints and "CandidatePage" not in hints, name
+
+def test_c20_58_r1_primitive_22_takes_exactly_its_four(adapter):
+    """Rule 6-17 (door lens I): a tenancy parameter by another name is still one."""
+    assert list(inspect.signature(AsyncStorageAdapter.get_instance).parameters) == [
+        "self", "namespace", "kind", "type_name", "instance_id"]
+
+@NEEDS_ATTRIBUTES
+async def test_c20_25_r1_tier_none_is_refused(adapter, make_registry):
+    """Rule 3-11 (door lens L)."""
+    registry = await _world(adapter, make_registry)
+    with pytest.raises(TypeError):
+        await registry.resolve_instance(EXACT, CTX, type_name="facility", tier=None)
+
+@NEEDS_ATTRIBUTES
+async def test_c20_63_r1_a_class_word_does_not_skip_the_host_filter_check(adapter, make_registry):
+    """Rule 2-12 (door lens J): the mapping check runs before `not_an_instance`."""
+    registry = await _world(adapter, make_registry)
+    with pytest.raises(TypeError):
+        await _resolve(registry, "Provider Name", host_filter="state=AL")
+
+@NEEDS_ATTRIBUTES
+async def test_c20_62_r1_not_an_instance_carries_the_namespace_warnings(adapter, make_registry):
+    """Rules 7-1 and 7-4 (build lens, read-only): every resolution carries them, the
+    one that reads nothing included."""
+    registry = await _world(adapter, make_registry)
+    answer = await _resolve(registry, "Provider Name")
+    assert answer.outcome == "not_an_instance"
+    assert "no_tenancy_predicate" in answer.warnings
+    assert "consumers_unregistered" in answer.warnings

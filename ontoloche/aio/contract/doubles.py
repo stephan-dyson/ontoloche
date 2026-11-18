@@ -155,8 +155,9 @@ class _DegradedBase:
         #: non-empty page. Row 7b, finding 1 (E22): `C20-08` needed a check that can go
         #: red, and a test of the reference backends alone proves only that they are
         #: honest. The registry must read both as an extent it cannot count.
-        if instance_known not in ("honest", "none", "zero"):
-            raise ValueError(f"instance_known is honest / none / zero, got {instance_known!r}")
+        if instance_known not in ("honest", "none", "zero", "over"):
+            raise ValueError(
+                f"instance_known is honest / none / zero / over, got {instance_known!r}")
         self._instance_known = instance_known
         #: A host that stops serving rows after this many, and SAYS SO (rule 2-4).
         self._instance_page_cap = instance_page_cap
@@ -470,6 +471,10 @@ class _DegradedBase:
             page = dataclasses.replace(page, known=None)
         elif self._instance_known == "zero":
             page = dataclasses.replace(page, known=0)
+        elif self._instance_known == "over":
+            # The host's TOTAL match count on a page that holds fewer (round 1, door
+            # lens D): an over-count is as uncountable as an under-count.
+            page = dataclasses.replace(page, known=len(page.records) + 3)
         return page
 
     # ------------------------------------------------------------------ 19 to 21

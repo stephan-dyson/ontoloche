@@ -18,7 +18,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
-from ontoloche.aio.adapter import ProposalQuery, TypeQuery
+from ontoloche.aio.adapter import EdgeQuery, ProposalQuery, TypeQuery
+from ontoloche.errors import NotSupported
 from ontoloche.types import Evidence, TypeEntry
 import csv
 from datetime import UTC, datetime
@@ -217,6 +218,21 @@ async def snapshot(adapter) -> str:
         for rec in page.records:
             if rec.namespace == namespace:
                 parts.append(repr(await adapter.get_usage(namespace, rec.kind, rec.name)))
+        # Row 7b, round 1 (door lens E): the seam check (`C20-01`) compared five tables
+        # and could not see an attribute observation, an edge or an invocation written
+        # on the side. Every store a backend declares is read; one it declines is not.
+        try:
+            parts.extend([repr(r) for r in await adapter.read_attr_observed(namespace)])
+        except (NotSupported, AttributeError):
+            pass
+    try:
+        parts.extend([repr(r) for r in (await adapter.find_edges(EdgeQuery(include_retracted=True))).records])
+    except (NotSupported, AttributeError):
+        pass
+    try:
+        parts.extend([repr(r) for r in (await adapter.find_invocations()).records])
+    except (NotSupported, AttributeError):
+        pass
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 async def seed(
