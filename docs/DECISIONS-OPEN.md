@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**7 open · 16 ruled · 7 FYI** *(2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**10 open · 16 ruled · 7 FYI** *(2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,49 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 7 items
+## A. Decide when you want to — 10 items
+
+### 28 · `Q87` — should the ingest loop refuse to propose when no consumer is registered for the namespace?
+
+*New 2026-11-18, carried from [`INGEST.md` §11](https://github.com/stephan-dyson/ontoloche/blob/main/docs/specs/INGEST.md) where row 7a raised it on 2026-09-04. It never reached this page.*
+
+**TL;DR.** `consumers()` exists so nobody proposes a new thing blind. When it returns `known=0` for a namespace, the spec today keeps going and puts `consumers_unregistered` on the resolution. The stronger reading is that the propose path refuses outright, which turns an unmet host obligation into a hard stop in somebody else's deployment.
+
+**Why it is yours.** It decides whether the registry refuses a proposal.
+
+- **`warn`** — today's spec: resolve and propose, carrying `consumers_unregistered`.
+- **`refuse`** — the propose path refuses on a namespace with no registered consumer. Resolution still answers.
+- **`recommend`** — I bring the per-case rule with fixture counts once row 7c has the propose path running.
+
+**Ask: `warn`, `refuse`, or `recommend`.** Default in force: `warn`. Row 7b builds it that way and pins it; row 7c is where proposing lands.
+
+### 29 · `Q89` — should the registry refuse a self-review?
+
+*New 2026-11-18, carried from `INGEST.md` §11 (contortion ING9).*
+
+**TL;DR.** R73's argument for `review_invocation` is that a review is a second act by a second person at a later time. **[Observed in the spec]** nothing enforces the second person. The ingest loop is the caller that makes this matter: a batch of a thousand rows with a thousand self-reviews is a drained queue that reviewed nothing.
+
+**Why it is yours.** It decides whether `review_invocation` refuses a call.
+
+- **`refuse`** — the reviewer must differ from the actor that recorded the invocation.
+- **`warn`** — accept it and carry a warning naming the self-review.
+- **`allow`** — today's behaviour, no check.
+
+**Ask: `refuse`, `warn`, or `allow`.** Default in force: `allow`, the shipped `review_invocation`. Row 7b does not touch it. Row 7c drives the review queue and would build your answer if it arrives first.
+
+### 30 · `Q91` — when a retire hands a type to a successor with different governed facts, should `resolve_instance` decline to answer?
+
+*New 2026-11-18, carried from `INGEST.md` §11, where it was always marked yours.*
+
+**TL;DR.** After `retire(successor=...)`, the successor's entry may declare a different match policy or tenancy predicate. **[Observed in row 7a's design test]** one retire over the CA and CO fixture let a California caller see a Colorado row, and 73 of 1,373 real CMS labels resolved differently for one caller. The spec's default refuses to inherit: the hop answers `unknowable` until the host declares the successor's facts. That is safe and loud, and it stops a live ingest loop on every retire.
+
+**Why it is yours.** `unknowable` versus answering with a warning is the same choice you made for `resolve_type` in Q56 (`read`, R99), which allowed answering below 1.0 and refusing.
+
+- **`unknowable`** — the spec's default (a): no inheritance, the loop stops until the host acts.
+- **`warn`** — reading (c): inherit and keep answering, with a warning naming the changed fact.
+- Silent inheritance, reading (b), is refused by the spec and not offered.
+
+**Ask: `unknowable` or `warn`.** Default in force: `unknowable`. Row 7b builds that and pins it.
 
 ### 22 · `Q106` — a Foundry property with no description: import it with a warning, or decline it?
 
