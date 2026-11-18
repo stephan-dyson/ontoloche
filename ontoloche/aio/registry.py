@@ -9349,8 +9349,23 @@ class AsyncRegistry:
         effective, current = type_name, entry
         seen = {type_name}
         hops: list[str] = []
-        while current is not None and current.status == "retired" and current.successor:
+        while current is not None and current.status == "retired":
             nxt = current.successor
+            if not nxt:
+                # Rule 3-21: a hand-written alias is a member AND a hop. A retired word
+                # another live entry answers to is that entry's word, as `resolve_type`
+                # reads it; without this, the tombstone stayed its own effective entry
+                # and the ref, `governed_by` and a proposal's type all depended on which
+                # name the caller declared (round 3, door lens 1).
+                holder, look_why = await self._alias_holder(namespace, effective, "entity")
+                if look_why:
+                    return stop(
+                        f"{effective!r} is retired with no successor, and the look for "
+                        f"a live entry answering to it did not finish: {look_why}")
+                if holder is None or holder == effective or await self.adapter.get_type(
+                        namespace, holder, kind="entity") is None:
+                    break
+                nxt = holder
             out = {**out, "effective": effective, "entry": current, "hops": tuple(hops)}
             if nxt in seen:
                 return stop(

@@ -303,12 +303,18 @@ class AsyncBaseSqlAdapter:
         return keys or frozenset()
 
     def _instance_select(self, binding: HostInstanceTable) -> str:
-        cols = [binding.id_column, binding.label_column, *binding.attribute_columns]
-        return ", ".join(f'"{c}"' for c in cols)
+        # The id is selected AS TEXT, by the same conversion primitive 22 compares
+        # with, so the ref primitive 23 mints is the id primitive 22 finds. Round 3
+        # (build lens M1): Python's `str()` and SQL's cast disagree on REAL and BLOB
+        # ids (`1e+20` against `1.0e+20`, `b'015009'` against `015009`).
+        cols = [f'CAST("{binding.id_column}" AS TEXT)',
+                *(f'"{c}"' for c in (binding.label_column, *binding.attribute_columns))]
+        return ", ".join(cols)
 
     def _instance_record(self, binding: HostInstanceTable, row: tuple) -> InstanceRecord:
-        # The host's id, cast to the opaque ``str`` an InstanceRef holds, ONCE, here at
-        # the boundary where somebody can see it (EDGES.md contortion E4).
+        # The host's id as the opaque ``str`` an InstanceRef holds. The database cast
+        # it (`_instance_select`); `str()` here only covers a driver handing back a
+        # non-str for a TEXT expression (EDGES.md contortion E4).
         label = row[1]
         return InstanceRecord(
             namespace=binding.namespace,

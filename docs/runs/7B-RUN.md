@@ -310,10 +310,10 @@ Row 6j's stopping rule (§0.9): three lenses per round, build, door and fidelity
 
 **Build lens. 2 MAJOR, 4 minor.**
 
-1. **MAJOR, rule 2-2 with standing rule (e).** Primitive 22 compared the stored id with the string it was given, while primitive 23 mints the ref from `str(id)`. An integer 42 in a column that converts nothing was `existing #42` at one door and absent at the other. **Fixed:** `get_instance` compares `CAST(id AS TEXT)`, and the type column the same way at both primitives. The cost is the id column's index [Inferred]. Test `C20-05` r2, on a column typed so the database converts nothing (BLOB on SQLite, whose INTEGER affinity would convert `'42'`; INTEGER on Postgres). Red on a27a4df, mutation shown red.
+1. **MAJOR, rule 2-2 with standing rule (e).** Primitive 22 compared the stored id with the string it was given, while primitive 23 mints the ref from `str(id)`. An integer 42 in a column that converts nothing was `existing #42` at one door and absent at the other. **Fixed:** `get_instance` compares `CAST(id AS TEXT)`, and the type column the same way at both primitives. The cost is the id column's index [Inferred]. The type-column cast has no test and no mutation of its own. Test `C20-05` r2, on a column typed so the database converts nothing (BLOB on SQLite, whose INTEGER affinity would convert `'42'`; INTEGER on Postgres). Red on a27a4df, mutation shown red.
 2. **MAJOR, rule 2-17.** With no copy under the effective name and agreeing copies under two others, the kept copy was the first in closure order, which starts at the caller's declared name: `a#015009` from one caller and `b#015009` from another. **Fixed:** an identity held under more than one member resolves under the effective name, as the rule says. One copy under one name stays that name's row. Test `C20-89` r2. Red on a27a4df, mutation shown red.
 3. **Minor, rules 5-8 and 5-9.** Round 1's epsilon was on the thresholds too, so 0.9 counted as at `match_at` 0.9 + 5e-10. **Fixed:** thresholds compare exactly, and the epsilon stays on `top - score` only. Test `C20-73` r2 (a hair below). Red on a27a4df.
-4. **Minor, E10.** `_condition_terms` compared `in` members by `repr`, so `not_in [1]` and `not_in [1.0]` differed though `evaluate` treats them as one. It also stripped `why` inside an operand. **Fixed:** members compare by Python equality (the equality `evaluate` uses), and `why` is dropped only from a Condition. Test `C20-79` r2. Red on a27a4df, mutation shown red. The operand case has no test: a mapping operand is not something §6's vocabulary declares [Inferred, not checked against `condition_problem`].
+4. **Minor, E10.** `_condition_terms` compared `in` members by `repr`, so `not_in [1]` and `not_in [1.0]` differed though `evaluate` treats them as one. It also stripped `why` inside an operand. **Fixed:** members compare by Python equality (the equality `evaluate` uses), and `why` is dropped only from a Condition. Test `C20-79` r2. Red on a27a4df, mutation shown red. The operand case had no test, and the guess that a mapping operand cannot be declared was wrong: round 3's fidelity lens ran `condition_problem` and it accepts one. Round 3 adds `C20-79` r3.
 5. **Minor, rule 2-11.** A backend handing back empty pages with a fresh cursor each time was paged without end. **Fixed:** `INSTANCE_READ_PAGES_MAX` (10,000 pages per member) ends the read `unknowable`. Test `C20-14` r2. Red on a27a4df, mutation shown red.
 6. **Design note, recorded.** One identity whose copies disagree, none current, makes every resolution over that closure `unknowable`, not only the ones that would score it. This is how rule 2-16 treats an uncountable extent. §3.4b does not state it for 2-17, so it is a departure under the build's reading, not routed: the default (`unknowable`) is the conservative one Rule U already gives.
 
@@ -343,6 +343,52 @@ Row 6j's stopping rule (§0.9): three lenses per round, build, door and fidelity
 
 **After the fixes. [Observed]**
 
-- The 21 r2 tests: 5 were red against a27a4df's code (with round 2's test support), and 16 were green and close gaps. All 21 are green on SQLite, sync and aio.
+- The 18 r2 tests: 5 were red against a27a4df's code on SQLite (with round 2's test support), and 13 were green and close gaps. All 18 are green on SQLite, sync and aio (21 collected items, with the three that also run on `sqlite_minimal`). The first version of this line said 21 / 16 / 21, counting items, where §2.1 counts functions (round 3 fidelity lens).
 - The sweep: 66 mutations, 66 killed. That is 17 new, plus 3 re-anchored where round 2 changed their text.
-- The three-leg suite on a27a4df (SQLite, minimal, Postgres; sync and aio): 2,905 passed, 784 skipped, 3 failed. All 3 are the aio `C20-01` r1 source-inspection test. Round 2 regenerated aio `_support.py` while that run was in flight, so `inspect.getsource` read the new file at the old line numbers [Inferred]. Re-run on stable files, it passes on all three legs (6 passed). The landing run is §1.8.
+- The three-leg suite on a27a4df, with round 2's aio `_support.py` regenerated mid-run (SQLite, minimal, Postgres; sync and aio): 2,905 passed, 784 skipped, 3 failed. All 3 are the aio `C20-01` r1 source-inspection test. Round 2 regenerated aio `_support.py` while that run was in flight, so `inspect.getsource` read the new file at the old line numbers [Inferred]. Re-run on stable files, it passes on all three legs (6 passed). The landing run is §1.8.
+
+### §2.3 — Round 3, on 389e632
+
+**Build lens. 1 MAJOR, 2 minor.**
+
+1. **MAJOR, rule 2-2 with standing rule (e): round 2's fix covered integers only.** The ref's id was minted by Python's `str()`, and primitive 22 compared the database's `CAST(id AS TEXT)`. Two different conversions disagreed on REAL and BLOB ids: `1e+20` against `1.0e+20`, `0.30000000000000004` against `0.3`, and `b'015009'` against `015009`. In each case one door handed out a ref the other read back as absent. **Fixed:** the id is selected as `CAST(id AS TEXT)` and minted from that text, so one conversion serves both primitives. Ids the database renders as one text become one id on two rows: rule 2-16 at primitive 23, and the two-row refusal at primitive 22. Tests `C20-05` r3 (REAL ids and, on SQLite, a bytes id) and `C20-16` r3 (`0.1 + 0.2` against `0.3`). `C20-05` r3 was red on 389e632, and its mutation is shown red. On Postgres the test uses a `DOUBLE PRECISION` column, because INTEGER holds neither 1e20 nor bytes. Its first Postgres run failed on construction for exactly that reason. **[Observed]**
+2. **Minor, rule 3-18.** A NaN operand was accepted at declaration, and NaN equals nothing, itself included. A predicate carrying one could never equal its own copy, and `eq NaN` holds for no row. **Fixed:** `condition_problem` refuses a non-finite number. Test `C20-47` r3, red on 389e632, mutation shown red.
+3. **Note, recorded for row 7c.** A multi-copy identity's ref names the effective type (rule 2-17), which may hold no host row of its own. `get_instance_checked` reads it back through the closure, while raw primitive 22 under that name answers `None`. **Row 7c must re-read a recorded ref through `get_instance_checked`, never through primitive 22 directly.**
+
+**Door lens. 1 live MAJOR, 5 MAJOR test gaps, 2 minor.** The lens listed the 39 ids with no sweep mutation and attacked those first.
+
+- **MAJOR, live, rules 3-21, 2-17 and 5-11: an alias did not move the effective name.**
+  - **The construction, public calls only:** `legacy_home` is retired with no successor, then `import_types` writes `facility` with the alias `legacy_home`.
+  - **Observed:** `resolve_type("legacy_home")` answered `facility`. The instance doors answered `legacy_home#015009`, `governed_by default:legacy_home`, and proposed under the tombstone, a name `resolve_type` never hands out.
+  - **Why:** the forward walk followed `successor` only.
+  - **Fixed:** a retired entry with no successor that a live entity entry answers to (`_alias_holder`, the same look `propose_type` uses) is a hop to that entry. A look that cannot finish stops the closure, under Rule U.
+  - **Tests:** `C20-89` r3 (both names give one ref and one `governed_by`, and the proposal is under `facility`), red on 389e632 with its mutation shown red. Also `C20-87` r3, which asks that the closure read the alias's table, `scanned == 3`. That was green on 389e632, and its mutation is shown red.
+  - **This was also the merge-guard question round 2 left open.** The lens found no other route: entity identities never go stale at `resolve_type`, predicate and action words cannot enter the closure, and successor chains are walked.
+- **The test gaps, each now a required mutation shown red:**
+  - primitive 22's refusal for a successor declaring no governed facts (`C20-84` r3);
+  - `not_in` over null (`C20-46` r3);
+  - a host filter never replacing the predicate (`C20-56` r3);
+  - an undecidable combinator carrying its `why` (`C20-44` r3).
+  - **Fixing `C20-84` r3 surfaced a test-helper defect.** The first version survived its own mutation. `_successor_world` read `new_governed={}` as "use the default", so the successor was never bare. The helper now tests `is None`, and the mutation is killed.
+- **Minors taken:** a proposal that scored nothing carries `confidence=None` (`C20-23` r3), and `is_null` refuses terms (`C20-51` r3). Both have mutations, shown red.
+- **Minor recorded, not acted on: a door difference no rule row covers.** On a retired entity with no successor and no alias holder, `resolve_type` answers `proposal`, while `resolve_instance` reads the retired entry's host table and can answer `existing old#015009`. INGEST.md 3.4a governs a retired entry only through its successor chain. Reading a tombstone's own table is the build's reading of rules 3-14 and 3-15 [Inferred], and it is recorded here as a departure. It is not routed, because the conservative alternative (`unknowable`) and this behaviour both have a default the spec does not choose between. No refusal or hold is in question.
+
+**Fidelity lens. 1 MAJOR, 5 minor, all fixed in place in §2.2 and the probe.**
+
+- **MAJOR:** the r2 test count was 18 / 13 / 18, not 21 / 16 / 21.
+- **Minors:**
+  - the operand guess was wrong;
+  - the type-column cast is untested;
+  - the red claims are SQLite's;
+  - the a27a4df suite ran over a mid-run regeneration;
+  - the probe strings now say "7 UC2 configurations".
+- **Everything else recomputes:** the probe passes 24/24, and the sweep killed 66 of 66 covering 38 ids, with the 17 new and 3 re-anchored as stated. The markers are 20 + 1.
+
+**After the fixes. [Observed]**
+
+- **The 12 r3 test functions, on 389e632's code on SQLite:**
+  - **Red:** 3. These are `C20-05` r3, `C20-89` r3 and `C20-47` r3.
+  - **Green:** 8, which close gaps. `C20-84` r3 needs the corrected helper to be meaningful.
+  - **Skipped:** 1, `C20-16` r3. That code minted the two ids apart, so there was no collision to test.
+  - **Now:** every r1, r2 and r3 test passes on sync and aio, on all three legs (222 passed, 78 skipped).
+- **The sweep:** 76 mutations, 76 killed. 10 of them are new in round 3.

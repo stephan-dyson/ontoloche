@@ -121,8 +121,8 @@ async def _successor_world(adapter, make_registry, *, old_rows, new_rows, old_go
         await host_instances(adapter, old_rows, type_name=old)
         await host_instances(adapter, new_rows, type_name=new)
     registry = await make_registry(adapter)
-    await seed(registry, old, attributes=old_governed or _governed())
-    await seed(registry, new, attributes=new_governed or _governed())
+    await seed(registry, old, attributes=_governed() if old_governed is None else old_governed)
+    await seed(registry, new, attributes=_governed() if new_governed is None else new_governed)
     retired = await registry.retire(old, "CMS renamed the class", retired_by="user:sd",
                               successor=new)
     assert isinstance(retired, TypeEntry), retired
@@ -1460,3 +1460,162 @@ async def test_c20_14_r2_a_cursor_that_never_repeats_still_ends(adapter, make_re
     await seed(registry, "facility", attributes=_governed())
     answer = await _resolve(registry, EXACT)
     assert answer.outcome == "unknowable" and answer.complete is False, answer
+
+async def _round_trips(registry, label):
+    """The ref one door mints reads back at the other (standing rule (e))."""
+    answer = await _resolve(registry, label)
+    assert answer.outcome == "existing", (label, answer)
+    lookup = await registry.get_instance_checked("facility", answer.ref.id)
+    assert isinstance(lookup, InstanceLookup) and lookup.record is not None, (answer, lookup)
+    assert lookup.ref == answer.ref, (answer.ref, lookup.ref)
+    return answer
+
+@NEEDS_ATTRIBUTES
+async def test_c20_05_r3_a_real_or_bytes_host_id_reads_back_at_both_doors(adapter, make_registry):
+    """Rule 2-2 with standing rule (e) (round 3, build lens M1): round 2 fixed the
+    integer and left the id minted by Python's `str()` while primitive 22 compared the
+    database's text. A REAL `1e20` was `#1e+20` at one door and absent at the other; a
+    bytes id was `#b'015009'`. The id is now minted by the database, once."""
+    rows = [{"host_id": 1e20, "label": "BURNS NURSING HOME, INC.", "state": "AL"},
+            {"host_id": 1e-7, "label": "COOSA VALLEY HEALTHCARE CENTER", "state": "AL"},
+            {"host_id": b"015012", "label": "MESA VISTA CARE", "state": "AL"}]
+    target = getattr(adapter, "inner", adapter)
+    if getattr(getattr(target, "d", None), "name", "") != "sqlite":
+        rows = rows[:2]          # bytes have no column here that also holds numbers
+    await host_instances(adapter, rows, type_name="facility", id_type="NUMBER")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes=_governed())
+    for row in rows:
+        answer = await _round_trips(registry, row["label"])
+        assert not answer.ref.id.startswith("b'"), answer.ref
+
+@NEEDS_ATTRIBUTES
+async def test_c20_16_r3_two_ids_one_text_are_one_id_at_both_doors(adapter, make_registry):
+    """Rule 2-16 with standing rule (e): two stored ids the database renders as one text
+    are, to both doors, one id on two rows. Neither door hands out either of them."""
+    rows = [{"host_id": 0.1 + 0.2, "label": "BURNS NURSING HOME, INC.", "state": "AL"},
+            {"host_id": 0.3, "label": "BURNS NURSING HOME INC", "state": "AL"}]
+    await host_instances(adapter, rows, type_name="facility", id_type="NUMBER")
+    probe = await adapter.find_instance_candidates(CandidateQuery(
+        namespace="default", kind="entity", type_name="facility", label=EXACT))
+    ids = [r.instance_id for r in probe.records]
+    if len(set(ids)) == 2:
+        pytest.skip(f"this database renders the two ids apart ({ids}): no collision")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes=_governed())
+    assert (await _resolve(registry, EXACT)).outcome == "unknowable"
+    lookup = await registry.get_instance_checked("facility", ids[0])
+    assert isinstance(lookup, Refusal) and lookup.detail["problem"] == "lookup_incomplete"
+
+async def _alias_world(adapter, make_registry):
+    """`legacy_home` retired with no successor, then claimed as an alias by `facility`
+    through `import_types`, with public calls only (round 3, door lens 1)."""
+    burns = {"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL"}
+    await host_instances(adapter, [burns], type_name="legacy_home")
+    await host_instances(adapter, [burns, {"host_id": "015010", "label": "COOSA VALLEY",
+                                     "state": "AL"}], type_name="facility")
+    registry = await make_registry(adapter)
+    await seed(registry, "legacy_home", attributes=_governed())
+    await seed(registry, "facility", attributes=_governed())
+    retired = await registry.retire("legacy_home", "dropped", retired_by="user:sd")
+    assert isinstance(retired, TypeEntry), retired
+    await registry.import_types([{"name": "facility", "kind": "entity", "definition": "a facility",
+                            "aliases": ["legacy_home"], "status": "active",
+                            "attributes": _governed()}], kind="entity")
+    return registry
+
+@NEEDS_RETIRE
+async def test_c20_89_r3_an_alias_moves_the_effective_name(adapter, make_registry):
+    """Rules 2-17, 3-21 and 5-11 (round 3, door lens 1): `resolve_type` answers
+    `facility` for `legacy_home`; the instance doors answered `legacy_home#015009`,
+    `governed_by default:legacy_home`, and proposed under the tombstone."""
+    registry = await _alias_world(adapter, make_registry)
+    seen = set()
+    for name in ("facility", "legacy_home"):
+        answer = await _resolve(registry, EXACT, type_name=name)
+        assert answer.outcome == "existing", (name, answer)
+        seen.add((answer.ref, answer.governed_by))
+        proposal = await _resolve(registry, NOTHING, type_name=name)
+        assert proposal.outcome == "proposal" and proposal.candidate.type.name == "facility"
+        lookup = await registry.get_instance_checked(name, "015009")
+        assert isinstance(lookup, InstanceLookup) and lookup.ref.type.name == "facility"
+    assert seen == {(answer.ref, "default:facility")}, seen
+    assert answer.ref.type.name == "facility"
+
+@NEEDS_RETIRE
+async def test_c20_87_r3_a_hand_written_alias_is_read(adapter, make_registry):
+    """Rule 3-21's own reason (round 3, door lens 6): "a hand-written alias is one the
+    successor scan would miss". `merge_types` writes both; `import_types` writes only
+    the alias, so the closure must read the alias holder's table AND the alias's."""
+    registry = await _alias_world(adapter, make_registry)
+    answer = await _resolve(registry, EXACT, type_name="facility")
+    assert answer.scanned == 3, answer
+
+@NEEDS_RETIRE
+async def test_c20_84_r3_primitive_22_refuses_a_bare_successor(adapter, make_registry):
+    """Rules 7-5 and 6-18 at primitive 22's door (round 3, door lens 2): a successor
+    declaring NO governed facts is a change from a predecessor that declared them."""
+    registry = await _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=[],
+                                old_governed=_governed(condition=AL_ONLY), new_governed={})
+    lookup = await registry.get_instance_checked("facility", "055001")
+    assert isinstance(lookup, Refusal), lookup
+    assert lookup.detail["problem"] == "governed_facts_changed"
+
+def test_c20_46_r3_not_in_over_null_is_unknowable(adapter):
+    """Rule 6-5 (round 3, door lens 3): `not_in` too."""
+    c = condition_from_mapping({"op": "not_in", "attribute": "state", "value": ["CA"],
+                                "why": "w"})
+    assert evaluate(c, {"state": None}).holds is None
+
+@NEEDS_ATTRIBUTES
+async def test_c20_56_r3_a_host_filter_never_replaces_the_predicate(adapter, make_registry):
+    """Rule 6-15 (round 3, door lens 4): narrowing the host's read is an optimisation;
+    the entry's predicate is still evaluated over what came back."""
+    registry = await _world(adapter, make_registry, condition=AL_ONLY, filter_columns=("state",))
+    answer = await _resolve(registry, "Willowbrooke Ct Skilled Care Center",
+                      host_filter={"state": "CA"})
+    assert answer.outcome != "existing", answer
+
+def test_c20_44_r3_an_undecidable_combinator_says_why(adapter):
+    """Rule 6-3 (round 3, door lens 5): `unknowable` carries its sentence."""
+    t = {"op": "eq", "attribute": "state", "value": "AL", "why": "w"}
+    u = {"op": "eq", "attribute": "zip", "value": "35004", "why": "w"}
+    f = {"op": "eq", "attribute": "state", "value": "CA", "why": "w"}
+    for op, terms in (("all_of", [t, u]), ("any_of", [f, u])):
+        c = condition_from_mapping({"op": op, "terms": terms, "why": "w"})
+        result = evaluate(c, {"state": "AL"})
+        assert result.holds is None and result.why.strip(), (op, result)
+
+@NEEDS_ATTRIBUTES
+async def test_c20_23_r3_a_proposal_that_scored_nothing_carries_none(adapter, make_registry):
+    """Rule 3-9 (round 3, door lens minor): the predicate excludes every row, nothing
+    is scored, and `None` is the only honest confidence."""
+    nowhere = {"op": "eq", "attribute": "state", "value": "ZZ", "why": "no such state"}
+    registry = await _world(adapter, make_registry, condition=nowhere)
+    answer = await _resolve(registry, EXACT)
+    assert answer.confidence is None, answer
+
+def test_c20_51_r3_is_null_takes_no_terms(adapter):
+    """Rule 6-10 (round 3, door lens minor)."""
+    assert condition_problem({"op": "is_null", "attribute": "state", "why": "w",
+                              "terms": [{"op": "eq", "attribute": "state", "value": "AL",
+                                         "why": "w"}]})
+
+def test_c20_47_r3_a_non_finite_operand_is_refused(adapter):
+    """Round 3, build lens minor 2: NaN equals nothing, itself included, so rule 3-18
+    could never find a predicate equal to its own copy."""
+    for value in (float("nan"), float("inf"), [float("nan")]):
+        op = "in" if isinstance(value, list) else "eq"
+        assert condition_problem({"op": op, "attribute": "x", "value": value, "why": "w"})
+
+@NEEDS_RETIRE
+async def test_c20_79_r3_a_why_inside_an_operand_is_an_operand(adapter, make_registry):
+    """E10 (round 2's minor, round 3's fidelity lens): `why` is a Condition's prose, and a
+    key named "why" inside a mapping operand is part of the value."""
+    old = {"op": "ne", "attribute": "state", "value": {"why": "x", "k": 1}, "why": "w"}
+    new = {"op": "ne", "attribute": "state", "value": {"why": "y", "k": 1}, "why": "w"}
+    registry = await _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=[],
+                                old_governed=_governed(condition=old),
+                                new_governed=_governed(condition=new))
+    answer = await _resolve(registry, EXACT)
+    assert answer.outcome == "unknowable" and "predicate" in answer.why_incomplete, answer

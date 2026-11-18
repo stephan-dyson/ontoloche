@@ -173,10 +173,11 @@ def host_instances(
     from ..backends import HostInstanceTable
 
     if id_type == "NUMBER":
-        # A host whose ids are numbers as the database stores them: INTEGER where
-        # the column type converts nothing (Postgres), and a BLOB-affinity column on
-        # SQLite, whose INTEGER affinity would quietly convert '42' to 42.
-        id_type = "BLOB" if getattr(target.d, "name", "") == "sqlite" else "INTEGER"
+        # A host whose ids are numbers as the database stores them: a float column
+        # on Postgres (which converts nothing on comparison, and holds 1e20), and a
+        # BLOB-affinity column on SQLite, whose INTEGER affinity would quietly convert
+        # '42' to 42 and hide the defect round 2 found.
+        id_type = "BLOB" if getattr(target.d, "name", "") == "sqlite" else "DOUBLE PRECISION"
     _HOST_TABLE_SEQ[0] += 1
     table = f"host_{type_name}_{_HOST_TABLE_SEQ[0]}"
     columns = ["host_id", "label"]

@@ -298,6 +298,11 @@ def condition_problem(declared: Any, *, _path: str = INSTANCE_CONDITION_KEY) -> 
             return f"{_path}: {op} takes a sequence, got {type(value).__name__}: rule 6-7"
         if any(v is None for v in value):
             return f"{_path}: {op} may not carry a null member: rule 6-6"
+    members = value if isinstance(value, (list, tuple)) else (value,)
+    if any(isinstance(v, float) and not math.isfinite(v) for v in members):
+        # NaN equals nothing, itself included, so a predicate carrying it could never
+        # be compared with its own copy (rule 3-18) and `eq NaN` holds for no row.
+        return f"{_path}: {op} may not carry a non-finite number"
     return None
 
 

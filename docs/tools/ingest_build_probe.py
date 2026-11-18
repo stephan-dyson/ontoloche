@@ -12,7 +12,7 @@ made before the code existed:
   truncated live scan;
 * **Paging**: a 7-row host page against the unpaged control, and R58's three states;
 * **F1** (the seam: no instance row in the registry's tables), **F2** (the build and
-  the kit agree on every UC2 label and every gate-batch group), and **Q93**, rule
+  the kit agree on every UC2 configuration and every gate-batch group), and **Q93**, rule
   3-19's read cost, measured.
 
 Run::
@@ -256,8 +256,8 @@ def uc2(facilities) -> None:
     ]
     disagree = [(label, b.outcome, k.outcome) for label, b, k in kit_pairs
                 if b.outcome != k.outcome or b.known != k.known]
-    check(f"F2: the build and the kit agree on all {len(kit_pairs)} UC2 labels, the two "
-          "capped ones included (outcome and known)",
+    check(f"F2: the build and the kit agree on all {len(kit_pairs)} UC2 configurations "
+          "(five labels, the two capped ones included; outcome and known)",
           not disagree, str(disagree))
 
     # --- Q93: rule 3-19's read cost --------------------------------------------------

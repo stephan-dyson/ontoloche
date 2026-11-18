@@ -204,6 +204,48 @@ MUTATIONS = (
              '''            warnings.extend(self._instance_consumers_warning(namespace))
             return answer(''',
              "            return answer(", required=True),
+    # ---- round 3 of the loop (7B-RUN.md 2.3) ------------------------------------------
+    Mutation("2-2 the id is minted by the database's cast", "c20_05", SQL,
+             """cols = [f'CAST("{binding.id_column}" AS TEXT)',""",
+             """cols = [f'"{binding.id_column}"',""", required=True),
+    Mutation("3-21 an alias moves the effective name", "c20_89", REG,
+             "                nxt = holder\n", "                break\n", required=True),
+    Mutation("3-21 a hand-written alias is a member", "c20_87", REG,
+             "            if m.name not in names:",
+             "            if m.name not in names and getattr(self.adapter.get_type("
+             "namespace, m.name, kind=\"entity\"), \"successor\", None):",
+             required=True),
+    Mutation("6-6 a non-finite operand is refused", "c20_47", ING,
+             "if any(isinstance(v, float) and not math.isfinite(v) for v in members):",
+             "if False:", required=True),
+    Mutation("7-5 / 6-18 primitive 22 refuses a bare successor", "c20_84", REG,
+             '''            rec = self.adapter.get_type(namespace, member, kind="entity")
+            if rec is None:
+                continue
+            theirs = self._governed_facts(rec)''',
+             '''            rec = self.adapter.get_type(namespace, member, kind="entity")
+            if rec is None or self._governed_facts(rec) == (None, None):
+                continue
+            theirs = self._governed_facts(rec)''', required=True),
+    Mutation("6-5 not_in over null is unknowable", "c20_46", ING,
+             "    if got is None:", "    if got is None and cond.op != \"not_in\":",
+             required=True),
+    Mutation("6-15 a host filter never replaces the predicate", "c20_56", REG,
+             '''        if condition is None:
+            warnings.append("no_tenancy_predicate")
+            survivors = list(one_copy)''',
+             '''        if condition is None or host_filter:
+            warnings.append("no_tenancy_predicate")
+            survivors = list(one_copy)''', required=True),
+    Mutation("6-3 an undecidable combinator says why", "c20_44", ING,
+             "        if holds is None:", "        if False:", required=True),
+    Mutation("3-9 nothing scored is None", "c20_23", REG,
+             "scored[0].score if scored else None", "scored[0].score if scored else 0.0",
+             required=True),
+    Mutation("6-10 is_null takes no terms", "c20_51", ING,
+             "    if terms not in (None, (), []):",
+             "    if terms not in (None, (), []) and op not in (\"is_null\", \"is_not_null\"):",
+             required=True),
     # ---- the rest of the read side ---------------------------------------------------
     Mutation("1-3 the capability refuses first", "c20_03", REG,
              "        if self.caps.resolves_instances:\n            return None",
