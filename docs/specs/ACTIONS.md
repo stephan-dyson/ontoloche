@@ -111,9 +111,9 @@ Two candidate second rules were considered and **not** taken, because two is whe
 | 2.2-5 | `created_by` and `namespace` are `TypeEntry`'s and are **not** restated in `attributes` | `prose-only:` an absence cannot be exercised by a test that does not know what to look for; the gate that catches a second home for one fact is `check_spec_drift.py` holding the printed shape against the code, which the build row extends |
 
 
-### 2.3 `inputs` — three reference shapes, and the third is this document's
+### 2.3 `inputs` — four reference shapes, the third is this document's and the fourth is `INGEST.md`'s
 
-[`EDGES.md`](EDGES.md) §2.1 defines two. An action takes a third.
+[`EDGES.md`](EDGES.md) §2.1 defines two. An action takes a third. **Row 7c landed a fourth, `INGEST.md` §4.1's `CandidateRef`, as amendment A1** ([`INGEST.md`](INGEST.md) §4.4): a thing that does not exist yet has no `InstanceRef`, and F1 recorded the four ways the three shapes failed it. Omitting the input is `missing`. Naming its type is a `ref` mismatch. An invented id is answered `allowed`, which `INGEST.md` rule 1-1 forbids. An optional input lets the gate answer for a subject it never saw.
 
 ```
 TypeRef:                        # EDGES 2.1, unchanged. A row of the vocabulary
@@ -131,14 +131,17 @@ EdgeRef:                        # NEW, this document
                                 #   reference can be READ without a store round trip
     namespace:  str             # the FAMILY's namespace. EDGES 2.2's rule, verbatim
 
-InputRef = TypeRef | InstanceRef | EdgeRef
+InputRef = TypeRef | InstanceRef | EdgeRef | CandidateRef
+                                # CandidateRef is INGEST.md 4.1's shape: type, label,
+                                #   resolution, act_id. No id, ever. Amendment A1
 
 InputSpec:
     name:       str             # the argument name, as the host's tool schema spells it
-    ref:        "type" | "instance" | "edge"
+    ref:        "type" | "instance" | "edge" | "candidate"
     required:   bool
-    kinds:      tuple[str, ...] | None   # for ref="type"/"instance": which registry kinds
-                                         #   are acceptable. None = any but `predicate`
+    kinds:      tuple[str, ...] | None   # for ref="type"/"instance"/"candidate": which
+                                         #   registry kinds are acceptable. None = any
+                                         #   but `predicate`. A candidate's is `entity`
     families:   tuple[str, ...] | None   # for ref="edge": which families are acceptable
 ```
 
@@ -155,6 +158,9 @@ def parse_ref(key: str) -> InputRef: ...      # its inverse. RAISES ValueError f
 | `"<namespace>:<kind>:<name>"` | `TypeRef` |
 | `"<namespace>:<kind>:<name>#<id>"` | `InstanceRef` |
 | `"<namespace>:edge:<family>#<edge_id>"` | `EdgeRef` |
+| `{"candidate":{"act_id":…,"label":…,"resolution":…,"type":"<namespace>:<kind>:<name>"}}` | `CandidateRef` (amendment A1) |
+
+**A candidate's flat form is canonical JSON, and the `#` grammar could not hold it** (row 7c). A label is the host's string and may carry `:` and `#`, and a candidate has two free strings (`label` and `act_id`) where the other shapes have one opaque string after the first `#`. No string the three-segment grammar accepts begins `{"candidate":` with four keys behind it, because that grammar needs a head of exactly three colon-separated segments. Both invocation doors validate a candidate the way they validate the other three shapes, refusing `input_kind_mismatch` for the wrong shape either way, a type whose `kind` is not `entity`, a `resolution` outside `proposal` and `ambiguous`, and an empty `label` or `act_id`. A type precondition on a candidate is asked of its type, and an edge precondition is unknown (`holds=None`), because a thing that does not exist yet has no edges to look for.
 
 **It raises rather than guessing, and that is the whole discipline.** *A permissive default for a value you did not recognise* is the shape row 6b shipped **twice** — `ref_shape` returning `"type"` for a bare string, which walked `merge_capabilities(commentable, searchable)` past the `predicate` exclusion, and `_alias_identity_breach` comparing a row against itself, which is the kill row's **ninth** trip. There is no `None` fallback and no *"probably a type ref"* branch: a caller that gets a value back got one this function actually read, which is **R64**'s required-keyword rule applied to a parser.
 
@@ -566,6 +572,7 @@ So, concretely, for the one host that exists:
 | 6-11 | The queue drains end to end: a `review`-mode invocation is enumerable by `invocations(unreviewed=True)` until `review_invocation` appends the `invocation_reviewed` event, after which it is not — and the invocation carries `reviewed_at` | `C19-81` |
 | 6-12 | `invocations(unreviewed=True)` reads the **mode of record** (`Invocation.declared_policy`), never the family's mode today — an amendment must not move a historical invocation into or out of the queue *(row 6c, round 1)*. A row that carries **no** mode of record — filed before the field existed, or by a backend that keeps none — falls back to the live family, and `why_incomplete` **says how many rows did** *(round 3)*: rule 3-8's guarantee does not reach them, and a fallback nobody can see is a fallback nobody can act on | `C19-84`, `C19-89` |
 | 6-13 | `review_invocation` **honours its `namespace`**: an invocation stored in another scope is `unknown_invocation`, not a silent cross-tenant drain; and an empty `reviewed_by` is a `ValueError`, as an empty `reason` is at `retire` *(row 6c, round 1)* | `C19-85` |
+| 6-14 | `ref="candidate"` (amendment **A1**, row 7c) is validated at both doors: a candidate where another shape is declared, and the reverse, is `input_kind_mismatch`, and so are a non-`entity` type, a `resolution` outside `proposal` / `ambiguous`, and an empty `label` or `act_id`. Its flat form round-trips through `parse_ref` | `C19-111` |
 
 Signatures are Python-shaped because deliverable #2 is a Python package. They are **not** a module layout.
 

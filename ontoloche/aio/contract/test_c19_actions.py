@@ -5031,3 +5031,89 @@ async def test_c19_108_nested_membership_inside_a_declared_input_is_unordered_to
         "and never by position, and ACTIONS.md 1 says NO ORDERING",
         getattr(out, "reason", None), getattr(out, "detail", None),
     )
+
+_HOST_WRITE = Effect(op="host_state", why="the host writes the instance row; ACTIONS.md 2.5")
+
+def _candidate(label="Burns Nursing Home: #1 (Montgomery)", *, name="facility",
+               resolution="proposal", act_id="act-c19", namespace="default", kind="entity"):
+    from ontoloche.ingest import CandidateRef
+
+    return CandidateRef(TypeRef(namespace, kind, name), label, resolution, act_id)
+
+async def _propose_family(registry, name="propose_facility", *, mode="auto", ref="candidate"):
+    return await action_family(
+        registry,
+        name,
+        approval_mode=mode,
+        inputs=[InputSpec("instance", ref)],
+        effects=[_HOST_WRITE],
+    )
+
+@NEEDS_ATTRIBUTES
+async def test_c19_111_a_candidate_is_a_fourth_reference_shape_validated_at_both_doors(
+    adapter, make_registry
+):
+    """Rule **6-14**, amendment **A1** (`INGEST.md` 4.4, rule 4-9).
+
+    A thing being proposed has no `InstanceRef`, and F1 recorded the four ways the
+    shipped doors failed it: omitted is `missing`, its type is `ref` mismatch, an
+    invented id is `allowed` (rule 1-1 forbids it), and an optional input lets the gate
+    answer for a subject it never saw. `ref="candidate"` is the honest name.
+    """
+    from ontoloche.actions import REF_SHAPES, ref_shape
+    from ontoloche.ingest import CandidateRef
+
+    assert REF_SHAPES == ("type", "instance", "edge", "candidate")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    declared = await _propose_family(registry)
+    assert isinstance(declared, TypeEntry), declared
+
+    cand = _candidate()
+    assert ref_shape(cand) == "candidate"
+    gate = await registry.preflight("propose_facility", {"instance": cand}, actor="ai:ingest")
+    assert not isinstance(gate, Refusal), gate
+    assert gate.verdict == "allowed", gate
+
+    # Wrong shape, both directions.
+    instance = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+    wrong = await registry.preflight("propose_facility", {"instance": instance}, actor="ai:ingest")
+    assert isinstance(wrong, Refusal) and wrong.reason == "input_kind_mismatch", wrong
+    assert (wrong.detail["declared"], wrong.detail["supplied"]) == ("candidate", "instance")
+    await _propose_family(registry, "touch_facility", ref="instance")
+    back = await registry.preflight("touch_facility", {"instance": cand}, actor="ai:ingest")
+    assert isinstance(back, Refusal) and back.reason == "input_kind_mismatch", back
+    assert (back.detail["declared"], back.detail["supplied"]) == ("instance", "candidate")
+
+    # A candidate that is not a candidate.
+    await seed(registry, "flag_it", kind="action", attributes=action_attributes(
+        reversibility="reversible", approval_mode="auto"))
+    for bad, problem in (
+        (_candidate(kind="action", name="flag_it"), "kind"),
+        (_candidate(resolution="existing"), "resolution"),
+        (_candidate(label=""), "label"),
+        (_candidate(act_id=""), "act_id"),
+    ):
+        out = await registry.preflight("propose_facility", {"instance": bad}, actor="ai:ingest")
+        assert isinstance(out, Refusal) and out.reason == "input_kind_mismatch", (bad, out)
+        assert out.detail["problem"] == problem, (bad, out.detail)
+
+    # The flat form carries a label with both separators and reads back exactly.
+    key = ref_key(cand)
+    assert parse_ref(key) == cand, key
+    assert isinstance(parse_ref(key), CandidateRef)
+    for malformed in ('{"candidate": 1}', '{"candidate": {"label": "x"}}', '{"candidate":'):
+        with pytest.raises(ValueError):
+            parse_ref(malformed)
+
+    if registry.caps.stores_invocations:
+        rec = await registry.record_invocation(
+            "propose_facility", {"instance": cand}, actor="ai:ingest",
+            outcome="applied", gate_verdict="allowed", judged=gate,
+        )
+        assert not isinstance(rec, Refusal), rec
+        assert parse_ref(rec.inputs["instance"]) == cand
+        wrong_rec = await registry.record_invocation(
+            "propose_facility", {"instance": instance}, actor="ai:ingest", outcome="applied",
+        )
+        assert isinstance(wrong_rec, Refusal) and wrong_rec.reason == "input_kind_mismatch"

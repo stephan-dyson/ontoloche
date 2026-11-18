@@ -57,6 +57,7 @@ from .actions import (
     ACTION_ATTRIBUTE_KEYS,
     ACTION_PAYLOAD_KIND,
     ADMISSION_RULE,
+    CANDIDATE_RESOLUTIONS,
     EVALUATORS,
     GATE_VERDICTS,
     OUTCOMES,
@@ -10791,8 +10792,9 @@ class Registry:
                         "supplied": type(ref).__name__,
                         "why": (
                             f"input {name!r} is a {type(ref).__name__} and not one of "
-                            f"ACTIONS.md 2.3's three reference shapes (TypeRef, "
-                            f"InstanceRef, EdgeRef). An unreadable reference is refused "
+                            f"ACTIONS.md 2.3's four reference shapes (TypeRef, "
+                            f"InstanceRef, EdgeRef, CandidateRef). An unreadable "
+                            f"reference is refused "
                             f"rather than read as the most permissive shape -- the "
                             f"exclusion is general or it is nothing"
                         ),
@@ -10843,6 +10845,38 @@ class Registry:
                         ),
                     },
                 )
+            if shape == "candidate":
+                # Amendment A1 (row 7c, INGEST.md 4.1). A candidate is the subject of a
+                # proposal: its resolution must be one that produces a candidate, and it
+                # must carry the label and the act it belongs to, or the ledger holds a
+                # proposal for nothing in particular (F1's invented-id `allowed`).
+                for field_name, bad in (
+                    ("resolution", ref.resolution not in CANDIDATE_RESOLUTIONS),
+                    ("label", not ref.label.strip()),
+                    ("act_id", not ref.act_id.strip()),
+                ):
+                    if bad:
+                        return Refusal(
+                            "input_kind_mismatch",
+                            {
+                                "input": name,
+                                "problem": field_name,
+                                "supplied": getattr(ref, field_name),
+                                "why": (
+                                    f"input {name!r} is a CandidateRef whose "
+                                    f"{field_name} is "
+                                    + (
+                                        f"{ref.resolution!r}, not one of "
+                                        f"{list(CANDIDATE_RESOLUTIONS)} -- the two "
+                                        f"outcomes INGEST.md 3.1 lets mint a candidate"
+                                        if field_name == "resolution"
+                                        else "empty -- a proposal must say what it "
+                                        "proposes and which ingest act it belongs to "
+                                        "(INGEST.md 4.1)"
+                                    )
+                                ),
+                            },
+                        )
             kind = ref_kind(ref)
             # **The kind the CALLER wrote is a claim; the stored row is the fact -- and
             # trusting the claim was the ACTIONS door's own kill-row walk.** `ref_kind`
@@ -10865,8 +10899,8 @@ class Registry:
             # does not resolve instances, and `type_active` is the precondition that asks
             # about registration. What is refused is a claim the registry can SEE is
             # false.
-            if shape in ("type", "instance"):
-                target = type_of(ref) if shape == "instance" else ref
+            if shape in ("type", "instance", "candidate"):
+                target = ref if shape == "type" else ref.type
                 stored = self.adapter.find_types(
                     TypeQuery(namespace=target.namespace, name_in=(target.name,),
                               include_retired=True)
@@ -10909,7 +10943,7 @@ class Registry:
                         ),
                     },
                 )
-            if spec.ref == "instance" and kind != "entity":
+            if spec.ref in ("instance", "candidate") and kind != "entity":
                 return Refusal(
                     "input_kind_mismatch",
                     {
@@ -10917,7 +10951,11 @@ class Registry:
                         "problem": "kind",
                         "declared": "entity",
                         "supplied": kind,
-                        "why": 'an InstanceRef names an instance of a kind="entity" type',
+                        "why": (
+                            f"an {'InstanceRef' if shape == 'instance' else 'CandidateRef'} "
+                            f'names an instance of a kind="entity" type (ACTIONS.md 2.3, '
+                            f"INGEST.md 4.1)"
+                        ),
                     },
                 )
             if spec.kinds is not None and kind not in spec.kinds:
@@ -11192,6 +11230,22 @@ class Registry:
         the escape.
         """
         subject = inputs.get(condition.subject)
+        if isinstance(subject, CandidateRef):
+            # Amendment A1. A candidate has no instance yet, so a TYPE condition is asked
+            # of its type, and an edge condition has no instance to ask about: that is
+            # unknown, never vacuously true or false (Rule U).
+            if condition.kind in ("edge_exists", "edge_absent"):
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "neighbors",
+                    why=(
+                        "the subject is a CandidateRef -- a thing that does not exist yet "
+                        "has no edges to look for, and answering `absent` for it would "
+                        "be a confident claim about nothing (INGEST.md 4.1)"
+                    ),
+                )
+            subject = subject.type
         subject_key = ref_key(subject) if subject is not None else condition.subject
 
         if condition.kind == "type_active":

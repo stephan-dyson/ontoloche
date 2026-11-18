@@ -55,6 +55,8 @@ from ontoloche.aio.registry import AsyncRegistry
 from ontoloche.types import Consumer, Refusal, ResolveContext, TypeEntry
 from ontoloche.aio.contract._support import host_instances, seed, snapshot
 from ontoloche.aio.contract.doubles import AsyncDegradedAdapter
+from ontoloche.actions import Effect, InputSpec, parse_ref, ref_key  # noqa: E402
+from ontoloche.aio.contract._support import action_family  # noqa: E402
 
 
 NEEDS_ATTRIBUTES = pytest.mark.requires_capability("stores_attributes")
@@ -1931,3 +1933,34 @@ def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
     for value in (True, 3, 10 ** 400, 2.5, complex(1, 2)):
         assert condition_problem({"op": "eq", "attribute": "x", "value": value,
                                   "why": "w"}) is None
+
+NEEDS_LEDGER = pytest.mark.requires_capability("stores_attributes", "stores_invocations")
+
+_HOST_WRITE = Effect(op="host_state", why="the host writes the facility row (INGEST.md 4.2)")
+
+async def _ingest_family(registry, name="propose_facility", *, mode="auto"):
+    out = await action_family(registry, name, approval_mode=mode,
+                        inputs=[InputSpec("instance", "candidate")], effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    return out
+
+@NEEDS_LEDGER
+async def test_c20_69_a_proposed_thing_is_named_by_a_candidate_ref_with_no_id(adapter, make_registry):
+    """Rule **4-9**. A `CandidateRef` has no `id` and never acquires one: the host mints
+    the identifier, and the moment it does the ledger's reference is an `InstanceRef`
+    (amendment A2's `results`, `C20-29`). Through the ledger, the recorded input reads
+    back as the candidate and never as an instance."""
+    registry = await _world(adapter, make_registry)
+    res = await _resolve(registry, NOTHING)
+    assert res.outcome == "proposal", res
+    cand = res.candidate
+    assert isinstance(cand, CandidateRef)
+    assert {f.name for f in dataclasses.fields(cand)} == {"type", "label", "resolution", "act_id"}
+    assert not hasattr(cand, "id")
+    await _ingest_family(registry)
+    rec = await registry.record_invocation("propose_facility", {"instance": cand}, actor="ai:ingest",
+                                     outcome="applied")
+    assert not isinstance(rec, Refusal), rec
+    back = parse_ref(rec.inputs["instance"])
+    assert back == cand and isinstance(back, CandidateRef), back
+    assert "#" not in rec.inputs["instance"].split('"label"')[0], rec.inputs

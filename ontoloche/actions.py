@@ -38,7 +38,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 
+import json
+
 from .edges import InstanceRef, TypeRef
+from .ingest import CandidateRef
 from .types import Evidence, ProvenanceEvent, Refusal
 
 __all__ = [
@@ -65,6 +68,7 @@ __all__ = [
     "GATE_VERDICTS",
     "EVALUATORS",
     "REF_SHAPES",
+    "CANDIDATE_RESOLUTIONS",
     "ACTION_PAYLOAD_KIND",
     "ADMISSION_RULE",
     "family_declaration_problem",
@@ -167,8 +171,16 @@ GATE_VERDICTS = ("allowed", "refused", "not_asked")
 #: does not have (contortion ACT2/ACT6).
 EVALUATORS = ("list_types", "predicates", "neighbors")
 
-#: ACTIONS.md 2.3. Three reference shapes, and the third is this document's.
-REF_SHAPES = ("type", "instance", "edge")
+#: ACTIONS.md 2.3. Four reference shapes. The third is this document's, and the fourth
+#: is INGEST.md 4.1's ``CandidateRef``, landed by row 7c as amendment **A1**: a thing that
+#: does not exist yet has no ``InstanceRef``, and F1 recorded the four ways the three
+#: shapes failed it (``missing``, a ``ref`` mismatch, an invented id answered
+#: ``allowed``, and an optional input the gate answered for without seeing).
+REF_SHAPES = ("type", "instance", "edge", "candidate")
+
+#: INGEST.md 3.1's two outcomes that produce a ``CandidateRef``. A candidate carrying any
+#: other resolution names something the resolution did not say could be proposed.
+CANDIDATE_RESOLUTIONS = ("proposal", "ambiguous")
 
 #: ACTIONS.md 2.7, ruling **R10**, row 6b -- the ``AttributeSchema.kind`` an invocation's
 #: INPUTS schema is keyed under, and it is **not** ``"action"``.
@@ -230,7 +242,7 @@ class EdgeRef:
         return f"{self.namespace}:edge:{self.family}#{self.edge_id}"
 
 
-InputRef = TypeRef | InstanceRef | EdgeRef
+InputRef = TypeRef | InstanceRef | EdgeRef | CandidateRef
 
 
 def ref_shape(ref: Any) -> str | None:
@@ -255,6 +267,8 @@ def ref_shape(ref: Any) -> str | None:
         return "instance"
     if isinstance(ref, TypeRef):
         return "type"
+    if isinstance(ref, CandidateRef):
+        return "candidate"
     return None
 
 
@@ -262,8 +276,8 @@ def ref_kind(ref: Any) -> str | None:
     """The registry ``kind`` this reference is about, or ``None`` when it names none."""
     if isinstance(ref, EdgeRef):
         return "edge"
-    if isinstance(ref, InstanceRef):
-        return ref.type.kind
+    if isinstance(ref, (InstanceRef, CandidateRef)):
+        return getattr(ref.type, "kind", None)
     return getattr(ref, "kind", None)
 
 
@@ -274,7 +288,37 @@ def ref_key(ref: Any) -> str:
     if isinstance(ref, InstanceRef):
         t = ref.type
         return f"{t.namespace}:{t.kind}:{t.name}#{ref.id}"
+    if isinstance(ref, CandidateRef):
+        return _candidate_key(ref)
     return f"{ref.namespace}:{ref.kind}:{ref.name}"
+
+
+#: The prefix every candidate's flat form starts with, and nothing else's can.
+_CANDIDATE_PREFIX = '{"candidate":'
+
+
+def _candidate_key(ref: CandidateRef) -> str:
+    """A ``CandidateRef``'s flat form: canonical JSON. Row 7c, amendment **A1**.
+
+    **Why not the ``#`` grammar.** A label is the host's string and may carry ``:`` and
+    ``#``. The other three shapes keep their one opaque string AFTER the first ``#``, and
+    a candidate has two free strings (``label`` and ``act_id``), so no split can hold
+    them. JSON can. No string the three-segment grammar reads as valid begins
+    ``{"candidate":`` with four keys behind it, because that grammar needs a head of
+    exactly three colon-separated segments and this object has at least five colons
+    before any ``#``. :func:`flat_form_problem` asks the round trip for a candidate
+    rather than reasoning about it, which is its existing method (``C19-94``).
+    """
+    t = ref.type
+    type_key = (
+        f"{getattr(t, 'namespace', None)}:{getattr(t, 'kind', None)}:"
+        f"{getattr(t, 'name', None)}"
+    )
+    return json.dumps(
+        {"candidate": {"act_id": ref.act_id, "label": ref.label,
+                       "resolution": ref.resolution, "type": type_key}},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
 
 
 #: The two characters ACTIONS.md 2.3's flat identity form spends: ``:`` separates the
@@ -316,6 +360,8 @@ def flat_form_problem(ref: Any) -> str | None:
     shape = ref_shape(ref)
     if shape is None:
         return None  # `_input_refusal` has its own, earlier, answer for this
+    if shape == "candidate":
+        return _candidate_problem(ref)
     if shape == "edge":
         segments = (("namespace", ref.namespace), ("family", ref.family))
     elif shape == "instance":
@@ -444,6 +490,8 @@ def parse_ref(key: str) -> InputRef:
             f"{type(key).__name__}. There is no default for a value this function did "
             f"not recognise (ACTIONS.md 2.3, ruling R72)"
         )
+    if key.startswith(_CANDIDATE_PREFIX):
+        return _parse_candidate(key)
     head, sep, tail = key.partition("#")
     parts = head.split(":")
     if len(parts) != 3:
@@ -462,6 +510,66 @@ def parse_ref(key: str) -> InputRef:
     return InstanceRef(type=TypeRef(namespace, kind, name), id=tail)
 
 
+def _candidate_problem(ref: CandidateRef) -> str | None:
+    """Why a ``CandidateRef`` cannot be written to the ledger faithfully, or ``None``.
+
+    The type's three identity segments carry the rule the other shapes' do (a ``:`` or
+    ``#`` in one is a segment the stored ``"<ns>:<kind>:<name>"`` cannot carry), and then
+    the whole reference is ASKED: written, read back, compared.
+    """
+    t = ref.type
+    if not isinstance(t, TypeRef):
+        return f"type is a {type(t).__name__} and not a TypeRef"
+    for field_name, value in (("namespace", t.namespace), ("kind", t.kind), ("name", t.name)):
+        if not isinstance(value, str):
+            return f"type.{field_name} is a {type(value).__name__} and not a string"
+        for separator in _FLAT_FORM_SEPARATORS:
+            if separator in value:
+                return (
+                    f"type.{field_name}={value!r} contains {separator!r}, which the "
+                    f"candidate's stored type string spends as a separator"
+                )
+    for field_name in ("label", "resolution", "act_id"):
+        value = getattr(ref, field_name)
+        if not isinstance(value, str):
+            return f"{field_name} is a {type(value).__name__} and not a string"
+    try:
+        back = parse_ref(_candidate_key(ref))
+    except ValueError as exc:  # pragma: no cover - the checks above pre-empt it
+        return f"its flat form does not read back: {exc}"
+    if back != ref:  # pragma: no cover - the same
+        return "its flat form reads back as a DIFFERENT reference"
+    return None
+
+
+def _parse_candidate(key: str) -> CandidateRef:
+    """The inverse of :func:`_candidate_key`. RAISES on anything it did not write."""
+    try:
+        doc = json.loads(key)
+    except ValueError as exc:
+        raise ValueError(
+            f"{key!r} starts like a candidate's flat form and is not JSON (ACTIONS.md "
+            f"2.3, amendment A1): {exc}"
+        ) from None
+    body = doc.get("candidate") if isinstance(doc, dict) and len(doc) == 1 else None
+    want = {"act_id", "label", "resolution", "type"}
+    if not isinstance(body, dict) or set(body) != want or not all(
+        isinstance(body[k], str) for k in want
+    ):
+        raise ValueError(
+            f"{key!r} is not a candidate's flat form: it must be one key, `candidate`, "
+            f"holding exactly `act_id`, `label`, `resolution` and `type`, every value a "
+            f"string (ACTIONS.md 2.3, amendment A1)"
+        )
+    parts = body["type"].split(":")
+    if len(parts) != 3:
+        raise ValueError(
+            f"{key!r}: a candidate's type must be `<namespace>:<kind>:<name>`, and "
+            f"{body['type']!r} has {len(parts)} segment(s)"
+        )
+    return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], body["act_id"])
+
+
 @dataclass(frozen=True)
 class InputSpec:
     """ACTIONS.md 2.3 -- one typed argument the action takes.
@@ -475,7 +583,8 @@ class InputSpec:
 
     #: the argument name, as the host's tool schema spells it
     name: str
-    ref: Literal["type", "instance", "edge"]
+    #: ``"candidate"`` is row 7c's amendment **A1**: a thing that does not exist yet
+    ref: Literal["type", "instance", "edge", "candidate"]
     required: bool = True
     #: for ``ref="type"``/``"instance"``: which registry kinds are acceptable.
     #: ``None`` = any but ``predicate``
