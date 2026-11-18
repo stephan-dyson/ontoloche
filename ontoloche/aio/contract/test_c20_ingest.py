@@ -2054,3 +2054,133 @@ async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unre
                            {"instance": InstanceRef(res.candidate.type, "995001")},
                            actor="host:cms")
     assert (await registry.invocations(unwritten_for=again.candidate)).invocations == ()
+
+def _act(registry, act_id="act-1", *, family="propose_facility", tier="small", **kw):
+    act = registry.ingest_act(act_id, family=family, actor="ai:ingest", tier=tier, **kw)
+    assert not isinstance(act, Refusal), act
+    return act
+
+async def _ledger(registry):
+    return [i.invocation_id for i in (await registry.invocations(limit=10_000)).invocations]
+
+@NEEDS_LEDGER
+async def test_c20_27_a_propose_at_ingest_act_is_an_invocation_and_adds_no_store(
+    adapter, make_registry
+):
+    """Rule **4-1**. The act's proposal is an ordinary invocation of a `kind="action"`
+    family, and §4 adds no object with a store and no primitive: the act is memory."""
+    from ontoloche.aio.adapter import AsyncStorageAdapter as Adapter
+    from ontoloche.ingest import INGEST_LANDINGS, IngestLanding
+
+    assert not [n for n in dir(Adapter) if "ingest" in n.lower() or n.startswith("act")]
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    landing = _act(registry).land(NOTHING, type_name="facility")
+    assert isinstance(landing, IngestLanding) and landing.outcome in INGEST_LANDINGS
+    assert landing.outcome == "proposed", landing
+    inv = landing.invocation
+    assert inv.family == "propose_facility"
+    assert await registry.get_type("propose_facility", kind="action") is not None
+    assert parse_ref(inv.inputs["instance"]) == landing.candidate
+    assert await _ledger(registry) == [inv.invocation_id]
+    # A second act with the same id shares nothing: the memory is the act's, not a store.
+    again = _act(registry).land(NOTHING, type_name="facility")
+    assert again.outcome == "pending", "the LEDGER answers across acts, not the memory"
+
+@NEEDS_LEDGER
+async def test_c20_28_the_host_writes_the_row_and_this_project_performs_no_write(
+    adapter, make_registry
+):
+    """Rule **4-2**. The family must declare `host_state` (the act refuses one that does
+    not), and landing a proposal writes no instance row."""
+    registry = await _world(adapter, make_registry)
+    out = await action_family(registry, "no_host_write", approval_mode="auto",
+                        inputs=[InputSpec("instance", "candidate")], effects=[])
+    assert isinstance(out, TypeEntry), out
+    refused = registry.ingest_act("a", family="no_host_write", actor="ai:ingest",
+                                  tier="small")
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+    out = await action_family(registry, "no_candidate", approval_mode="auto",
+                        inputs=[InputSpec("instance", "instance")], effects=[_HOST_WRITE])
+    refused = registry.ingest_act("a", family="no_candidate", actor="ai:ingest", tier="small")
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+    unknown = registry.ingest_act("a", family="nope", actor="ai:ingest", tier="small")
+    assert isinstance(unknown, Refusal) and unknown.reason == "action_family_unknown"
+
+    await _ingest_family(registry)
+    landing = _act(registry).land(NOTHING, type_name="facility")
+    assert landing.outcome == "proposed"
+    assert landing.invocation.declared_effects == (_HOST_WRITE,)
+    after = await _resolve(registry, NOTHING)
+    assert after.outcome == "proposal" and after.scanned == len(FACILITIES), (
+        "a proposal wrote a host row")
+
+@NEEDS_LEDGER
+async def test_c20_30_provenance_is_invocation_provenance_unchanged(adapter, make_registry):
+    """Rule **4-4**. Actor, tier, confidence, approver and `source_version` ride the
+    invocation's existing provenance, and §4 adds no field to it."""
+    import dataclasses
+
+    from ontoloche.actions import InvocationProvenance
+
+    assert [f.name for f in dataclasses.fields(InvocationProvenance)] == [
+        "created_at", "created_by_actor", "created_by", "model_tier", "confidence",
+        "approved_by", "approved_at", "evidence", "source_version", "history",
+        "history_why",
+    ]
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    landing = _act(registry, tier="large").land(
+        NOTHING, type_name="facility", confidence=0.4, source_version="cms-2026-08")
+    prov = landing.invocation.provenance
+    assert prov.created_by_actor == "ai:ingest" and prov.created_by == "ai"
+    assert prov.model_tier == "large" and prov.confidence == 0.4
+    assert prov.source_version == "cms-2026-08"
+    assert prov.approved_by and prov.approved_by.startswith("auto:")
+
+@NEEDS_LEDGER
+async def test_c20_33_unknowable_and_not_an_instance_yield_no_proposal(adapter, make_registry):
+    """Rule **4-7**. Both outcomes mint nothing, and the second is the classifier
+    SUCCEEDING: proposing over it is how a column header becomes a host row."""
+    registry = await _world(adapter, make_registry)
+    await seed(registry, "unscored")               # no MatchPolicy: nothing can be scored
+    await host_instances(adapter, _rows(), type_name="unscored")
+    await _ingest_family(registry)
+    act = _act(registry)
+    header = act.land("Provider Name", type_name="facility")
+    assert header.outcome == "not_an_instance", header
+    blind = act.land(EXACT, type_name="unscored")
+    assert blind.outcome == "unknowable", blind
+    for landing in (header, blind):
+        assert landing.invocation is None and landing.candidate is None
+        assert landing.ref is None and landing.why
+    assert await _ledger(registry) == []
+
+@NEEDS_LEDGER
+async def test_c20_34_an_ingest_family_may_not_propose_a_predicate(adapter, make_registry):
+    """Rule **4-8**. Refused at declaration (`ACTIONS.md` 2.5's allowlist), and the act
+    refuses a family carrying one that reached the store past validation."""
+    import dataclasses
+
+    registry = await _world(adapter, make_registry)
+    from ontoloche.actions import action_attributes
+
+    out = await registry.propose_type(
+        "mint_predicate", "an ingest family that would mint predicates", [], "user:sd",
+        kind="action",
+        attributes=action_attributes(
+            reversibility="reversible", approval_mode="auto",
+            inputs=[InputSpec("instance", "candidate")],
+            effects=[_HOST_WRITE,
+                     Effect(op="propose_type", namespace="default", kind="predicate")],
+        ),
+    )
+    assert isinstance(out, Refusal) and out.reason == "effect_not_permitted", out
+    await _ingest_family(registry)
+    rec = await adapter.get_type("default", "propose_facility", kind="action")
+    effects = list(rec.attributes["effects"]) + [
+        Effect(op="propose_type", namespace="default", kind="predicate").to_dict()]
+    await adapter.put_type(dataclasses.replace(rec, attributes={**rec.attributes, "effects": effects}))
+    refused = registry.ingest_act("a", family="propose_facility", actor="ai:ingest",
+                                  tier="small")
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
