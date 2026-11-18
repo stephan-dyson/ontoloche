@@ -2008,6 +2008,12 @@ async def test_c20_29_the_minted_ref_is_recorded_in_results_under_the_effective_
     assert out.results["instance"].type.name == "ltc_facility"
     assert all(ref_key(minted) not in e.why for e in out.observed_effects)
     assert parse_ref(out.inputs["instance"]) == res.candidate
+    # Through the act: the candidate it records is under the EFFECTIVE type too.
+    landing = _act(registry, "act-29").land(NOTHING + " two", type_name="facility")
+    assert landing.outcome == "proposed", landing
+    assert landing.candidate.type.name == "ltc_facility"
+    assert parse_ref(landing.invocation.inputs["instance"]).type.name == "ltc_facility"
+    assert landing.invocation.results == {}
 
 @NEEDS_LEDGER
 async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_family_says(
@@ -2027,6 +2033,16 @@ async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_f
     assert not isinstance(rec, Refusal), rec
     assert rec.declared_policy["approval_mode"] == "review"
     assert warning in rec.warnings
+    # Through the act, which computes the warning and the mode itself.
+    act = _act(registry, "act-31")
+    landing = act.land(BAND + " ", type_name="facility")
+    assert landing.outcome in ("proposed", "pending"), landing
+    inv = landing.invocation
+    assert inv.declared_policy["approval_mode"] == "review"
+    assert inv.declared_policy["approval_mode_declared"] == "auto"
+    assert f"instance_ambiguous_at_proposal:instance:{landing.resolution.known}" in inv.warnings
+    plain = act.land(NOTHING, type_name="facility")
+    assert plain.invocation.declared_policy["approval_mode"] == "auto"
 
 @NEEDS_LEDGER
 async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unreviewed_one(
@@ -2184,3 +2200,48 @@ async def test_c20_34_an_ingest_family_may_not_propose_a_predicate(adapter, make
     refused = registry.ingest_act("a", family="propose_facility", actor="ai:ingest",
                                   tier="small")
     assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+
+@NEEDS_LEDGER
+async def test_c20_32_ambiguous_proposals_are_enumerable_and_drained_only_by_review(
+    adapter, make_registry
+):
+    """Rule **4-6**. The review-mode proposals rule 4-5 records are in
+    `invocations(unreviewed=True)`, and only `review_invocation` takes them out."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("draining is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    act = _act(registry)
+    ambiguous = act.land(BAND, type_name="facility").invocation
+    clean = act.land(NOTHING, type_name="facility").invocation
+    queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+    assert ambiguous.invocation_id in queue and clean.invocation_id not in queue
+    await registry.record_result(ambiguous.invocation_id,
+                           {"instance": InstanceRef(TypeRef("default", "entity", "facility"),
+                                                    "995002")},
+                           actor="host:cms")
+    queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+    assert ambiguous.invocation_id in queue, "a RESULT is not a review"
+    await registry.review_invocation(ambiguous.invocation_id, reviewed_by="user:sd")
+    queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+    assert ambiguous.invocation_id not in queue
+
+@NEEDS_LEDGER
+async def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
+    """Rule **4-12**. `<n>` is the resolution's `known` over a COMPLETE read, and an
+    unfinished read never reaches the proposal door (rule 3-6): it lands `unknowable`
+    and records nothing."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    landing = _act(registry).land(BAND, type_name="facility")
+    res = landing.resolution
+    assert res.outcome == "ambiguous" and res.complete
+    assert f"instance_ambiguous_at_proposal:instance:{res.known}" in landing.invocation.warnings
+
+    dup = await make_registry(adapter)
+    await host_instances(adapter, _rows() + _rows()[:1], type_name="dupes")
+    await seed(dup, "dupes", attributes=_governed())
+    blind = _act(dup, "act-dup").land(BAND, type_name="dupes")
+    assert blind.outcome == "unknowable" and blind.invocation is None, blind
+    assert not any(w.startswith("instance_ambiguous_at_proposal")
+                   for w in (blind.resolution.warnings if blind.resolution else ()))
