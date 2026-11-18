@@ -2010,3 +2010,30 @@ async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_f
     assert not isinstance(rec, Refusal), rec
     assert rec.declared_policy["approval_mode"] == "review"
     assert warning in rec.warnings
+
+@NEEDS_LEDGER
+async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unreviewed_one(
+    adapter, make_registry
+):
+    """Rule **4-11**, through the ledger's A4 read. A proposal whose row has not been
+    written holds the identity whether or not it has been reviewed, and once the host
+    reports the row (`record_result`) it holds nothing."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    res = await _resolve(registry, NOTHING)
+    assert res.outcome == "proposal", res
+    await _ingest_family(registry, mode="review")
+    first = await registry.record_invocation("propose_facility", {"instance": res.candidate},
+                                       actor="ai:ingest", outcome="applied")
+    again = await _resolve(registry, NOTHING.upper())
+    held = await registry.invocations(unwritten_for=again.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [first.invocation_id]
+    await registry.review_invocation(first.invocation_id, reviewed_by="user:sd")
+    assert [i.invocation_id
+            for i in (await registry.invocations(unwritten_for=again.candidate)).invocations] == [
+        first.invocation_id], "draining the queue stood the guard down (I-5)"
+    await registry.record_result(first.invocation_id,
+                           {"instance": InstanceRef(res.candidate.type, "995001")},
+                           actor="host:cms")
+    assert (await registry.invocations(unwritten_for=again.candidate)).invocations == ()

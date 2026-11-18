@@ -5489,6 +5489,13 @@ _A4_POLICY = {"match_at": 0.97, "propose_below": 0.80, "ambiguity_margin": 0.02,
               "why": "C19-113: the kit's thresholds"}
 
 
+def _record_proposal(registry, cand, *, outcome="applied", **kw):
+    out = registry.record_invocation("propose_facility", {"instance": cand},
+                                     actor="ai:ingest", outcome=outcome, **kw)
+    assert not isinstance(out, Refusal), out
+    return out
+
+
 @NEEDS_INVOCATIONS
 def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
     adapter, make_registry
@@ -5510,19 +5517,12 @@ def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
     _propose_family(registry)
     cand = _candidate("Burns Nursing Home Inc")
 
-    def record(c, **kw):
-        out = registry.record_invocation("propose_facility", {"instance": c},
-                                         actor="ai:ingest", outcome=kw.pop("outcome", "applied"),
-                                         **kw)
-        assert not isinstance(out, Refusal), out
-        return out
-
     # Noise first: 120 unrelated proposals so the holder is NOT in the oldest 100 (B2).
     for n in range(120):
-        record(_candidate(f"Unrelated Facility {n:03d}"))
-    holder = record(_candidate("BURNS NURSING HOME, INC."))   # same key under norm
-    record(_candidate("Burns Nursing Home Inc", name="clinic"))  # another type: no
-    record(_candidate("Burns Nursing Home Inc"), outcome="refused",
+        _record_proposal(registry, _candidate(f"Unrelated Facility {n:03d}"))
+    holder = _record_proposal(registry, _candidate("BURNS NURSING HOME, INC."))   # same key under norm
+    _record_proposal(registry, _candidate("Burns Nursing Home Inc", name="clinic"))  # another type: no
+    _record_proposal(registry, _candidate("Burns Nursing Home Inc"), outcome="refused",
            refusal=Refusal("precondition_unmet", {"why": "x"}))  # holds nothing
 
     with pytest.raises(ValueError):
@@ -5547,7 +5547,7 @@ def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
         gone = registry.invocations(unwritten_for=cand)
         assert gone.complete and gone.invocations == () and gone.known == 0
         # A row that is itself `pending` holds nothing either.
-        record(_candidate("Burns Nursing Home Inc"),
+        _record_proposal(registry, _candidate("Burns Nursing Home Inc"),
                warnings=(f"instance_proposal_pending:{holder.invocation_id}",))
         assert registry.invocations(unwritten_for=cand).invocations == ()
     else:
