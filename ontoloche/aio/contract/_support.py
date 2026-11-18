@@ -110,6 +110,86 @@ EXTERNAL_BORROWED: Callable[[], Any] | None = None
 
 EXTERNAL_SCHEMA_HARNESS: Callable[[], Any] | None = None
 
+EXTERNAL_INSTANCE_HOST: Callable[..., Any] | None = None
+
+_HOST_TABLE_SEQ = [0]
+
+async def host_instances(
+    adapter,
+    rows: Sequence[dict],
+    *,
+    type_name: str,
+    namespace: str = "default",
+    attribute_columns: Sequence[str] = ("state",),
+    filter_columns: Sequence[str] = (),
+    type_column: str | None = None,
+    scan_cap: int | None = None,
+    page_size: int = 500,
+) -> None:
+    """Act as the HOST: create a table of instances and bind it. INGEST.md 2, row 7b.
+
+    Each row is ``{"host_id": ..., "label": ..., <attribute columns>...}``, plus the
+    ``type_column`` value when one is named. **Bind before ``make_registry``**: the
+    registry reads ``capabilities()`` once, and ``resolves_instances`` turns on with the
+    first binding. The table is created through the adapter's own connection because
+    that is the host's database -- the adapter issues no DDL for it (7B-RUN 0.2 item 4).
+    """
+    if EXTERNAL_INSTANCE_HOST is not None:
+        EXTERNAL_INSTANCE_HOST(
+            adapter, rows, type_name=type_name, namespace=namespace,
+            attribute_columns=tuple(attribute_columns),
+            filter_columns=tuple(filter_columns), type_column=type_column,
+            scan_cap=scan_cap, page_size=page_size,
+        )
+        return
+    target = getattr(adapter, "inner", adapter)
+    if not hasattr(target, "bind_instance_table"):
+        import pytest
+
+        pytest.skip(
+            "PENDING -- this backend exposes no host-table binding and no "
+            "EXTERNAL_INSTANCE_HOST was supplied, so the suite cannot act as its host "
+            "(INGEST.md 1: the host holds the instances)"
+        )
+    from ontoloche.aio.backends import HostInstanceTable
+
+    _HOST_TABLE_SEQ[0] += 1
+    table = f"host_{type_name}_{_HOST_TABLE_SEQ[0]}"
+    columns = ["host_id", "label"]
+    for c in (*attribute_columns, *filter_columns):
+        if c not in columns:
+            columns.append(c)
+    if type_column is not None:
+        columns.append(type_column)
+    await target._execute(
+        f"CREATE TABLE {table} (" + ", ".join(f"{c} TEXT" for c in columns) + ")"
+    )
+    marks = ", ".join([target.d.ph] * len(columns))
+    for row in rows:
+        await target._execute(
+            f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({marks})",
+            tuple(row.get(c) for c in columns),
+        )
+    target.bind_instance_table(
+        HostInstanceTable(
+            namespace, type_name, table, "host_id", "label",
+            attribute_columns=tuple(c for c in columns[2:] if c != type_column),
+            filter_columns=tuple(filter_columns), type_column=type_column,
+            scan_cap=scan_cap, page_size=page_size,
+        )
+    )
+    if not (await adapter.capabilities()).resolves_instances:
+        import pytest
+
+        # A double that DECLINES the flag over a backend that has it: the table is
+        # bound and the adapter says it cannot read it, which PACKAGE.md 3.2 calls
+        # conformant. `C20-03` and `C20-12` are the ids whose subject that is.
+        pytest.skip(
+            "PACKAGE.md 3.2 -- this backend declares resolves_instances=False, which "
+            "3.2 says is conformant. This test needs host rows as scaffolding: "
+            + (await adapter.capabilities()).reason("resolves_instances")
+        )
+
 FIXTURE_NAME = "cms_sample_400.csv"
 
 async def snapshot(adapter) -> str:

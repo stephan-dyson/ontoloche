@@ -216,6 +216,16 @@ REFUSAL_REASONS = (
     # family* would go looking for the family, which is registered, live, and not the
     # problem.
     "unknown_invocation",        # ACTIONS 6.5 -- no invocation is stored under this id
+    # INGEST.md v0, row 7b -- the THIRTY-FOURTH, and the sixth capability refusal, for
+    # the reason the first of those exists: an empty candidate page would read as
+    # *"there is nothing like this"*. INGEST.md §9 reserved it; it is minted in the
+    # change that introduces the call that returns it (Q85, R11). `detail["problem"]`
+    # says which fact: `capability`, `closure_incomplete`, `lookup_incomplete`,
+    # `governed_facts_changed`, `predicate_undecidable` or `unfaithful_reference` --
+    # one word for several facts at primitive 22's door, recorded as contortion ING13
+    # in 7B-RUN rather than minted apart, because §9 reserves no other value.
+    "instance_source_absent",    # INGEST 1-3 -- resolves_instances=False, or an
+                                 #   instance lookup this registry cannot decide
 )
 
 # INTERFACE.md 5.4 -- CLOSED, the same rule R3 gives for REFUSAL_REASONS and for the
@@ -508,6 +518,18 @@ WARNING_VALUES = (
     # Rule 2.10-16: a reserved key the backend cannot store. Carries the key. The view
     # then reads `why_absent[key] = "not_stored"`, never an empty declaration.
     "property_declaration_not_stored",
+    # INGEST.md v0, row 7b -- the read side's four, reserved in INGEST.md §9 and minted
+    # in the change that emits them (Q85, R11). §4's two (`instance_ambiguous_at_
+    # proposal`, `instance_proposal_pending`) stay reserved for row 7c.
+    # Rule 2-13: a `proposal` decided over a host_filter-narrowed read. Carries the keys.
+    "instance_narrowed_proposal",
+    # Rule 3-14: one per HOP of the successor closure. Carries the successor's name.
+    "instance_type_succeeded",
+    # Rule 7-1, Q87's default (warn): the namespace has no registered consumer, so the
+    # blast radius of curating this instance is unknown, never safe.
+    "consumers_unregistered",
+    # Rule 7-4: the entry declares no tenancy predicate, so the read ran unfiltered.
+    "no_tenancy_predicate",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

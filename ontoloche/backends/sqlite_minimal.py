@@ -295,6 +295,10 @@ class MinimalSQLiteAdapter(SQLiteAdapter):
             stores_invocations=False,
             stores_invocation_events=False,
             indexes_invocations_by_family=False,
+            # INGEST.md 2.3, row 7b: the base class's answer -- True only over a
+            # table the host bound. This leg holds no instances either.
+            resolves_instances=bool(self._instance_tables),
+            instance_filters=self._instance_filter_keys(),
             why={**MINIMAL_WHY, **self._why()},
             transaction_scope="savepoint" if self._borrowed else "owned",
             # ...and the one key this schema DOES own, as a typed column. U3.

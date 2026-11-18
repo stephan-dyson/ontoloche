@@ -2168,6 +2168,9 @@ def test_c19_43_the_action_flags_default_false_so_an_older_adapter_claims_no_sto
         why={
             "stores_edges": "a type registry only",
             "stores_invocations": "a type registry only",
+            # Row 7b: `resolves_instances` defaults False the same way, so C0-01 asks
+            # an adapter that predates it for the sentence, as it asked of the two above.
+            "resolves_instances": "a type registry only",
         },
     )
     assert minimal.stores_invocations is False

@@ -27,6 +27,8 @@ import dataclasses
 from datetime import datetime
 from typing import Any
 from ontoloche.aio.adapter import (
+    CandidatePage,
+    CandidateQuery,
     CAPABILITY_FLAGS,
     Capabilities,
     ConsumerRecord,
@@ -77,6 +79,10 @@ class _DegradedBase:
         edge_page_cap: int | None = None,
         drops_edge_limit: bool = False,
         stale_edge_cursor: bool = False,
+        instance_filters: frozenset[str] | tuple[str, ...] | None = None,
+        instance_known: str = "honest",
+        instance_page_cap: int | None = None,
+        instance_rename: str | None = None,
         **flags: bool,
     ):
         unknown = set(flags) - set(CAPABILITY_FLAGS)
@@ -139,6 +145,27 @@ class _DegradedBase:
         self._drops_edge_limit = drops_edge_limit
         self._stale_edge_cursor = stale_edge_cursor
         self._read_only_consumers = read_only_consumers
+        #: INGEST.md 2.3 -- U3's shape for `host_filter` keys, forced rather than
+        #: inherited, so a double can decline a key the backend honours (rule 2-7).
+        self._instance_filters = (
+            None if instance_filters is None else frozenset(instance_filters)
+        )
+        #: INGEST.md rule 2-5, both ways: ``"none"`` is the honest backend that cannot
+        #: count (``known=None``), ``"zero"`` the DISHONEST one that says ``0`` over a
+        #: non-empty page. Row 7b, finding 1 (E22): `C20-08` needed a check that can go
+        #: red, and a test of the reference backends alone proves only that they are
+        #: honest. The registry must read both as an extent it cannot count.
+        if instance_known not in ("honest", "none", "zero"):
+            raise ValueError(f"instance_known is honest / none / zero, got {instance_known!r}")
+        self._instance_known = instance_known
+        #: A host that stops serving rows after this many, and SAYS SO (rule 2-4).
+        self._instance_page_cap = instance_page_cap
+        #: A host whose records name a type their reference cannot carry faithfully --
+        #: rule 2-14's case, which a bound reference table cannot produce, because the
+        #: backend writes the binding's own name onto every record.
+        self._instance_rename = instance_rename
+        #: Rule 3-8: how many times either instance primitive was called.
+        self.instance_reads = 0
         # U3: not a flag -- a declared set of keys this backend owns as typed columns.
         self._attribute_projections = (
             None if attribute_projections is None else frozenset(attribute_projections)
@@ -194,6 +221,11 @@ class _DegradedBase:
                 self._transaction_scope or base.action_transaction_scope
             ),
             action_store_shares_connection=base.action_store_shares_connection,
+            instance_filters=(
+                base.instance_filters
+                if self._instance_filters is None
+                else self._instance_filters
+            ),
         )
 
     async def migrate(self) -> int:
@@ -378,6 +410,67 @@ class _DegradedBase:
             edge_id=edge_id,
             invocation_id=invocation_id,
         )
+
+    # ------------------------------------------------------------------ 22 and 23
+    async def _need_instances(self) -> None:
+        if not (await self.capabilities()).resolves_instances:
+            raise NotSupported((await self.capabilities()).reason("resolves_instances"))
+
+    def _renamed(self, rec):
+        if rec is None or self._instance_rename is None:
+            return rec
+        return dataclasses.replace(rec, type_name=self._instance_rename)
+
+    async def get_instance(self, namespace: str, kind: str, type_name: str, instance_id: str):
+        await self._need_instances()
+        self.instance_reads += 1
+        return self._renamed(await self.inner.get_instance(namespace, kind, type_name, instance_id))
+
+    async def find_instance_candidates(self, q: CandidateQuery) -> CandidatePage:
+        await self._need_instances()
+        self.instance_reads += 1
+        page = await self._find_instance_candidates(q)
+        if self._instance_rename is not None:
+            page = dataclasses.replace(
+                page, records=tuple(self._renamed(r) for r in page.records))
+        return page
+
+    async def _find_instance_candidates(self, q: CandidateQuery) -> CandidatePage:
+        declared = (await self.capabilities()).instance_filters
+        undeclared = sorted(k for k in (q.host_filter or {}) if k not in declared)
+        if undeclared:
+            # Rule 2-7, for a key this double declines that the inner backend honours:
+            # read WITHOUT it and say so, never apply-looking.
+            narrowed = {k: v for k, v in (q.host_filter or {}).items() if k in declared}
+            page = await self.inner.find_instance_candidates(
+                dataclasses.replace(q, host_filter=narrowed or None)
+            )
+            return dataclasses.replace(
+                page, complete=False, next_after=None,
+                why_incomplete=(
+                    "host_filter keys this backend does not declare: "
+                    + ", ".join(undeclared)
+                ),
+            )
+        page = await self.inner.find_instance_candidates(q)
+        if self._instance_page_cap is not None:
+            served = 0 if q.after is None else int(q.after.split(":", 1)[1])
+            room = max(self._instance_page_cap - served, 0)
+            if len(page.records) > room or (page.next_after is not None
+                                             and served + len(page.records) >= self._instance_page_cap):
+                kept = page.records[:room]
+                page = CandidatePage(
+                    records=kept, known=len(kept), complete=False, next_after=None,
+                    why_incomplete=(
+                        f"this host serves at most {self._instance_page_cap} rows; the "
+                        "rest cannot be read from this surface"
+                    ),
+                )
+        if self._instance_known == "none":
+            page = dataclasses.replace(page, known=None)
+        elif self._instance_known == "zero":
+            page = dataclasses.replace(page, known=0)
+        return page
 
     # ------------------------------------------------------------------ 19 to 21
     async def _need_invocations(self) -> None:

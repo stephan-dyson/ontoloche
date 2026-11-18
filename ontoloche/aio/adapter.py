@@ -32,7 +32,7 @@ from __future__ import annotations
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Mapping, Protocol, runtime_checkable
 
 # The records, queries, pages and capability flags are storage shapes with no I/O in
 # them, so the async mirror does not copy them -- it re-exports the sync package's.
@@ -50,6 +50,9 @@ from ontoloche.adapter import (
     EdgeQuery,
     EdgeRecord,
     EventRecord,
+    CandidatePage,
+    CandidateQuery,
+    InstanceRecord,
     InvocationPage,
     InvocationRecord,
     ProposalPage,
@@ -81,6 +84,9 @@ __all__ = [
     "EdgePage",
     "InvocationRecord",
     "InvocationPage",
+    "InstanceRecord",
+    "CandidateQuery",
+    "CandidatePage",
     "CAPABILITY_FLAGS",
     "EDGE_CAPABILITY_FLAGS",
     "ACTION_CAPABILITY_FLAGS",
@@ -245,6 +251,25 @@ class AsyncStorageAdapter(Protocol):
 
     # 18
     async def find_edges(self, q: EdgeQuery) -> EdgePage: ...
+
+    # ------------------------------------------------------------------ 22 and 23
+    # INGEST.md 2, row 7b. TWO, both READS, and the count is the argument (rule 2-1,
+    # `C20-04`): instances are the HOST's (R78), so there is no `put` -- a protocol that
+    # needed one would be an instance store with a different name. Counting is
+    # `CandidatePage.known`; writing is the host's. Neither gets a primitive.
+    #
+    # The `stores_edges=False` treatment: `resolves_instances=False` raises
+    # `NotSupported`, and the registry checks the capability first and never calls them.
+    # **The adapter scores nothing** (rule 2-6, `C20-09`): it returns records and the
+    # registry scores them, which C0-04's source inspection polices.
+
+    # 22
+    async def get_instance(
+        self, namespace: str, kind: str, type_name: str, instance_id: str
+    ) -> InstanceRecord | None: ...
+
+    # 23
+    async def find_instance_candidates(self, q: CandidateQuery) -> CandidatePage: ...
 
 
 @runtime_checkable

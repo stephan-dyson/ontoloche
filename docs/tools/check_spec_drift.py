@@ -52,6 +52,7 @@ SPEC = ROOT / "docs" / "specs" / "INTERFACE.md"
 PACKAGE = ROOT / "docs" / "specs" / "PACKAGE.md"
 EDGES = ROOT / "docs" / "specs" / "EDGES.md"
 ACTIONS = ROOT / "docs" / "specs" / "ACTIONS.md"
+INGEST = ROOT / "docs" / "specs" / "INGEST.md"
 sys.path.insert(0, str(ROOT))
 
 from ontoloche import actions as actions_module  # noqa: E402
@@ -1057,6 +1058,160 @@ def _check_printed_primitives(text: str, names: tuple[str, ...], label: str) -> 
     return problems
 
 
+# ---------------------------------------------------------------------------
+# INGEST.md -- row 7b. `INGEST.md` 8 said, in those words, that the build row adds the
+# document to this checker "in the same change that lands the shapes". This is that.
+#
+# What it holds, and against what:
+#   1. the three adapter records 2 prints as ``@dataclass`` blocks, against adapter.py;
+#   2. the eight ``Name:`` shapes 4.1, 5, 6 and 8 print, against ontoloche/ingest.py;
+#   3. ``resolve_instance`` and ``get_instance_checked``, against ``Registry``;
+#   4. primitives 22 and 23 as 2 prints them in bold, against the Protocol;
+#   5. 6's twelve Condition terms and 3.1's five outcomes, against the tuples;
+#   6. 9's vocabulary table: every minted value's ordinal is its 1-based position in
+#      the tuple that holds it, and every reserved value is NOT in that tuple. 8.1a
+#      finding 8 was these ordinals going stale twice, by hand;
+#   7. the rule tables: sections 1, 2, 3, 5, 6 and 7 are BUILT and checked as
+#      implemented. Section 4 is row 7c's -- every one of its ids must be one the suite
+#      does NOT claim yet, and the day it does, 4 moves to the implemented set.
+
+INGEST_ADAPTER_SHAPES = ("InstanceRecord", "CandidateQuery", "CandidatePage")
+INGEST_SHAPES = (
+    "CandidateRef", "MatchPolicy", "Condition", "ConditionResult",
+    "InstanceContext", "InstanceResolution", "InstanceCandidate", "InstanceLookup",
+)
+INGEST_CALLS = ("resolve_instance", "get_instance_checked")
+INGEST_PRIMITIVES = ("get_instance", "find_instance_candidates")
+
+#: The sections whose rules row 7b built, and the heading each table sits under.
+R31_INGEST_SECTIONS = {
+    "1": "## 1. The seam",
+    "2": "### 2.4 The flat-form guard",
+    "3": "### 3.4b The extent must be COUNTABLE",
+    "5": "### 5.2 *\"I already know 38 of these\"*",
+    "6": "### 6.4 The one change R60 requires",
+    "7": "### 7.3 The tenancy predicate is the host's",
+}
+#: Row 7c's. Planned: every id named, none claimed.
+PLANNED_R31_INGEST_SECTIONS = {"4": "### 4.4 The FIVE amendments"}
+
+_INGEST_PRIMITIVE = re.compile(r"^\*\*2[23]\. `(\w+)\((.*?)\) ->", re.M)
+_INGEST_VOCAB_ROW = re.compile(
+    r"^\| `([a-z_]+)[^`]*` \| `(Refusal\.reason|warnings)` \| (\d+) \| (minted|reserved)", re.M
+)
+
+
+def _check_ingest(implemented: set[str]) -> list[str]:
+    import inspect
+
+    from ontoloche import ingest as ingest_module
+
+    if not INGEST.exists():  # pragma: no cover - an installed wheel has no docs/
+        return []
+    text = INGEST.read_text(encoding="utf-8")
+    blocks = spec_blocks(text)
+    problems: list[str] = []
+
+    for name in INGEST_ADAPTER_SHAPES:
+        cls = getattr(adapter_module, name, None)
+        printed = package_shape_fields(blocks, name)
+        if cls is None or printed is None:
+            problems.append(f"INGEST {name}: adapter.py has it {cls is not None}, "
+                            f"INGEST.md 2 prints it {printed is not None}")
+            continue
+        actual = set(cls.__dataclass_fields__)
+        for f in sorted(actual - printed):
+            problems.append(f"INGEST {name}.{f}: in adapter.py, absent from INGEST.md 2")
+        for f in sorted(printed - actual):
+            problems.append(f"INGEST {name}.{f}: printed by INGEST.md 2, absent from the code")
+
+    for name in INGEST_SHAPES:
+        cls = getattr(ingest_module, name, None)
+        printed = shape_fields(blocks, name)
+        if cls is None or not hasattr(cls, "__dataclass_fields__"):
+            problems.append(f"INGEST {name}: ontoloche/ingest.py has no dataclass {name}")
+            continue
+        if printed is None:
+            problems.append(f"INGEST {name}: INGEST.md prints no `{name}:` block")
+            continue
+        actual = set(cls.__dataclass_fields__)
+        for f in sorted(actual - printed):
+            problems.append(f"INGEST {name}.{f}: in ingest.py, absent from INGEST.md")
+        for f in sorted(printed - actual):
+            problems.append(f"INGEST {name}.{f}: printed by INGEST.md, absent from the code")
+
+    for name in INGEST_CALLS:
+        impl = getattr(registry_module.Registry, name, None)
+        printed = call_params(blocks, name)
+        if impl is None or printed is None:
+            problems.append(f"INGEST {name}(): Registry has it {impl is not None}, "
+                            f"INGEST.md prints it {printed is not None}")
+            continue
+        actual = set(inspect.signature(impl).parameters) - {"self"}
+        for p in sorted(actual - printed):
+            problems.append(f"INGEST {name}(): the code takes {p!r} and INGEST.md does not")
+        for p in sorted(printed - actual):
+            problems.append(f"INGEST {name}(): INGEST.md declares {p!r}; the code does not")
+
+    seen = {}
+    for name, params in _INGEST_PRIMITIVE.findall(text):
+        seen[name] = {x.split(":")[0].strip() for x in params.split(",") if x.strip()}
+    for name in INGEST_PRIMITIVES:
+        method = getattr(adapter_module.StorageAdapter, name, None)
+        if name not in seen or method is None:
+            problems.append(f"INGEST primitive {name}: printed {name in seen}, "
+                            f"on the protocol {method is not None}")
+            continue
+        actual = set(inspect.signature(method).parameters) - {"self"}
+        if actual != seen[name]:
+            problems.append(f"INGEST primitive {name}: INGEST.md 2 prints {sorted(seen[name])}, "
+                            f"the protocol takes {sorted(actual)}")
+
+    terms_line = next((l for l in text.splitlines() if l.startswith("`eq` · ")), "")
+    printed_terms = [t.strip("`* ") for t in terms_line.split("·")]
+    code_terms = list(ingest_module.CONDITION_OPERATORS) + list(ingest_module.CONDITION_COMBINATORS)
+    if printed_terms != code_terms:
+        problems.append(f"INGEST 6: prints the terms {printed_terms}, the code holds {code_terms}")
+    outcomes_section = _section(text, "### 3.1 The outcomes")
+    for outcome in ingest_module.INSTANCE_OUTCOMES:
+        if f"`{outcome}`" not in outcomes_section:
+            problems.append(f"INGEST 3.1: the outcome {outcome!r} is in the code and not in 3.1")
+
+    tuples = {"Refusal.reason": types_module.REFUSAL_REASONS, "warnings": types_module.WARNING_VALUES}
+    next_free = {k: len(v) + 1 for k, v in tuples.items()}
+    rows = _INGEST_VOCAB_ROW.findall(text)
+    if len(rows) != 7:
+        problems.append(f"INGEST 9: the vocabulary table has {len(rows)} rows, not 7")
+    for value, carrier, ordinal, status in rows:
+        vocab = tuples[carrier]
+        if status == "minted":
+            if value not in vocab:
+                problems.append(f"INGEST 9: {value!r} says minted and {carrier} lacks it")
+            elif vocab.index(value) + 1 != int(ordinal):
+                problems.append(f"INGEST 9: {value!r} says ordinal {ordinal}; it is "
+                                f"{vocab.index(value) + 1} in the tuple")
+        else:
+            if value in vocab:
+                problems.append(f"INGEST 9: {value!r} says reserved and {carrier} holds it")
+            elif int(ordinal) != next_free[carrier]:
+                problems.append(f"INGEST 9: reserved {value!r} says ordinal {ordinal}; the next "
+                                f"free one is {next_free[carrier]}")
+            next_free[carrier] += 1
+
+    problems.extend(_check_one_document(text, "INGEST", R31_INGEST_SECTIONS, implemented))
+    for label, heading in PLANNED_R31_INGEST_SECTIONS.items():
+        body = _section(text, heading)
+        numbered = [(n, c) for n, c in _R31_ROW.findall(body) if n.startswith(f"{label}-")]
+        if not numbered:
+            problems.append(f"INGEST {label}: the planned section has no rule table")
+        for number, cells in numbered:
+            for cid in _CONTRACT_ID.findall(cells.rsplit("|", 1)[-1]):
+                if cid in implemented:
+                    problems.append(f"INGEST {number}: names {cid} and the suite claims it -- "
+                                    f"section {label} is built; move it to R31_INGEST_SECTIONS")
+    return problems
+
+
 def main() -> int:
     text = SPEC.read_text(encoding="utf-8")
     blocks = spec_blocks(text)
@@ -1395,6 +1550,7 @@ def main() -> int:
     problems.extend(_check_rule_coverage(set(implemented_ids())))
     problems.extend(_check_planned_rules(text, set(implemented_ids())))
     problems.extend(_check_planned_shapes(blocks))
+    problems.extend(_check_ingest(set(implemented_ids())))
 
     if problems:
         print("the specifications have drifted from the implementation:\n")
@@ -1439,6 +1595,11 @@ def main() -> int:
         f"{', '.join(sorted(R31_INTERFACE_SECTIONS))} does too -- row 4d is the first "
         f"row to change rules in this document since R31 landed, and constraint 8 binds "
         f"every spec rather than one.\n"
+        f"INGEST.md: {len(INGEST_ADAPTER_SHAPES) + len(INGEST_SHAPES)} shapes, "
+        f"{len(INGEST_CALLS)} calls, primitives 22 and 23, the Condition terms and 9's "
+        f"ordinals match the code; every rule in "
+        f"{', '.join(sorted(R31_INGEST_SECTIONS))} carries a claimed id, and "
+        f"{', '.join(sorted(PLANNED_R31_INGEST_SECTIONS))} is planned for row 7c.\n"
         f"INTERFACE.md: {len(PLANNED_SHAPES)} PLANNED shapes are printed and not yet built, "
         f"every printed shape is listed, and "
         + (

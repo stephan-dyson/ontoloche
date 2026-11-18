@@ -67,6 +67,11 @@ SEED_AWAIT_ATTRS = frozenset(
         "put_invocation",
         "get_invocation",
         "find_invocations",
+        # INGEST.md 2's two, added by row 7b. Seeds, not derived: the fixpoint below
+        # picks up `resolve_instance`, `get_instance_checked` and everything that calls
+        # them from these two.
+        "get_instance",
+        "find_instance_candidates",
         # the optional AttributeStore extension (deviation D-2)
         "put_attr_schema",
         "get_attr_schema",
@@ -197,6 +202,9 @@ from ontoloche.adapter import (
     EdgeQuery,
     EdgeRecord,
     EventRecord,
+    CandidatePage,
+    CandidateQuery,
+    InstanceRecord,
     InvocationPage,
     InvocationRecord,
     ProposalPage,
@@ -228,6 +236,9 @@ __all__ = [
     "EdgePage",
     "InvocationRecord",
     "InvocationPage",
+    "InstanceRecord",
+    "CandidateQuery",
+    "CandidatePage",
     "CAPABILITY_FLAGS",
     "EDGE_CAPABILITY_FLAGS",
     "ACTION_CAPABILITY_FLAGS",

@@ -54,6 +54,9 @@ AWAITABLE_PRIMITIVES = (
     "put_invocation",
     "get_invocation",
     "find_invocations",
+    # INGEST.md 2's two, row 7b. Both reads.
+    "get_instance",
+    "find_instance_candidates",
 )
 
 #: INTERFACE.md 5 -- the thirteen the facade exposes, plus the three package-local ones.
@@ -128,7 +131,8 @@ def test_every_facade_call_is_a_coroutine(name):
 
 def test_the_async_protocol_is_the_same_eighteen_primitives():
     """Fifteen until row 4b, which added EDGES.md 7.1's three; twenty-one since row 6b,
-    which added ACTIONS.md 9's three.
+    which added ACTIONS.md 9's three; twenty-three since row 7b, which added INGEST.md
+    2's two reads.
 
     The number is asserted rather than derived on purpose: this test's job is to notice
     that the protocol GREW, and a count computed from the thing it is counting notices
@@ -139,7 +143,7 @@ def test_the_async_protocol_is_the_same_eighteen_primitives():
     sync = {n for n in vars(StorageAdapter) if not n.startswith("_")}
     asynchronous = {n for n in vars(AsyncStorageAdapter) if not n.startswith("_")}
     assert sync == asynchronous
-    assert len(sync) == 21
+    assert len(sync) == 23
     assert sync == set(AWAITABLE_PRIMITIVES) | {"transaction"}
 
     sync_attrs = {n for n in vars(AttributeStore) if not n.startswith("_")}
