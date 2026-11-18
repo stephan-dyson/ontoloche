@@ -12066,8 +12066,14 @@ class AsyncRegistry:
         unreviewed: bool | None = None,
         since: datetime | None = None,
         limit: int = 100,
+        unwritten_for: CandidateRef | None = None,
     ) -> InvocationReport | Refusal:
         """ACTIONS.md 6.3 -- the read, and **every filtered answer is a FLOOR**.
+
+        **Except ``unwritten_for=``, amendment A4** (row 7c, INGEST.md 4.4, rule 4-11):
+        a SCOPED read that pages to exhaustion and can therefore answer ``complete=True``.
+        See :meth:`_unwritten_for`. It combines with no other filter, because a combined
+        answer is a floor again and rule 4-11 cannot act on a floor.
 
         ``complete`` is ``False`` whenever a filter suppressed rows or ``limit``
         truncated the answer, which is INTERFACE.md 5.6's rule for ``TypeListing``
@@ -12083,6 +12089,30 @@ class AsyncRegistry:
         explicitly rather than by analogy -- so anticipating it here would be a build row
         taking a routed decision.
         """
+        if unwritten_for is not None:
+            combined = {
+                k: v
+                for k, v in (
+                    ("family", family), ("namespace", namespace), ("actor", actor),
+                    ("outcome", outcome), ("gate_verdict", gate_verdict),
+                    ("effect_undeclared", effect_undeclared), ("unreviewed", unreviewed),
+                    ("since", since),
+                )
+                if v is not None
+            }
+            if combined:
+                raise ValueError(
+                    f"unwritten_for= is a scoped read and combines with no other filter "
+                    f"(got {sorted(combined)}): a combined answer is a floor again, and "
+                    f"INGEST.md rule 4-11 cannot act on a floor (ACTIONS.md 6.3, A4)"
+                )
+            if not isinstance(unwritten_for, CandidateRef):
+                raise ValueError(
+                    f"unwritten_for= takes a CandidateRef, got "
+                    f"{type(unwritten_for).__name__} (ACTIONS.md 6.3, A4)"
+                )
+            return await self._unwritten_for(unwritten_for, page_size=limit)
+
         absent = self._invocations_absent({"family": family, "namespace": namespace})
         if absent is not None:
             return absent
@@ -12303,6 +12333,126 @@ class AsyncRegistry:
             # verbatim: *a signal that never turns off is noise.* An `invocations()`
             # that always warned about durability would be a warning about the ledger's
             # existence rather than about anything a caller did.
+            warnings=(),
+        )
+
+    async def _effective_of(
+        self, namespace: str, type_name: str, closures: dict, whys: list
+    ) -> str | None:
+        """A4's closure step, memoised per read. ``None`` (and a ``why``) when the
+        closure could not finish: an unfinished walk never answers *same entry* or
+        *different entry* (INGEST.md rule 3-17, ``I-2``)."""
+        if type_name not in closures:
+            closures[type_name] = await self._instance_closure(namespace, type_name)
+        c = closures[type_name]
+        if not c["complete"]:
+            whys.append(f"the closure of {namespace}:{type_name} did not finish: {c['why']}")
+            return None
+        return c["effective"]
+
+    async def _unwritten_for(self, cand: CandidateRef, *, page_size: int) -> InvocationReport | Refusal:
+        """Amendment **A4**: who holds a proposal for ``cand``'s identity whose row has
+        not been WRITTEN. INGEST.md rule 4-11; the three asks §4.4 names.
+
+        (i) **Unwritten, not unreviewed.** A row holds the identity while it was applied,
+        is not compensated, is not itself ``instance_proposal_pending``, and has no
+        ``results`` entry for the matching input (amendment A2). Review does not enter.
+        (ii) **Rule 4-10's key, under the gate's own relation**: same namespace and kind,
+        the same EFFECTIVE entry under :meth:`_instance_closure` (the function
+        ``resolve_instance`` uses, so the two cannot drift: ``I-2``, ``I-4``), and
+        ``similar(norm(a), norm(b)) >= match_at`` of that entry. (iii) **Not the oldest
+        page**: the primitive's keyset cursor is followed until the ledger is exhausted
+        (B2), and ``complete=True`` is answered only when every page was read, every
+        closure finished, and -- for any row that matched -- its events were readable.
+        An unreadable ``written`` half is never a confident *no holder* (``I-5``).
+        """
+        namespace = cand.type.namespace
+        absent = self._invocations_absent({"namespace": namespace})
+        if absent is not None:
+            return absent
+        whys: list[str] = []
+        closures: dict[str, dict] = {}
+
+        target = await self._effective_of(namespace, cand.type.name, closures, whys)
+        if target is None:
+            return InvocationReport((), None, False, "; ".join(whys))
+        entry = closures[cand.type.name]["entry"]
+        policy_raw, _ = self._governed_facts(entry)
+        if policy_raw is None or match_policy_problem(policy_raw) is not None:
+            why = (
+                f"{namespace}:{target} declares no usable MatchPolicy, so nothing says which "
+                f"labels are the same identity (INGEST.md rule 4-10)"
+            )
+            return InvocationReport((), None, False, why)
+        match_at = match_policy_from_mapping(policy_raw).match_at
+        key = norm(cand.label)
+        events_readable = self.caps.stores_events and self.caps.stores_invocation_events
+
+        holders = []
+        after: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            page = await self.adapter.find_invocations(
+                namespace=namespace, after=after, limit=max(1, int(page_size))
+            )
+            for rec in page.records:
+                if rec.namespace != namespace:
+                    continue
+                matched = None
+                for name, flat in (rec.inputs or {}).items():
+                    if not isinstance(flat, str) or not flat.startswith('{"candidate":'):
+                        continue
+                    try:
+                        other = parse_ref(flat)
+                    except ValueError:
+                        continue
+                    if other.type.namespace != namespace or other.type.kind != cand.type.kind:
+                        continue
+                    if other.type.name != cand.type.name:
+                        if await self._effective_of(namespace, other.type.name, closures, whys) != target:
+                            continue
+                    if similar(key, norm(other.label)) + _SCORE_EPS < match_at:
+                        continue
+                    matched = name
+                    break
+                if matched is None:
+                    continue
+                if rec.outcome != "applied":
+                    continue
+                if any(w.startswith("instance_proposal_pending:") for w in (rec.warnings or ())):
+                    continue
+                if not events_readable:
+                    whys.append(
+                        f"invocation {rec.invocation_id} matches and this backend keeps no "
+                        f"invocation events, so whether its row was written cannot be read: "
+                        + self.caps.reason(
+                            "stores_events" if not self.caps.stores_events
+                            else "stores_invocation_events"
+                        )
+                    )
+                    continue
+                built = await self._invocation(
+                    rec, compensated_by=await self._compensated_by(rec.invocation_id, namespace)
+                )
+                if built.compensated_by or matched in built.results:
+                    continue
+                holders.append(built)
+            nxt = page.next_after
+            if nxt is None:
+                if not page.complete and page.records:
+                    whys.append(page.why_incomplete or "the ledger read stopped with no cursor")
+                break
+            if nxt in seen_cursors:
+                whys.append("the ledger cursor repeated, so the scan could not finish")
+                break
+            seen_cursors.add(nxt)
+            after = nxt
+        why = "; ".join(dict.fromkeys(whys)) or None
+        return InvocationReport(
+            invocations=tuple(holders),
+            known=len(holders),
+            complete=why is None,
+            why_incomplete=why,
             warnings=(),
         )
 

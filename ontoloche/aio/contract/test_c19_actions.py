@@ -5318,9 +5318,15 @@ async def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
 
     found = await registry.invocations(unwritten_for=cand)
     assert not isinstance(found, Refusal), found
-    assert found.complete, found.why_incomplete
-    assert [i.invocation_id for i in found.invocations] == [holder.invocation_id]
-    assert found.known == 1
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        # The `written` half cannot be read: a confident `no holder` would fail open,
+        # and so would a confident holder list that cannot say which rows are written.
+        assert not found.complete and found.why_incomplete, found
+        assert holder.invocation_id in found.why_incomplete
+    else:
+        assert found.complete, found.why_incomplete
+        assert [i.invocation_id for i in found.invocations] == [holder.invocation_id]
+        assert found.known == 1
 
     # Reviewed is NOT written: draining the queue must not stand the guard down (I-5).
     if registry.caps.stores_events and registry.caps.stores_invocation_events:
@@ -5336,10 +5342,6 @@ async def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
         await _record_proposal(registry, _candidate("Burns Nursing Home Inc"),
                warnings=(f"instance_proposal_pending:{holder.invocation_id}",))
         assert (await registry.invocations(unwritten_for=cand)).invocations == ()
-    else:
-        # The `written` half cannot be read: a confident `no holder` would fail open.
-        blind = await registry.invocations(unwritten_for=cand)
-        assert not blind.complete and blind.why_incomplete, blind
 
     # An entry with no MatchPolicy cannot say what counts as the same label.
     await seed(registry, "unscored")

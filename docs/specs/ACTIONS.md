@@ -586,6 +586,7 @@ So, concretely, for the one host that exists:
 | 6-14 | `ref="candidate"` (amendment **A1**, row 7c) is validated at both doors: a candidate where another shape is declared, and the reverse, is `input_kind_mismatch`, and so are a non-`entity` type, a `resolution` outside `proposal` / `ambiguous`, and an empty `label` or `act_id`. Its flat form round-trips through `parse_ref` | `C19-111` |
 | 6-15 | `record_result` (amendment **A2**'s writer, row 7c) is the `results` slot's only writer. It refuses `unknown_invocation` (no invocation under that id in that namespace), `action_store_absent`, `cannot_record_override` on a backend that cannot keep the event, and `input_kind_mismatch` for a result keyed by an input the invocation did not carry or naming a `CandidateRef`; an empty `actor` is a `ValueError` | `C19-114` |
 | 6-16 | `record_invocation(approval_mode=, warnings=)` (amendment **A3**, row 7c): `approval_mode` raises one invocation's mode of record and never lowers it, keeping the family's as `declared_policy["approval_mode_declared"]`, and the next invocation is not raised. `warnings` accepts only `CARRIED_WARNINGS`; a registry-detected value, or one outside the vocabulary, is a `ValueError`, and so is an `approval_mode` outside `APPROVAL_MODES` | `C19-112` |
+| 6-17 | `invocations(unwritten_for=)` (amendment **A4**, row 7c) is a scoped read of who holds a proposal for a candidate's identity whose row has not been written: rule 4-10's key under the closure and the entry's `match_at`, paged to exhaustion past the oldest page, keeping rows that are applied, uncompensated, not themselves pending and without a `results` entry. Review does not release a holder; a result does. It is `complete=False` with a reason when a closure, the `MatchPolicy` or a matching row's events cannot be read, and combining it with any other filter is a `ValueError` | `C19-113` |
 
 Signatures are Python-shaped because deliverable #2 is a Python package. They are **not** a module layout.
 
@@ -696,8 +697,19 @@ def invocations(
     unreviewed: bool | None = None,
     since: datetime | None = None,
     limit: int = 100,
+    unwritten_for: CandidateRef | None = None,   # AMENDMENT A4 (row 7c): a SCOPED read,
+                                                  #   paged to exhaustion; combines with no
+                                                  #   other filter (ValueError)
 ) -> InvocationReport | Refusal: ...   # 8: action_store_absent
 ```
+
+**`unwritten_for=` is amendment A4, landed by row 7c** ([`INGEST.md`](INGEST.md) §4.4, rule 4-11). B2 found rule 4-11's question unaskable: this read has no label, type or kind filter, answers `complete=False` for any filter, and returns the **oldest** page, so on an ordinary 250-row batch the repeat carried no warning and two identities were minted. With `unwritten_for` set the call is a different read, and the three things §4.4 asks of it are each held:
+
+1. **Unwritten, not unreviewed.** A row is a holder while it was `applied`, is not compensated, does not itself carry `instance_proposal_pending`, and has no `results` entry (amendment A2, §6.6) for the input that matched. Review does not enter, because draining a proposal used to stand the guard down at exactly the moment its permission was live (`INGEST.md` `I-5`).
+2. **Rule 4-10's key, under the gate's own relation.** Same namespace and kind, the same **effective** entry under the closure `resolve_instance` walks (the same function, so the two cannot drift), and `similar(norm(a), norm(b)) >= match_at` of that entry's `MatchPolicy`. An entry with no usable `MatchPolicy` answers `complete=False`, because nothing says which labels are one identity.
+3. **Not the oldest page.** The primitive's keyset cursor (§9) is followed until the ledger is exhausted, and `complete=True` is answered only when every page was read, every closure finished, and every matching row's events were readable. A backend that keeps no invocation events cannot say whether a matching row was written, and that is `complete=False` with its sentence, never a confident *no holder*.
+
+The unscoped read is unchanged: it still does not page, and rule 6-8 still says so. `limit` is the page size of the scoped read.
 
 ```
 InvocationReport:
