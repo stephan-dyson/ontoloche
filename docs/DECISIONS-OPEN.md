@@ -68,7 +68,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 - **`unknowable`** — decline under Rule U until the host names a successor or an alias holder.
 - **`refuse`** — a `Refusal` saying the type is retired, so a caller cannot mistake it for an empty or undecided read.
 
-**Ask: `serve`, `unknowable` or `refuse`.** Default in force: `serve` (current behaviour). Non-blocking: row 7b lands with it and pins it in `C20-80` r4 ([`7B-RUN.md` §2.3](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/7B-RUN.md)).
+**Ask: `serve`, `unknowable` or `refuse`.** Default in force: `serve` (current behaviour). Non-blocking: row 7b lands with it and pins it in `C20-80` r4 ([`7B-RUN.md` §2.4](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/7B-RUN.md)).
 
 ### 22 · `Q106` — a Foundry property with no description: import it with a warning, or decline it?
 

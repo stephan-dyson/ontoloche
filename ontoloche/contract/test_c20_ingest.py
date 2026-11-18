@@ -2100,7 +2100,24 @@ def test_c20_05_r5_an_id_that_cannot_be_text_is_never_a_crash(adapter, make_regi
     # Primitive 22 filters by id, so the bad row is never rendered: an id no row
     # carries is honestly absent, and nothing crashes.
     lookup = registry.get_instance_checked("facility", "anything")
-    assert isinstance(lookup, Refusal) or lookup.record is None, lookup
+    assert not isinstance(lookup, Refusal) and lookup.record is None, lookup
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_05_r6_a_present_row_that_cannot_be_rendered_is_refused(adapter, make_registry):
+    """Rule 2-2 (round 6, door lens MAJOR, a test gap): primitive 22's guard was never
+    reached by `C20-05` r5. A row whose id is fine but whose TEXT label holds bytes
+    that are not UTF-8 (Latin-1 data in SQLite) must be refused at primitive 22, never
+    read as absent (`None` means no such row) and never a raw driver crash."""
+    target = getattr(adapter, "inner", adapter)
+    if getattr(getattr(target, "d", None), "name", "") != "sqlite":
+        pytest.skip("only SQLite stores TEXT that is not UTF-8")
+    registry = _world(adapter, make_registry)
+    binding = list(target._instance_tables.values())[0]
+    target._execute(f"UPDATE \"{binding.table}\" SET label = CAST(x'fffe' AS TEXT) "
+                    "WHERE host_id = '015009'")
+    assert _resolve(registry, EXACT).outcome == "unknowable"
+    assert isinstance(registry.get_instance_checked("facility", "015009"), Refusal)
 
 
 def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
@@ -2108,7 +2125,8 @@ def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
     loop: list = []
     loop.append(loop)
     for op, value in (("eq", complex("nan")), ("eq", {float("nan"): 1}),
-                      ("in", [frozenset({float("inf")})]), ("in", loop)):
+                      ("in", [frozenset({float("inf")})]), ("in", loop),
+                      ("eq", {float("nan")})):
         assert condition_problem({"op": op, "attribute": "x", "value": value, "why": "w"})
     for value in (True, 3, 10 ** 400, 2.5, complex(1, 2)):
         assert condition_problem({"op": "eq", "attribute": "x", "value": value,

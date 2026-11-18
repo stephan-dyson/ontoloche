@@ -416,6 +416,16 @@ MUTATIONS = (
     Mutation('6-6 a self-containing operand is refused', 'c20_47_r5', ING,
              '            return True          # a self-containing operand',
              '            return False          # a self-containing operand', required=True),
+    # ---- after round 6 (7B-RUN.md 2.6) ---------------------------------------------
+    Mutation('2-2 a present row that cannot be rendered is refused, not absent', 'c20_05_r6', SQL,
+             '            raise NotSupported(\n                f"a row of {binding.table!r} carries an id this backend cannot render as "',
+             '            return []\n            raise NotSupported(\n                f"a row of {binding.table!r} carries an id this backend cannot render as "', required=True),
+    Mutation('2-2 primitive 22 is guarded too', 'c20_05_r6', SQL,
+             '        rows = self._fetch_instance_rows(\n            binding,\n',
+             '        rows = (lambda b, *a: self._fetchall(*a))(\n            binding,\n', required=True),
+    Mutation('6-6 a set member is walked', 'c20_47_r5', ING,
+             '(Mapping, list, tuple, set, frozenset)',
+             '(Mapping, list, tuple, frozenset)', required=True),
     # ---- the rest of the read side ---------------------------------------------------
     Mutation("1-3 the capability refuses first", "c20_03", REG,
              "        if self.caps.resolves_instances:\n            return None",
