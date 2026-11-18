@@ -1822,3 +1822,95 @@ async def test_c20_80_r4_a_tombstone_with_no_successor_is_served_q108(adapter, m
     assert novel.outcome == "proposal" and novel.candidate.type.name == "legacy_home"
     lookup = await registry.get_instance_checked("legacy_home", "015009")
     assert isinstance(lookup, InstanceLookup) and lookup.record is not None, lookup
+
+async def _spelled_alias_world(adapter, make_registry, spelling):
+    """`legacy_home` retired with no successor and holding BURNS; `facility` live with
+    COOSA, claiming the word as an alias written `spelling`. Public calls only."""
+    await host_instances(adapter, [{"host_id": "015009", "label": "BURNS NURSING HOME, INC.",
+                              "state": "AL"}], type_name="legacy_home")
+    await host_instances(adapter, [{"host_id": "015010", "label": "COOSA VALLEY", "state": "AL"}],
+                   type_name="facility")
+    registry = await make_registry(adapter)
+    await seed(registry, "legacy_home", attributes=_governed())
+    await seed(registry, "facility", attributes=_governed())
+    retired = await registry.retire("legacy_home", "dropped", retired_by="user:sd")
+    assert isinstance(retired, TypeEntry), retired
+    await registry.import_types([{"name": "facility", "kind": "entity", "definition": "a facility",
+                            "aliases": [spelling], "status": "active",
+                            "attributes": _governed()}], kind="entity")
+    return registry
+
+@NEEDS_ALIASES
+@pytest.mark.parametrize("spelling", ["Legacy Home", "Legacy_Home", "legacy-home"])
+async def test_c20_87_r5_an_alias_in_another_spelling_is_read_from_both_names(
+        adapter, make_registry, spelling):
+    """Rules 3-20 and 3-21, standing rule (e) (round 5, build and door lenses, MAJOR):
+    the alias joined the closure from the retired name, matched by `identity_key`, and
+    not from the holder, looked up as bytes. From `facility` the read was a strict
+    subset, presented as complete, and proposed a duplicate of BURNS."""
+    registry = await _spelled_alias_world(adapter, make_registry, spelling)
+    old = await _resolve(registry, EXACT, type_name="legacy_home")
+    new = await _resolve(registry, EXACT, type_name="facility")
+    assert (old.outcome, old.ref, old.scanned) == (new.outcome, new.ref, new.scanned), (old, new)
+    assert new.outcome == "existing" and new.scanned == 2, new
+    lookup = await registry.get_instance_checked("facility", "015009")
+    assert isinstance(lookup, InstanceLookup) and lookup.record is not None, lookup
+
+@NEEDS_ALIASES
+async def test_c20_87_r5_an_alias_naming_two_entries_decides_nothing(adapter, make_registry):
+    """Rule 3-21 under Rule U (round 5): `Legacy Home` is `legacy_home` and also
+    `legacy_home_` by `identity_key`, and choosing one would be deciding."""
+    registry = await _spelled_alias_world(adapter, make_registry, "Legacy Home")
+    rec = await adapter.get_type("default", "legacy_home", kind="entity")
+    await adapter.put_type(dataclasses.replace(rec, name="legacy_home_", successor=None, aliases=()))
+    answer = await _resolve(registry, EXACT, type_name="facility")
+    assert answer.outcome == "unknowable" and "identity_key" in answer.why_incomplete, answer
+
+@NEEDS_ALIASES
+async def test_c20_89_r5_a_capped_alias_look_is_unknowable(adapter, make_registry):
+    """Rule U through rule 3-21 (round 5, door lens minor 1): §2.4 called this branch
+    near-equivalent to the closure-incomplete check. It is not: with it removed, a
+    capped look answered `existing` under the tombstone."""
+    registry = await _retired_word_world(adapter, make_registry, ["facility"])
+    await _rewrite(adapter, "facility", aliases=("legacy_home",))
+    capped = await make_registry(AsyncDegradedAdapter(adapter, page_cap=1))
+    assert (await _resolve(capped, EXACT, type_name="legacy_home")).outcome == "unknowable"
+    assert isinstance(await capped.get_instance_checked("legacy_home", "015009"), Refusal)
+
+@NEEDS_ATTRIBUTES
+async def test_c20_45_r5_an_incomparable_operand_is_unknowable_at_both_doors(adapter, make_registry):
+    """Rule 6-4 (round 5, door lens minor 2): `lt 5` over string states raises, and the
+    answer is `unknowable`, never `True`, which would hand the row out (R59)."""
+    registry = await _world(adapter, make_registry,
+                      condition={"op": "lt", "attribute": "state", "value": 5, "why": "w"})
+    assert (await _resolve(registry, EXACT)).outcome == "unknowable"
+    assert isinstance(await registry.get_instance_checked("facility", "015009"), Refusal)
+
+@NEEDS_ATTRIBUTES
+async def test_c20_05_r5_an_id_that_cannot_be_text_is_never_a_crash(adapter, make_registry):
+    """Rule 2-2 (round 5, build lens minor 1): a SQLite BLOB id that is not UTF-8. Both
+    primitives raised the driver's raw decode error."""
+    target = getattr(adapter, "inner", adapter)
+    if getattr(getattr(target, "d", None), "name", "") != "sqlite":
+        pytest.skip("only SQLite casts a BLOB to TEXT by decoding it")
+    rows = [{"host_id": b"\xff\xfe", "label": "BURNS NURSING HOME, INC.", "state": "AL"}]
+    await host_instances(adapter, rows, type_name="facility", id_type="NUMBER")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes=_governed())
+    answer = await _resolve(registry, EXACT)
+    assert answer.outcome == "unknowable" and answer.complete is False, answer
+    # Primitive 22 filters by id, so the bad row is never rendered: an id no row
+    # carries is honestly absent, and nothing crashes.
+    lookup = await registry.get_instance_checked("facility", "anything")
+    assert isinstance(lookup, Refusal) or lookup.record is None, lookup
+
+def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
+    """Round 5, build lens minor 2."""
+    loop: list = []
+    loop.append(loop)
+    for op, value in (("eq", complex("nan")), ("eq", {float("nan"): 1}),
+                      ("in", [frozenset({float("inf")})]), ("in", loop)):
+        assert condition_problem({"op": op, "attribute": "x", "value": value, "why": "w"})
+    for value in (True, 3, 10 ** 400, 2.5, complex(1, 2)):
+        assert condition_problem({"op": "eq", "attribute": "x", "value": value,
+                                  "why": "w"}) is None

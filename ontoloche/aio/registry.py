@@ -6560,6 +6560,77 @@ class AsyncRegistry:
         cache[key] = (successors, why)
         return successors, why
 
+    async def _word_map(
+        self, namespace: str, kind: str, cache: dict
+    ) -> tuple[dict[str, tuple[str, ...]], str | None]:
+        """``{identity_key -> every entry of this kind, any status, written that way}``.
+
+        Row 7B round 5: what `_alias_target` reads when an alias's own spelling names
+        no entry. Paged to exhaustion and memoised like `_successor_map`; the `why` is
+        Rule U's, a scan that did not finish has not said the word names nothing.
+        """
+        key = ("words", namespace, kind)
+        if key in cache:
+            return cache[key]
+        words: dict[str, list[str]] = {}
+        why: str | None = None
+        for status in ("active", "retired"):
+            after: str | None = None
+            cursors: set[str] = set()
+            while True:
+                page = await self.adapter.find_types(
+                    TypeQuery(namespace=namespace, kind=kind, status=status,
+                              include_retired=True, after=after)
+                )
+                for rec in page.records:
+                    k = identity_key(rec.name)
+                    if k and rec.name not in words.setdefault(k, []):
+                        words[k].append(rec.name)
+                if not page.complete and page.next_after is None:
+                    why = why or page.why_incomplete or (
+                        f"the backend could not page this namespace's {status} types")
+                    break
+                after = page.next_after
+                if after is None:
+                    break
+                if after in cursors:
+                    why = why or (
+                        "this backend returned a pagination cursor it had already "
+                        "returned, so the types cannot be read to exhaustion")
+                    break
+                cursors.add(after)
+        result = ({k: tuple(sorted(v)) for k, v in words.items()}, why)
+        cache[key] = result
+        return result
+
+    async def _alias_target(
+        self, namespace: str, kind: str, alias: str, cache: dict
+    ) -> tuple[str | None, str | None]:
+        """``(the entry this alias names, why that could not be decided)``.
+
+        The exact spelling first; otherwise the one entry `identity_key` says the word
+        is. Two entries under one key is a choice, and choosing would be deciding.
+        """
+        if await self.adapter.get_type(namespace, alias, kind=kind) is not None:
+            return alias, None
+        k = identity_key(alias)
+        if not k:
+            return None, None
+        words, why = await self._word_map(namespace, kind, cache)
+        named = words.get(k, ())
+        if len(named) > 1:
+            return None, (
+                f"the alias {alias!r} names {len(named)} entries by identity_key "
+                f"({', '.join(named)}): which one it absorbs cannot be decided "
+                "(rule 3-21, Rule U)")
+        if named:
+            return named[0], None
+        if why:
+            return None, (
+                f"the alias {alias!r} names no entry by its own spelling, and the look "
+                f"for one under another spelling did not finish: {why}")
+        return None, None
+
     async def _alias_map(
         self, namespace: str, kind: str, cache: dict
     ) -> tuple[dict[str, str], str | None]:
@@ -6742,7 +6813,19 @@ class AsyncRegistry:
                     joined.append(successors[name])
                 rec = await self.adapter.get_type(ref.namespace, name, kind=ref.kind)
                 if rec is not None and rec.status == "active":
-                    joined.extend(alias for alias in rec.aliases if alias != name)
+                    # Round 5 (row 7B, build and door lenses, MAJOR): an alias is matched
+                    # to the entry it names by `identity_key`, the way `_alias_map`
+                    # matches the other direction. Looked up as exact bytes, an alias
+                    # written "Legacy Home" joined the closure from `legacy_home` and not
+                    # from `facility`: one identity, two extents (rules 3-20, 3-21).
+                    for alias in rec.aliases or ():
+                        target, target_why = await self._alias_target(
+                            ref.namespace, ref.kind, alias, cache)
+                        if target_why:
+                            complete = False
+                            why = why or target_why
+                        elif target is not None and target != name:
+                            joined.append(target)
                 # ...and the row that answers to THIS word as one of its aliases.
                 holder = alias_holders.get(identity_key(name)) if identity_key(name) else None
                 if holder is not None and holder != name:

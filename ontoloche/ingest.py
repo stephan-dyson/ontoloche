@@ -17,9 +17,11 @@ instance id: an ``InstanceRecord``'s ``instance_id`` is the host's, opaque, and 
 
 from __future__ import annotations
 
+import cmath
 import decimal
 import difflib
 import math
+import numbers
 import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping
@@ -306,17 +308,26 @@ def condition_problem(declared: Any, *, _path: str = INSTANCE_CONDITION_KEY) -> 
     return None
 
 
-def _non_finite(value: Any) -> bool:
+def _non_finite(value: Any, _seen: frozenset = frozenset()) -> bool:
     """A NaN or an infinity anywhere in an operand (round 4: a mapping member, a nested
-    sequence, and `Decimal("NaN")` were let through)."""
-    if isinstance(value, float):
-        return not math.isfinite(value)
+    sequence, and `Decimal("NaN")` were let through; round 5: a complex number, any
+    `numbers.Real` that is not a float, a set member, a mapping key, and a sequence
+    that contains itself, which raised `RecursionError`)."""
+    if isinstance(value, numbers.Integral):
+        return False             # bool included; float(10**400) would overflow
     if isinstance(value, decimal.Decimal):
         return not value.is_finite()
-    if isinstance(value, Mapping):
-        return any(_non_finite(v) for v in value.values())
-    if isinstance(value, (list, tuple)):
-        return any(_non_finite(v) for v in value)
+    if isinstance(value, numbers.Real):
+        return not math.isfinite(float(value))
+    if isinstance(value, numbers.Complex):
+        return not cmath.isfinite(complex(value))
+    if isinstance(value, (Mapping, list, tuple, set, frozenset)):
+        if id(value) in _seen:
+            return True          # a self-containing operand is no comparable value
+        seen = _seen | {id(value)}
+        members = (list(value.keys()) + list(value.values())
+                   if isinstance(value, Mapping) else list(value))
+        return any(_non_finite(v, seen) for v in members)
     return False
 
 

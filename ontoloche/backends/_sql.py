@@ -1074,6 +1074,20 @@ class BaseSqlAdapter:
                 *(f'"{c}"' for c in (binding.label_column, *binding.attribute_columns))]
         return ", ".join(cols)
 
+    def _fetch_instance_rows(self, binding: HostInstanceTable, sql: str, params) -> list:
+        # Round 5 (build lens minor 1): a SQLite BLOB id that is not UTF-8 cannot be
+        # cast to the text a ref holds, and the driver raised a raw decode error out of
+        # both primitives. It is a row this surface cannot reference (rule 2-2), said
+        # as `NotSupported`, which the registry reads as an unfinished read.
+        try:
+            return self._fetchall(sql, params)
+        except Exception as exc:
+            if "decode" not in str(exc).lower():
+                raise
+            raise NotSupported(
+                f"a row of {binding.table!r} carries an id this backend cannot render as "
+                f"text ({exc}): it cannot be referenced (rule 2-2)") from exc
+
     def _instance_record(self, binding: HostInstanceTable, row: tuple) -> InstanceRecord:
         # The host's id as the opaque ``str`` an InstanceRef holds. The database cast
         # it (`_instance_select`); `str()` here only covers a driver handing back a
@@ -1120,7 +1134,8 @@ class BaseSqlAdapter:
         if binding.type_column is not None:
             where.append(f'CAST("{binding.type_column}" AS TEXT) = {ph}')
             params.append(type_name)
-        rows = self._fetchall(
+        rows = self._fetch_instance_rows(
+            binding,
             f'SELECT {self._instance_select(binding)} FROM "{binding.table}" '
             f"WHERE {' AND '.join(where)} LIMIT 2",
             params,
@@ -1181,7 +1196,7 @@ class BaseSqlAdapter:
             " ORDER BY " + ", ".join(f'"{c}"' for c in order_cols)
             + f" LIMIT {int(want)} OFFSET {int(offset)}"
         )
-        rows = self._fetchall(sql, params) if want > 0 else []
+        rows = self._fetch_instance_rows(binding, sql, params) if want > 0 else []
         more = len(rows) > size
         page_rows = rows[:size]
         end = offset + len(page_rows)

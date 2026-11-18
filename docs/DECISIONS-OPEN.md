@@ -60,9 +60,9 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 *New 2026-11-18, found by row 7b's adversarial review (round 3) and routed by the supervisor as a refusal question.*
 
-**TL;DR.** When an entity type is retired with no successor, and no live type holds its name as an alias, `resolve_instance` still reads the retired type's own host rows. **[Observed]** it answers `existing legacy_home#015009` for a known label, proposes a new instance under `legacy_home` for an unknown one, and `get_instance_checked("legacy_home", "015009")` returns the row. `resolve_type("legacy_home")` answers `proposal` for the same word, so the two doors disagree about whether the retired type is still in service.
+**TL;DR.** When an entity type is retired with no successor, and no live entity type holds its name as an alias, `resolve_instance` still reads the retired type's own host rows. **[Observed]** it answers `existing legacy_home#015009` for a known label, proposes a new instance under `legacy_home` for an unknown one, and `get_instance_checked("legacy_home", "015009")` returns the row. `resolve_type("legacy_home")` answers `proposal` for the same word, so the two doors disagree about whether the retired type is still in service.
 
-**Why it is yours.** It decides whether the registry keeps serving a retired type, which is what the registry refuses or holds. INGEST.md 3.4a governs a retired entry only through its successor chain, and no rule row says what happens when there is none. The build's reading is that rule 3-19 puts a retired member's rows in the extent.
+**Why it is yours.** It decides whether the registry keeps serving a retired type, which is what the registry refuses or holds. INGEST.md 3.4a governs a retired entry only through its successor chain, and no rule row says what happens when there is none. The build's reading is that rules 3-14, 3-15 and 3-19 put a retired member's rows in the extent [Inferred].
 
 - **`serve`** — as today: answer from the tombstone's own rows, including proposals under the retired name.
 - **`unknowable`** — decline under Rule U until the host names a successor or an alias holder.
