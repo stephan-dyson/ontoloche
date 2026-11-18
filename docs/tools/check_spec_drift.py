@@ -286,6 +286,8 @@ ACTION_CALLS = (
     # D-6b-3 with its signature printed NOWHERE -- which is exactly the gap this
     # tuple exists to close, and 6.5 now prints it.
     "review_invocation",
+    # Row 7c, amendment A2. The sixth call: the `results` slot's only writer.
+    "record_result",
 )
 
 #: `ACTIONS.md`'s printed MODULE-LEVEL function signatures, against `actions.py`. **Row

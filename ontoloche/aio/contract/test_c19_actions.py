@@ -5141,15 +5141,23 @@ async def test_c19_109_results_carry_what_the_host_minted_and_nothing_else_does(
     await _propose_family(registry)
     cand = _candidate()
     minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
-    rec = await registry.record_invocation(
+    # F2's route A, reproduced: the ref in the effect's `why` makes a correct run warn,
+    # because a `host_state` effect's identity IS its `why` (rule 2.5-9).
+    route_a = await registry.record_invocation(
         "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
         observed_effects=[Effect(op="host_state", why=f"wrote {ref_key(minted)}")],
+    )
+    assert any(w.startswith("effect_undeclared:host_state") for w in route_a.warnings)
+    # The slot: the host reports the DECLARED effect and the ref goes in `results`.
+    rec = await registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        observed_effects=[_HOST_WRITE],
     )
     assert not isinstance(rec, Refusal), rec
     assert rec.results == {}, "nothing is minted until the host says so"
     assert not any(w.startswith("effect_undeclared") for w in rec.warnings), rec.warnings
 
-    out = registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    out = await registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
     assert not isinstance(out, Refusal), out
     assert out.results == {"instance": minted}, out.results
     assert parse_ref(out.inputs["instance"]) == cand, "the input is still the candidate"
@@ -5166,7 +5174,7 @@ async def test_c19_109_results_carry_what_the_host_minted_and_nothing_else_does(
 
     # Append-only: a second result is recorded and the latest reads back.
     later = InstanceRef(TypeRef("default", "entity", "facility"), "015010")
-    again = registry.record_result(rec.invocation_id, {"instance": later}, actor="host:cms")
+    again = await registry.record_result(rec.invocation_id, {"instance": later}, actor="host:cms")
     assert again.results == {"instance": later}, again.results
 
 @NEEDS_INVOCATIONS
@@ -5185,16 +5193,16 @@ async def test_c19_114_record_result_is_the_slots_only_writer_and_refuses_what_i
     assert not isinstance(rec, Refusal), rec
 
     with pytest.raises(ValueError):
-        registry.record_result(rec.invocation_id, {"instance": minted}, actor=" ")
+        await registry.record_result(rec.invocation_id, {"instance": minted}, actor=" ")
     for bad_id, ns in (("no-such-invocation", "default"), (rec.invocation_id, "elsewhere")):
-        out = registry.record_result(bad_id, {"instance": minted}, actor="host:cms",
+        out = await registry.record_result(bad_id, {"instance": minted}, actor="host:cms",
                                      namespace=ns)
         assert isinstance(out, Refusal) and out.reason == "unknown_invocation", out
     if registry.caps.stores_events and registry.caps.stores_invocation_events:
-        as_cand = registry.record_result(rec.invocation_id, {"instance": cand},
+        as_cand = await registry.record_result(rec.invocation_id, {"instance": cand},
                                          actor="host:cms")
         assert isinstance(as_cand, Refusal) and as_cand.reason == "input_kind_mismatch"
-        undeclared = registry.record_result(rec.invocation_id, {"other": minted},
+        undeclared = await registry.record_result(rec.invocation_id, {"other": minted},
                                             actor="host:cms")
         assert isinstance(undeclared, Refusal)
         assert undeclared.reason == "input_kind_mismatch", undeclared
@@ -5205,10 +5213,10 @@ async def test_c19_114_record_result_is_the_slots_only_writer_and_refuses_what_i
     ))
     kept = await eventless.record_invocation("propose_facility", {"instance": cand},
                                        actor="ai:ingest", outcome="applied")
-    out = eventless.record_result(kept.invocation_id, {"instance": minted}, actor="host:cms")
+    out = await eventless.record_result(kept.invocation_id, {"instance": minted}, actor="host:cms")
     assert isinstance(out, Refusal) and out.reason == "cannot_record_override", out
 
     blind = await make_registry(AsyncDegradedAdapter(adapter, stores_invocations=False,
                                           why=NO_INVOCATIONS))
-    out = blind.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    out = await blind.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
     assert isinstance(out, Refusal) and out.reason == "action_store_absent", out

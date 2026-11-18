@@ -827,6 +827,14 @@ class Invocation:
     warnings: tuple[str, ...] = ()
     #: the inputs schema in force when this was written
     attr_schema_version: int | None = None
+    #: **Amendment A2** (row 7c, INGEST.md 4.4): what the host reports it MINTED, keyed
+    #: by the input name the result answers -- the ``InstanceRef`` a ``CandidateRef``
+    #: became (rule 4-3). DERIVED at read time from ``invocation_recorded`` events that
+    #: ``record_result`` appends, because the host writes AFTER the proposal is recorded
+    #: and the store never rewrites a row. Never an effect's ``why`` (F2's route A made a
+    #: correct run warn ``effect_undeclared``) and never an input (route B is one
+    #: container meaning two things). Empty means nothing has been reported minted.
+    results: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

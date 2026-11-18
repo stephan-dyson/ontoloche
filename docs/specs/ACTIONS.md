@@ -357,6 +357,7 @@ If `record_invocation` **refused** a report because the host observed an effect 
 | 3-6 | There is no `pending` outcome | `prose-only:` a value that does not exist cannot be asserted present; what a test could check is that the vocabulary has exactly four members, which is the closed-vocabulary assertion in rule 3-4 doing the same work under another name |
 | 3-7 | The copy is taken from **what the gate judged**: `family_version` is stamped on `Preflight` and `Invocation`, `record_invocation(judged=…)` records that declaration and that policy, and a version mismatch is `declaration_amended:<from>:<to>` | `C19-56` |
 | 3-8 | `declared_policy` carries `approval_mode`, `min_auto_tier`, `reversibility` and the precondition kinds, for the reason rule 3-1 carries the effects | `C19-57` |
+| 3-9 | `Invocation.results` (amendment **A2**, row 7c) carries what the host reports it minted, keyed by input name, derived from `invocation_recorded` events `record_result` appends, never from an effect's `why` and never from `inputs`. The latest report for a name wins and the record is never rewritten | `C19-109` |
 
 ### 3.1 `Invocation` — one use of one verb
 
@@ -386,7 +387,15 @@ Invocation:
                                               #   sequence stays in `history`
     warnings:           list[str]             # INTERFACE 5.4's vocabulary, which this change amends
     attr_schema_version: int | None           # the inputs schema in force when this was written
+    results:            dict[str, InputRef]   # AMENDMENT A2 (row 7c): what the host reports
+                                              #   it MINTED, keyed by input name -- the
+                                              #   InstanceRef a CandidateRef became. DERIVED
+                                              #   from `invocation_recorded` events that
+                                              #   `record_result` (6.6) appends. Never an
+                                              #   effect's `why`, never an input
 ```
+
+**`results` is amendment A2, landed by row 7c** ([`INGEST.md`](INGEST.md) §4.4). `INGEST.md` rule 4-3 says the `InstanceRef` the host minted is recorded on the invocation, and this shape had no field that carries a result. F2 measured both workarounds: the ref in the `host_state` effect's `why` makes a correct run warn `effect_undeclared` (that effect's identity is its `why`, rule 2.5-9), and an optional input used as an output slot is one container meaning two things. The host writes **after** the proposal is recorded and the store never rewrites a row, so the slot is filled by a later act, `record_result` (§6.6), as an `invocation_recorded` event, which is §3.5's own sentence for a correction. The latest report for a name reads back; the earlier ones stay in `history`.
 
 **`declared_effects` is copied, not referenced, and that is the field to read twice.** A family's declaration may be amended after an invocation ran. An invocation that pointed at the *current* declaration would silently re-describe its own blast radius every time somebody edited the family — so the record carries the declaration **it was judged against**, the same way `attr_schema_version` carries *which generation* of a schema validated an entry (`INTERFACE.md` §2.1, `PACKAGE.md` §5.4: *entries written under an older schema are never rewritten and never retroactively invalidated*). Without the copy, `invocations(effect_undeclared=True)` would answer a different question each time the vocabulary moved.
 
@@ -551,7 +560,9 @@ So, concretely, for the one host that exists:
 
 ---
 
-## 6. The calls — five, and none of them in `INTERFACE.md` §5
+## 6. The calls — six, and none of them in `INTERFACE.md` §5
+
+> **The sixth is `record_result` (§6.6), amendment A2, row 7c.** `INGEST.md` rule 4-3 needs the `InstanceRef` a proposal minted on the invocation, the host writes after the proposal is recorded, and the store never rewrites a row. R73's argument for `review_invocation` applies unchanged: a later act is a call, not a parameter.
 
 > **The fifth is `review_invocation`, and this heading said *four* for a row.** §5.2 says a `review`-mode invocation *"is enumerable by `invocations(unreviewed=True)` **until an `invocation_reviewed` event is appended**"* and §3.5 mints the event value — **and none of the first four calls appends one**, so the queue `review` mode creates could never drain. The build row shipped the writer as deviation **D-6b-3** and raised it rather than specifying it on its own authority; **ruling R73 adopts D-6b-3's argument in full** and §6.5 is that specification. The heading is corrected in the same change, because *"the count in this heading is four because that is what the specification designed"* was an honest note in v0 and would be a stale number in v0.1.
 
@@ -573,6 +584,7 @@ So, concretely, for the one host that exists:
 | 6-12 | `invocations(unreviewed=True)` reads the **mode of record** (`Invocation.declared_policy`), never the family's mode today — an amendment must not move a historical invocation into or out of the queue *(row 6c, round 1)*. A row that carries **no** mode of record — filed before the field existed, or by a backend that keeps none — falls back to the live family, and `why_incomplete` **says how many rows did** *(round 3)*: rule 3-8's guarantee does not reach them, and a fallback nobody can see is a fallback nobody can act on | `C19-84`, `C19-89` |
 | 6-13 | `review_invocation` **honours its `namespace`**: an invocation stored in another scope is `unknown_invocation`, not a silent cross-tenant drain; and an empty `reviewed_by` is a `ValueError`, as an empty `reason` is at `retire` *(row 6c, round 1)* | `C19-85` |
 | 6-14 | `ref="candidate"` (amendment **A1**, row 7c) is validated at both doors: a candidate where another shape is declared, and the reverse, is `input_kind_mismatch`, and so are a non-`entity` type, a `resolution` outside `proposal` / `ambiguous`, and an empty `label` or `act_id`. Its flat form round-trips through `parse_ref` | `C19-111` |
+| 6-15 | `record_result` (amendment **A2**'s writer, row 7c) is the `results` slot's only writer. It refuses `unknown_invocation` (no invocation under that id in that namespace), `action_store_absent`, `cannot_record_override` on a backend that cannot keep the event, and `input_kind_mismatch` for a result keyed by an input the invocation did not carry or naming a `CandidateRef`; an empty `actor` is a `ValueError` | `C19-114` |
 
 Signatures are Python-shaped because deliverable #2 is a Python package. They are **not** a module layout.
 
@@ -733,6 +745,22 @@ Appends the `invocation_reviewed` event §3.5 mints, so the invocation stops bei
 > **Why this arrived as a deviation rather than as a design, and the register keeps the sequence.** §5.2 specified the read (`invocations(unreviewed=True)`) and §3.5 minted the event, and **no call appended one** — so `approval_mode="review"` shipped as a mode whose queue could never drain. Three adversarial rounds read §5.2 and §3.5; what found it was writing the ids. That is §14's own argument arriving as evidence: *"a build row finds what a reading round cannot, by trying to write the test."*
 >
 > **`unknown_invocation` is minted here and not before, and the conditionality is the point.** §7 argued the value and declined it **because no call in this document named an existing invocation by id**. This call does. R3's rule is that a value is added in the change that introduces it, so the value and the call it belongs to land together — and the build row's placeholder (`action_family_unknown`, recorded as a mismatch rather than defended) is replaced rather than left. One word for two objects is §2.3's Cause B: a host draining a review queue and told *no such action family* would go looking for a family that is registered, live, and not the problem.
+
+### 6.6 `record_result` — what the host minted *(amendment **A2**, row 7c)*
+
+```python
+def record_result(
+    invocation_id: str,
+    results: dict[str, InputRef],
+    *,
+    actor: str,
+    namespace: str = "default",
+) -> Invocation | Refusal: ...
+```
+
+Appends an `invocation_recorded` event carrying `detail["results"]` (the flat strings `ref_key` writes), and the invocation reads back with `results` set (§3.1). Each key must be an input the invocation carried, and each value a reference to a thing that exists: a `CandidateRef` is refused `input_kind_mismatch`, because the point of the slot is the moment the candidate became an `InstanceRef`. Refuses **`unknown_invocation`**, `action_store_absent`, and `cannot_record_override` on a backend that cannot keep the event, exactly as `review_invocation` does: *a result nothing records is not a result*. A second result for the same name is recorded and the latest reads back, because the ledger is append-only and refusing it would destroy the evidence that the host reported twice.
+
+**Who calls it.** The host, after it writes the row a proposal asked for (`INGEST.md` rule 4-2). `INGEST.md` rule 4-11's guard asks whether a proposal's row has been **written**, and this event is how the ledger knows.
 
 ---
 

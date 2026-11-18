@@ -1985,7 +1985,7 @@ async def test_c20_29_the_minted_ref_is_recorded_in_results_under_the_effective_
                                      actor="ai:ingest", outcome="applied",
                                      observed_effects=[_HOST_WRITE])
     minted = InstanceRef(res.candidate.type, "995001")
-    out = registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    out = await registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
     assert not isinstance(out, Refusal), out
     assert out.results == {"instance": minted}
     assert out.results["instance"].type.name == "ltc_facility"

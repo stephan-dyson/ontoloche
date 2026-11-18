@@ -5350,9 +5350,17 @@ def test_c19_109_results_carry_what_the_host_minted_and_nothing_else_does(
     _propose_family(registry)
     cand = _candidate()
     minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
-    rec = registry.record_invocation(
+    # F2's route A, reproduced: the ref in the effect's `why` makes a correct run warn,
+    # because a `host_state` effect's identity IS its `why` (rule 2.5-9).
+    route_a = registry.record_invocation(
         "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
         observed_effects=[Effect(op="host_state", why=f"wrote {ref_key(minted)}")],
+    )
+    assert any(w.startswith("effect_undeclared:host_state") for w in route_a.warnings)
+    # The slot: the host reports the DECLARED effect and the ref goes in `results`.
+    rec = registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        observed_effects=[_HOST_WRITE],
     )
     assert not isinstance(rec, Refusal), rec
     assert rec.results == {}, "nothing is minted until the host says so"

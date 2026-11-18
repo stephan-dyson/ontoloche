@@ -83,6 +83,7 @@ from ontoloche.actions import (
     effect_target,
     flat_form_problem,
     is_person,
+    parse_ref,
     ref_key,
     ref_kind,
     ref_shape,
@@ -11322,6 +11323,7 @@ class AsyncRegistry:
         history_why: str | None = None
         reviewed_at: datetime | None = None
         reviewed_by: str | None = None
+        results: dict = {}
         for flag in ("stores_invocation_events", "stores_events"):
             if not getattr(self.caps, flag):
                 history_why = self.caps.reason(flag)
@@ -11340,6 +11342,7 @@ class AsyncRegistry:
                 if r.event == "invocation_reviewed":
                     reviewed_at = r.at
                     reviewed_by = r.actor
+            results = self._results_of(rows)
         return Invocation(
             invocation_id=rec.invocation_id,
             family=rec.family,
@@ -11378,7 +11381,29 @@ class AsyncRegistry:
             reviewed_by=reviewed_by,
             warnings=tuple(rec.warnings or ()),
             attr_schema_version=rec.attr_schema_version,
+            results=results,
         )
+
+    @staticmethod
+    def _results_of(rows) -> dict:
+        '''Amendment A2's slot, derived from the ``invocation_recorded`` events
+        ``record_result`` appends. The LATEST report for a name wins, because the ledger is
+        append-only and a correction is a new event (ACTIONS.md 3.5); the earlier ones
+        stay in ``history``. A stored key that does not parse is skipped rather than
+        guessed at -- ``record_result`` writes only keys ``parse_ref`` reads.'''
+        out: dict = {}
+        for r in rows:
+            if r.event != "invocation_recorded":
+                continue
+            reported = (r.detail or {}).get("results")
+            if not isinstance(reported, dict):
+                continue
+            for name, key in reported.items():
+                try:
+                    out[name] = parse_ref(key)
+                except ValueError:  # pragma: no cover - never written by record_result
+                    continue
+        return out
 
     async def _compensated_by(self, invocation_id: str, namespace: str) -> str | None:
         """The BACKWARD pointer, derived. ACTIONS.md 9.
@@ -11877,6 +11902,119 @@ class AsyncRegistry:
         )
 
     # ==================================================== ACTIONS.md 6.3 invocations
+    async def record_result(
+        self,
+        invocation_id: str,
+        results: dict,
+        *,
+        actor: str,
+        namespace: str = "default",
+    ) -> Invocation | Refusal:
+        '''Record what the host MINTED for an invocation. ACTIONS.md 6.6, amendment **A2**.
+
+        **A sixth call, for R73's reason.** The host writes the instance row after the
+        proposal is recorded (INGEST.md rule 4-2), so the result arrives in a LATER act,
+        and the store never rewrites a row. So it is appended as an
+        ``invocation_recorded`` event carrying ``detail["results"]`` -- 3.5's own sentence,
+        *"a correction is an ``invocation_recorded`` event carrying the correction"*, and
+        the path evidence already rides -- and ``Invocation.results`` is derived from it.
+
+        A result is keyed by an input the invocation actually carried, and it names a
+        thing that EXISTS: a ``CandidateRef`` is refused. A second result for the same
+        name is recorded and the latest reads back, because refusing it would destroy the
+        evidence that the host reported twice (ACTIONS.md 6.2's argument).
+        '''
+        if not isinstance(actor, str) or not actor.strip():
+            raise ValueError(
+                "record_result requires a non-empty actor -- a result nobody reported is "
+                "a claim with no author (ACTIONS.md 3.2)"
+            )
+        if not isinstance(results, dict) or not results:
+            raise ValueError(
+                "record_result takes a non-empty mapping of input name to the reference "
+                "the host minted for it (ACTIONS.md 6.6)"
+            )
+        absent = self._invocations_absent({"invocation_id": invocation_id})
+        if absent is not None:
+            return absent
+        rec = await self.adapter.get_invocation(invocation_id)
+        if rec is not None and rec.namespace != namespace:
+            rec = None
+        if rec is None:
+            return Refusal(
+                "unknown_invocation",
+                {
+                    "invocation_id": invocation_id,
+                    "namespace": namespace,
+                    "why": (
+                        f"no invocation {invocation_id!r} is stored in namespace "
+                        f"{namespace!r}, so there is nothing to record a result on "
+                        f"(ACTIONS.md 6.6)"
+                    ),
+                },
+            )
+        if not (self.caps.stores_events and self.caps.stores_invocation_events):
+            return Refusal(
+                "cannot_record_override",
+                {
+                    "invocation_id": invocation_id,
+                    "why": (
+                        "a result is an event and this backend cannot keep one, so "
+                        "recording it would be a claim nothing records: "
+                        + self.caps.reason(
+                            "stores_events"
+                            if not self.caps.stores_events
+                            else "stores_invocation_events"
+                        )
+                    ),
+                },
+            )
+        carried = set((rec.inputs or {}).keys())
+        stored: dict[str, str] = {}
+        for name, ref in results.items():
+            shape = ref_shape(ref)
+            problem = None
+            if name not in carried:
+                problem = ("undeclared", f"the invocation carried no input named {name!r}")
+            elif shape is None:
+                problem = (
+                    "unrecognised",
+                    f"{type(ref).__name__} is not one of ACTIONS.md 2.3's reference shapes",
+                )
+            elif shape == "candidate":
+                problem = (
+                    "candidate",
+                    "a result names a thing that EXISTS, and a CandidateRef is a thing "
+                    "that does not exist yet (INGEST.md 4.1)",
+                )
+            else:
+                unfaithful = flat_form_problem(ref)
+                if unfaithful is not None:
+                    problem = ("unrepresentable", unfaithful)
+            if problem is not None:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "invocation_id": invocation_id,
+                        "input": name,
+                        "problem": problem[0],
+                        "why": f"result {name!r}: {problem[1]} (ACTIONS.md 6.6)",
+                    },
+                )
+            stored[name] = ref_key(ref)
+        await self._append_event(
+            rec.namespace,
+            "invocation_recorded",
+            actor,
+            kind="action",
+            name=rec.family,
+            invocation_id=invocation_id,
+            detail={"results": stored},
+        )
+        return await self._invocation(
+            rec, compensated_by=await self._compensated_by(invocation_id, rec.namespace)
+        )
+
     async def invocations(
         self,
         *,
