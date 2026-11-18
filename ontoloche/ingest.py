@@ -17,6 +17,7 @@ instance id: an ``InstanceRecord``'s ``instance_id`` is the host's, opaque, and 
 
 from __future__ import annotations
 
+import decimal
 import difflib
 import math
 import re
@@ -298,12 +299,25 @@ def condition_problem(declared: Any, *, _path: str = INSTANCE_CONDITION_KEY) -> 
             return f"{_path}: {op} takes a sequence, got {type(value).__name__}: rule 6-7"
         if any(v is None for v in value):
             return f"{_path}: {op} may not carry a null member: rule 6-6"
-    members = value if isinstance(value, (list, tuple)) else (value,)
-    if any(isinstance(v, float) and not math.isfinite(v) for v in members):
+    if _non_finite(value):
         # NaN equals nothing, itself included, so a predicate carrying it could never
         # be compared with its own copy (rule 3-18) and `eq NaN` holds for no row.
         return f"{_path}: {op} may not carry a non-finite number"
     return None
+
+
+def _non_finite(value: Any) -> bool:
+    """A NaN or an infinity anywhere in an operand (round 4: a mapping member, a nested
+    sequence, and `Decimal("NaN")` were let through)."""
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    if isinstance(value, decimal.Decimal):
+        return not value.is_finite()
+    if isinstance(value, Mapping):
+        return any(_non_finite(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_non_finite(v) for v in value)
+    return False
 
 
 def condition_from_mapping(declared: Mapping[str, Any]) -> Condition:

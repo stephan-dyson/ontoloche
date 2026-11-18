@@ -1194,6 +1194,19 @@ class BaseSqlAdapter:
             )
             capped = bool(self._fetchall(probe, params))
         records = tuple(self._instance_record(binding, r) for r in page_rows)
+        if any(r[0] is None for r in page_rows):
+            # Rule 2-2 (round 4, build lens M1): a row whose id is NULL cannot be
+            # referenced, and `str(None)` minted the ref `#None` that primitive 22
+            # then read back as absent. Dropping the row would shrink the extent, so
+            # the read says it is incomplete instead.
+            kept = tuple(rec for r, rec in zip(page_rows, records) if r[0] is not None)
+            return CandidatePage(
+                records=kept, known=len(kept), complete=False, next_after=None,
+                why_incomplete=(
+                    f"a row of {binding.table!r} carries no id: it cannot be referenced, "
+                    "and leaving it out would shrink the extent (rule 2-2)"
+                ),
+            )
         if undeclared:
             return CandidatePage(
                 records=records, known=len(records), complete=False, next_after=None,

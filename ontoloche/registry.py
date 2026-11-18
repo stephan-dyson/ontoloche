@@ -9583,6 +9583,24 @@ class Registry:
                 return other.name, None
         return None, why
 
+    def _entity_alias_holders(
+        self, namespace: str, word: str
+    ) -> tuple[tuple[str, ...], str | None]:
+        """Every ACTIVE entity entry holding ``word`` as one of its ALIASES, sorted.
+
+        The instance closure's alias hop (rule 3-21, row 7B rounds 3 and 4). Narrower
+        than :meth:`_alias_holder`, which also answers for another kind and for a
+        `same_word` NAME: neither moves an entity identity. ``why`` as everywhere: a
+        look that did not finish is not "no holder" (Rule U).
+        """
+        records, why = self._active_page(namespace)
+        found = sorted({
+            o.name for o in records
+            if o.kind == "entity" and o.name != word
+            and any(same_word(a, word) for a in (o.aliases or ()))
+        })
+        return tuple(found), why
+
     def _alias_clash(
         self, namespace: str, name: str, kind: str, aliases: Sequence[str]
     ) -> tuple[tuple[str, ...], str | None]:
@@ -9789,15 +9807,23 @@ class Registry:
                 # reads it; without this, the tombstone stayed its own effective entry
                 # and the ref, `governed_by` and a proposal's type all depended on which
                 # name the caller declared (round 3, door lens 1).
-                holder, look_why = self._alias_holder(namespace, effective, "entity")
+                # Round 4 (build lens 2-4): an ENTITY entry, holding the word as an
+                # ALIAS (never by `same_word` name, which no entry claimed and which the
+                # holder's own closure would not walk back), and exactly one of them.
+                holders, look_why = self._entity_alias_holders(namespace, effective)
                 if look_why:
                     return stop(
                         f"{effective!r} is retired with no successor, and the look for "
                         f"a live entry answering to it did not finish: {look_why}")
-                if holder is None or holder == effective or self.adapter.get_type(
-                        namespace, holder, kind="entity") is None:
+                if len(holders) > 1:
+                    return stop(
+                        f"{effective!r} is retired with no successor and {len(holders)} "
+                        f"live entity entries hold it as an alias ({', '.join(holders)}): "
+                        "choosing one would be deciding (rule 3-21, Rule U)")
+                if not holders or self.adapter.get_type(
+                        namespace, holders[0], kind="entity") is None:
                     break
-                nxt = holder
+                nxt = holders[0]
             out = {**out, "effective": effective, "entry": current, "hops": tuple(hops)}
             if nxt in seen:
                 return stop(

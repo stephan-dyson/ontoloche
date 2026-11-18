@@ -19,6 +19,7 @@ eight below names the mutation that turns it red, and
 from __future__ import annotations
 
 import dataclasses
+import decimal
 import inspect
 
 import pytest
@@ -54,6 +55,11 @@ NEEDS_ATTRIBUTES = pytest.mark.requires_capability("stores_attributes")
 #: conformant (PACKAGE.md 3.2), so the test does not run there rather than forcing past
 #: the guard it is not about.
 NEEDS_RETIRE = pytest.mark.requires_capability("stores_attributes", "indexes_membership")
+#: An alias the closure must read (rule 3-21) needs a backend that stores one. The
+#: matrix found round 3's alias tests failing under `stores_aliases=False` (round 4).
+NEEDS_ALIASES = pytest.mark.requires_capability(
+    "stores_attributes", "indexes_membership", "stores_aliases"
+)
 #: `merge_types` writes a recorded override (`stores_events`), the same way.
 NEEDS_MERGE = pytest.mark.requires_capability(
     "stores_attributes", "indexes_membership", "stores_events"
@@ -1388,7 +1394,7 @@ def test_c20_05_r2_an_integer_host_id_reads_back_at_both_doors(adapter, make_reg
     holds integers. Primitive 23 mints ref `#42`; primitive 22 asked for "42" must find
     that row, never call it absent."""
     rows = [{"host_id": 42, "label": "BURNS NURSING HOME, INC.", "state": "AL"}]
-    host_instances(adapter, rows, type_name="facility", id_type="NUMBER")
+    host_instances(adapter, rows, type_name="facility", id_type="INTEGER")
     registry = make_registry(adapter)
     seed(registry, "facility", attributes=_governed())
     answer = _resolve(registry, EXACT)
@@ -1683,7 +1689,7 @@ def _alias_world(adapter, make_registry):
     return registry
 
 
-@NEEDS_RETIRE
+@NEEDS_ALIASES
 def test_c20_89_r3_an_alias_moves_the_effective_name(adapter, make_registry):
     """Rules 2-17, 3-21 and 5-11 (round 3, door lens 1): `resolve_type` answers
     `facility` for `legacy_home`; the instance doors answered `legacy_home#015009`,
@@ -1702,7 +1708,7 @@ def test_c20_89_r3_an_alias_moves_the_effective_name(adapter, make_registry):
     assert answer.ref.type.name == "facility"
 
 
-@NEEDS_RETIRE
+@NEEDS_ALIASES
 def test_c20_87_r3_a_hand_written_alias_is_read(adapter, make_registry):
     """Rule 3-21's own reason (round 3, door lens 6): "a hand-written alias is one the
     successor scan would miss". `merge_types` writes both; `import_types` writes only
@@ -1787,3 +1793,219 @@ def test_c20_79_r3_a_why_inside_an_operand_is_an_operand(adapter, make_registry)
                                 new_governed=_governed(condition=new))
     answer = _resolve(registry, EXACT)
     assert answer.outcome == "unknowable" and "predicate" in answer.why_incomplete, answer
+
+
+# ============================================================ round 4 of the loop
+#
+# 7B-RUN.md 2.4. Constructions round-4 lenses ran against 95b2c70.
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_05_r4_a_row_with_no_id_is_never_a_ref(adapter, make_registry):
+    """Rule 2-2 with standing rule (e) (round 4, build lens M1): a NULL id was minted as
+    `#None`, which primitive 22 read back as absent. The read is incomplete instead:
+    the row cannot be referenced and cannot be left out."""
+    rows = [{"host_id": None, "label": "BURNS NURSING HOME, INC.", "state": "AL"},
+            *_rows()[1:]]
+    host_instances(adapter, rows, type_name="facility")
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes=_governed())
+    for label in (EXACT, NOTHING):
+        answer = _resolve(registry, label)
+        assert answer.outcome == "unknowable" and answer.complete is False, answer
+        assert "no id" in answer.why_incomplete, answer
+        assert all(c.ref.id != "None" for c in answer.candidates), answer
+
+
+def _retired_word_world(adapter, make_registry, holders):
+    """`legacy_home` retired with no successor; each of `holders` a live entity with
+    its own host table. The aliases are written by the tests that need them."""
+    burns = {"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL"}
+    for name in ("legacy_home", *holders):
+        host_instances(adapter, [burns], type_name=name)
+    registry = make_registry(adapter)
+    for name in ("legacy_home", *holders):
+        seed(registry, name, attributes=_governed())
+    retired = registry.retire("legacy_home", "dropped", retired_by="user:sd")
+    assert isinstance(retired, TypeEntry), retired
+    return registry
+
+
+@NEEDS_ALIASES
+def test_c20_89_r4_only_an_entity_alias_moves_the_name(adapter, make_registry):
+    """Rule 3-21 (round 4, build lens 2): a PREDICATE holding the word as an alias does
+    not move an entity identity to the entity that shares the predicate's name. The
+    store is written directly; no public call was found to build it."""
+    registry = _retired_word_world(adapter, make_registry, ["facility"])
+    rec = adapter.get_type("default", "facility", kind="entity")
+    adapter.put_type(dataclasses.replace(rec, kind="predicate", aliases=("legacy_home",)))
+    answer = _resolve(registry, EXACT, type_name="legacy_home")
+    assert answer.governed_by == "default:legacy_home", answer
+
+
+@NEEDS_ALIASES
+def test_c20_89_r4_two_holders_decide_nothing(adapter, make_registry):
+    """Rule 3-21 under Rule U (round 4, build lens 3): two live entries hold the retired
+    word as an alias. The first by sort order won, and the second's table and governed
+    facts were never read."""
+    registry = _retired_word_world(adapter, make_registry, ["facility", "ltc_facility"])
+    for name in ("facility", "ltc_facility"):
+        _rewrite(adapter, name, aliases=("legacy_home",))
+    answer = _resolve(registry, EXACT, type_name="legacy_home")
+    assert answer.outcome == "unknowable" and "alias" in answer.why_incomplete, answer
+
+
+@NEEDS_RETIRE
+def test_c20_89_r4_a_same_word_name_is_not_an_alias(adapter, make_registry):
+    """Rules 3-20 and 3-21 (round 4, build lens 4): a live `legacy_home_` answers to the
+    word by `same_word`, claims no alias, and its own closure never walks back to the
+    tombstone. Hopping to it gave one effective entry two extents."""
+    registry = _retired_word_world(adapter, make_registry, [])
+    rec = adapter.get_type("default", "legacy_home", kind="entity")
+    host_instances(adapter, [{"host_id": "015010", "label": "COOSA VALLEY", "state": "AL"}],
+                   type_name="legacy_home_")
+    adapter.put_type(dataclasses.replace(rec, name="legacy_home_", status="active",
+                                         successor=None, aliases=()))
+    old = _resolve(registry, EXACT, type_name="legacy_home")
+    new = _resolve(registry, EXACT, type_name="legacy_home_")
+    assert old.governed_by == "default:legacy_home" and old.scanned == 1, old
+    assert new.scanned == 1, new
+
+
+def test_c20_47_r4_a_non_finite_number_anywhere_is_refused(adapter):
+    """Round 4, build lens (clean-attack note): NaN inside a mapping operand, inside a
+    nested sequence, and as a `Decimal` was let through. A finite `Decimal` is not."""
+    for op, value in (("eq", {"k": float("nan")}), ("in", [[float("nan")]]),
+                      ("eq", decimal.Decimal("NaN"))):
+        assert condition_problem({"op": op, "attribute": "x", "value": value, "why": "w"})
+    assert condition_problem({"op": "eq", "attribute": "x", "value": decimal.Decimal("1.5"),
+                              "why": "w"}) is None
+
+
+@NEEDS_RETIRE
+def test_c20_86_r4_an_unfinished_backward_walk_is_unknowable(adapter, make_registry):
+    """Rule 3-20 under Rule U (round 4, door lens 2): the survivor's backward scan
+    cannot finish, and the survivor must not decide over the part it saw."""
+    old = [{"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL"}]
+    registry = _successor_world(adapter, make_registry, old_rows=old, new_rows=_rows()[1:])
+    for n in range(4):
+        seed(registry, f"pad{n}", attributes=_governed())
+        seed(registry, f"padnew{n}", attributes=_governed())
+        registry.retire(f"pad{n}", "pad", retired_by="user:sd", successor=f"padnew{n}")
+    capped = make_registry(DegradedAdapter(adapter, page_cap=1))
+    answer = _resolve(capped, EXACT, type_name="ltc_facility")
+    assert answer.outcome == "unknowable", answer
+
+
+@NEEDS_RETIRE
+def test_c20_89_r4_copies_differing_only_in_label_decide_nothing(adapter, make_registry):
+    """Rule 2-17 (round 4, door lens 3): the label is content. With it ignored, the
+    copy scored depended on which name the caller declared."""
+    burns = {"host_id": "015009", "label": "BURNS NURSING HOME, INC.", "state": "AL"}
+    rows = [dict(burns, kind_name="a"), dict(burns, kind_name="b", label="ZZZ OTHER")]
+    registry = _chain_world(adapter, make_registry, rows)
+    for name in ("a", "b", "c"):
+        answer = _resolve(registry, EXACT, type_name=name)
+        assert answer.outcome == "unknowable" and "2-17" in answer.why_incomplete, answer
+
+
+@NEEDS_RETIRE
+def test_c20_19_r4_a_member_primitive_23_cannot_read_is_unknowable(adapter, make_registry):
+    """Rules 3-5 and 3-19, I-1 (round 4, door lens 5): one member's candidate read
+    raises. The double stops after 200 calls so a loop that retries is red, not hung."""
+    from ..errors import NotSupported
+
+    class Raises:
+        def __init__(self, inner):
+            self.inner, self.calls = inner, 0
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def find_instance_candidates(self, q):
+            if q.type_name == "facility":
+                self.calls += 1
+                if self.calls > 200:
+                    raise AssertionError("the registry kept asking a member it cannot read")
+                raise NotSupported("cannot read facility")
+            return self.inner.find_instance_candidates(q)
+
+    registry = _successor_world(adapter, make_registry, old_rows=_rows()[:1],
+                                new_rows=_rows()[1:])
+    wrapped = make_registry(Raises(adapter))
+    answer = _resolve(wrapped, NOTHING, type_name="ltc_facility")
+    assert answer.outcome == "unknowable" and answer.complete is False, answer
+
+
+@NEEDS_RETIRE
+@pytest.mark.parametrize("pair", [
+    ({"op": "not_in", "attribute": "state", "value": ["CA", "CO"], "why": "w"},
+     {"op": "not_in", "attribute": "state", "value": ["CO", "CA"], "why": "w"}),
+    ({"op": "any_of", "why": "w", "terms": [
+        {"op": "eq", "attribute": "state", "value": "AL", "why": "w"},
+        {"op": "eq", "attribute": "state", "value": "GA", "why": "w"}]},
+     {"op": "any_of", "why": "w", "terms": [
+        {"op": "eq", "attribute": "state", "value": "GA", "why": "w"},
+        {"op": "eq", "attribute": "state", "value": "AL", "why": "w"}]}),
+])
+def test_c20_79_r4_reordered_terms_are_not_a_change(adapter, make_registry, pair):
+    """E10 (round 4, door lens 4): only an `in` list had been reordered. The build reads
+    "the terms" as a set for `in`, `not_in` and a combinator's terms."""
+    old, new = pair
+    registry = _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=[],
+                                old_governed=_governed(condition=old),
+                                new_governed=_governed(condition=new))
+    assert _resolve(registry, EXACT).outcome == "existing"
+
+
+@NEEDS_ATTRIBUTES
+def test_c20_36_r4_a_stored_malformed_policy_is_unknowable(adapter, make_registry):
+    """Rule 5-2, fail closed (round 4, door lens minor): a policy written past the
+    declaration check is not scored against."""
+    registry = _world(adapter, make_registry)
+    rec = adapter.get_type("default", "facility", kind="entity")
+    adapter.put_type(dataclasses.replace(rec, attributes={
+        **rec.attributes, MATCH_POLICY_KEY: {**POLICY, "match_at": 7.0}}))
+    assert _resolve(registry, EXACT).outcome == "unknowable"
+
+
+@NEEDS_ATTRIBUTES
+@pytest.mark.parametrize("cond,cand,want", [
+    ({"op": "not_in", "attribute": "state", "value": ["CA", "CO"], "why": "w"},
+     "Willowbrooke Ct Skilled Care Center", "proposal"),
+    ({"op": "ne", "attribute": "state", "value": "CA", "why": "w"},
+     "Willowbrooke Ct Skilled Care Center", "proposal"),
+    ({"op": "lt", "attribute": "state", "value": "CA", "why": "w"},
+     "Willowbrooke Ct Skilled Care Center", "proposal"),
+    ({"op": "gt", "attribute": "state", "value": "CO", "why": "w"},
+     "Mesa Vista Care", "proposal"),
+    ({"op": "lte", "attribute": "state", "value": "AL", "why": "w"},
+     "Willowbrooke Ct Skilled Care Center", "proposal"),
+    ({"op": "lte", "attribute": "state", "value": "AL", "why": "w"}, EXACT, "existing"),
+    ({"op": "gte", "attribute": "state", "value": "CA", "why": "w"},
+     "Willowbrooke Ct Skilled Care Center", "existing"),
+])
+def test_c20_43_r4_each_operator_holds_and_fails_where_it_should(adapter, make_registry,
+                                                                  cond, cand, want):
+    """Rule 6-3 and §6's operator meanings (round 4, door lens 1): six of the twelve
+    operators had never been shown to exclude the row they exclude."""
+    registry = _world(adapter, make_registry, condition=cond)
+    answer = _resolve(registry, cand)
+    assert answer.outcome == want, (cond, answer)
+
+
+@NEEDS_RETIRE
+def test_c20_80_r4_a_tombstone_with_no_successor_is_served_q108(adapter, make_registry):
+    """DECISIONS-OPEN item 31, Q108's default in force (the supervisor's ruling on round
+    3's departure): a retired entity with no successor and no alias holder is still
+    served from its own rows. `existing` under the retired name, a proposal under it,
+    and primitive 22 returning the row. If the founder rules `unknowable` or `refuse`,
+    this test is the one that changes."""
+    registry = _retired_word_world(adapter, make_registry, [])
+    found = _resolve(registry, EXACT, type_name="legacy_home")
+    assert found.outcome == "existing" and found.ref.type.name == "legacy_home", found
+    assert found.governed_by == "default:legacy_home", found
+    novel = _resolve(registry, NOTHING, type_name="legacy_home")
+    assert novel.outcome == "proposal" and novel.candidate.type.name == "legacy_home"
+    lookup = registry.get_instance_checked("legacy_home", "015009")
+    assert isinstance(lookup, InstanceLookup) and lookup.record is not None, lookup
