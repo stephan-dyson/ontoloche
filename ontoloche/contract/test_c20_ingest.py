@@ -3092,3 +3092,102 @@ def test_c20_28_r4_a_family_amended_to_propose_predicates_is_judged_at_the_landi
     assert landing.refusal.reason == "attributes_schema_violation", landing
     assert "4-8" in landing.why, landing.why
     assert _ledger(registry) == []
+
+
+# ---- row 7c, adversarial round 5 ----------------------------------------------------
+
+
+@NEEDS_LEDGER
+def test_c20_70_r5_the_recall_never_settles_an_ambiguity_the_gate_would_review(
+    adapter, make_registry
+):
+    """Rule **4-10** with the gate's non-transitive relation (round 5, lens 2, MAJOR).
+    At `match_at` 0.97 the label R matches X and Y and X does not match Y. One act lands
+    X and Y, both `existing`. The gate calls R `ambiguous`, so the act's landing of R
+    must be what a fresh act gives (a review-mode proposal), never a recall of whichever
+    of X and Y the act landed first."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    rows = [{"host_id": "X1", "label": x, "state": "AL"},
+            {"host_id": "Y1", "label": y, "state": "AL"}]
+    registry = _world(adapter, make_registry, rows)
+    _ingest_family(registry)
+    act_x = _act(registry, "act-r5x")
+    assert act_x.land(x, type_name="facility").outcome == "existing"
+    assert act_x.land(y, type_name="facility").outcome == "existing"
+    gate = _resolve(registry, r)
+    assert gate.outcome == "ambiguous", gate
+    landing = act_x.land(r, type_name="facility")
+    assert landing.outcome != "reused", (landing.outcome, landing.ref, landing.why)
+    act_y = _act(registry, "act-r5y")
+    fresh = act_y.land(r, type_name="facility")
+    assert landing.outcome == fresh.outcome == "proposed", (landing, fresh)
+    assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+
+
+@NEEDS_LEDGER
+def test_c20_70_r5_two_proposals_the_reader_matches_are_never_recalled_by_order(
+    adapter, make_registry
+):
+    """Rule **4-10** (round 5, lens 2, same root). One act proposes X and Y. R matches
+    both, so the act does not hand R either `CandidateRef`: the gate decides, and rule
+    4-11 finds the two unwritten proposals."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    _ingest_family(registry)
+    act_z = _act(registry, "act-r5z")
+    assert act_z.land(x, type_name="facility").outcome == "proposed"
+    assert act_z.land(y, type_name="facility").outcome == "proposed"
+    landing = act_z.land(r, type_name="facility")
+    assert landing.outcome == "pending", (landing.outcome, landing.why)
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_r5_a_recalled_ref_is_the_one_the_gate_gives_now(adapter, make_registry):
+    """Rule **4-10** with rule 2-17 (round 5, lens 2, m2). After `facility` is retired
+    toward `ltc_facility`, the gate answers `existing` under the effective type. The
+    act's next landing of the same label gives that ref, not the retired member's."""
+    host_instances(adapter, _rows(), type_name="facility")
+    host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act_e = _act(registry, "act-r5e")
+    first = act_e.land(EXACT, type_name="facility")
+    assert first.outcome == "existing" and first.ref.type.name == "facility", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    gate = _resolve(registry, EXACT, type_name="ltc_facility")
+    again = act_e.land(EXACT, type_name="ltc_facility")
+    assert again.ref == gate.ref, (again.outcome, again.ref, gate.ref)
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_r5_the_recall_defers_to_rule_3_18(adapter, make_registry):
+    """Rule **4-10** with rule 3-18 (round 5, lens 1, m1). The successor declares its own
+    `MatchPolicy`, so after the retire the gate declines to judge the extent
+    (`unknowable`). The act's next landing says the same, and records nothing."""
+    host_instances(adapter, _rows(), type_name="facility")
+    host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed(dict(POLICY, match_at=0.95)))
+    _ingest_family(registry)
+    act_g = _act(registry, "act-r5g")
+    first = act_g.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    gate = _resolve(registry, NOTHING)
+    assert gate.outcome == "unknowable", gate
+    again = act_g.land(NOTHING, type_name="facility")
+    assert again.outcome == "unknowable", (again.outcome, again.why)
+    assert len(_ledger(registry)) == 1
