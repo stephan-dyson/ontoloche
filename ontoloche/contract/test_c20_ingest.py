@@ -3395,3 +3395,65 @@ def test_c20_70_d1_a_remembered_host_ref_is_never_a_similar_candidate(
     weston = act_h.land(_WESTON, type_name="facility")
     assert weston.outcome == "proposed", (weston.outcome, weston.why)
     assert weston.ref is None and isinstance(weston.candidate, CandidateRef), weston
+
+
+# ------------------------------------------------- row 7d, row 7b's three recorded minors
+def test_c20_05_d1_a_dropped_table_is_the_drivers_error_whatever_its_name(
+    adapter, make_registry
+):
+    """Rule **2-2** (7B-RUN 2.6, build lens minor 1). Only the driver's own decode
+    failure is a row that cannot be rendered. A dropped host table whose NAME contains
+    "decode" is the same driver error as any other dropped table, never `NotSupported`
+    with a why about an id that cannot be text."""
+    from ..errors import NotSupported
+
+    target = getattr(adapter, "inner", adapter)
+    if not hasattr(target, "_instance_tables") or not hasattr(target, "_execute"):
+        pytest.skip("only the SQL backends bind a host table this suite can drop")
+    host_instances(adapter, _rows(), type_name="decode_site")
+    binding = next(b for b in target._instance_tables.values() if b.type_name == "decode_site")
+    assert "decode" in binding.table, binding.table
+    target._execute(f'DROP TABLE "{binding.table}"')
+    with pytest.raises(Exception) as caught:
+        target.get_instance("default", "entity", "decode_site", "015009")
+    assert not isinstance(caught.value, NotSupported), caught.value
+
+
+def test_c20_47_d1_a_huge_fraction_is_finite_and_never_a_crash(adapter):
+    """Rule **6-6** (7B-RUN 2.6, build lens minor 2). `Fraction(10**400)` is finite.
+    `float()` of it overflows, so it is judged as a rational, never converted."""
+    from fractions import Fraction
+
+    for value in (Fraction(10 ** 400), Fraction(-(10 ** 400), 3), [Fraction(1, 10 ** 400)]):
+        op = "in" if isinstance(value, list) else "eq"
+        assert condition_problem({"op": op, "attribute": "x", "value": value,
+                                  "why": "w"}) is None, value
+
+
+def test_c20_47_d1_a_deep_or_shared_operand_is_walked_once(adapter):
+    """Rule **6-6** (7B-RUN 2.6, build lens minor 3). The operand walk visits each
+    container once: a list nested 5,000 deep is judged without `RecursionError`, and a
+    sub-list shared at 20 levels (a million paths) is judged at once. A non-finite
+    member at the bottom is still found, and a container holding itself is still
+    refused."""
+    import time
+
+    deep: list = [1.5]
+    for _ in range(5000):
+        deep = [deep]
+    assert condition_problem({"op": "in", "attribute": "x", "value": [deep],
+                              "why": "w"}) is None
+    bad: list = [float("nan")]
+    for _ in range(5000):
+        bad = [bad]
+    assert condition_problem({"op": "in", "attribute": "x", "value": [bad], "why": "w"})
+    shared: list = [2.5]
+    for _ in range(20):
+        shared = [shared, shared]
+    began = time.perf_counter()
+    assert condition_problem({"op": "in", "attribute": "x", "value": shared,
+                              "why": "w"}) is None
+    assert time.perf_counter() - began < 1.0
+    loop: list = [[1.0]]
+    loop[0].append(loop)
+    assert condition_problem({"op": "in", "attribute": "x", "value": loop, "why": "w"})
