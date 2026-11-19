@@ -608,7 +608,8 @@ MUTATIONS = (
              '                if other.compensates == rec.invocation_id and other.outcome == "applied":',
              "                if other.compensates == rec.invocation_id:", required=True),
     Mutation("4-11 an unfinished A4 read proposes nothing", "c20_71", REG,
-             "        if not held.complete:", "        if False:", required=True),
+             "        if not held.complete:\n            return IngestLanding(",
+             "        if False:\n            return IngestLanding(", required=True),
     Mutation("4-4 the resolution's carried warnings ride onto the invocation", "c20_30", REG,
              '        warnings = [w for w in res.warnings if w.split(":", 1)[0] in CARRIED_WARNINGS]',
              "        warnings = []", required=True),
@@ -714,8 +715,16 @@ MUTATIONS = (
              "        return any(i.invocation_id == row for i in held.invocations)",
              "        return True", required=True),
     Mutation("4-10 the similar step reuses only a live proposal (ING16)", "c20_70_d1", REG,
-             "            if now[eff] == effective and answer not in found and self._alive(answer, origin):",
-             "            if now[eff] == effective and answer not in found:", required=True),
+             "            if (now[eff] == effective and answer not in found\n"
+             "                    and self._alive(answer, origin) is not False):",
+             "            if (now[eff] == effective and answer not in found):", required=True),
+    Mutation("4-10 an unreadable liveness check keeps the act's own answer (ING16)",
+             "c20_70", REG,
+             '            return held.why_incomplete or "the ledger read did not finish"',
+             "            return False",
+             # Killed only where A4 cannot finish: the capability matrix's
+             # stores_events=False leg, which this sqlite-only sweep does not run.
+             required=False),
     Mutation("4-10 a remembered candidate goes to the gate first (round 2 lens 2 #1)",
              "c20_70_d1", REG, "        remembered = recalled\n",
              "        remembered = recalled\n        if remembered is not None:\n"
