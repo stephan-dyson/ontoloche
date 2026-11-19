@@ -5725,6 +5725,11 @@ class AsyncRegistry:
                     "aliases_added": [left.name],
                 },
             )
+        # Row 8d round 2 (door lens, MAJOR 1): a retired `from_` was a chain's dead end,
+        # and now hands its word on to `into`, so `into` may have become the live end of a
+        # chain whose first word another live row holds as an alias. The fourth door.
+        if left.status == "retired" and target_ns == namespace:
+            merge_warnings.extend(await self._reinstated_end_warnings(namespace, right.kind, right.name))
         return MergeResult(
             from_=from_,
             into=into,
@@ -6690,7 +6695,7 @@ class AsyncRegistry:
                     if twin is not None and twin.api_name != api:
                         target = twin
                         if twin.reason is None:
-                            bound.append({label: word, "api": api, "bound_to": twin.api_name})
+                            bound.append(({label: word, "api": api, "bound_to": twin.api_name}, twin))
                 if target_kind == "property" and isinstance(word, str) and word:
                     # **Row 8c round 2 (lens C, MAJOR 1).** A shared slot is resolved
                     # by rule 2.10-11's reader, so the report and the entity's own
@@ -6769,14 +6774,15 @@ class AsyncRegistry:
                 p.detail["unresolved"] = [
                     dict(pairs) for pairs in dict.fromkeys(tuple(u.items()) for u in unresolved)
                 ]
-            # Round 1 (implementer lens, MAJOR 1): a twin written retired, or refused by
-            # the real run, leaves the reference unresolved, and nothing was bound.
+            # Rounds 1 and 2 (implementer lens): a twin written retired (DEPRECATED) or
+            # refused by the real run was never live, so nothing was bound to it. Asked of
+            # the twin itself: round 1 asked whether the reference read unresolved, and on
+            # the shared-property path a reader that redirects the slot never does.
             bound = [
-                b for b in bound
-                if not any(
-                    u.get(label) == b[label]
-                    for u in unresolved
-                    for label in b if label not in ("api", "bound_to")
+                b for b, twin in bound
+                if str(twin.row.get("status") or "").upper() != "DEPRECATED"
+                and not (
+                    id(twin) in results and _import_refusal(results[id(twin)].warnings)
                 )
             ]
             if bound:

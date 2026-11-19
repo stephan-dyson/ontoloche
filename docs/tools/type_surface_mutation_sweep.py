@@ -58,6 +58,9 @@ MUTATIONS = (
     Mutation("D14 reinstating a chain's live end warns (round 1)", "c12_79_reinstating_the_live_end", REG,
              "        alias_warnings.extend(self._reinstated_end_warnings(namespace, rec.kind, rec.name))",
              "        pass", suite=C12),
+    Mutation("D14 merging a chain's retired end warns (round 2)", "c12_79_merging_a_chains", REG,
+             "            merge_warnings.extend(self._reinstated_end_warnings(namespace, right.kind, right.name))",
+             "            pass", suite=C12),
     Mutation("D14 the walk reaches as far as the reader (round 1)", "c12_78_the_walk_reaches", REG,
              "            if hops > _IDENTITY_CHAIN_CAP:\n                return \"?\"",
              "            if hops >= _IDENTITY_CHAIN_CAP:\n                return \"?\"", suite=C12),
@@ -65,11 +68,12 @@ MUTATIONS = (
     Mutation("B5 the twin is looked up", "c12_80", REG,
              "                    if twin is not None and twin.api_name != api:",
              "                    if False:", suite=C12),
-    # Not here since round 1: dropping `if twin.reason is None` before `bound.append` is
-    # now an EQUIVALENT mutant. A held twin leaves its reference unresolved
-    # (`held:<reason>`), and round 1's filter drops every binding whose reference is
-    # unresolved, so the guard is belt-and-braces. C12-80's held-twin case still runs and
-    # the filter's own mutation below is killed. Observed surviving in the sweep on 4e110dd.
+    # Round 1's filter (drop a binding whose reference reads unresolved) made the guard
+    # below an EQUIVALENT mutant on 4e110dd. Round 2 replaced that filter with questions
+    # asked of the twin itself, so the guard carries weight again and is back.
+    Mutation("B5 a held twin binds nothing", "c12_80_a_held", REG,
+             "                        if twin.reason is None:\n                            bound.append((",
+             "                        if True:\n                            bound.append((", suite=C12),
     Mutation("B5 the dry run reports it", "c12_80_a_reference", REG,
              "                    FoundryItem(p.kind, p.api_name, p.name, \"would_write\",\n"
              "                                warnings=bound_warnings,",
@@ -80,9 +84,12 @@ MUTATIONS = (
     Mutation("B5 bound_by_conversion is in the detail", "c12_80_a_reference", REG,
              "            if bound:\n                p.detail[\"bound_by_conversion\"] = bound",
              "            if False:\n                p.detail[\"bound_by_conversion\"] = bound", suite=C12),
-    Mutation("B5 a twin that is not live binds nothing (round 1)", "c12_80_a_twin_that", REG,
-             "                b for b in bound\n                if not any(",
-             "                b for b in bound\n                if True or not any(", suite=C12),
+    Mutation("B5 a DEPRECATED twin binds nothing (round 1)", "c12_80_a_twin_that", REG,
+             "                if str(twin.row.get(\"status\") or \"\").upper() != \"DEPRECATED\"\n                and not (",
+             "                if True\n                and not (", suite=C12),
+    Mutation("B5 a refused twin binds nothing (rounds 1 and 2)", "c12_80_a_twin_the_real", REG,
+             "                    id(twin) in results and _import_refusal(results[id(twin)].warnings)",
+             "                    False", suite=C12),
     # ---- C5-4 (C12-81) ------------------------------------------------------------
     Mutation("C5-4 an unresolved word is listed once", "c12_81", REG,
              "                    dict(pairs) for pairs in dict.fromkeys(tuple(u.items()) for u in unresolved)",
