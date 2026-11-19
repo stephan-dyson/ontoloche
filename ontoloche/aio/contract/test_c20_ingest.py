@@ -3570,3 +3570,38 @@ async def test_c20_70_d1_a_similar_reuse_says_when_its_row_could_not_be_read(ada
     west = await act.land(_WEST, type_name="facility")
     assert west.outcome == "reused" and west.candidate == east.candidate, west
     assert "could not be read" in west.why, west.why
+
+async def _amend_facility(registry, policy, condition=None):
+    out = await registry.import_types([{"name": "facility", "kind": "entity",
+                                  "definition": "a facility", "status": "active",
+                                  "attributes": _governed(policy, condition)}],
+                                kind="entity")
+    assert not isinstance(out, Refusal), out
+
+@NEEDS_LEDGER
+@pytest.mark.parametrize("amend", ["match_at", "predicate"])
+async def test_c20_70_d1_a_host_row_remembered_before_its_entry_was_amended_goes_to_the_gate(
+        adapter, make_registry, amend):
+    """Rule **4-10** (7D-RUN 2.4, round 4 lens 2 #1). A host row remembered before the
+    effective entry's own governed facts changed goes back to the gate: the gate's answer
+    rests on the entry's `MatchPolicy` and predicate as much as on the closure's members.
+    `match_at`: the act lands `Burns Nursing Homes Inc` `existing` at 0.9778, `facility` is
+    amended to `match_at` 0.99 (the `C20-28` r3 door), and the gate now calls it
+    `ambiguous`. `predicate`: the act lands `Mesa Vista Care` on its CO row, and an AL-only
+    predicate is added. Either way the act's repeat is the gate's answer, as a fresh act's
+    is, never a `reused` that mints nothing where a fresh act records a proposal."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act = await _act(registry, f"act-r4-{amend}")
+    label = "Burns Nursing Homes Inc" if amend == "match_at" else "Mesa Vista Care"
+    first = await act.land(label, type_name="facility")
+    assert first.outcome == "existing", first
+    if amend == "match_at":
+        await _amend_facility(registry, {**POLICY, "match_at": 0.99})
+    else:
+        await _amend_facility(registry, POLICY, AL_ONLY)
+    fresh = await _resolve(registry, label)
+    assert fresh.outcome != "existing", fresh
+    again = await act.land(label, type_name="facility")
+    assert again.outcome != "reused", again
+    assert again.resolution is not None and again.resolution.outcome == fresh.outcome, again
