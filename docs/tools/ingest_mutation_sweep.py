@@ -667,12 +667,19 @@ MUTATIONS = (
              "c20_70", REG,
              "        if len(found) != 1:\n            return None, None",
              "        if not found:\n            return None, None", required=True),
+    # Both below are subsumed since row 7d (7D-RUN 2.4, the final sweep): a remembered
+    # candidate goes to the gate first (round 2), and a remembered host row goes to the gate
+    # when the closure's members or the effective entry's governed facts changed (round 3,
+    # after round 4). A 3-18 disagreement that arises mid-act needs a member's facts to
+    # change, and a non-effective member is a retired predecessor that `import_types`
+    # refuses to amend ([Observed], 7D-RUN 2.4). An effective entry that moves moves a link,
+    # so the members change too ([Inferred]). Kept as guards, so non-required.
     Mutation("4-10 the recall defers to rule 3-18", "c20_70", REG,
              "        if registry._governed_change(self.namespace, type_name, closure):",
-             "        if False:", required=True),
+             "        if False:", required=False),
     Mutation("4-10 a host row under a retired type is the gate's to answer", "c20_70", REG,
              "        if isinstance(answer, InstanceRef) and eff != effective:",
-             "        if False:", required=True),
+             "        if False:", required=False),
     # ---- row 7c, the post-cap fix of round 6's MAJOR
     Mutation("4-10 the recall's own key is the exact normalised label", "c20_70", REG,
              "            if kind != \"entity\" or norm(seen_label) != want:",

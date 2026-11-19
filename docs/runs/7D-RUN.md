@@ -311,3 +311,33 @@ The door lens's new fuzzer (three types, repeated retires with and without succe
 **The sweep.** One new required mutation (the governed-facts check) and one retarget (round 3's members check, now the tuple's first half). Both are killed. `--list`: 210 mutations, 0 whose old text does not occur once **[Observed]**.
 
 **What "not clean" means here.** §0.9's stopping rule is not met: round 4, the last round under the cap, found an in-scope reachable MAJOR. The fix is test-first and mutation-held, but no adversarial round has seen it. A fifth round would be over the pre-registered cap, so the row does not run one. `STATUS.md` is the supervisor's, so the finding goes to the supervisor in the row's closing report rather than into that file.
+
+**The supervisor-authorised review of the post-cap fix.** The supervisor ruled the same process as row 7c's: one fresh read-only lens on `e9900c5..7961c78` alone, before landing.
+- **Code.** It found **no MAJOR in the code**. The fix holds in both directions:
+  - nothing amended gives no false alarm, with the same facts, keys reordered, or amended and amended back;
+  - a non-effective member amended is caught by rule 3-18's guard;
+  - candidates are untouched;
+  - the aio mirror is current;
+  - all 8 red-first tests fail at `872d17b` and pass at `7961c78`;
+  - each of the two sweep mutations is killed by its own test.
+
+  **[Observed by the lens]**
+- **Record MAJOR.** It found **one MAJOR in the record**: at `7961c78`, §1.3, §1.6 and §2.3 pointed to final runs that §2.4 did not hold yet. The README also stated a Q92 split not measured on the final code. **Fixed** by the paragraph below, and the split it states is confirmed there.
+- **Two MINORs, both left:**
+  1. The comparison is on raw values, not E10's terms. A reworded `why` or a reordered `in` list sends the row to the gate. That costs one read and mints nothing (ledger +0, the answer a fresh act's) **[Observed by the lens]**.
+  2. An amendment landing between the gate's read and `_remember`'s read is remembered as already seen. Round 3's members check has the same window, and only concurrent writes reach it **[Inferred]**.
+
+**Final runs on `7961c78`'s code** (the commit after it changes only the sweep file's flags and this text) **[Observed]**:
+- **Full suite, three legs:** 3,466 passed, 1,030 skipped, 0 failed, 1,243 s.
+- **`check_capability_matrix`:** exit 0, every configuration conformant. Two examples: `stores_events=False` 610/163/0 and `stores_invocation_events=False` 729/44/0.
+- **Probe** (`ingest_write_probe.py --assert`): 18 of 18 checks. Q92: 3,346 rows, 1,031 `proposed`, 2,310 `reused`, 5 `pending`, 69.0%, which is the split the README states. 1,385 s, against 1,404 s at `70ea408` and 1,396 s at `1859baf`. No timing exists from before row 7d.
+- **Gates:** `check_links`, `check_spec_drift`, `check_merge_guard` and `check_skip_census` exit 0, and `tools/unasync.py --check` is current.
+
+**The sweep, and a miss of my own.** On `7961c78` the full sweep ran 210 mutations: 206 killed, 4 survived, and **2 required survivors, exit 1**.
+- **The two survivors:** *4-10 the recall defers to rule 3-18* and *4-10 a host row under a retired type is the gate's to answer*.
+- **Why they survive.** Round 2 sent remembered candidates to the gate first. Round 3 and the post-cap fix then send a remembered host row to the gate whenever the members or the effective entry's facts change. The kill test for each of the two older checks is now caught by a newer check first.
+- **The 3-18 guard is still reachable in principle.** It also covers a non-effective member amended mid-act. But a non-effective member is a retired predecessor, and `import_types` refuses to amend one: "source status 'retired' has no mapping" **[Observed]**, probe at `C:\Users\steph\AppData\Local\Temp\claude\5d1bac2c575d7018\f383dde6-b304-4873-ab74-0507370cc348\scratchpad\r5probe\test_zz_r5.py`.
+- **The retired-type check is redundant.** An effective entry that moves (retire, reinstate, merge) moves a link, so the members change as well **[Inferred]**.
+- **The change.** Both are now non-required guards, with that reason in the sweep file. The rerun gives **210 mutations, 206 killed, 4 survived, 0 not applied or broken, 0 required survivors, exit 0** **[Observed]**.
+- **The miss.** These went undetected because after round 3 I ran the sweep only with `--only` on the mutations each fix touched, never in full. No lens ran it in full either, because I told round 4's lenses and the post-cap lens not to.
+- **What this means for the row.** It is a test-coverage loss, not a code defect: the guards are still in the code and still correct. It is recorded here and changes nothing about the row landing not clean.
