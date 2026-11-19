@@ -637,8 +637,9 @@ MUTATIONS = (
              "            refusal = judged.refusal\n            return IngestLanding(",
              "            self._remember(effective, label, cand, \"proposed:none\")\n"
              "            refusal = judged.refusal\n            return IngestLanding(",
-             # Equivalent since row 7d round 2 (7D-RUN 2.2): an entry whose row A4 does
-             # not name is never reused (ING16), so a refused landing's memory is inert.
+             # Equivalent since row 7d round 2 (7D-RUN 2.2) WHERE A4'S READ FINISHES: an
+             # entry whose row a finished read does not name is never reused (ING16). On a
+             # backend where it cannot finish, the entry would stand (7D-RUN 2.3).
              required=False),
     # ---- row 7c, adversarial round 4
     Mutation("4-10 the recall reads each memory entry's closure now", "c20_70", REG,
@@ -664,8 +665,8 @@ MUTATIONS = (
     # ---- row 7c, adversarial round 5
     Mutation("4-10 two distinct remembered answers are an ambiguity the gate decides",
              "c20_70", REG,
-             "        return found[0] if len(found) == 1 else None",
-             "        return found[0] if found else None", required=True),
+             "        if len(found) != 1:\n            return None, None",
+             "        if not found:\n            return None, None", required=True),
     Mutation("4-10 the recall defers to rule 3-18", "c20_70", REG,
              "        if registry._governed_change(self.namespace, type_name, closure):",
              "        if False:", required=True),
@@ -715,9 +716,8 @@ MUTATIONS = (
              "        return any(i.invocation_id == row for i in held.invocations)",
              "        return True", required=True),
     Mutation("4-10 the similar step reuses only a live proposal (ING16)", "c20_70_d1", REG,
-             "            if (now[eff] == effective and answer not in found\n"
-             "                    and self._alive(answer, origin) is not False):",
-             "            if (now[eff] == effective and answer not in found):", required=True),
+             "            alive = self._alive(answer, origin)\n            if alive is not False:",
+             "            alive = self._alive(answer, origin)\n            if True:", required=True),
     Mutation("4-10 an unreadable liveness check keeps the act's own answer (ING16)",
              "c20_70", REG,
              '            return held.why_incomplete or "the ledger read did not finish"',
@@ -730,6 +730,13 @@ MUTATIONS = (
              "        remembered = recalled\n        if remembered is not None:\n"
              "            return IngestLanding(\"reused\", None, None, remembered, None, \"x\")\n",
              required=True),
+    Mutation("4-10 a host row remembered before the closure's members changed is the gate's",
+             "c20_70_d1", REG,
+             "        if isinstance(answer, InstanceRef) and self._members[at] != frozenset(",
+             "        if False and self._members[at] != frozenset(", required=True),
+    Mutation("4-10 a similar reuse says when its row could not be read (ING16)", "c20_70_d1",
+             REG, "                if alive is not True:\n                    unread[answer] = alive",
+             "                if False:\n                    unread[answer] = alive", required=True),
     Mutation("6-6 a number that is also a container is judged as a number", "c20_47_d1", ING,
              "    return isinstance(value, _CONTAINERS) and not isinstance(value, numbers.Number)",
              "    return isinstance(value, _CONTAINERS)", required=True),

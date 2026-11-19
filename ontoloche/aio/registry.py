@@ -232,6 +232,10 @@ class AsyncIngestAct:
     #: 7d, ING15). A candidate entry is only as good as that row, and is reused only while
     #: A4 still names it (ING16).
     _memory: list = dataclasses.field(default_factory=list)
+    #: the closure's MEMBERS when each ``_memory`` entry was written, index for index (row
+    #: 7d, round 3): a retire can grow the closure while its effective entry stays the
+    #: same, and a host row remembered before that is the gate's to answer again.
+    _members: list = dataclasses.field(default_factory=list)
 
     async def _recall(self, type_name: str, label: str) -> tuple[str | None, Any, str | None]:
         """Rule 4-10's lookup under the GATE'S key: the closure's effective entry and the
@@ -262,7 +266,8 @@ class AsyncIngestAct:
         want = norm(label)
         now: dict[str, Any] = {}
         latest = None
-        for kind, eff, seen_label, answer, origin in self._memory:
+        at = None
+        for i, (kind, eff, seen_label, answer, origin) in enumerate(self._memory):
             if kind != "entity" or norm(seen_label) != want:
                 continue
             # The entry's OWN closure, read now: a retire between two landings of one
@@ -273,6 +278,7 @@ class AsyncIngestAct:
                 now[eff] = theirs["effective"] if theirs["complete"] else None
             if now[eff] == effective:
                 latest = (eff, answer, origin)  # the most recent answer for this key
+                at = i
         if latest is None:
             return effective, None, None
         eff, answer, origin = latest
@@ -282,9 +288,16 @@ class AsyncIngestAct:
         # (rounds 5 and 6). A recalled `CandidateRef` is the one recorded.
         if isinstance(answer, InstanceRef) and eff != effective:
             return effective, None, None
+        # And a host row remembered before the closure's MEMBERS changed: a retire toward
+        # this entry brings the predecessor's table into the read with the effective name
+        # unchanged, and an exact twin there is a tie only the gate sees (round 3, lens 2
+        # #1, rule 4-10's "`existing` and `ambiguous` are always the gate's").
+        if isinstance(answer, InstanceRef) and self._members[at] != frozenset(
+                closure["members"]):
+            return effective, None, None
         return effective, answer, origin
 
-    async def _similar_candidate(self, effective: str | None, label: str) -> Any:
+    async def _similar_candidate(self, effective: str | None, label: str) -> tuple[Any, str | None]:
         """Rule 4-10 under the gate's RELATION, asked only AFTER the gate answered
         ``proposal`` (no host row is near the label): the one ``CandidateRef`` this act
         itself PROPOSED for a label within ``match_at`` under the same effective entry, or
@@ -297,20 +310,24 @@ class AsyncIngestAct:
         the CMS triple WESTON is within ``match_at`` of WEST and WEST of EAST, while
         WESTON is 0.944 from EAST, so reusing WEST's candidate folds WESTON into EAST with
         no reviewer. A label near only a pending candidate goes on to A4 (rule 4-11),
-        which holds it exactly as it would for a fresh act."""
+        which holds it exactly as it would for a fresh act.
+
+        ``(candidate, unread)``: ``unread`` is the reason the liveness read of that
+        candidate's row could not finish, when it could not (ING16), else ``None``."""
         if effective is None:
-            return None
+            return None, None
         registry = self._registry
         entry = await registry.adapter.get_type(self.namespace, effective, kind="entity")
         if entry is None:
-            return None
+            return None, None
         policy_raw, _ = registry._governed_facts(entry)
         if policy_raw is None or match_policy_problem(policy_raw) is not None:
-            return None
+            return None, None
         match_at = match_policy_from_mapping(policy_raw).match_at
         want = norm(label)
         now: dict[str, Any] = {}
         found: list = []
+        unread: dict = {}
         for kind, eff, seen_label, answer, origin in self._memory:
             if kind != "entity" or not isinstance(answer, CandidateRef):
                 continue
@@ -321,10 +338,16 @@ class AsyncIngestAct:
             if eff not in now:
                 theirs = await registry._instance_closure(self.namespace, eff)
                 now[eff] = theirs["effective"] if theirs["complete"] else None
-            if (now[eff] == effective and answer not in found
-                    and await self._alive(answer, origin) is not False):
+            if now[eff] != effective or answer in found:
+                continue
+            alive = await self._alive(answer, origin)
+            if alive is not False:
                 found.append(answer)
-        return found[0] if len(found) == 1 else None
+                if alive is not True:
+                    unread[answer] = alive
+        if len(found) != 1:
+            return None, None
+        return found[0], unread.get(found[0])
 
     async def _alive(self, cand: CandidateRef, origin: str) -> bool | str:
         """ING16 (row 7d, round 2): a remembered candidate is reused only while the row it
@@ -348,9 +371,12 @@ class AsyncIngestAct:
             return held.why_incomplete or "the ledger read did not finish"
         return any(i.invocation_id == row for i in held.invocations)
 
-    def _remember(self, effective: str | None, label: str, answer: Any, origin: str) -> None:
+    async def _remember(self, effective: str | None, label: str, answer: Any, origin: str) -> None:
         if effective is not None and answer is not None:
+            closure = await self._registry._instance_closure(self.namespace, effective)
             self._memory.append(("entity", effective, label, answer, origin))
+            self._members.append(
+                frozenset(closure["members"]) if closure["complete"] else None)
 
     async def land(
         self,
@@ -368,7 +394,8 @@ class AsyncIngestAct:
         ``ambiguous`` and while its row still holds it (ING16); ``resolve_instance``;
         ``existing`` is remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance``
         record nothing (rule 4-7); on ``proposal``, the one candidate this act itself
-        proposed within ``match_at`` is reused, never a pending one (rule 4-10, ING15); ``proposal`` and ``ambiguous`` carry the
+        proposed within ``match_at`` is reused while its row still holds it, never a
+        pending one (rule 4-10, ING15, ING16); ``proposal`` and ``ambiguous`` carry the
         resolution's own ``CandidateRef``, under the EFFECTIVE type (rule 4-3);
         ``preflight``; rules 4-2 and 4-8 against the effects the gate read; amendment
         A4's read of who holds an unwritten proposal (rule 4-11); then
@@ -403,7 +430,7 @@ class AsyncIngestAct:
             return IngestLanding("refused", None, None, None, None,
                                  f"the resolution was refused: {res.reason}", res)
         if res.outcome == "existing":
-            self._remember(effective, label, res.ref, "existing")      # rule 4-13, B7
+            await self._remember(effective, label, res.ref, "existing")      # rule 4-13, B7
             return IngestLanding("existing", res, res.ref, None, None, res.reason)
         if res.outcome in ("unknowable", "not_an_instance"):          # rule 4-7
             return IngestLanding(
@@ -430,13 +457,16 @@ class AsyncIngestAct:
                        f"{self.namespace}:{effective} (INGEST.md rule 4-10){unread}")
             return IngestLanding("reused", None, None, remembered, None, why)
         if res.outcome == "proposal":                                  # rule 4-10
-            held = await self._similar_candidate(effective, label)
+            held, unread_similar = await self._similar_candidate(effective, label)
             if held is not None:
+                note = ("" if unread_similar is None else
+                        f"; whether its row still holds it could not be read, so the "
+                        f"act's own answer stands (ING16): {unread_similar}")
                 return IngestLanding(
                     "reused", None, None, held, None,
                     f"this act already proposed this identity under "
                     f"{self.namespace}:{effective}, and the gate finds no host row near "
-                    f"it (INGEST.md rule 4-10)",
+                    f"it (INGEST.md rule 4-10){note}",
                 )
         cand = res.candidate
         if cand is None or not res.complete:  # pragma: no cover - rule 3-6 forbids it
@@ -525,7 +555,7 @@ class AsyncIngestAct:
         if isinstance(rec, Refusal):
             return IngestLanding("refused", res, None, cand, None,
                                  f"the ledger refused: {rec.reason}", rec)
-        self._remember(effective, label, cand,                         # rule 4-13
+        await self._remember(effective, label, cand,                         # rule 4-13
                        f"proposed:{rec.invocation_id}" if holder is None
                        else f"pending:{holder}")
         if holder is not None:
