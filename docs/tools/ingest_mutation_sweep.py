@@ -560,15 +560,42 @@ MUTATIONS = (
              'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], "")',
              required=True),
     Mutation("4-10 the recall uses the gate's relation", "c20_70", REG,
-             "                similar(want, norm(seen_label)) + _SCORE_EPS >= match_at",
+             "                similar(want, norm(seen_label)) >= match_at",
              "                want == norm(seen_label)", required=True),
     Mutation("4-11 a holder makes the landing pending", "c20_71", REG,
              "        holder = held.invocations[0].invocation_id if held.invocations else None",
              "        holder = None", required=True),
-    Mutation("4-12 <n> is the finished read's known", "c20_72", REG,
-             'warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:{res.known}")',
-             'warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:'
-             '{res.scanned}")', required=True),
+    Mutation("4-12 <n> is the tied set, not the display list", "c20_72", REG,
+             "                n = sum(", "                n = res.known or sum(",
+             required=True),
+    # ---- row 7c, adversarial round 1: one mutation per fix, the regression's shape
+    Mutation("6-17 (A4) a compensating row holds nothing", "c20_71", REG,
+             "                if rec.compensates:", "                if False:",
+             required=True),
+    Mutation("6-17 (A4) a pending warning exempts only when it names a holder", "c20_71",
+             REG, "            if not (set(named) & matching_ids)", "            if False",
+             required=True),
+    Mutation("6-17 (A4) the label test runs before the closure walk", "c20_71", REG,
+             "                    if similar(key, norm(other.label)) < match_at:\n"
+             "                        continue\n"
+             "                    if other.type.name != cand.type.name:\n"
+             "                        if self._effective_of(namespace, other.type.name, "
+             "closures, whys) != target:\n"
+             "                            continue\n",
+             "                    if other.type.name != cand.type.name:\n"
+             "                        if self._effective_of(namespace, other.type.name, "
+             "closures, whys) != target:\n"
+             "                            continue\n"
+             "                    if similar(key, norm(other.label)) < match_at:\n"
+             "                        continue\n",
+             required=True),
+    Mutation("4-10 a foreign act_id is refused before the recall", "c20_70", REG,
+             "        if context is not None and context.act_id != self.act_id:",
+             "        if False:", required=True),
+    Mutation("I-7 the act records the effective entry as governing", "c20_41", REG,
+             "            governed_by=res.governed_by if policy_raw is not None else None,",
+             '            governed_by=f"{self.namespace}:{type_name}" '
+             "if policy_raw is not None else None,", required=True),
     Mutation("4-13 the pending branch writes the memory", "c20_81", REG,
              "        self._remember(effective, label, cand)                         # rule 4-13",
              "        if holder is None:\n            self._remember(effective, label, cand)",

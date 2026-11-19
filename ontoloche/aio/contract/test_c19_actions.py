@@ -5181,7 +5181,7 @@ async def test_c19_109_results_carry_what_the_host_minted_and_nothing_else_does(
 async def test_c19_114_record_result_is_the_slots_only_writer_and_refuses_what_it_cannot_keep(
     adapter, make_registry
 ):
-    """Rule **6-17**, amendment **A2**'s writer. A sixth call, for R73's reason: a
+    """Rule **6-15**, amendment **A2**'s writer. A sixth call, for R73's reason: a
     result is a later act, so it is a call and not a parameter."""
     registry = await make_registry(adapter)
     await seed(registry, "facility")

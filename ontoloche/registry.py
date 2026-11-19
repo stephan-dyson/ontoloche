@@ -679,7 +679,7 @@ class IngestAct:
         want = norm(label)
         for kind, eff, seen_label, answer in self._memory:
             if kind == "entity" and eff == effective and (
-                similar(want, norm(seen_label)) + _SCORE_EPS >= match_at
+                similar(want, norm(seen_label)) >= match_at
             ):
                 return effective, answer
         return effective, None
@@ -710,6 +710,11 @@ class IngestAct:
         branch that answers with a ref or a candidate, pending included (rule 4-13).
         """
         registry = self._registry
+        if context is not None and context.act_id != self.act_id:
+            raise ValueError(
+                f"context.act_id {context.act_id!r} is not this act's {self.act_id!r}: a "
+                f"candidate must name the act that proposed it (INGEST.md 4.1)"
+            )
         effective, recalled = self._recall(type_name, label)
         if recalled is not None:                                      # rule 4-10
             is_ref = isinstance(recalled, InstanceRef)
@@ -721,11 +726,6 @@ class IngestAct:
             )
         ctx = context if context is not None else InstanceContext(
             act_id=self.act_id, proposed_by=self.actor)
-        if ctx.act_id != self.act_id:
-            raise ValueError(
-                f"context.act_id {ctx.act_id!r} is not this act's {self.act_id!r}: a "
-                f"candidate must name the act that proposed it (INGEST.md 4.1)"
-            )
         res = registry.resolve_instance(
             label, ctx, type_name=type_name, namespace=self.namespace, tier=self.tier)
         if isinstance(res, Refusal):
@@ -772,15 +772,34 @@ class IngestAct:
             )
         warnings = [w for w in res.warnings if w.split(":", 1)[0] in CARRIED_WARNINGS]
         approval_mode = None
+        governed = registry.adapter.get_type(
+            self.namespace, cand.type.name, kind="entity")
+        policy_raw, _ = registry._governed_facts(governed)
         if res.outcome == "ambiguous":                                # rules 4-5, 4-12
-            warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:{res.known}")
+            # `<n>` is the multiplicity a reviewer chooses among (4.3, K9): the rows at or
+            # above `propose_below` within `ambiguity_margin` of the top -- rules 3-3 and
+            # 5-12's tied set. NOT `res.known`: on a band ambiguous (rule 5-9) the
+            # resolution's `candidates` are the five best for display, sub-floor rows
+            # included, and `:5` would tell a reviewer of a one-row band it is a five-way
+            # collision (round 1, lens 1). Counted over the finished read rule 3-6 already
+            # guarantees, under the policy that governed it.
+            n = res.known
+            if policy_raw is not None and match_policy_problem(policy_raw) is None:
+                pol = match_policy_from_mapping(policy_raw)
+                scores = [c.score for c in res.candidates if c.score is not None]
+                top = max(scores) if scores else None
+                n = sum(
+                    1 for s in scores
+                    if s >= pol.match_at or (
+                        top - s <= pol.ambiguity_margin + _SCORE_EPS
+                        and s >= pol.propose_below
+                    )
+                )
+            warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:{n}")
             approval_mode = "review"
         holder = held.invocations[0].invocation_id if held.invocations else None
         if holder is not None:
             warnings.append(f"instance_proposal_pending:{holder}")
-        governed = registry.adapter.get_type(
-            self.namespace, cand.type.name, kind="entity")
-        policy_raw, _ = registry._governed_facts(governed)
         rec = registry.record_invocation(
             self.family, inputs, namespace=self.namespace, actor=self.actor,
             outcome="applied", tier=self.tier, gate_verdict=judged.verdict,
@@ -13092,6 +13111,10 @@ class Registry:
         events_readable = self.caps.stores_events and self.caps.stores_invocation_events
 
         holders = []
+        matching_ids: set[str] = set()
+        pending_rows: list = []
+        to_judge: list = []
+        order = 0
         after: str | None = None
         seen_cursors: set[str] = set()
         while True:
@@ -13111,19 +13134,56 @@ class Registry:
                         continue
                     if other.type.namespace != namespace or other.type.kind != cand.type.kind:
                         continue
+                    # The label first: a row whose label is not this identity cannot hold
+                    # it, whatever its closure says, so an unrelated broken closure must
+                    # not make the whole namespace unreadable (round 1, lens 2, M2).
+                    if similar(key, norm(other.label)) < match_at:
+                        continue
                     if other.type.name != cand.type.name:
                         if self._effective_of(namespace, other.type.name, closures, whys) != target:
                             continue
-                    if similar(key, norm(other.label)) + _SCORE_EPS < match_at:
-                        continue
                     matched = name
                     break
                 if matched is None:
                     continue
                 if rec.outcome != "applied":
                     continue
-                if any(w.startswith("instance_proposal_pending:") for w in (rec.warnings or ())):
+                if rec.compensates:
+                    # A compensating row undoes a proposal; it proposes nothing, even
+                    # when it carries the same candidate (round 1, lens 1, MAJOR 1).
                     continue
+                matching_ids.add(rec.invocation_id)
+                named = [
+                    w.split(":", 1)[1] for w in (rec.warnings or ())
+                    if w.split(":", 1)[0] == "instance_proposal_pending"
+                    and ":" in w
+                ]
+                if named or "instance_proposal_pending" in (rec.warnings or ()):
+                    # A pending row is not a holder ONLY when the holder it names is a
+                    # matching applied row of this same identity. Otherwise the warning
+                    # is an exemption anyone can write (round 1, lens 2, M1), and the
+                    # row is judged as any other.
+                    pending_rows.append((order, rec, matched, named))
+                    order += 1
+                    continue
+                to_judge.append((order, rec, matched))
+                order += 1
+            nxt = page.next_after
+            if nxt is None:
+                if not page.complete and page.records:
+                    whys.append(page.why_incomplete or "the ledger read stopped with no cursor")
+                break
+            if nxt in seen_cursors:
+                whys.append("the ledger cursor repeated, so the scan could not finish")
+                break
+            seen_cursors.add(nxt)
+            after = nxt
+        to_judge.extend(
+            (o, rec, matched) for o, rec, matched, named in pending_rows
+            if not (set(named) & matching_ids)
+        )
+        to_judge.sort(key=lambda item: item[0])
+        for _, rec, matched in to_judge:
                 if not events_readable:
                     whys.append(
                         f"invocation {rec.invocation_id} matches and this backend keeps no "
@@ -13140,16 +13200,6 @@ class Registry:
                 if built.compensated_by or matched in built.results:
                     continue
                 holders.append(built)
-            nxt = page.next_after
-            if nxt is None:
-                if not page.complete and page.records:
-                    whys.append(page.why_incomplete or "the ledger read stopped with no cursor")
-                break
-            if nxt in seen_cursors:
-                whys.append("the ledger cursor repeated, so the scan could not finish")
-                break
-            seen_cursors.add(nxt)
-            after = nxt
         why = "; ".join(dict.fromkeys(whys)) or None
         return InvocationReport(
             invocations=tuple(holders),

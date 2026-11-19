@@ -2256,7 +2256,8 @@ def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_family_
     inv = landing.invocation
     assert inv.declared_policy["approval_mode"] == "review"
     assert inv.declared_policy["approval_mode_declared"] == "auto"
-    assert f"instance_ambiguous_at_proposal:instance:{landing.resolution.known}" in inv.warnings
+    assert f"instance_ambiguous_at_proposal:instance:{_tied_n(landing.resolution)}" in (
+        inv.warnings)
     plain = act.land(NOTHING, type_name="facility")
     assert plain.invocation.declared_policy["approval_mode"] == "auto"
 
@@ -2312,6 +2313,15 @@ def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unreviewed
 # Row 7c. `Registry.ingest_act` returns the in-memory act (no store, no primitive: rule
 # 4-1) whose `land` is the kit's order. These tests drive the rules THROUGH it, which is
 # what a host calls; the direct-call halves above pin the amendments underneath.
+
+
+def _tied_n(res, policy=POLICY):
+    """Rule 4-12's `<n>`: the rows a reviewer chooses among -- at or above `match_at`, or
+    at or above `propose_below` within `ambiguity_margin` of the top (rules 3-3, 5-12)."""
+    scores = [c.score for c in res.candidates if c.score is not None]
+    top = max(scores)
+    return sum(1 for s in scores if s >= policy["match_at"] or (
+        top - s <= policy["ambiguity_margin"] + 1e-9 and s >= policy["propose_below"]))
 
 
 def _act(registry, act_id="act-1", *, family="propose_facility", tier="small", **kw):
@@ -2487,11 +2497,12 @@ def test_c20_32_ambiguous_proposals_are_enumerable_and_drained_only_by_review(
 
 @NEEDS_LEDGER
 def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
-    """Rule **4-12**. `<n>` is the resolution's `known` over a COMPLETE read, and an
+    """Rule **4-12**. `<n>` is the tied set's size over a COMPLETE read -- the rows a
+    reviewer chooses among, not the resolution's display list (round 1) -- and an
     unfinished read never reaches the proposal door (rule 3-6): it lands `unknowable`
     and records nothing."""
     # Padding rows nothing like BAND, so the read SCANS more rows than it KNOWS: an `<n>`
-    # taken from `scanned` (or any count but `known`) is then a different number.
+    # taken from `scanned`, or from `known` (the five shown), is then a different number.
     padding = [{"host_id": f"pad{i}", "label": f"qqqq unrelated padding {i}", "state": "XX"}
                for i in range(7)]
     registry = _world(adapter, make_registry, rows=_rows() + padding)
@@ -2503,7 +2514,8 @@ def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
     assert res.scanned > res.known, (res.scanned, res.known)
     ambiguity = [w for w in landing.invocation.warnings
                  if w.startswith("instance_ambiguous_at_proposal:")]
-    assert ambiguity == [f"instance_ambiguous_at_proposal:instance:{res.known}"], ambiguity
+    assert _tied_n(res) != res.known, "the fixture must separate the tied set from known"
+    assert ambiguity == [f"instance_ambiguous_at_proposal:instance:{_tied_n(res)}"], ambiguity
 
     dup = make_registry(adapter)
     host_instances(adapter, _rows() + _rows()[:1], type_name="dupes")
