@@ -2996,3 +2996,98 @@ def test_c20_71_r3_a_broken_target_closure_is_never_no_holder(adapter, make_regi
     _rewrite(adapter, "facility", status="retired", successor="gone_missing")
     held = registry.invocations(unwritten_for=first.candidate)
     assert not held.complete, held
+
+
+# ---- row 7c, adversarial round 4 ----------------------------------------------------
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_r4_the_recall_follows_a_retire_inside_one_act(adapter, make_registry):
+    """Rule **4-10** (round 4, lens 2, m1). The act's memory is keyed under the closure of
+    `type_name`, so it holds when the type is retired between two landings of one act:
+    `facility` is now `ltc_facility`, and the second landing of the identity the act
+    already proposed is `reused`, not a fresh `pending` row."""
+    host_instances(adapter, _rows(), type_name="facility")
+    host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act_t = _act(registry, "act-r4t")
+    first = act_t.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    for type_name in ("facility", "ltc_facility"):
+        again = act_t.land(NOTHING, type_name=type_name)
+        assert again.outcome == "reused", (type_name, again.outcome, again.why)
+        assert again.candidate == first.candidate, again
+    assert len(_ledger(registry)) == 1
+
+
+_PAIR_BASE = "kemubcrdlsbqgbcnnchcrnbsdhuusbssmbhbrejn"
+
+
+@NEEDS_LEDGER
+def test_c20_71_r4_a_pending_row_is_exempt_only_when_each_candidate_is_held(
+    adapter, make_registry
+):
+    """Rule **4-11** (round 4, lens 2, m2). A pending row with two candidates that match
+    the reader, only one of them held by the row it names, is a holder for the other.
+    At `match_at` 0.97 the reader R matches X and Y and X does not match Y."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    _ingest_family(registry)
+    action_family(registry, "propose_pair", approval_mode="auto",
+                  inputs=[InputSpec("a", "candidate"), InputSpec("b", "candidate")],
+                  effects=[_HOST_WRITE])
+    act_u = _act(registry, "act-r4u")
+    held = act_u.land(_PAIR_BASE + "qz", type_name="facility")
+    assert held.outcome == "proposed", held
+    hid = held.invocation.invocation_id
+    cx = _resolve(registry, _PAIR_BASE + "qz").candidate
+    cy = _resolve(registry, "qz" + _PAIR_BASE).candidate
+    pair = registry.record_invocation("propose_pair", {"a": cx, "b": cy}, actor="ai:x",
+                                      outcome="applied",
+                                      warnings=(f"instance_proposal_pending:{hid}",))
+    assert not isinstance(pair, Refusal), pair
+    reader = _resolve(registry, _PAIR_BASE).candidate
+    ids = [i.invocation_id for i in registry.invocations(unwritten_for=reader).invocations]
+    assert ids == [hid, pair.invocation_id], ids
+    registry.record_result(hid, {"instance": InstanceRef(cx.type, "995301")}, actor="host:cms")
+    act_v = _act(registry, "act-r4v")
+    landing = act_v.land("qz" + _PAIR_BASE, type_name="facility")
+    assert landing.outcome == "pending", landing
+
+
+@NEEDS_LEDGER
+def test_c20_28_r4_a_family_amended_to_propose_predicates_is_judged_at_the_landing(
+    adapter, make_registry
+):
+    """Rule **4-8** at the landing (round 4, lens 3, m1). The public doors refuse a
+    predicate-proposing family (`import_types` says `effect_not_permitted`), so this
+    writes one past them, as a host with write access to the store can. The landing is
+    refused and records nothing."""
+    registry = _world(adapter, make_registry)
+    if not registry.caps.stores_invocations:
+        pytest.skip("this backend keeps no ledger")
+    _ingest_family(registry)
+    act_w = _act(registry, "act-r4w")
+    from ..actions import action_attributes
+    rec = adapter.get_type("default", "propose_facility", kind="action")
+    adapter.put_type(dataclasses.replace(rec, attributes=action_attributes(
+        reversibility="reversible", approval_mode="auto",
+        inputs=[InputSpec("instance", "candidate")],
+        effects=[_HOST_WRITE, Effect(op="propose_type", kind="predicate",
+                                     namespace="default", why="written past the door")])))
+    landing = act_w.land(NOTHING, type_name="facility")
+    assert landing.outcome == "refused", landing
+    assert landing.refusal is not None
+    assert landing.refusal.reason == "attributes_schema_violation", landing
+    assert "4-8" in landing.why, landing.why
+    assert _ledger(registry) == []
