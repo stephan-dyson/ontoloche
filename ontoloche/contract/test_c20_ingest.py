@@ -3457,3 +3457,211 @@ def test_c20_47_d1_a_deep_or_shared_operand_is_walked_once(adapter):
     loop: list = [[1.0]]
     loop[0].append(loop)
     assert condition_problem({"op": "in", "attribute": "x", "value": loop, "why": "w"})
+
+
+# ------------------------------------- row 7d, row 7c's recorded non-refusal minors (C1-C10)
+def test_c20_34_d1_the_allowlist_holds_at_approve_and_import_types(adapter, make_registry):
+    """Rule **4-8** (7C-RUN 2.1, recorded: `C20-34` covered two of the four doors in a
+    test, the probe the rest). A predicate-proposing family written into a pending
+    proposal past validation is refused at `approve`, and the same family is refused at
+    `import_types`. Neither reaches the type store."""
+    from ..actions import action_attributes
+
+    registry = _world(adapter, make_registry)
+    bad = [_HOST_WRITE, Effect(op="propose_type", namespace="default", kind="predicate")]
+    attrs = action_attributes(reversibility="reversible", approval_mode="auto",
+                              inputs=[InputSpec("instance", "candidate")], effects=bad)
+    clean = action_attributes(reversibility="reversible", approval_mode="auto",
+                              inputs=[InputSpec("instance", "candidate")],
+                              effects=[_HOST_WRITE])
+    pending = registry.propose_type("mint_b", "clean, amended past validation", [],
+                                    "user:sd", kind="action", attributes=clean)
+    if getattr(pending, "id", None) is None:
+        pytest.skip(f"this backend holds no pending proposal to amend: {pending!r}"[:120])
+    rec = adapter.get_proposal(pending.id)
+    adapter.put_proposal(dataclasses.replace(rec, attributes={
+        **rec.attributes, "effects": [e.to_dict() for e in bad]}))
+    approved = registry.approve(pending.id, "user:sd")
+    assert isinstance(approved, Refusal) and approved.reason == "effect_not_permitted", approved
+    assert adapter.get_proposal(pending.id).status == "pending"
+    imported = registry.import_types(
+        [{"name": "mint_c", "kind": "action", "status": "active",
+          "definition": "mints predicates, imported", "attributes": attrs}],
+        namespace="default", kind="action")[0]
+    assert "import_refused:effect_not_permitted" in imported.warnings, imported
+    for name in ("mint_b", "mint_c"):
+        assert adapter.get_type("default", name, kind="action") is None, name
+
+
+class _LedgerDouble:
+    """Wraps an adapter and rewrites `find_invocations` pages (row 7d, C7 and C10)."""
+
+    def __init__(self, inner, page):
+        object.__setattr__(self, "inner", inner)
+        object.__setattr__(self, "page", page)
+        object.__setattr__(self, "calls", [0])
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def __setattr__(self, name, value):
+        setattr(self.inner, name, value)
+
+    def find_invocations(self, **kwargs):
+        self.calls[0] += 1
+        if self.calls[0] > 200:
+            raise RuntimeError("the ledger read never stopped")
+        if kwargs.get("after") == "the-same-cursor":
+            # A cursor this double minted is not the backend's: answer for it here.
+            first = self.inner.find_invocations(**{**kwargs, "after": None})
+            return self.page(type(first)(**{**first.__dict__, "records": ()}), kwargs)
+        return self.page(self.inner.find_invocations(**kwargs), kwargs)
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a_repeated_cursor_is_an_unfinished_read(adapter, make_registry):
+    """Rule **4-11**, Rule U (7C-RUN 2.2 #6 and 2.3 #7, recorded: A4's cursor-repeat
+    guard). A ledger whose cursor comes back unchanged would be read forever. A4 stops
+    and answers incomplete, never a confident "no holder"."""
+    registry = _world(adapter, make_registry)
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+    def repeat(page, kwargs):
+        return type(page)(**{**page.__dict__, "next_after": "the-same-cursor"})
+
+    looping = make_registry(_LedgerDouble(adapter, repeat))
+    held = looping.invocations(unwritten_for=cand)
+    assert not held.complete and "repeated" in (held.why_incomplete or ""), held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a4_holds_at_exactly_match_at(adapter, make_registry):
+    """Rule **4-10**'s key in A4 (7C-RUN 2.2 #6, recorded): `similar >= match_at` holds
+    at equality. The policy's `match_at` is set to the two labels' own score."""
+    from ..ingest import norm, similar
+
+    a, b = _EAST, _WEST
+    at = similar(norm(a), norm(b))
+    policy = {"match_at": at, "propose_below": 0.5, "ambiguity_margin": 0.0,
+              "why": "C20 row 7d: match_at is EAST ~ WEST exactly"}
+    registry = _world(adapter, make_registry, policy=policy)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    first = _act(registry, "act-d4a").land(a, type_name="facility")
+    assert first.outcome == "proposed", first
+    cand_b = _resolve(registry, b).candidate
+    held = registry.invocations(unwritten_for=cand_b)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        first.invocation.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a_pending_row_naming_a_failed_row_is_not_exempt(adapter, make_registry):
+    """Rule **4-11** (7C-RUN 2.3 #7, recorded: the proposals filter). A pending row is
+    exempt only when the row it names is an APPLIED proposal of its candidate. A row
+    naming a `failed` invocation holds the identity itself."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+    failed = registry.record_invocation("propose_facility", {"instance": cand},
+                                        actor="ai:ingest", outcome="failed")
+    assert not isinstance(failed, Refusal), failed
+    named = registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        warnings=(f"instance_proposal_pending:{failed.invocation_id}",))
+    assert not isinstance(named, Refusal), named
+    held = registry.invocations(unwritten_for=cand)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        named.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_an_unreadable_compensation_is_an_unfinished_read(adapter, make_registry):
+    """Rule **4-11**, Rule U (7C-RUN 2.3 #7, recorded: the `why_not` branch). When the
+    read of who compensated a holder cannot finish, A4 does not know whether the undo
+    was applied, so it answers incomplete."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+    first = registry.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied")
+    undo = registry.record_invocation("propose_facility", {"instance": cand},
+                                      actor="ai:ingest", outcome="failed",
+                                      compensates=first.invocation_id)
+    assert not isinstance(undo, Refusal), undo
+
+    def stall_compensations(page, kwargs):
+        # Only the paged read of who compensated a holder (it passes `after=`), not
+        # the one-row `compensated_by` lookup.
+        if kwargs.get("compensates") is None or "after" not in kwargs:
+            return page
+        return type(page)(**{**page.__dict__, "records": (), "next_after": None,
+                             "complete": False,
+                             "why_incomplete": "the compensations could not be read"})
+
+    stalled = make_registry(_LedgerDouble(adapter, stall_compensations))
+    held = stalled.invocations(unwritten_for=cand)
+    assert not held.complete and "compensations could not be read" in (
+        held.why_incomplete or ""), held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a_result_for_an_unmatched_input_releases_nothing(adapter, make_registry):
+    """Rule **4-11**, amendment A2 (7C-RUN 2.3 #7, recorded: `results` loosened to any
+    input). A row with two candidate inputs, only `a` matching, is written for the
+    identity only by a result for `a`. A result for `b` releases nothing."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    out = action_family(registry, "propose_pair", approval_mode="auto",
+                        inputs=[InputSpec("a", "candidate"), InputSpec("b", "candidate")],
+                        effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    cand = _resolve(registry, NOTHING).candidate
+    other = _resolve(registry, _EAST).candidate
+    pair = registry.record_invocation("propose_pair", {"a": cand, "b": other},
+                                      actor="ai:ingest", outcome="applied")
+    assert not isinstance(pair, Refusal), pair
+    wrote = registry.record_result(pair.invocation_id,
+                                   {"b": InstanceRef(other.type, "995301")}, actor="host:cms")
+    assert not isinstance(wrote, Refusal), wrote
+    held = registry.invocations(unwritten_for=cand)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        pair.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_unwritten_for_takes_only_a_candidate(adapter, make_registry):
+    """Amendment A4 (7C-RUN 2.3 #7, recorded: the `CandidateRef` type check). A4 keys
+    on a proposed thing. An `InstanceRef` names a written one, and is a `ValueError`."""
+    registry = _world(adapter, make_registry)
+    with pytest.raises(ValueError, match="takes a CandidateRef"):
+        registry.invocations(unwritten_for=InstanceRef(TypeRef("default", "entity",
+                                                               "facility"), "015009"))
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a4_reads_past_the_first_page(adapter, make_registry):
+    """Rule **4-11**, amendment A4 (iii) (7C-RUN 2.1, recorded: no mutation for reading
+    only the oldest page). With one row per page, a holder recorded after three
+    unrelated rows is found, and the read is complete."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    for label in (_EAST, _WEST, _WESTON):
+        cand_x = _resolve(registry, label).candidate
+        assert not isinstance(registry.record_invocation(
+            "propose_facility", {"instance": cand_x}, actor="ai:ingest",
+            outcome="applied"), Refusal)
+    cand = _resolve(registry, NOTHING).candidate
+    holder = registry.record_invocation("propose_facility", {"instance": cand},
+                                        actor="ai:ingest", outcome="applied")
+    held = registry.invocations(unwritten_for=cand, limit=1)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        holder.invocation_id], held
