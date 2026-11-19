@@ -228,7 +228,9 @@ class AsyncIngestAct:
     #: rule 4-10's memory: ``(kind, effective, label, answer, origin)`` per identity the
     #: act has answered for. A LIST, because the gate's relation is not an equivalence and
     #: so cannot be a dict key (finding B1). ``origin`` is the landing that wrote the entry:
-    #: ``"existing"``, ``"proposed"``, or ``"pending:<holder id>"`` (row 7d, ING15).
+    #: ``"existing"``, ``"proposed:<this act's row>"``, or ``"pending:<holder id>"`` (row
+    #: 7d, ING15). A candidate entry is only as good as that row, and is reused only while
+    #: A4 still names it (ING16).
     _memory: list = dataclasses.field(default_factory=list)
 
     async def _recall(self, type_name: str, label: str) -> tuple[str | None, Any, str | None]:
@@ -312,16 +314,30 @@ class AsyncIngestAct:
         for kind, eff, seen_label, answer, origin in self._memory:
             if kind != "entity" or not isinstance(answer, CandidateRef):
                 continue
-            if origin != "proposed":                    # never a pending one (ING15)
+            if not origin.startswith("proposed:"):      # never a pending one (ING15)
                 continue
             if similar(want, norm(seen_label)) < match_at:
                 continue
             if eff not in now:
                 theirs = await registry._instance_closure(self.namespace, eff)
                 now[eff] = theirs["effective"] if theirs["complete"] else None
-            if now[eff] == effective and answer not in found:
+            if now[eff] == effective and answer not in found and await self._alive(answer, origin):
                 found.append(answer)
         return found[0] if len(found) == 1 else None
+
+    async def _alive(self, cand: CandidateRef, origin: str) -> bool:
+        """ING16 (row 7d, round 2): a remembered candidate is reused only while the row it
+        rests on still holds an unwritten proposal for it, read now by amendment A4, the
+        read a fresh act makes. For ``proposed:<id>`` that row is the act's own, and for
+        ``pending:<id>`` it is the holder. A row undone by an applied compensation, or
+        written by a result, holds nothing, and the label goes on as a fresh act's would.
+        An unfinished read keeps nothing either: the path that follows reads A4 again
+        and says so (rule 4-11, Rule U)."""
+        row = origin.split(":", 1)[1]
+        held = await self._registry.invocations(unwritten_for=cand)
+        if isinstance(held, Refusal) or not held.complete:
+            return False
+        return any(i.invocation_id == row for i in held.invocations)
 
     def _remember(self, effective: str | None, label: str, answer: Any, origin: str) -> None:
         if effective is not None and answer is not None:
@@ -338,7 +354,9 @@ class AsyncIngestAct:
     ) -> IngestLanding:
         """Resolve one landed row and, where section 4 allows, record a proposal.
 
-        The order is the rule: rule 4-10's recall of the exact key; ``resolve_instance``;
+        The order is the rule: rule 4-10's recall of the exact key, where a host row is
+        reused at once and a candidate only after the gate answers ``proposal`` or
+        ``ambiguous`` and while its row still holds it (ING16); ``resolve_instance``;
         ``existing`` is remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance``
         record nothing (rule 4-7); on ``proposal``, the one candidate this act itself
         proposed within ``match_at`` is reused, never a pending one (rule 4-10, ING15); ``proposal`` and ``ambiguous`` carry the
@@ -357,23 +375,17 @@ class AsyncIngestAct:
                 f"candidate must name the act that proposed it (INGEST.md 4.1)"
             )
         effective, recalled, origin = await self._recall(type_name, label)
-        if recalled is not None:                                      # rule 4-10
-            is_ref = isinstance(recalled, InstanceRef)
-            if origin is not None and origin.startswith("pending:"):
-                # Name what was recalled (row 7d, ING15's minor): this act proposed
-                # nothing for the label, and another row held its identity.
-                why = (f"this act already landed this label pending under "
-                       f"{self.namespace}:{effective}, behind invocation "
-                       f"{origin.split(':', 1)[1]}, which held an unwritten proposal for "
-                       f"it when this act landed it (INGEST.md rules 4-10, 4-11; the "
-                       f"memory is not re-read within the act, ING16)")
-            else:
-                why = (f"this act already answered for this identity under "
-                       f"{self.namespace}:{effective} (INGEST.md rule 4-10)")
+        if isinstance(recalled, InstanceRef):                         # rule 4-10
             return IngestLanding(
-                "reused", None, recalled if is_ref else None,
-                None if is_ref else recalled, None, why,
+                "reused", None, recalled, None, None,
+                f"this act already answered for this identity under "
+                f"{self.namespace}:{effective} (INGEST.md rule 4-10)",
             )
+        # A remembered CANDIDATE is reused only after the gate (row 7d, round 2): a retire
+        # can put a host row for the label into the closure, and then the gate's
+        # `existing` is the answer a fresh act gets (lens 2 #1). And only while its row
+        # still holds it (ING16).
+        remembered = recalled
         ctx = context if context is not None else InstanceContext(
             act_id=self.act_id, proposed_by=self.actor)
         res = await registry.resolve_instance(
@@ -389,6 +401,19 @@ class AsyncIngestAct:
                 res.outcome, res, None, None, None,
                 f"{res.outcome} proposes nothing (INGEST.md rule 4-7): {res.reason}",
             )
+        if (remembered is not None and res.outcome in ("proposal", "ambiguous")
+                and await self._alive(remembered, origin)):                 # rule 4-10
+            if origin.startswith("pending:"):
+                # Name what was recalled (row 7d, ING15's minor): this act proposed
+                # nothing for the label, and another row holds its identity.
+                why = (f"this act already landed this label pending under "
+                       f"{self.namespace}:{effective}, behind invocation "
+                       f"{origin.split(':', 1)[1]}, which still holds an unwritten "
+                       f"proposal for it (INGEST.md rules 4-10, 4-11)")
+            else:
+                why = (f"this act already answered for this identity under "
+                       f"{self.namespace}:{effective} (INGEST.md rule 4-10)")
+            return IngestLanding("reused", None, None, remembered, None, why)
         if res.outcome == "proposal":                                  # rule 4-10
             held = await self._similar_candidate(effective, label)
             if held is not None:
@@ -486,7 +511,8 @@ class AsyncIngestAct:
             return IngestLanding("refused", res, None, cand, None,
                                  f"the ledger refused: {rec.reason}", rec)
         self._remember(effective, label, cand,                         # rule 4-13
-                       "proposed" if holder is None else f"pending:{holder}")
+                       f"proposed:{rec.invocation_id}" if holder is None
+                       else f"pending:{holder}")
         if holder is not None:
             return IngestLanding(
                 "pending", res, None, cand, rec,

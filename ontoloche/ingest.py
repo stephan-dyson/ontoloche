@@ -348,6 +348,12 @@ _CONTAINERS = (Mapping, list, tuple, set, frozenset)
 _END = object()       # the walk's own end-of-members mark, which no operand can carry
 
 
+def _is_container(value: Any) -> bool:
+    # A number that is also a container is judged as the number, as the recursive walk
+    # did (row 7d, round 2 lens 2 #3: a NaN float that is also an empty mapping).
+    return isinstance(value, _CONTAINERS) and not isinstance(value, numbers.Number)
+
+
 def _scalar_non_finite(value: Any) -> bool:
     if isinstance(value, numbers.Rational):
         # bool and int included. A rational is finite by construction, and float() of
@@ -376,7 +382,7 @@ def _non_finite(value: Any) -> bool:
     `done` is keyed on `id()`, so the walk keeps every container it judged alive until it
     returns: a mapping that builds its values on each read would otherwise free one, and
     the next one built could carry its id (row 7d, 7D-RUN 2.1)."""
-    if not isinstance(value, _CONTAINERS):
+    if not _is_container(value):
         return _scalar_non_finite(value)
     done: set[int] = set()
     judged: list[Any] = []       # holds each id in `done` to its container
@@ -401,7 +407,7 @@ def _non_finite(value: Any) -> bool:
             done.add(id(container))
             judged.append(container)
             continue
-        if isinstance(member, _CONTAINERS):
+        if _is_container(member):
             if id(member) in on_path:
                 return True      # a self-containing operand is no comparable value
             if id(member) not in done:

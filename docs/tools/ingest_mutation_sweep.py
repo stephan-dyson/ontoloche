@@ -634,9 +634,11 @@ MUTATIONS = (
              "            return InvocationReport((), 0, True, None)", required=True),
     Mutation("4-13 a refused landing writes no memory", "c20_81", REG,
              "            refusal = judged.refusal\n            return IngestLanding(",
-             "            self._remember(effective, label, cand, \"proposed\")\n"
+             "            self._remember(effective, label, cand, \"proposed:none\")\n"
              "            refusal = judged.refusal\n            return IngestLanding(",
-             required=True),
+             # Equivalent since row 7d round 2 (7D-RUN 2.2): an entry whose row A4 does
+             # not name is never reused (ING16), so a refused landing's memory is inert.
+             required=False),
     # ---- row 7c, adversarial round 4
     Mutation("4-10 the recall reads each memory entry's closure now", "c20_70", REG,
              "            if now[eff] == effective:\n                latest = (eff, answer, origin)",
@@ -693,19 +695,35 @@ MUTATIONS = (
              required=True),
     # ---- row 7d: ING15 and its two minors (7D-RUN 0.2, 0.5)
     Mutation("4-10 the similar step never reuses a pending candidate (ING15)", "c20_70_d1",
-             REG, '            if origin != "proposed":                    # never a pending one (ING15)',
+             REG, '            if not origin.startswith("proposed:"):      # never a pending one (ING15)',
              "            if False:", required=True),
     Mutation("4-10 the similar step skips a remembered host ref, not only pending ones",
              "c20_70_d1", REG,
              "            if kind != \"entity\" or not isinstance(answer, CandidateRef):\n"
              "                continue\n"
-             '            if origin != "proposed":                    # never a pending one (ING15)',
+             '            if not origin.startswith("proposed:"):      # never a pending one (ING15)',
              "            if kind != \"entity\":\n"
              "                continue\n"
              '            if origin.startswith("pending:"):', required=True),
     Mutation("4-10 a recalled pending label's why names its holder", "c20_70_d1", REG,
-             '            if origin is not None and origin.startswith("pending:"):',
-             "            if False:", required=True),
+             '            if origin.startswith("pending:"):\n                # Name what was recalled',
+             "            if False:\n                # Name what was recalled", required=True),
+    # ---- row 7d round 2: ING16 and the retire door (7D-RUN 2.2)
+    Mutation("4-10 a remembered candidate is reused only while its row holds it (ING16)",
+             "c20_70_d1", REG,
+             "        return any(i.invocation_id == row for i in held.invocations)",
+             "        return True", required=True),
+    Mutation("4-10 the similar step reuses only a live proposal (ING16)", "c20_70_d1", REG,
+             "            if now[eff] == effective and answer not in found and self._alive(answer, origin):",
+             "            if now[eff] == effective and answer not in found:", required=True),
+    Mutation("4-10 a remembered candidate goes to the gate first (round 2 lens 2 #1)",
+             "c20_70_d1", REG, "        remembered = recalled\n",
+             "        remembered = recalled\n        if remembered is not None:\n"
+             "            return IngestLanding(\"reused\", None, None, remembered, None, \"x\")\n",
+             required=True),
+    Mutation("6-6 a number that is also a container is judged as a number", "c20_47_d1", ING,
+             "    return isinstance(value, _CONTAINERS) and not isinstance(value, numbers.Number)",
+             "    return isinstance(value, _CONTAINERS)", required=True),
     # ---- row 7d: row 7b's three recorded minors (7D-RUN 0.6)
     Mutation("2-2 only the driver's own decode failure is a row that cannot be text",
              "c20_05_d1", SQL, "            if not _is_decode_failure(exc):",
