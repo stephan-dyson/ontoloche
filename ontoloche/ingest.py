@@ -344,26 +344,65 @@ def condition_problem(declared: Any, *, _path: str = INSTANCE_CONDITION_KEY) -> 
     return None
 
 
-def _non_finite(value: Any, _seen: frozenset = frozenset()) -> bool:
-    """A NaN or an infinity anywhere in an operand (round 4: a mapping member, a nested
-    sequence, and `Decimal("NaN")` were let through; round 5: a complex number, any
-    `numbers.Real` that is not a float, a set member, a mapping key, and a sequence
-    that contains itself, which raised `RecursionError`)."""
-    if isinstance(value, numbers.Integral):
-        return False             # bool included; float(10**400) would overflow
+_CONTAINERS = (Mapping, list, tuple, set, frozenset)
+
+
+def _scalar_non_finite(value: Any) -> bool:
+    if isinstance(value, numbers.Rational):
+        # bool and int included. A rational is finite by construction, and float() of
+        # `10**400` or `Fraction(10**400)` overflows (row 7d, 7B-RUN 2.6 minor 2).
+        return False
     if isinstance(value, decimal.Decimal):
         return not value.is_finite()
     if isinstance(value, numbers.Real):
         return not math.isfinite(float(value))
     if isinstance(value, numbers.Complex):
         return not cmath.isfinite(complex(value))
-    if isinstance(value, (Mapping, list, tuple, set, frozenset)):
-        if id(value) in _seen:
-            return True          # a self-containing operand is no comparable value
-        seen = _seen | {id(value)}
-        members = (list(value.keys()) + list(value.values())
-                   if isinstance(value, Mapping) else list(value))
-        return any(_non_finite(v, seen) for v in members)
+    return False
+
+
+def _non_finite(value: Any) -> bool:
+    """A NaN or an infinity anywhere in an operand (round 4: a mapping member, a nested
+    sequence, and `Decimal("NaN")` were let through; round 5: a complex number, any
+    `numbers.Real` that is not a float, a set member, a mapping key, and a sequence
+    that contains itself, which raised `RecursionError`).
+
+    The walk is ITERATIVE and visits each container once (row 7d, 7B-RUN 2.6 minor 3):
+    a list nested 5,000 deep raised `RecursionError`, and a sub-list shared at 20
+    levels was walked once per path. A container met again while it is still being
+    walked (an ancestor of itself) contains itself, which is no comparable value. A
+    container met again after its walk finished is shared, and was already judged."""
+    if not isinstance(value, _CONTAINERS):
+        return _scalar_non_finite(value)
+    done: set[int] = set()
+    on_path: set[int] = set()
+    # Each frame is (container, iterator over its members). A container is on the path
+    # from when it is pushed until its iterator is exhausted.
+    stack: list[tuple[Any, Any]] = []
+
+    def push(container: Any) -> None:
+        on_path.add(id(container))
+        members = (list(container.keys()) + list(container.values())
+                   if isinstance(container, Mapping) else list(container))
+        stack.append((container, iter(members)))
+
+    push(value)
+    while stack:
+        container, members = stack[-1]
+        member = next(members, _CONTAINERS)      # a sentinel no operand can carry
+        if member is _CONTAINERS:
+            stack.pop()
+            on_path.discard(id(container))
+            done.add(id(container))
+            continue
+        if isinstance(member, _CONTAINERS):
+            if id(member) in on_path:
+                return True      # a self-containing operand is no comparable value
+            if id(member) not in done:
+                push(member)
+            continue
+        if _scalar_non_finite(member):
+            return True
     return False
 
 

@@ -853,6 +853,22 @@ def decode_instance_cursor(cursor: str) -> int:
     return offset
 
 
+def _is_decode_failure(exc: BaseException) -> bool:
+    """The driver could not render a stored value as text: a ``UnicodeDecodeError``
+    anywhere in the chain, or SQLite's own *"Could not decode to UTF-8"* message. Never
+    the bare word "decode", which a table or column name can carry (row 7d)."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, UnicodeDecodeError):
+            return True
+        if "could not decode to utf-8" in str(current).lower():
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 class BaseSqlAdapter:
     """The fifteen primitives over a DB-API connection, shared by both backends.
 
@@ -1079,10 +1095,13 @@ class BaseSqlAdapter:
         # cast to the text a ref holds, and the driver raised a raw decode error out of
         # both primitives. It is a row this surface cannot reference (rule 2-2), said
         # as `NotSupported`, which the registry reads as an unfinished read.
+        # Row 7d (7B-RUN 2.6, minor 1): only the driver's OWN decode failure is such a
+        # row. The bare word "decode" also matched a dropped table named
+        # `host_decode_site_3`, which is the driver's error like any other.
         try:
             return self._fetchall(sql, params)
         except Exception as exc:
-            if "decode" not in str(exc).lower():
+            if not _is_decode_failure(exc):
                 raise
             raise NotSupported(
                 f"a row of {binding.table!r} carries an id this backend cannot render as "
