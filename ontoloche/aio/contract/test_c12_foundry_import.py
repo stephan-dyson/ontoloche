@@ -3323,6 +3323,8 @@ async def test_c12_79_reinstating_an_alias_over_a_tombstone_with_a_live_successo
         namespace=namespace,
     ))[0]
     assert stored.status == "retired", stored
+    # A retired row is not a claimant yet, so the import does not warn it.
+    assert not [w for w in stored.warnings if w.startswith("alias_word_succeeded")], stored.warnings
     back = await registry.reinstate("post_code", "in use again", reinstated_by="user:sd",
                               namespace=namespace)
     assert isinstance(back, TypeEntry) and back.status == "active", back
