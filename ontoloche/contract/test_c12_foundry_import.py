@@ -3493,6 +3493,28 @@ def test_c12_79_merging_a_dead_end_into_a_retired_row_whose_chain_ends_live_is_w
 
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+@pytest.mark.parametrize("kind", D14_KINDS)
+def test_c12_79_merging_a_retired_rows_dormant_alias_into_a_live_row_is_warned(registry, kind):
+    """Row 8d round 3 (door lens, MAJOR 1). A retired row's aliases are dormant, so the
+    import that wrote them did not warn. `merge_types` moves them onto a live `into`, which
+    makes them live: D14's state through a fifth door, warned on the `MergeResult`."""
+    namespace = f"c12_79_dorm_{kind}"
+    attributes = _d14_store(registry, kind, namespace)
+    registry.import_types([_d14_row("rr", kind, attributes, aliases=())], kind=kind,
+                          namespace=namespace)
+    entry = registry.import_types([_d14_row("carrier", kind, attributes, status="deprecated")],
+                                  kind=kind, namespace=namespace)[0]
+    assert entry.status == "retired", entry
+    assert not [w for w in entry.warnings if w.startswith("alias_word_succeeded")], entry.warnings
+    merged = registry.merge_types(
+        "carrier", "rr", "m", merged_by="user:sd", namespace=namespace,
+        acknowledge=["retired_operand", "definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    assert "alias_word_succeeded:zip_code:postal_code" in merged.warnings, merged.warnings
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
 def test_c12_78_the_walk_reaches_as_far_as_the_reader(registry):
     """Row 8d round 1 (implementer lens, MINOR 3). The reader takes the first hop and up to
     `_IDENTITY_CHAIN_CAP` more; the warning's walk takes the same, so a chain the reader
