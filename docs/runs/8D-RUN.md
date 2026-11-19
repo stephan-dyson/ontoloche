@@ -163,7 +163,7 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 | B5-1, dry and real | both report it, identical | `C12-80` shared case: the warning and `bound_by_conversion` on both runs, `unresolved_shared []` on both | hit |
 | the interface case | warned `predicate:FooInterface:fooInterface` | the same | hit |
 | a link endpoint (K7) | covered by the same path | `homeOffice` warned `dst:office:Office` on both runs. The side is held `definition_missing` on both, so the edge's real-run written path is not exercised (the entity cases cover it) | hit, weaker than it reads |
-| the five Foundry fixtures | byte-identical | `type_surface_snapshot.py --compare` against `add906f`: **0 differences across 10 reports**, after D14, B5, C5-4 and round 1. SNAPSHOT-ON-FINAL | hit |
+| the five Foundry fixtures | byte-identical | `type_surface_snapshot.py --compare` against `add906f`: **0 differences across 10 reports**, after D14, B5, C5-4 and round 1, and again on the frozen `3fc5b3c`: 0 differences across 10 reports | hit |
 | UC1 to UC3 | green | see §1.6 | see §1.6 |
 | the 19 reserved-rule lines | unchanged | unchanged | hit |
 
@@ -179,13 +179,13 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 ### §1.5 — Every touched contract id red by mutation
 
-`docs/tools/type_surface_mutation_sweep.py`, counted by the test each mutation runs: **21 mutations**, seven on `C12-78`, six on `C12-79`, seven on `C12-80`, one on `C12-81`. The result is SWEEP-ON-FINAL. The `?` claimant had no test until round 3's fidelity lens pointed it out. It now has one, and a mutation. History: 12 of 12 killed on `1ceeec2`, 13 of 13 on `45eab75`. On `4e110dd` the held-twin guard's mutation **survived**, because round 1's filter made the guard redundant, and it was set aside as equivalent. Round 2 replaced that filter with questions asked of the twin, so the guard carries weight again and its mutation is back. One mutation stays out as **equivalent**, commented in the sweep: removing the tombstone's `successor` test changes nothing, because the walk stops at once when there is no successor.
+`docs/tools/type_surface_mutation_sweep.py`, counted by the test each mutation runs: **21 mutations**, seven on `C12-78`, six on `C12-79`, seven on `C12-80`, one on `C12-81`. On the frozen `3fc5b3c`: **21 mutations, 21 killed**, the unmutated copy green first. The `?` claimant had no test until round 3's fidelity lens pointed it out. It now has one, and a mutation. History: 12 of 12 killed on `1ceeec2`, 13 of 13 on `45eab75`. On `4e110dd` the held-twin guard's mutation **survived**, because round 1's filter made the guard redundant, and it was set aside as equivalent. Round 2 replaced that filter with questions asked of the twin, so the guard carries weight again and its mutation is back. One mutation stays out as **equivalent**, commented in the sweep: removing the tombstone's `successor` test changes nothing, because the walk stops at once when there is no successor.
 
 ### §1.6 — The suite and the gates
 
 - First full run, on `1ceeec2`: three legs `1 failed, 3555 passed, 1054 skipped` (`0:22:25`). The one failure was `test_every_optional_capability_can_be_declined_alone`, the suite's copy of the capability matrix, which failed as §1.2 records. `check_links`, `check_spec_drift`, `check_merge_guard` and `check_skip_census` exited 0, `check_capability_matrix` exited 1, and `unasync --check` said 27 generated files are current.
 - On `45eab75` the capability matrix and the skip census exited 0.
-- RUN-ON-FINAL
+- **Final run, on a frozen `git archive` of `3fc5b3c`** (the importing copy checked first): three legs `3610 passed, 1078 skipped, 0 failed` (`0:21:02`), postgres on the stated DSN. `check_links`, `check_spec_drift`, `check_merge_guard`, `check_capability_matrix` and `check_skip_census` all exited 0. `unasync --check`: 27 generated files are current. `properties_baseline_probe.py --assert`: all 22 lines print their recorded values.
 
 ### §1.7 — Row 8c's other MINORs (§0.7)
 
