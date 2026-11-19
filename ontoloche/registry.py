@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import copy
 import dataclasses
 import json
 import logging
@@ -682,9 +683,12 @@ class IngestAct:
     #: 7d, ING15). A candidate entry is only as good as that row, and is reused only while
     #: A4 still names it (ING16).
     _memory: list = dataclasses.field(default_factory=list)
-    #: the closure's MEMBERS when each ``_memory`` entry was written, index for index (row
-    #: 7d, round 3): a retire can grow the closure while its effective entry stays the
-    #: same, and a host row remembered before that is the gate's to answer again.
+    #: what the gate's answer rested on when each ``_memory`` entry was written, index for
+    #: index: the closure's MEMBERS (row 7d, round 3: a retire can grow the closure while
+    #: its effective entry stays the same) and the effective entry's GOVERNED FACTS, its
+    #: ``MatchPolicy`` and predicate (row 7d, after round 4: an amendment changes the
+    #: gate's answer with every name unchanged). A host row remembered before either
+    #: changed is the gate's to answer again.
     _members: list = dataclasses.field(default_factory=list)
 
     def _recall(self, type_name: str, label: str) -> tuple[str | None, Any, str | None]:
@@ -742,8 +746,11 @@ class IngestAct:
         # this entry brings the predecessor's table into the read with the effective name
         # unchanged, and an exact twin there is a tie only the gate sees (round 3, lens 2
         # #1, rule 4-10's "`existing` and `ambiguous` are always the gate's").
-        if isinstance(answer, InstanceRef) and self._members[at] != frozenset(
-                closure["members"]):
+        # The same for an amendment to the effective entry's own governed facts: a raised
+        # `match_at` or a new predicate changes the gate's answer with every name the
+        # same (7D-RUN 2.4, round 4 lens 2 #1).
+        if isinstance(answer, InstanceRef) and self._members[at] != (
+                frozenset(closure["members"]), registry._governed_facts(closure["entry"])):
             return effective, None, None
         return effective, answer, origin
 
@@ -826,7 +833,9 @@ class IngestAct:
             closure = self._registry._instance_closure(self.namespace, effective)
             self._memory.append(("entity", effective, label, answer, origin))
             self._members.append(
-                frozenset(closure["members"]) if closure["complete"] else None)
+                (frozenset(closure["members"]),
+                 copy.deepcopy(self._registry._governed_facts(closure["entry"])))
+                if closure["complete"] else None)
 
     def land(
         self,
