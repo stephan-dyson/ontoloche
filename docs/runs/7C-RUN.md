@@ -196,7 +196,8 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 | round 2 | `f2d6796` | four regressions, each red for its predicted reason; two coverage pins green on arrival (§2) | `b61d641` |
 | round 3 | `ca65400` | two regressions red for their predicted reason; four coverage pins green on arrival (§2) | `8247df4` |
 | round 4 | `6b381e5` | `C20-70` r4 red for its predicted reason; `C20-28` r4 green on arrival; `C20-71` r4 flaky there, made stable in the fix commit (§2.4) | `4c45c65` |
-| round 5 | `d68ba8f` | four `C20-70` r5 regressions, each red for its predicted reason: the act landed `reused` (§2.5) | the following commit |
+| round 5 | `d68ba8f` | four `C20-70` r5 regressions, each red for its predicted reason: the act landed `reused` (§2.5) | `0d60c85` |
+| round 6, after the cap | `16cb54d` | five `C20-70` r6 regressions, each red for its predicted reason: `reused` where the gate answers, and `existing` or `pending` where the act had answered the exact label (§2.6) | the following commit (§2.7) |
 
 **Scored against §0.3:**
 
@@ -221,7 +222,7 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 ### §1.4 — Design tests (§0.4), from `docs/tools/ingest_write_probe.py`, 18 of 18
 
-Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rerun on the final code and the result is in §2.5.
+Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rerun on the final code and the result is in §2.8.
 
 | test | predicted | observed | score |
 |---|---|---|---|
@@ -243,17 +244,17 @@ Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rer
 
 ### §1.6 — Mutation sweep
 
-`docs/tools/ingest_mutation_sweep.py` at the round 5 fix: **181 mutations, 180 killed, 0 required survivors, 0 not applied** (`sweep_r5.log`; 178 and 177 at `4c45c65`, 173 and 172 at `8247df4`). Every row-7c `C19` and `C20` id has at least one required mutation of its own. The one survivor is not required: `<n>` counted on rounded rather than unrounded scores, which no fixture can tell apart because none sits on a rounding edge. Four misses happened along the way, all recorded:
+`docs/tools/ingest_mutation_sweep.py` at the post-cap fix: **184 mutations, 183 killed, 0 required survivors, 0 not applied** (`sweep_r6b.log`; 181 and 180 at `0d60c85`, 178 and 177 at `4c45c65`, 173 and 172 at `8247df4`). Every row-7c `C19` and `C20` id has at least one required mutation of its own. The one survivor is not required: `<n>` counted on rounded rather than unrounded scores, which no fixture can tell apart because none sits on a rounding edge. Four misses happened along the way, all recorded:
 
 - **First run: one survivor, `C20-72`.** In the five-row fixture `scanned == known`, so `{res.known}` → `{res.scanned}` passed. The test was padded with seven unrelated rows and asserts `scanned > known`, and the rerun killed the mutant.
 - **Round 2: two mutations never ran, and the summary still said 0 required survivors.** My round 2 edits had rewritten the C19-113 target and duplicated the 3-17 target. My shell wrapper's `echo exit=$?` also hid the sweep's exit 1. Both were retargeted, and the sweep's own exit code is now logged.
-- **Rounds 3 and 4: three mutations pointed at code a fix had moved** (4-2 and 4-8 in round 3, the recall's relation in round 4). A preflight that counts every target before the run caught them.
+- **Rounds 3 to 6: mutations pointed at code a fix had moved** (4-2 and 4-8 in round 3, the recall's relation in round 4, one in round 5, four in the post-cap fix). A preflight that counts every target before the run caught each of them, and they were retargeted before the sweep ran.
 - **`c20_69` kills only a strawman.** It drops `act_id` in `parse_ref`, which any round-trip test kills. Rule 4-9's "no `id`" assertion is never reached by a mutation. Recorded, not fixed.
 
 ### §1.7 — Suite and gates
 
-- **Full suite, three legs** (sqlite, minimal, postgres on `oo-pg` at port 55432): 3,228 passed, 926 skipped, 0 failed at `25cce19`, in 21m34s. Two later runs were stopped on purpose, because the code changed under them (`30b512d` at 49%, `b61d641` when round 3's tests landed). The run on the final code is in §2.5.
-- **Gates at `8247df4`:** all five exit 0: `check_links`, `check_spec_drift` (every `INGEST.md` rule claimed, no section planned; the 90 `C20` ids are the manifest's count), `check_merge_guard`, `check_capability_matrix` and `check_skip_census`.
+- **Full suite, three legs** (sqlite, minimal, postgres on `oo-pg` at port 55432): 3,228 passed, 926 skipped, 0 failed at `25cce19`, in 21m34s. Five later runs were stopped on purpose, because the code changed under them (`30b512d` at 49%, `b61d641` when round 3's tests landed, and `49eabca`, `4c45c65` and `0d60c85` when rounds 4, 5 and 6 found code to change). The run on the final code is in §2.8.
+- **Gates on the final code (§2.8):** all five exit 0: `check_links`, `check_spec_drift` (every `INGEST.md` rule claimed, no section planned; the 90 `C20` ids are the manifest's count), `check_merge_guard`, `check_capability_matrix` and `check_skip_census`.
 - **One miss on the way.** `check_capability_matrix` failed the `indexes_membership=False` cell once, on round 1's I-7 pin, because its successor world needs `retire`. The test took `NEEDS_RETIRE`, like every other successor-world test (`30b512d`).
 
 ### §1.8 — Kill row (§0.7)
@@ -268,7 +269,7 @@ Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rer
 
 ## §2 — Adversarial rounds (§0.9)
 
-Each round ran three fresh lenses on the commit named, read-only on the tree: lens 1 builds against the spec, lens 2 attacks the doors, lens 3 checks the claims and the evidence. Nothing under review was edited while a lens ran. Every code MAJOR fix was red first. The MAJORs that were not code were a probe made sensitive, a pin green on arrival, a measurement and a wording fix, each named in its table. A full round followed every MAJOR.
+Each round ran three fresh lenses on the commit named, read-only on the tree: lens 1 builds against the spec, lens 2 attacks the doors, lens 3 checks the claims and the evidence. Nothing under review was edited while a lens ran. Every code MAJOR fix was red first. The MAJORs that were not code were a probe made sensitive, a pin green on arrival, a measurement and a wording fix, each named in its table. A full round followed every MAJOR through round 5. Round 6's MAJOR, past the cap, was followed by one supervisor-authorised lens on the fix diff (§2.7).
 
 ### §2.1 — Round 1, on `25cce19`
 
@@ -342,7 +343,7 @@ Lens 2 found a code MAJOR, so it was fixed red first and round 6, the confirming
 
 | # | lens | severity | finding | outcome |
 |---|---|---|---|---|
-| 1 | 2 | MAJOR | Rule 4-10's recall returned the first remembered entry that matched. The gate's relation is not transitive: over the `_PAIR_BASE` triple from `C20-71` r4, R matches X and Y and X does not match Y. One act landed X and Y, both `existing`, and then handed R whichever it had landed first, where the gate says `ambiguous` and a fresh act proposes in review mode. The same root reused a `CandidateRef` by order over two proposals, and after a retire merged two types | fixed, `d68ba8f` red, fixed in the following commit: every matching entry is judged, and one is recalled only when all carry the same answer |
+| 1 | 2 | MAJOR | Rule 4-10's recall returned the first remembered entry that matched. The gate's relation is not transitive: over the `_PAIR_BASE` triple from `C20-71` r4, R matches X and Y and X does not match Y. One act landed X and Y, both `existing`, and then handed R whichever it had landed first, where the gate says `ambiguous` and a fresh act proposes in review mode. The same root reused a `CandidateRef` by order over two proposals, and after a retire merged two types | fixed only where the act had landed BOTH tied neighbours, `d68ba8f` red, `0d60c85`. Round 6 found the same harm with one landed neighbour, so the claim "fixed" was false as observed: see §2.6 #1 and §2.7 |
 | 2 | 1 | MINOR | After a retire onto a successor that declares its own `MatchPolicy`, the act recalled `reused` where the gate declines under rule 3-18 (`unknowable`). Round 4 widened this from the successor's own name to the retired one | fixed, same commits: the recall defers when the closure has a governed change |
 | 3 | 2 | MINOR | After a retire, a recalled `existing` ref kept the retired member's type, where the gate now answers under the effective one (rule 2-17) | fixed, same commits: a host row under a type that is no longer effective goes back to the gate, which records nothing |
 | 4 | 2 | MINOR | A recalled `CandidateRef` keeps the type it was recorded under, while rule 4-3 speaks of the effective type | recorded in rule 4-10's text: a recalled candidate is the one recorded |
@@ -351,3 +352,26 @@ Lens 2 found a code MAJOR, so it was fixed red first and round 6, the confirming
 | 7 | 3 | MINOR | §1.7 counted two stopped suite runs. The runs on `49eabca` and `4c45c65` were also stopped on purpose, because round 4 and round 5 found code to change | recorded here: four stopped runs, none on the final code |
 
 One correction to a red test: `C20-70` r5's first test also compared the act's landing with a fresh act's landing made *after* it. Once the fix proposed R, that later fresh act correctly found the act's proposal as a holder and landed `pending`. The assertion now says so. The red reason, `reused`, was unchanged. `check_capability_matrix` then failed the `stores_events=False` and `stores_invocation_events=False` cells on that last step, where A4's read is unfinished, so the step expects `unknowable` there.
+
+### §2.6 — Round 6, on `0d60c85` (the confirming round)
+
+Round 6 is the last round §0.9 allows. Lenses 2 and 3 found the same code MAJOR independently. Lens 1 found none.
+
+| # | lens | severity | finding | outcome |
+|---|---|---|---|---|
+| 1 | 2, 3 | MAJOR | Round 5's fix judged only the entries in the act's memory. A host row the act never landed is not there, so with one landed neighbour the recall still settled an ambiguity the gate sends to review. Shown three ways: the `_PAIR_BASE` triple landing only X before R; the real CMS triple from `C20-71` r2 (the act lands `EAST`, `existing`, then `WEST`, which the gate calls `ambiguous` over `EAST` and `WESTON`, came back `reused` onto `EAST`'s row); and a remembered proposal for X hiding Y's host row, which the gate answers `existing`. WEST's data went onto EAST's row with no review | fixed after the cap (§2.7), `16cb54d` red |
+| 2 | 1, 2 | MINOR | Inside the non-transitive triple, a repeat of a label the act had answered pended a new ledger row each time: round 5's all-equal test was stricter than rule 4-10's key | fixed with #1: the exact label is resolved once |
+| 3 | 1 | MINOR | A stale host row stayed first in the memory, so the act went back to the gate on every landing and the memory grew | fixed with #1: the most recent answer for the exact key is the one recalled |
+| 4 | 2 | MINOR | After a retire, a host row held only under the retired member's name was never recalled again | fixed with #1: the gate answers once and its answer is recalled from then on |
+| 5 | 3 | MINOR | §1.4 and §1.7 pointed at "§2.5" for the final runs; §1.7 counted two stopped runs and said "Gates at `8247df4`"; §1.1's round 5 row said "the following commit" | fixed in this document |
+| 6 | 3 | MINOR | An inline comment in `_unwritten_for` still said "OWN identity", and `land`'s docstring order left out the rules 4-2 and 4-8 re-check that §8 lists | both reworded |
+
+### §2.7 — The post-cap fix and its one supervisor-authorised review
+
+§0.9 caps the loop at five rounds plus a confirming round, and round 6 found a MAJOR. The supervisor ruled (process) that fixing it after the cap is right, red first, followed by ONE fresh lens on the fix diff only (`0d60c85..` the fix), not a full round. If that lens finds a MAJOR, the row lands not clean with it recorded.
+
+**The fix.** Before the gate, rule 4-10 now recalls only the EXACT key: the same normalised label, under a type whose closure has the same effective entry, taking the most recent answer. A label that is only within `match_at` goes to the gate first. Only when the gate answers `proposal` (no host row near it) does the act reuse the one `CandidateRef` it recorded within `match_at` under the same effective entry. `existing` and `ambiguous` are always the gate's, and two similar candidates go on to A4 (rule 4-11). The original `C20-70` typo pin (`"zzzz qqqq unrelatd"` reused after a proposal) still holds through that second step, unchanged. The cost is one gate read per fuzzy repeat, never an identity: an `existing` read records nothing, and a fuzzy proposal is still held by A4.
+
+**One pin, green on arrival.** The first sweep on the fix (`sweep_r6.log`, exit 1) left one required survivor: reading the stored effective name instead of each entry's closure now. After a retire the gate's `proposal` and the similar-candidate step recovered the same candidate, so no test told the two apart. `C20-70` r6 "the exact key is recalled before the gate" adds the case where they differ (three similar candidates, so only the exact recall gives `reused`). It was added after the fix and is green on arrival there, and it is red on the mutant (`pending`).
+
+**The review.** Recorded in §2.8 once it reports.

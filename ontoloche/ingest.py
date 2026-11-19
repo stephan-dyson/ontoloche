@@ -182,8 +182,8 @@ INGEST_LANDINGS = (
 class IngestLanding:
     """``IngestAct.land``'s answer. INGEST.md §8, row 7c.
 
-    ``resolution`` is ``None`` for ``reused`` (the memory answered, nothing was
-    resolved) and for a ``refused`` that ``resolve_instance`` itself refused. ``ref`` is
+    ``resolution`` is ``None`` for ``reused`` (the memory answered; when a similar
+    label was first read by the gate, that read is not carried) and for a ``refused`` that ``resolve_instance`` itself refused. ``ref`` is
     set for ``existing`` and for a ``reused`` that recalled one; ``candidate`` for
     ``proposed``, ``pending``, a ``reused`` that recalled one, and a ``refused`` after
     the resolution (at preflight, at A4's read or at the record);

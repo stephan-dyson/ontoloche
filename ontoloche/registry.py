@@ -681,11 +681,12 @@ class IngestAct:
     _memory: list = dataclasses.field(default_factory=list)
 
     def _recall(self, type_name: str, label: str) -> tuple[str | None, Any]:
-        """Rule 4-10's lookup under the GATE'S key: the closure's effective entry and
-        ``similar(norm(a), norm(b)) >= match_at`` of that entry -- the functions
-        ``resolve_instance`` uses, so the act and the gate cannot key differently
-        (``I-4``). ``(effective, answer)``; ``effective`` is ``None`` when the closure
-        did not finish, and then nothing is recalled (the resolution will say why)."""
+        """Rule 4-10's lookup under the GATE'S key: the closure's effective entry and the
+        label under §3's normaliser, exactly -- the functions ``resolve_instance`` uses,
+        so the act and the gate cannot key differently (``I-4``). Anything only
+        similar is the gate's to judge (rounds 5 and 6). ``(effective, answer)``;
+        ``effective`` is ``None`` when the closure did not finish, and then nothing is
+        recalled (the resolution will say why)."""
         registry = self._registry
         closure = registry._instance_closure(self.namespace, type_name)
         if not closure["complete"]:
@@ -699,12 +700,17 @@ class IngestAct:
         # gate say so (round 5, lens 1, m1).
         if registry._governed_change(self.namespace, type_name, closure):
             return effective, None
-        match_at = match_policy_from_mapping(policy_raw).match_at
+        # The key is the label under §3's normaliser, EXACTLY (rule 4-10). A label
+        # that only matches a remembered one at `match_at` is the gate's to judge: its
+        # relation is not transitive, so R can match X while the gate calls R
+        # `ambiguous` over X and a Y this act never landed (rounds 5 and 6). A fuzzy
+        # proposal is still caught by A4 (rule 4-11), and an `existing` read records
+        # nothing, so sending it to the gate costs a read, never an identity.
         want = norm(label)
         now: dict[str, Any] = {}
-        found: list = []
+        latest = None
         for kind, eff, seen_label, answer in self._memory:
-            if kind != "entity" or similar(want, norm(seen_label)) < match_at:
+            if kind != "entity" or norm(seen_label) != want:
                 continue
             # The entry's OWN closure, read now: a retire between two landings of one
             # act moves `facility` onto `ltc_facility`, and the stored name alone would
@@ -712,21 +718,50 @@ class IngestAct:
             if eff not in now:
                 theirs = registry._instance_closure(self.namespace, eff)
                 now[eff] = theirs["effective"] if theirs["complete"] else None
-            if now[eff] != effective:
+            if now[eff] == effective:
+                latest = (eff, answer)          # the most recent answer for this key
+        if latest is None:
+            return effective, None
+        eff, answer = latest
+        # A host row remembered before the closure changed goes back to the gate once:
+        # rule 2-17 may now answer it under the effective name. The gate's answer is
+        # remembered under the current effective entry and recalled from then on
+        # (rounds 5 and 6). A recalled `CandidateRef` is the one recorded.
+        if isinstance(answer, InstanceRef) and eff != effective:
+            return effective, None
+        return effective, answer
+
+    def _similar_candidate(self, effective: str | None, label: str) -> Any:
+        """Rule 4-10 under the gate's RELATION, asked only AFTER the gate answered
+        ``proposal`` (no host row is near the label): the one ``CandidateRef`` this act
+        recorded for a label within ``match_at`` under the same effective entry, or
+        ``None`` when there is none or more than one. The gate, not the memory, settles
+        ``existing`` and ``ambiguous``, because its relation is not transitive and a
+        neighbour the act never landed can tie (rounds 5 and 6)."""
+        if effective is None:
+            return None
+        registry = self._registry
+        entry = registry.adapter.get_type(self.namespace, effective, kind="entity")
+        if entry is None:
+            return None
+        policy_raw, _ = registry._governed_facts(entry)
+        if policy_raw is None or match_policy_problem(policy_raw) is not None:
+            return None
+        match_at = match_policy_from_mapping(policy_raw).match_at
+        want = norm(label)
+        now: dict[str, Any] = {}
+        found: list = []
+        for kind, eff, seen_label, answer in self._memory:
+            if kind != "entity" or not isinstance(answer, CandidateRef):
                 continue
-            # A host row remembered under a type that is no longer the effective one
-            # is not what the gate answers now (rule 2-17 keeps it under the effective
-            # name), so the gate decides. `existing` records nothing (round 5, m2).
-            if isinstance(answer, InstanceRef) and answer.type.name != effective:
-                return effective, None
-            found.append(answer)
-        # EVERY entry that matches, not the first: the gate's relation is not
-        # transitive, so R can match X and Y while X does not match Y. Only one answer
-        # is recalled; two distinct ones are an ambiguity the gate decides (round 5,
-        # lens 2, MAJOR).
-        if found and all(a == found[0] for a in found):
-            return effective, found[0]
-        return effective, None
+            if similar(want, norm(seen_label)) < match_at:
+                continue
+            if eff not in now:
+                theirs = registry._instance_closure(self.namespace, eff)
+                now[eff] = theirs["effective"] if theirs["complete"] else None
+            if now[eff] == effective and answer not in found:
+                found.append(answer)
+        return found[0] if len(found) == 1 else None
 
     def _remember(self, effective: str | None, label: str, answer: Any) -> None:
         if effective is not None and answer is not None:
@@ -743,10 +778,12 @@ class IngestAct:
     ) -> IngestLanding:
         """Resolve one landed row and, where section 4 allows, record a proposal.
 
-        The order is the rule: rule 4-10's recall; ``resolve_instance``; ``existing`` is
-        remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance`` record nothing
-        (rule 4-7); ``proposal`` and ``ambiguous`` carry the resolution's own
-        ``CandidateRef``, under the EFFECTIVE type (rule 4-3); ``preflight``; amendment
+        The order is the rule: rule 4-10's recall of the exact key; ``resolve_instance``;
+        ``existing`` is remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance``
+        record nothing (rule 4-7); on ``proposal``, the one candidate this act recorded
+        within ``match_at`` is reused (rule 4-10); ``proposal`` and ``ambiguous`` carry the
+        resolution's own ``CandidateRef``, under the EFFECTIVE type (rule 4-3);
+        ``preflight``; rules 4-2 and 4-8 against the effects the gate read; amendment
         A4's read of who holds an unwritten proposal (rule 4-11); then
         ``record_invocation`` with the gate's judgement, the policy that governed (A5),
         the resolution's carried warnings, and on ``ambiguous`` ``review`` mode plus
@@ -783,6 +820,15 @@ class IngestAct:
                 res.outcome, res, None, None, None,
                 f"{res.outcome} proposes nothing (INGEST.md rule 4-7): {res.reason}",
             )
+        if res.outcome == "proposal":                                  # rule 4-10
+            held = self._similar_candidate(effective, label)
+            if held is not None:
+                return IngestLanding(
+                    "reused", None, None, held, None,
+                    f"this act already proposed this identity under "
+                    f"{self.namespace}:{effective}, and the gate finds no host row near "
+                    f"it (INGEST.md rule 4-10)",
+                )
         cand = res.candidate
         if cand is None or not res.complete:  # pragma: no cover - rule 3-6 forbids it
             return IngestLanding(
@@ -13225,8 +13271,8 @@ class Registry:
                     and ":" in w
                 ]
                 if named or "instance_proposal_pending" in (rec.warnings or ()):
-                    # A pending row is not a holder ONLY when the row it names is an
-                    # applied proposal of the pending row's OWN identity. Otherwise the
+                    # A pending row is not a holder ONLY when the rows it names hold an
+                    # applied proposal of EACH of its own matching candidates. Otherwise the
                     # warning is an exemption anyone can write (round 1, lens 2, M1), and
                     # the row is judged as any other.
                     pending_rows.append((order, rec, matched, named, mine))

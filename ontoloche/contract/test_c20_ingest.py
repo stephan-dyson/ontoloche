@@ -3291,3 +3291,33 @@ def test_c20_70_r6_a_remembered_proposal_never_hides_a_host_row(adapter, make_re
     landing = act_q.land(r, type_name="facility")
     assert landing.outcome == "existing" and landing.ref == gate.ref, (
         landing.outcome, landing.ref, landing.why)
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_r6_after_a_retire_the_exact_key_is_recalled_before_the_gate(
+    adapter, make_registry
+):
+    """Rule **4-10** (post-cap fix, a pin the sweep asked for). The exact key reads each
+    entry's closure NOW. Inside the non-transitive triple the act holds three candidates
+    within `match_at` of R, so after a retire only the exact recall of R's own candidate
+    gives `reused`: the similar-candidate step sees three and goes on to A4."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    host_instances(adapter, _rows(), type_name="facility")
+    host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act_w = _act(registry, "act-r6w")
+    first = [act_w.land(label, type_name="facility") for label in (x, y, r)]
+    assert [f.outcome for f in first] == ["proposed", "proposed", "pending"], first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    again = act_w.land(r, type_name="ltc_facility")
+    assert again.outcome == "reused" and again.candidate == first[2].candidate, (
+        again.outcome, again.why)
+    assert len(_ledger(registry)) == 3
