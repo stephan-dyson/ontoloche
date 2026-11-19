@@ -694,9 +694,15 @@ class IngestAct:
         policy_raw, _ = registry._governed_facts(closure["entry"])
         if policy_raw is None or match_policy_problem(policy_raw) is not None:
             return effective, None
+        # Rule 3-18: when a member of the closure declares other governed facts, the
+        # gate declines to judge the extent, so the act recalls nothing and lets the
+        # gate say so (round 5, lens 1, m1).
+        if registry._governed_change(self.namespace, type_name, closure):
+            return effective, None
         match_at = match_policy_from_mapping(policy_raw).match_at
         want = norm(label)
         now: dict[str, Any] = {}
+        found: list = []
         for kind, eff, seen_label, answer in self._memory:
             if kind != "entity" or similar(want, norm(seen_label)) < match_at:
                 continue
@@ -706,8 +712,20 @@ class IngestAct:
             if eff not in now:
                 theirs = registry._instance_closure(self.namespace, eff)
                 now[eff] = theirs["effective"] if theirs["complete"] else None
-            if now[eff] == effective:
-                return effective, answer
+            if now[eff] != effective:
+                continue
+            # A host row remembered under a type that is no longer the effective one
+            # is not what the gate answers now (rule 2-17 keeps it under the effective
+            # name), so the gate decides. `existing` records nothing (round 5, m2).
+            if isinstance(answer, InstanceRef) and answer.type.name != effective:
+                return effective, None
+            found.append(answer)
+        # EVERY entry that matches, not the first: the gate's relation is not
+        # transitive, so R can match X and Y while X does not match Y. Only one answer
+        # is recalled; two distinct ones are an ambiguity the gate decides (round 5,
+        # lens 2, MAJOR).
+        if found and all(a == found[0] for a in found):
+            return effective, found[0]
         return effective, None
 
     def _remember(self, effective: str | None, label: str, answer: Any) -> None:
@@ -13112,7 +13130,8 @@ class Registry:
         is not undone by an APPLIED compensation, is not itself a compensation, and has
         no ``results`` entry for the matching input (amendment A2). A row carrying
         ``instance_proposal_pending:<id>`` is exempt only when ``<id>`` is an applied
-        proposal of that row's OWN identity (rounds 1 and 2). Review does not enter.
+        proposal of EACH of that row's own matching candidates (rounds 1 to 3). Review
+        does not enter.
         (ii) **Rule 4-10's key, under the gate's own relation**, over the whole ledger and
         keyed on the CANDIDATE's namespace, not the recording row's (round 2): same kind,
         the same EFFECTIVE entry under :meth:`_instance_closure` (the function

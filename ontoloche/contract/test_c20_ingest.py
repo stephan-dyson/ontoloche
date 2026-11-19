@@ -3118,10 +3118,14 @@ def test_c20_70_r5_the_recall_never_settles_an_ambiguity_the_gate_would_review(
     assert gate.outcome == "ambiguous", gate
     landing = act_x.land(r, type_name="facility")
     assert landing.outcome != "reused", (landing.outcome, landing.ref, landing.why)
-    act_y = _act(registry, "act-r5y")
-    fresh = act_y.land(r, type_name="facility")
-    assert landing.outcome == fresh.outcome == "proposed", (landing, fresh)
+    assert landing.outcome == "proposed", landing
     assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+    # ...and a fresh act now finds that proposal as the identity's holder (rule 4-11),
+    # where `written` is readable; without it A4's read is unfinished (`unknowable`).
+    act_y = _act(registry, "act-r5y")
+    events = registry.caps.stores_events and registry.caps.stores_invocation_events
+    assert act_y.land(r, type_name="facility").outcome == (
+        "pending" if events else "unknowable")
 
 
 @NEEDS_LEDGER

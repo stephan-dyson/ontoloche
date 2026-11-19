@@ -639,8 +639,8 @@ MUTATIONS = (
              required=True),
     # ---- row 7c, adversarial round 4
     Mutation("4-10 the recall reads each memory entry's closure now", "c20_70", REG,
-             "            if now[eff] == effective:",
-             "            if eff == effective:", required=True),
+             "            if now[eff] != effective:",
+             "            if eff != effective:", required=True),
     Mutation("4-11 a pending row is exempt only when EACH own candidate is held", "c20_71",
              REG,
              "                if not own_held:\n                    exempt = False\n"
@@ -657,6 +657,17 @@ MUTATIONS = (
              "        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8",
              "        problem = _ingest_effects_problem([e for e in judged.declared_effects "
              "if e.op != \"propose_type\"])", required=True),
+    # ---- row 7c, adversarial round 5
+    Mutation("4-10 two distinct remembered answers are an ambiguity the gate decides",
+             "c20_70", REG,
+             "        if found and all(a == found[0] for a in found):",
+             "        if found:", required=True),
+    Mutation("4-10 the recall defers to rule 3-18", "c20_70", REG,
+             "        if registry._governed_change(self.namespace, type_name, closure):",
+             "        if False:", required=True),
+    Mutation("4-10 a host row under a retired type is the gate's to answer", "c20_70", REG,
+             "            if isinstance(answer, InstanceRef) and answer.type.name != effective:",
+             "            if False:", required=True),
     Mutation("4-10 a foreign act_id is refused before the recall", "c20_70", REG,
              "        if context is not None and context.act_id != self.act_id:",
              "        if False:", required=True),

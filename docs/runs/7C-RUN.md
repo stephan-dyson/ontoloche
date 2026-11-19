@@ -195,6 +195,8 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 | round 1 | `656ca49` | five regressions, each red for its predicted reason (§2) | `8a91551` |
 | round 2 | `f2d6796` | four regressions, each red for its predicted reason; two coverage pins green on arrival (§2) | `b61d641` |
 | round 3 | `ca65400` | two regressions red for their predicted reason; four coverage pins green on arrival (§2) | `8247df4` |
+| round 4 | `6b381e5` | `C20-70` r4 red for its predicted reason; `C20-28` r4 green on arrival; `C20-71` r4 flaky there, made stable in the fix commit (§2.4) | `4c45c65` |
+| round 5 | `d68ba8f` | four `C20-70` r5 regressions, each red for its predicted reason: the act landed `reused` (§2.5) | the following commit |
 
 **Scored against §0.3:**
 
@@ -241,7 +243,7 @@ Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rer
 
 ### §1.6 — Mutation sweep
 
-`docs/tools/ingest_mutation_sweep.py` at the round 4 fix: **178 mutations, 177 killed, 0 required survivors, 0 not applied** (`sweep_r4.log`; at `8247df4` it was 173 and 172). Every row-7c `C19` and `C20` id has at least one required mutation of its own. The one survivor is not required: `<n>` counted on rounded rather than unrounded scores, which no fixture can tell apart because none sits on a rounding edge. Four misses happened along the way, all recorded:
+`docs/tools/ingest_mutation_sweep.py` at the round 5 fix: **181 mutations, 180 killed, 0 required survivors, 0 not applied** (`sweep_r5.log`; 178 and 177 at `4c45c65`, 173 and 172 at `8247df4`). Every row-7c `C19` and `C20` id has at least one required mutation of its own. The one survivor is not required: `<n>` counted on rounded rather than unrounded scores, which no fixture can tell apart because none sits on a rounding edge. Four misses happened along the way, all recorded:
 
 - **First run: one survivor, `C20-72`.** In the five-row fixture `scanned == known`, so `{res.known}` → `{res.scanned}` passed. The test was padded with seven unrelated rows and asserts `scanned > known`, and the rerun killed the mutant.
 - **Round 2: two mutations never ran, and the summary still said 0 required survivors.** My round 2 edits had rewritten the C19-113 target and duplicated the 3-17 target. My shell wrapper's `echo exit=$?` also hid the sweep's exit 1. Both were retargeted, and the sweep's own exit code is now logged.
@@ -325,7 +327,7 @@ Lens 3 found one evidence MAJOR, so a full round 5 follows. Lenses 1 and 2 found
 |---|---|---|---|---|
 | 1 | 3 | MAJOR (evidence) | The `docs/README.md` row and §2's preamble said every MAJOR was fixed red first. Eight of the eleven were. One was a pin green on arrival, one a probe made sensitive and one a measurement | reworded in both places |
 | 2 | 2 | MINOR | Rule 4-10's recall compared the effective name stored when the memory was written. A retire between two landings of one act moved `facility` onto `ltc_facility`, and the second landing of the identity the act had proposed came back `pending`, with one extra ledger row. No second identity was minted, because A4 caught the first proposal | fixed, `6b381e5` red, fixed in the following commit: each entry's closure is read at the recall |
-| 3 | 2 | MINOR | Round 3's "each own candidate is held" exemption and `mine` keeping every matching candidate survived mutation | pinned by `C20-71` r4, green on arrival, with two required mutations |
+| 3 | 2 | MINOR | Round 3's "each own candidate is held" exemption and `mine` keeping every matching candidate survived mutation | pinned by `C20-71` r4 with two required mutations. At `6b381e5` the pin was flaky (an order-dependent assertion, 5 failures in 16 runs per round 5's lens 3), not green; it was made stable in `4c45c65` |
 | 4 | 3 | MINOR | Rule 4-8's half of the landing re-check had no test. It is not reachable through any printed call, because every public door refuses a predicate-proposing family | pinned by `C20-28` r4, which writes the family past the doors, green on arrival, with a required mutation. `C20-28` r3's docstring now names rule 4-2 only |
 | 5 | 1 | MINOR | Rule 4-2 said the re-check runs "at each landing". A `reused` or `existing` landing returns before the gate and records nothing | reworded: each landing that reaches the gate |
 | 6 | 3 | MINOR | §1.3 and §1.7 credited `check_spec_drift.py` with the 575 and 90 counts, which come from `test_manifest.py` | reworded |
@@ -333,3 +335,19 @@ Lens 3 found one evidence MAJOR, so a full round 5 follows. Lenses 1 and 2 found
 | 8 | 3 | MINOR | `C20-81`'s `existing` clause had no sweep mutation; `INGEST.md` §8.1a row 6 stated the 0% baseline twice; §2.1 left out the `IngestLanding` notes fix; §2.2 #2 credited lens 3 with a MINOR it did not raise; §2.3 said round 4 "ran" on `8247df4` | mutation added, the others fixed |
 
 While writing `C20-71` r4, one assertion compared ids in order. Two rows recorded in the same instant order on their random ids, so it failed once in four runs. It now compares a set.
+
+### §2.5 — Round 5, on `4c45c65`
+
+Lens 2 found a code MAJOR, so it was fixed red first and round 6, the confirming round §0.9 allows, follows. Lenses 1 and 3 found no in-scope reachable MAJOR.
+
+| # | lens | severity | finding | outcome |
+|---|---|---|---|---|
+| 1 | 2 | MAJOR | Rule 4-10's recall returned the first remembered entry that matched. The gate's relation is not transitive: over the `_PAIR_BASE` triple from `C20-71` r4, R matches X and Y and X does not match Y. One act landed X and Y, both `existing`, and then handed R whichever it had landed first, where the gate says `ambiguous` and a fresh act proposes in review mode. The same root reused a `CandidateRef` by order over two proposals, and after a retire merged two types | fixed, `d68ba8f` red, fixed in the following commit: every matching entry is judged, and one is recalled only when all carry the same answer |
+| 2 | 1 | MINOR | After a retire onto a successor that declares its own `MatchPolicy`, the act recalled `reused` where the gate declines under rule 3-18 (`unknowable`). Round 4 widened this from the successor's own name to the retired one | fixed, same commits: the recall defers when the closure has a governed change |
+| 3 | 2 | MINOR | After a retire, a recalled `existing` ref kept the retired member's type, where the gate now answers under the effective one (rule 2-17) | fixed, same commits: a host row under a type that is no longer effective goes back to the gate, which records nothing |
+| 4 | 2 | MINOR | A recalled `CandidateRef` keeps the type it was recorded under, while rule 4-3 speaks of the effective type | recorded in rule 4-10's text: a recalled candidate is the one recorded |
+| 5 | 3 | MINOR | `INGEST.md` §8 said a `pending` row is never a holder; `ACTIONS.md` 6-17, the holder prose and `_unwritten_for`'s docstring said "own identity" where the code needs each matching candidate held; rule 4-2 said "reaches the gate" | reworded: a pending row is a holder unless each matching candidate is held; "each landing the gate allows" |
+| 6 | 3 | MINOR | `C20-71` r4 was flaky at `6b381e5`, not green on arrival; §1.1 had no round 4 row | §2.4 #3 corrected; §1.1 rows for rounds 4 and 5 added |
+| 7 | 3 | MINOR | §1.7 counted two stopped suite runs. The runs on `49eabca` and `4c45c65` were also stopped on purpose, because round 4 and round 5 found code to change | recorded here: four stopped runs, none on the final code |
+
+One correction to a red test: `C20-70` r5's first test also compared the act's landing with a fresh act's landing made *after* it. Once the fix proposed R, that later fresh act correctly found the act's proposal as a holder and landed `pending`. The assertion now says so. The red reason, `reused`, was unchanged. `check_capability_matrix` then failed the `stores_events=False` and `stores_invocation_events=False` cells on that last step, where A4's read is unfinished, so the step expects `unknowable` there.
