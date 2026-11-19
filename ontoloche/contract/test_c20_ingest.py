@@ -3548,7 +3548,8 @@ def test_c20_71_d1_a4_holds_at_exactly_match_at(adapter, make_registry):
     if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
         pytest.skip("A4's read needs invocation events, and this backend keeps none")
     _ingest_family(registry)
-    first = _act(registry, "act-d4a").land(a, type_name="facility")
+    act_a = _act(registry, "act-d4a")
+    first = act_a.land(a, type_name="facility")
     assert first.outcome == "proposed", first
     cand_b = _resolve(registry, b).candidate
     held = registry.invocations(unwritten_for=cand_b)
