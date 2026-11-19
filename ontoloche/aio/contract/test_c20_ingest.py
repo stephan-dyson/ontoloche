@@ -2338,3 +2338,115 @@ async def test_c20_81_the_per_act_memory_is_written_on_every_branch_that_answers
     again = await b.land(NOTHING, type_name="facility")
     assert again.outcome == "reused" and again.candidate == pending.candidate
     assert len(await _ledger(registry)) == 2, "the pending branch left the act unbound"
+
+@NEEDS_LEDGER
+async def test_c20_71_r1_a_compensating_row_holds_nothing(adapter, make_registry):
+    """Rule **4-11** (round 1, lens 1, MAJOR 1). A compensating invocation that carries
+    the same candidate undoes the proposal; it does not become a holder, or the identity
+    could never be proposed again."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry, mode="review")
+    act_a = await _act(registry, "act-r1a")
+    first = await act_a.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    undo = await registry.record_invocation(
+        "propose_facility", {"instance": first.candidate}, actor="user:sd",
+        outcome="applied", approved_by="user:sd", compensates=first.invocation.invocation_id)
+    assert not isinstance(undo, Refusal), undo
+    held = await registry.invocations(unwritten_for=first.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [], held
+    act_b = await _act(registry, "act-r1b")
+    again = await act_b.land(NOTHING, type_name="facility")
+    assert again.outcome == "proposed", again
+
+@NEEDS_LEDGER
+async def test_c20_71_r1_a_pending_warning_naming_no_holder_exempts_nothing(adapter, make_registry):
+    """Rule **4-11** (round 1, lens 2, M1). `instance_proposal_pending:<id>` makes a row
+    a non-holder only when `<id>` is a matching applied row of the same identity. A
+    proposal recorded directly with a pending warning naming nothing real is a holder."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    res = await _resolve(registry, NOTHING)
+    await _ingest_family(registry)
+    forged = await registry.record_invocation(
+        "propose_facility", {"instance": res.candidate}, actor="ai:ingest", outcome="applied",
+        warnings=("instance_proposal_pending:bogus",))
+    assert not isinstance(forged, Refusal), forged
+    act_c = await _act(registry, "act-r1c")
+    landing = await act_c.land(NOTHING, type_name="facility")
+    assert landing.outcome == "pending", landing
+    assert f"instance_proposal_pending:{forged.invocation_id}" in landing.invocation.warnings
+
+@NEEDS_LEDGER
+async def test_c20_71_r1_an_unrelated_broken_closure_does_not_stall_the_namespace(
+    adapter, make_registry
+):
+    """Rule **4-11** (round 1, lens 2, M2). A ledger row for another type whose label is
+    nothing like this identity cannot hold it, so its broken closure must not turn every
+    A4 read in the namespace `complete=False`."""
+    registry = await _world(adapter, make_registry)
+    await host_instances(adapter, _rows(), type_name="widget")
+    await seed(registry, "widget", attributes=_governed())
+    await _ingest_family(registry)
+    widget = await _resolve(registry, "qqqq widget nothing alike", type_name="widget")
+    assert widget.outcome == "proposal", widget
+    out = await registry.record_invocation("propose_facility", {"instance": widget.candidate},
+                                     actor="ai:ingest", outcome="applied")
+    assert not isinstance(out, Refusal), out
+    await _rewrite(adapter, "widget", status="retired", successor="gadget_missing")
+    cand = (await _resolve(registry, NOTHING)).candidate
+    held = await registry.invocations(unwritten_for=cand)
+    assert held.complete, held.why_incomplete
+    act_d = await _act(registry, "act-r1d")
+    assert (await act_d.land(NOTHING, type_name="facility")).outcome == "proposed"
+
+@NEEDS_LEDGER
+async def test_c20_72_r1_n_is_the_tied_set_not_the_display_list(adapter, make_registry):
+    """Rule **4-12** with §4.3's K9 (round 1, lens 1, MAJOR 2). On a band ambiguous
+    (rule 5-9) the resolution's `candidates` are the five best for display, sub-floor
+    rows included; `<n>` is the multiplicity a reviewer chooses among -- the rows at or
+    above `propose_below` within `ambiguity_margin` of the top."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_e = await _act(registry, "act-r1e")
+    landing = await act_e.land(BAND, type_name="facility")
+    res = landing.resolution
+    assert res.outcome == "ambiguous" and res.known > 1, res
+    floor = POLICY["propose_below"]
+    above = [c for c in res.candidates if c.score is not None and c.score >= floor]
+    assert len(above) == 1, [c.score for c in res.candidates]
+    ambiguity = [w for w in landing.invocation.warnings
+                 if w.startswith("instance_ambiguous_at_proposal:")]
+    assert ambiguity == ["instance_ambiguous_at_proposal:instance:1"], ambiguity
+
+@NEEDS_LEDGER
+async def test_c20_70_r1_a_foreign_act_id_is_refused_before_the_recall(adapter, make_registry):
+    """Rule **4-10**'s memory is the act's (round 1, lens 2, m3): a context naming another
+    act is a `ValueError` even when the act already answered for the identity."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_f = await _act(registry, "act-A")
+    await act_f.land(NOTHING, type_name="facility")
+    with pytest.raises(ValueError):
+        await act_f.land(NOTHING, type_name="facility",
+                   context=InstanceContext(act_id="act-B", proposed_by="ai:ingest"))
+
+@NEEDS_LEDGER
+async def test_c20_41_r1_the_act_records_the_effective_entrys_policy(adapter, make_registry):
+    """`I-7` at the act (round 1, lens 3, M2). Through `land`, the policy recorded is the
+    EFFECTIVE entry's, with `governed_by` naming it -- not the declared type. Rule 3-18
+    makes a closure whose entries disagree on the numbers `unknowable`, so the numbers
+    are equal by construction and `governed_by` is the only thing that can be wrong."""
+    registry = await _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=_rows())
+    await _ingest_family(registry)
+    act_g = await _act(registry, "act-r1g")
+    landing = await act_g.land(NOTHING, type_name="facility")
+    assert landing.outcome == "proposed", landing
+    assert landing.resolution.governed_by == "default:ltc_facility"
+    assert landing.invocation.declared_policy["match_policy"] == {
+        "governed_by": "default:ltc_facility", "match_at": 0.97, "propose_below": 0.80,
+        "ambiguity_margin": 0.02,
+    }, landing.invocation.declared_policy
