@@ -4823,6 +4823,12 @@ class AsyncRegistry:
                     "successor": successor,
                 },
             )
+        # Row 8d, D14's second door: a row coming back to life with an alias whose
+        # word a tombstone's live successor also answers to. Warned, never refused
+        # (DECISIONS-OPEN item 35).
+        alias_warnings.extend(
+            await self._succeeded_alias_warnings(namespace, rec.kind, rec.name, dormant)
+        )
         return self._written(await self._entry(stored, extra_warnings=tuple(alias_warnings)))
 
     async def _active_page(self, namespace: str) -> tuple[list, str | None]:
@@ -6444,6 +6450,19 @@ class AsyncRegistry:
                     # report the same partial page, and a fact said twice is the
                     # `_merged_marker` defect one call along (row 4d, round 2).
                     + tuple(dict.fromkeys(extra_import_warnings))
+                    # Row 8d, D14: an alias whose word a tombstone's live successor
+                    # also answers to. Only on a row written live: a retired row is
+                    # not a claimant until `reinstate`, which asks the same question.
+                    + (
+                        tuple(
+                            await self._succeeded_alias_warnings(
+                                namespace, row.get("kind", kind), name,
+                                tuple(row.get("aliases") or ()),
+                            )
+                        )
+                        if status != "retired"
+                        else ()
+                    )
                 ),
                 retire_reason=retire_reason,
                 retired_by=imported_by if status == "retired" else None,
@@ -9409,6 +9428,57 @@ class AsyncRegistry:
                 return False
             current = getattr(nxt, "successor", None)
         return False
+
+    async def _succeeded_alias_warnings(
+        self, namespace: str, kind: str, name: str, aliases: Sequence[str]
+    ) -> list[str]:
+        """``alias_word_succeeded:<word>:<live claimant>`` for each alias that would
+        give its word a second live claimant. Row 8d, D14 (8D-RUN.md 0.2).
+
+        An alias may be the NAME of a retired row (``C12-09``'s succession, which
+        ``_retired_holder`` deliberately does not refuse). When that tombstone has a
+        successor whose walk ends at a LIVE row, the reader (``resolve_type``, rule
+        2.10-11) answers the successor while this row answers to the word too: two live
+        claimants, same kind, one word. **Warned, never refused**: whether to refuse the
+        write or change which claimant the reader answers is the founder's
+        (DECISIONS-OPEN item 35), and the default in force is to write it.
+
+        The walk is the reader's: same kind and namespace, ``_IDENTITY_CHAIN_CAP`` hops,
+        cycle-guarded. A dead end, or a walk ending at ``name`` itself, is one claimant.
+        A walk cut off by the cap is warned with ``?`` (Rule U: we could not finish).
+        """
+        found: list[str] = []
+        for word in dict.fromkeys(a for a in aliases if a):
+            tomb = None
+            for spelling in self._word_spellings(word):
+                rec = await self.adapter.get_type(namespace, spelling, kind=kind)
+                if rec is not None:
+                    tomb = rec
+                    break
+            if tomb is None or tomb.status != "retired" or not getattr(tomb, "successor", None):
+                continue
+            live = tomb
+            walked = {tomb.name}
+            hops = 0
+            claimant: str | None = None
+            while True:
+                nxt = getattr(live, "successor", None)
+                if not nxt or nxt in walked:
+                    break
+                if hops >= _IDENTITY_CHAIN_CAP:
+                    claimant = "?"
+                    break
+                walked.add(nxt)
+                hops += 1
+                live = await self.adapter.get_type(namespace, nxt, kind=kind)
+                if live is None:
+                    break
+                if live.status != "retired":
+                    claimant = live.name
+                    break
+            if claimant is not None and claimant != name:
+                found.append(f"alias_word_succeeded:{word}:{claimant}")
+        return found
 
     async def _retired_holder(
         self,

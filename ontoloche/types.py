@@ -537,6 +537,12 @@ WARNING_VALUES = (
     # Rule 4-11: a proposal for an identity whose earlier proposal's row is unwritten.
     # Carries the holder's `<invocation_id>`.
     "instance_proposal_pending",
+    # INTERFACE.md 5.4, row 8d, D14. `TypeEntry`, from `import_types` and `reinstate`,
+    # when a live row carries as an alias the NAME of a retired same-kind row whose
+    # successor walk ends at another live row: the word now has two live claimants and
+    # the reader answers the successor. Carries `<word>:<live claimant>` (`?` when the
+    # walk was cut off at the cap). Warned, never refused: DECISIONS-OPEN item 35.
+    "alias_word_succeeded",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
