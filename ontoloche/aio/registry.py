@@ -268,7 +268,7 @@ class AsyncIngestAct:
             if eff not in now:
                 theirs = await registry._instance_closure(self.namespace, eff)
                 now[eff] = theirs["effective"] if theirs["complete"] else None
-            if eff == effective:
+            if now[eff] == effective:
                 latest = (eff, answer)          # the most recent answer for this key
         if latest is None:
             return effective, None
