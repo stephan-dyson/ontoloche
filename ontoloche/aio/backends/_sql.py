@@ -79,6 +79,7 @@ from ontoloche.backends._sql import (
     TYPE_COLUMNS,
     _INCIDENT_CHUNK,
     _SAVEPOINT_STACKS,
+    _is_decode_failure,
     decode_cursor,
     decode_edge_cursor,
     decode_instance_cursor,
@@ -316,10 +317,13 @@ class AsyncBaseSqlAdapter:
         # cast to the text a ref holds, and the driver raised a raw decode error out of
         # both primitives. It is a row this surface cannot reference (rule 2-2), said
         # as `NotSupported`, which the registry reads as an unfinished read.
+        # Row 7d (7B-RUN 2.6, minor 1): only the driver's OWN decode failure is such a
+        # row. The bare word "decode" also matched a dropped table named
+        # `host_decode_site_3`, which is the driver's error like any other.
         try:
             return await self._fetchall(sql, params)
         except Exception as exc:
-            if "decode" not in str(exc).lower():
+            if not _is_decode_failure(exc):
                 raise
             raise NotSupported(
                 f"a row of {binding.table!r} carries an id this backend cannot render as "

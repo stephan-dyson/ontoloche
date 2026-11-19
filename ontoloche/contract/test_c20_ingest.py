@@ -3321,3 +3321,598 @@ def test_c20_70_r6_after_a_retire_the_exact_key_is_recalled_before_the_gate(
     assert again.outcome == "reused" and again.candidate == first[2].candidate, (
         again.outcome, again.why)
     assert len(_ledger(registry)) == 3
+
+
+# ------------------------------------------------------------- row 7d, ING15 and its minors
+@NEEDS_LEDGER
+def test_c20_70_d1_a_pending_candidate_never_absorbs_a_distinct_label(adapter, make_registry):
+    """Rule **4-10**, ING15 (row 7c's post-cap review, MAJOR). Act A proposes EAST; act B
+    lands WEST `pending` behind A's row; the gate answers WESTON `proposal`. WEST's
+    candidate is A's identity, and EAST ~ WESTON is 0.944, below `match_at`, so reusing
+    it folds WESTON into EAST with no reviewer. The similar step reuses only a candidate
+    the act itself PROPOSED: B proposes WESTON, exactly as a fresh act would."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    act_a, act_b, act_c = (_act(registry, f"act-d1{c}") for c in "abc")
+    east = act_a.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    west = act_b.land(_WEST, type_name="facility")
+    assert west.outcome == "pending", west
+    assert _resolve(registry, _WESTON).outcome == "proposal"
+    weston = act_b.land(_WESTON, type_name="facility")
+    assert weston.outcome == "proposed", (weston.outcome, weston.why)
+    assert weston.invocation is not None and not any(
+        w.startswith("instance_proposal_pending:") for w in weston.invocation.warnings
+    ), weston.invocation.warnings
+    held = registry.invocations(unwritten_for=weston.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        weston.invocation.invocation_id], held
+    fresh = act_c.land(_WESTON, type_name="facility")
+    assert fresh.outcome == "pending", (fresh.outcome, fresh.why)
+
+
+@NEEDS_LEDGER
+def test_c20_70_d1_a_recalled_pending_label_says_what_holds_it(adapter, make_registry):
+    """Rule **4-10** (ING15's minor, 7C-RUN 2.8 finding 2). A repeat of a label this act
+    landed `pending` is `reused` (rule 4-13), and its why names the holder's invocation:
+    this act proposed nothing for it."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    act_a, act_b = (_act(registry, f"act-d2{c}") for c in "ab")
+    east = act_a.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    assert act_b.land(_WEST, type_name="facility").outcome == "pending"
+    again = act_b.land(_WEST, type_name="facility")
+    assert again.outcome == "reused", again
+    assert east.invocation.invocation_id in again.why, again.why
+    assert "pending" in again.why and "proposed" not in again.why, again.why
+
+
+#: ING15's second minor (7C-RUN 2.8 finding 3) needs a `propose_below` above
+#: EAST ~ WESTON (0.944), so that the gate answers WESTON `proposal` over an EAST row.
+_HIGH_FLOOR = {"match_at": 0.97, "propose_below": 0.96, "ambiguity_margin": 0.0,
+               "why": "C20 row 7d: a floor above 0.944, so the similar step is reachable"}
+
+
+@NEEDS_LEDGER
+def test_c20_70_d1_a_remembered_host_ref_is_never_a_similar_candidate(
+    adapter, make_registry
+):
+    """Rule **4-10** (ING15's minor, 7C-RUN 2.8 finding 3). The similar step reuses only
+    a candidate the act proposed. A remembered `existing` ref within `match_at` must not
+    override the gate's `proposal`: the host row is EAST, the act lands WEST (`existing`,
+    0.971), and WESTON (0.944 to EAST, 0.972 to WEST) is the gate's proposal."""
+    registry = _world(adapter, make_registry,
+                      [{"host_id": "E1", "label": _EAST, "state": "AL"}], policy=_HIGH_FLOOR)
+    _ingest_family(registry)
+    act_h = _act(registry, "act-d3")
+    assert act_h.land(_WEST, type_name="facility").outcome == "existing"
+    assert _resolve(registry, _WESTON).outcome == "proposal"
+    weston = act_h.land(_WESTON, type_name="facility")
+    assert weston.outcome == "proposed", (weston.outcome, weston.why)
+    assert weston.ref is None and isinstance(weston.candidate, CandidateRef), weston
+
+
+# ------------------------------------------------- row 7d, row 7b's three recorded minors
+def test_c20_05_d1_a_dropped_table_is_the_drivers_error_whatever_its_name(
+    adapter, make_registry
+):
+    """Rule **2-2** (7B-RUN 2.6, build lens minor 1). Only the driver's own decode
+    failure is a row that cannot be rendered. A dropped host table whose NAME contains
+    "decode" is the same driver error as any other dropped table, never `NotSupported`
+    with a why about an id that cannot be text."""
+    from ..errors import NotSupported
+
+    target = getattr(adapter, "inner", adapter)
+    if not hasattr(target, "_instance_tables") or not hasattr(target, "_execute"):
+        pytest.skip("only the SQL backends bind a host table this suite can drop")
+    host_instances(adapter, _rows(), type_name="decode_site")
+    binding = next(b for b in target._instance_tables.values() if b.type_name == "decode_site")
+    assert "decode" in binding.table, binding.table
+    target._execute(f'DROP TABLE "{binding.table}"')
+    with pytest.raises(Exception) as caught:
+        target.get_instance("default", "entity", "decode_site", "015009")
+    assert not isinstance(caught.value, NotSupported), caught.value
+
+
+def test_c20_47_d1_a_huge_fraction_is_finite_and_never_a_crash(adapter):
+    """Rule **6-6** (7B-RUN 2.6, build lens minor 2). `Fraction(10**400)` is finite.
+    `float()` of it overflows, so it is judged as a rational, never converted."""
+    from fractions import Fraction
+
+    for value in (Fraction(10 ** 400), Fraction(-(10 ** 400), 3), [Fraction(1, 10 ** 400)]):
+        op = "in" if isinstance(value, list) else "eq"
+        assert condition_problem({"op": op, "attribute": "x", "value": value,
+                                  "why": "w"}) is None, value
+
+
+def test_c20_47_d1_a_deep_or_shared_operand_is_walked_once(adapter):
+    """Rule **6-6** (7B-RUN 2.6, build lens minor 3). The operand walk visits each
+    container once: a list nested 5,000 deep is judged without `RecursionError`, and a
+    sub-list shared at 20 levels (a million paths) is judged at once. A non-finite
+    member at the bottom is still found, and a container holding itself is still
+    refused."""
+    import time
+
+    deep: list = [1.5]
+    for _ in range(5000):
+        deep = [deep]
+    assert condition_problem({"op": "in", "attribute": "x", "value": [deep],
+                              "why": "w"}) is None
+    bad: list = [float("nan")]
+    for _ in range(5000):
+        bad = [bad]
+    assert condition_problem({"op": "in", "attribute": "x", "value": [bad], "why": "w"})
+    shared: list = [2.5]
+    for _ in range(20):
+        shared = [shared, shared]
+    began = time.perf_counter()
+    assert condition_problem({"op": "in", "attribute": "x", "value": shared,
+                              "why": "w"}) is None
+    assert time.perf_counter() - began < 1.0
+    loop: list = [[1.0]]
+    loop[0].append(loop)
+    assert condition_problem({"op": "in", "attribute": "x", "value": loop, "why": "w"})
+
+
+# ------------------------------------- row 7d, row 7c's recorded non-refusal minors (C1-C10)
+@pytest.mark.requires_capability("stores_attributes", "stores_proposals")
+def test_c20_34_d1_the_allowlist_holds_at_approve_and_import_types(adapter, make_registry):
+    """Rule **4-8** (7C-RUN 2.1, recorded: `C20-34` covered two of the four doors in a
+    test, the probe the rest). A predicate-proposing family written into a pending
+    proposal past validation is refused at `approve`, and the same family is refused at
+    `import_types`. Neither reaches the type store."""
+    from ..actions import action_attributes
+
+    registry = _world(adapter, make_registry)
+    bad = [_HOST_WRITE, Effect(op="propose_type", namespace="default", kind="predicate")]
+    attrs = action_attributes(reversibility="reversible", approval_mode="auto",
+                              inputs=[InputSpec("instance", "candidate")], effects=bad)
+    clean = action_attributes(reversibility="reversible", approval_mode="auto",
+                              inputs=[InputSpec("instance", "candidate")],
+                              effects=[_HOST_WRITE])
+    pending = registry.propose_type("mint_b", "clean, amended past validation", [],
+                                    "user:sd", kind="action", attributes=clean)
+    assert getattr(pending, "id", None) is not None, pending
+    rec = adapter.get_proposal(pending.id)
+    adapter.put_proposal(dataclasses.replace(rec, attributes={
+        **rec.attributes, "effects": [e.to_dict() for e in bad]}))
+    approved = registry.approve(pending.id, "user:sd")
+    assert isinstance(approved, Refusal) and approved.reason == "effect_not_permitted", approved
+    assert adapter.get_proposal(pending.id).status == "pending"
+    imported = registry.import_types(
+        [{"name": "mint_c", "kind": "action", "status": "active",
+          "definition": "mints predicates, imported", "attributes": attrs}],
+        namespace="default", kind="action")[0]
+    assert "import_refused:effect_not_permitted" in imported.warnings, imported
+    for name in ("mint_b", "mint_c"):
+        assert adapter.get_type("default", name, kind="action") is None, name
+
+
+class _LedgerDouble:
+    """Wraps an adapter and rewrites `find_invocations` pages (row 7d, C7 and C10)."""
+
+    def __init__(self, inner, page):
+        object.__setattr__(self, "inner", inner)
+        object.__setattr__(self, "page", page)
+        object.__setattr__(self, "calls", [0])
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    def __setattr__(self, name, value):
+        setattr(self.inner, name, value)
+
+    def find_invocations(self, **kwargs):
+        self.calls[0] += 1
+        if self.calls[0] > 200:
+            raise RuntimeError("the ledger read never stopped")
+        if kwargs.get("after") == "the-same-cursor":
+            # A cursor this double minted is not the backend's: answer for it here.
+            first = self.inner.find_invocations(**{**kwargs, "after": None})
+            return self.page(type(first)(**{**first.__dict__, "records": ()}), kwargs)
+        return self.page(self.inner.find_invocations(**kwargs), kwargs)
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a_repeated_cursor_is_an_unfinished_read(adapter, make_registry):
+    """Rule **4-11**, Rule U (7C-RUN 2.2 #6 and 2.3 #7, recorded: A4's cursor-repeat
+    guard). A ledger whose cursor comes back unchanged would be read forever. A4 stops
+    and answers incomplete, never a confident "no holder"."""
+    registry = _world(adapter, make_registry)
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+    def repeat(page, kwargs):
+        return type(page)(**{**page.__dict__, "next_after": "the-same-cursor"})
+
+    looping = make_registry(_LedgerDouble(adapter, repeat))
+    held = looping.invocations(unwritten_for=cand)
+    assert not held.complete and "repeated" in (held.why_incomplete or ""), held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a4_holds_at_exactly_match_at(adapter, make_registry):
+    """Rule **4-10**'s key in A4 (7C-RUN 2.2 #6, recorded): `similar >= match_at` holds
+    at equality. The policy's `match_at` is set to the two labels' own score."""
+    from ..ingest import norm, similar
+
+    a, b = _EAST, _WEST
+    at = similar(norm(a), norm(b))
+    policy = {"match_at": at, "propose_below": 0.5, "ambiguity_margin": 0.0,
+              "why": "C20 row 7d: match_at is EAST ~ WEST exactly"}
+    registry = _world(adapter, make_registry, policy=policy)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    act_a = _act(registry, "act-d4a")
+    first = act_a.land(a, type_name="facility")
+    assert first.outcome == "proposed", first
+    cand_b = _resolve(registry, b).candidate
+    held = registry.invocations(unwritten_for=cand_b)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        first.invocation.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a_pending_row_naming_a_failed_row_is_not_exempt(adapter, make_registry):
+    """Rule **4-11** (7C-RUN 2.3 #7, recorded: the proposals filter). A pending row is
+    exempt only when the row it names is an APPLIED proposal of its candidate. A row
+    naming a `failed` invocation holds the identity itself."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+    failed = registry.record_invocation("propose_facility", {"instance": cand},
+                                        actor="ai:ingest", outcome="failed")
+    assert not isinstance(failed, Refusal), failed
+    named = registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        warnings=(f"instance_proposal_pending:{failed.invocation_id}",))
+    assert not isinstance(named, Refusal), named
+    held = registry.invocations(unwritten_for=cand)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        named.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_an_unreadable_compensation_is_an_unfinished_read(adapter, make_registry):
+    """Rule **4-11**, Rule U (7C-RUN 2.3 #7, recorded: the `why_not` branch). When the
+    read of who compensated a holder cannot finish, A4 does not know whether the undo
+    was applied, so it answers incomplete."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+    first = registry.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied")
+    undo = registry.record_invocation("propose_facility", {"instance": cand},
+                                      actor="ai:ingest", outcome="failed",
+                                      compensates=first.invocation_id)
+    assert not isinstance(undo, Refusal), undo
+
+    def stall_compensations(page, kwargs):
+        # Only the paged read of who compensated a holder (it passes `after=`), not
+        # the one-row `compensated_by` lookup.
+        if kwargs.get("compensates") is None or "after" not in kwargs:
+            return page
+        return type(page)(**{**page.__dict__, "records": (), "next_after": None,
+                             "complete": False,
+                             "why_incomplete": "the compensations could not be read"})
+
+    stalled = make_registry(_LedgerDouble(adapter, stall_compensations))
+    held = stalled.invocations(unwritten_for=cand)
+    assert not held.complete and "compensations could not be read" in (
+        held.why_incomplete or ""), held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a_result_for_an_unmatched_input_releases_nothing(adapter, make_registry):
+    """Rule **4-11**, amendment A2 (7C-RUN 2.3 #7, recorded: `results` loosened to any
+    input). A row with two candidate inputs, only `a` matching, is written for the
+    identity only by a result for `a`. A result for `b` releases nothing."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    out = action_family(registry, "propose_pair", approval_mode="auto",
+                        inputs=[InputSpec("a", "candidate"), InputSpec("b", "candidate")],
+                        effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    cand = _resolve(registry, NOTHING).candidate
+    other = _resolve(registry, _EAST).candidate
+    pair = registry.record_invocation("propose_pair", {"a": cand, "b": other},
+                                      actor="ai:ingest", outcome="applied")
+    assert not isinstance(pair, Refusal), pair
+    wrote = registry.record_result(pair.invocation_id,
+                                   {"b": InstanceRef(other.type, "995301")}, actor="host:cms")
+    assert not isinstance(wrote, Refusal), wrote
+    held = registry.invocations(unwritten_for=cand)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        pair.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_unwritten_for_takes_only_a_candidate(adapter, make_registry):
+    """Amendment A4 (7C-RUN 2.3 #7, recorded: the `CandidateRef` type check). A4 keys
+    on a proposed thing. An `InstanceRef` names a written one, and is a `ValueError`."""
+    registry = _world(adapter, make_registry)
+    with pytest.raises(ValueError, match="takes a CandidateRef"):
+        registry.invocations(unwritten_for=InstanceRef(TypeRef("default", "entity",
+                                                               "facility"), "015009"))
+
+
+@NEEDS_LEDGER
+def test_c20_71_d1_a4_reads_past_the_first_page(adapter, make_registry):
+    """Rule **4-11**, amendment A4 (iii) (7C-RUN 2.1, recorded: no mutation for reading
+    only the oldest page). With one row per page, a holder recorded after three
+    unrelated rows is found, and the read is complete."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    for label in (_EAST, _WEST, _WESTON):
+        cand_x = _resolve(registry, label).candidate
+        assert not isinstance(registry.record_invocation(
+            "propose_facility", {"instance": cand_x}, actor="ai:ingest",
+            outcome="applied"), Refusal)
+    cand = _resolve(registry, NOTHING).candidate
+    holder = registry.record_invocation("propose_facility", {"instance": cand},
+                                        actor="ai:ingest", outcome="applied")
+    held = registry.invocations(unwritten_for=cand, limit=1)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        holder.invocation_id], held
+
+
+def test_c20_47_d1_a_freed_container_never_hides_a_later_one(adapter):
+    """Rule **6-6** (7D-RUN 2.1, round 1 lens 1 #3 and lens 2 #5). The walk remembers a
+    finished container by `id()`, so it keeps that container alive: a mapping that builds
+    its values fresh on each read frees the first one, and CPython hands its id to the
+    next, whose NaN was skipped. And the end-of-members sentinel is the walk's own, so an
+    operand carrying the module's container tuple is walked past it."""
+    from collections.abc import Mapping
+
+    from ..ingest import _CONTAINERS, _non_finite
+
+    class Fresh(Mapping):
+        def __init__(self, x):
+            self.x = x
+
+        def __getitem__(self, key):
+            return [self.x]
+
+        def __iter__(self):
+            return iter(("k",))
+
+        def __len__(self):
+            return 1
+
+    nan = float("nan")
+    assert _non_finite([Fresh(nan)])
+    for n in range(1, 40):      # CPython hands a freed id on; some n meets it
+        assert _non_finite([Fresh(1.0) for _ in range(n)] + [Fresh(nan)]), n
+    assert _non_finite([_CONTAINERS, nan])
+
+
+# ------------------------------------- row 7d round 2, ING16: a remembered row that died
+def _undo(registry, landing):
+    out = registry.record_invocation(
+        "propose_facility", {"instance": landing.candidate}, actor="user:sd",
+        outcome="applied", approved_by="user:sd",
+        compensates=landing.invocation.invocation_id)
+    assert not isinstance(out, Refusal), out
+
+
+def _write(registry, landing, row_id):
+    out = registry.record_result(landing.invocation.invocation_id,
+                                 {"instance": InstanceRef(landing.candidate.type, row_id)},
+                                 actor="host:cms")
+    assert not isinstance(out, Refusal), out
+
+
+@NEEDS_LEDGER
+@pytest.mark.parametrize("ends", ["compensated", "written"])
+def test_c20_70_d1_an_own_proposal_that_ended_is_not_reused(adapter, make_registry, ends):
+    """Rule **4-10**, ING16 (7D-RUN 2.2, round 2). The act reuses a candidate it proposed
+    only while its own row is still unwritten. The act proposes EAST; an applied row then
+    undoes EAST's row (`C20-71` r1's shape), or `record_result` writes it with no host
+    row (r2's). The act's WEST, within `match_at` of EAST,
+    lands as a fresh act's would, proposed and not reused onto the ended candidate, and
+    the repeat of EAST then goes to the gate and onto the act's live WEST proposal."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry, mode="review" if ends == "compensated" else "auto")
+    act = _act(registry, "act-i16")
+    east = act.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    (_undo(registry, east) if ends == "compensated" else _write(registry, east, "995161"))
+    fresh_act = _act(registry, "act-i16f")
+    fresh = fresh_act.land(_WEST, type_name="facility")
+    assert fresh.outcome == "proposed", fresh
+    _undo(registry, fresh) if ends == "compensated" else _write(registry, fresh, "995162")
+    west = act.land(_WEST, type_name="facility")
+    assert west.outcome == "proposed", west
+    assert west.candidate != east.candidate
+    again = act.land(_EAST, type_name="facility")   # its memory of EAST ended: the gate,
+    assert again.outcome == "reused" and again.candidate == west.candidate, again  # then WEST
+
+
+@NEEDS_LEDGER
+@pytest.mark.parametrize("ends", ["compensated", "written"])
+def test_c20_70_d1_a_pending_label_whose_holder_ended_is_landed_again(adapter, make_registry,
+                                                                      ends):
+    """Rule **4-10**, ING16 (7D-RUN 2.2, round 2). Act A proposes EAST and act B lands
+    WEST `pending` behind it. A's row is then undone or written. B's repeat of WEST lands
+    as a fresh act's would, `proposed`, never `reused` behind a holder that holds nothing."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry, mode="review" if ends == "compensated" else "auto")
+    act_a = _act(registry, "act-i16a")
+    act_b = _act(registry, "act-i16b")
+    east = act_a.land(_EAST, type_name="facility")
+    west = act_b.land(_WEST, type_name="facility")
+    assert (east.outcome, west.outcome) == ("proposed", "pending"), (east, west)
+    (_undo(registry, east) if ends == "compensated" else _write(registry, east, "995163"))
+    again = act_b.land(_WEST, type_name="facility")
+    assert again.outcome == "proposed", again
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+@pytest.mark.parametrize("banded", [False, True])
+def test_c20_70_d1_a_candidate_remembered_before_a_retire_goes_to_the_gate(
+        adapter, make_registry, banded):
+    """Rule **4-10** (7D-RUN 2.2, round 2 lens 2 #1). A remembered candidate is reused only
+    after the gate, like a remembered host row after its closure changed. The act proposes
+    a label under `ltc_facility`; `facility`, whose host table holds the label, is then
+    retired toward `ltc_facility`. The act's repeat lands `existing` on that row, as a
+    fresh act's does, never `reused` onto a second identity for one host thing. With the
+    host row only in the band, the act reuses its own live candidate and a fresh act lands
+    `pending` behind it: both mint nothing."""
+    label = _PAIR_BASE[:34] + "zzzzzz" if banded else _PAIR_BASE
+    host_instances(adapter, [{"host_id": "H1", "label": label, "state": "AL"}],
+                   type_name="facility")
+    host_instances(adapter, _rows()[1:2], type_name="ltc_facility")
+    registry = make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act = _act(registry, "act-i16r")
+    first = act.land(_PAIR_BASE, type_name="ltc_facility")
+    assert first.outcome == "proposed", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    again = act.land(_PAIR_BASE, type_name="ltc_facility")
+    fresh_act = _act(registry, "act-i16rf")
+    fresh = fresh_act.land(_PAIR_BASE, type_name="ltc_facility")
+    if banded:
+        assert (again.outcome, again.candidate) == ("reused", first.candidate), again
+        assert fresh.outcome == "pending", fresh
+    else:
+        assert fresh.outcome == "existing", fresh
+        assert (again.outcome, again.ref) == ("existing", fresh.ref), again
+
+
+def test_c20_47_d1_a_number_that_is_also_a_mapping_is_judged_as_a_number(adapter):
+    """Rule **6-6** (7D-RUN 2.2, round 2 lens 2 #3). An operand that is both a number and
+    a container is judged as the number first, as the recursive walk did: a NaN float that
+    is also an empty mapping is refused."""
+    from collections.abc import Mapping
+
+    from ..ingest import _non_finite
+
+    class FloatMap(float, Mapping):
+        def __getitem__(self, key):
+            raise KeyError(key)
+
+        def __iter__(self):
+            return iter(())
+
+        def __len__(self):
+            return 0
+
+    assert _non_finite(FloatMap("nan"))
+    assert _non_finite([FloatMap("nan")])
+
+
+# ------------------------------------- row 7d round 3 (7D-RUN 2.3)
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_d1_a_host_row_remembered_before_the_closure_grew_goes_to_the_gate(
+        adapter, make_registry):
+    """Rule **4-10** (7D-RUN 2.3, round 3 lens 2 #1). A host row remembered before the
+    closure CHANGED goes back to the gate, and the closure changes when its members do,
+    not only its effective name. The act lands a label `existing` on an `ltc_facility`
+    row; `facility`, whose table holds an exact twin, is then retired toward
+    `ltc_facility`. The effective entry is still `ltc_facility`, and the gate now sees two
+    rows at 1.0. The act's repeat is the gate's `ambiguous`, as a fresh act's is, never a
+    `reused` that hides the tie from every reviewer."""
+    label = _EAST
+    host_instances(adapter, [{"host_id": "OLD1", "label": label, "state": "AL"}],
+                   type_name="facility")
+    host_instances(adapter, [{"host_id": "NEW1", "label": label, "state": "AL"}],
+                   type_name="ltc_facility")
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act = _act(registry, "act-r3a")
+    first = act.land(label, type_name="ltc_facility")
+    assert first.outcome == "existing", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    again = act.land(label, type_name="ltc_facility")
+    assert again.outcome != "reused", again
+    assert again.resolution is not None and again.resolution.outcome == "ambiguous", again
+
+
+@NEEDS_LEDGER
+def test_c20_70_d1_a_similar_reuse_says_when_its_row_could_not_be_read(adapter, make_registry):
+    """Rule **4-10**, ING16 (7D-RUN 2.3, round 3 lens 1 #1). When the read of whether a
+    remembered candidate's row still holds it cannot finish, the act's own answer stands
+    and the landing says the check could not be made, on the similar step as on the exact
+    key. Forced here by a ledger whose read of the act's own row never finishes."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    act = _act(registry, "act-r3b")
+    east = act.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+
+    def unfinished(page, kwargs):
+        return type(page)(**{**page.__dict__, "complete": False, "next_after": None,
+                             "why_incomplete": "the ledger read did not finish here"})
+
+    act._registry = make_registry(_LedgerDouble(adapter, unfinished))
+    west = act.land(_WEST, type_name="facility")
+    assert west.outcome == "reused" and west.candidate == east.candidate, west
+    assert "could not be read" in west.why, west.why
+
+
+# ---------------------------- row 7d, after round 4 (7D-RUN 2.4, a fix after the cap)
+def _amend_facility(registry, policy, condition=None):
+    out = registry.import_types([{"name": "facility", "kind": "entity",
+                                  "definition": "a facility", "status": "active",
+                                  "attributes": _governed(policy, condition)}],
+                                kind="entity")
+    assert not isinstance(out, Refusal), out
+
+
+@NEEDS_LEDGER
+@pytest.mark.parametrize("amend", ["match_at", "predicate"])
+def test_c20_70_d1_a_host_row_remembered_before_its_entry_was_amended_goes_to_the_gate(
+        adapter, make_registry, amend):
+    """Rule **4-10** (7D-RUN 2.4, round 4 lens 2 #1). A host row remembered before the
+    effective entry's own governed facts changed goes back to the gate: the gate's answer
+    rests on the entry's `MatchPolicy` and predicate as much as on the closure's members.
+    `match_at`: the act lands `Burns Nursing Homes Inc` `existing` at 0.9778, `facility` is
+    amended to `match_at` 0.99 (the `C20-28` r3 door), and the gate now calls it
+    `ambiguous`. `predicate`: the act lands `Mesa Vista Care` on its CO row, and an AL-only
+    predicate is added. Either way the act's repeat is the gate's answer, as a fresh act's
+    is, never a `reused` that mints nothing where a fresh act records a proposal."""
+    registry = _world(adapter, make_registry)
+    _ingest_family(registry)
+    act = _act(registry, f"act-r4-{amend}")
+    label = "Burns Nursing Homes Inc" if amend == "match_at" else "Mesa Vista Care"
+    first = act.land(label, type_name="facility")
+    assert first.outcome == "existing", first
+    if amend == "match_at":
+        _amend_facility(registry, {**POLICY, "match_at": 0.99})
+    else:
+        _amend_facility(registry, POLICY, AL_ONLY)
+    fresh = _resolve(registry, label)
+    assert fresh.outcome != "existing", fresh
+    again = act.land(label, type_name="facility")
+    assert again.outcome != "reused", again
+    assert again.resolution is not None and again.resolution.outcome == fresh.outcome, again

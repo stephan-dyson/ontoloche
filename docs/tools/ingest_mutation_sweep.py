@@ -264,8 +264,8 @@ MUTATIONS = (
              'and any(same_word(a, word) for a in (o.aliases or ()))',
              'and (same_word(o.name, word) or any(same_word(a, word) for a in (o.aliases or ())))', required=True),
     Mutation('6-6 a non-finite number anywhere', 'c20_47_r4', ING,
-             '        return any(_non_finite(v, seen) for v in members)',
-             '        return False', required=True),
+             '                push(member)',
+             '                pass', required=True),   # row 7d: the walk is iterative
     Mutation('3-20 an unfinished backward walk is unknowable', 'c20_86_r4', REG,
              '        if not complete:\n            return stop(why or',
              '        if False:\n            return stop(why or', required=True),
@@ -412,14 +412,14 @@ MUTATIONS = (
              'ConditionResult(None, f"{attribute!r}: {exc}")',
              'ConditionResult(True, "")', required=True),
     Mutation('2-2 an id that cannot be text is NotSupported', 'c20_05_r5', SQL,
-             '            if "decode" not in str(exc).lower():',
+             '            if not _is_decode_failure(exc):',
              '            if True:', required=True),
     Mutation('6-6 a complex non-finite is refused', 'c20_47_r5', ING,
              '        return not cmath.isfinite(complex(value))',
              '        return False', required=True),
     Mutation('6-6 a self-containing operand is refused', 'c20_47_r5', ING,
-             '            return True          # a self-containing operand',
-             '            return False          # a self-containing operand', required=True),
+             '                return True      # a self-containing operand',
+             '                return False     # a self-containing operand', required=True),
     # ---- after round 6 (7B-RUN.md 2.6) ---------------------------------------------
     Mutation('2-2 a present row that cannot be rendered is refused, not absent', 'c20_05_r6', SQL,
              '            raise NotSupported(\n                f"a row of {binding.table!r} carries an id this backend cannot render as "',
@@ -608,7 +608,8 @@ MUTATIONS = (
              '                if other.compensates == rec.invocation_id and other.outcome == "applied":',
              "                if other.compensates == rec.invocation_id:", required=True),
     Mutation("4-11 an unfinished A4 read proposes nothing", "c20_71", REG,
-             "        if not held.complete:", "        if False:", required=True),
+             "        if not held.complete:\n            return IngestLanding(",
+             "        if False:\n            return IngestLanding(", required=True),
     Mutation("4-4 the resolution's carried warnings ride onto the invocation", "c20_30", REG,
              '        warnings = [w for w in res.warnings if w.split(":", 1)[0] in CARRIED_WARNINGS]',
              "        warnings = []", required=True),
@@ -634,13 +635,16 @@ MUTATIONS = (
              "            return InvocationReport((), 0, True, None)", required=True),
     Mutation("4-13 a refused landing writes no memory", "c20_81", REG,
              "            refusal = judged.refusal\n            return IngestLanding(",
-             "            self._remember(effective, label, cand)\n"
+             "            self._remember(effective, label, cand, \"proposed:none\")\n"
              "            refusal = judged.refusal\n            return IngestLanding(",
-             required=True),
+             # Equivalent since row 7d round 2 (7D-RUN 2.2) WHERE A4'S READ FINISHES: an
+             # entry whose row a finished read does not name is never reused (ING16). On a
+             # backend where it cannot finish, the entry would stand (7D-RUN 2.3).
+             required=False),
     # ---- row 7c, adversarial round 4
     Mutation("4-10 the recall reads each memory entry's closure now", "c20_70", REG,
-             "            if now[eff] == effective:\n                latest = (eff, answer)",
-             "            if eff == effective:\n                latest = (eff, answer)",
+             "            if now[eff] == effective:\n                latest = (eff, answer, origin)",
+             "            if eff == effective:\n                latest = (eff, answer, origin)",
              required=True),
     Mutation("4-11 a pending row is exempt only when EACH own candidate is held", "c20_71",
              REG,
@@ -652,7 +656,7 @@ MUTATIONS = (
              "                    mine.append(other)",
              "                    mine.append(other) if not mine else None", required=True),
     Mutation("4-13 an `existing` landing binds the identity", "c20_81", REG,
-             "            self._remember(effective, label, res.ref)                  # rule 4-13, B7",
+             "            self._remember(effective, label, res.ref, \"existing\")      # rule 4-13, B7",
              "            pass", required=True),
     Mutation("4-8 the landing judges predicate-proposing effects", "c20_28", REG,
              "        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8",
@@ -661,22 +665,29 @@ MUTATIONS = (
     # ---- row 7c, adversarial round 5
     Mutation("4-10 two distinct remembered answers are an ambiguity the gate decides",
              "c20_70", REG,
-             "        return found[0] if len(found) == 1 else None",
-             "        return found[0] if found else None", required=True),
+             "        if len(found) != 1:\n            return None, None",
+             "        if not found:\n            return None, None", required=True),
+    # Both below are subsumed since row 7d (7D-RUN 2.4, the final sweep): a remembered
+    # candidate goes to the gate first (round 2), and a remembered host row goes to the gate
+    # when the closure's members or the effective entry's governed facts changed (round 3,
+    # after round 4). A 3-18 disagreement that arises mid-act needs a member's facts to
+    # change, and a non-effective member is a retired predecessor that `import_types`
+    # refuses to amend ([Observed], 7D-RUN 2.4). An effective entry that moves moves a link,
+    # so the members change too ([Inferred]). Kept as guards, so non-required.
     Mutation("4-10 the recall defers to rule 3-18", "c20_70", REG,
              "        if registry._governed_change(self.namespace, type_name, closure):",
-             "        if False:", required=True),
+             "        if False:", required=False),
     Mutation("4-10 a host row under a retired type is the gate's to answer", "c20_70", REG,
              "        if isinstance(answer, InstanceRef) and eff != effective:",
-             "        if False:", required=True),
+             "        if False:", required=False),
     # ---- row 7c, the post-cap fix of round 6's MAJOR
     Mutation("4-10 the recall's own key is the exact normalised label", "c20_70", REG,
              "            if kind != \"entity\" or norm(seen_label) != want:",
              "            if kind != \"entity\" or similar(want, norm(seen_label)) < 0.97:",
              required=True),
     Mutation("4-10 the most recent answer for the key is recalled", "c20_70", REG,
-             "                latest = (eff, answer)          # the most recent answer for this key",
-             "                latest = latest or (eff, answer)", required=True),
+             "                latest = (eff, answer, origin)  # the most recent answer for this key",
+             "                latest = latest or (eff, answer, origin)", required=True),
     Mutation("4-10 a similar label is recalled only after the gate says proposal", "c20_70",
              REG, '        if res.outcome == "proposal":                                  # rule 4-10',
              "        if False:", required=True),
@@ -688,9 +699,109 @@ MUTATIONS = (
              '            governed_by=f"{self.namespace}:{type_name}" '
              "if policy_raw is not None else None,", required=True),
     Mutation("4-13 the pending branch writes the memory", "c20_81", REG,
-             "        self._remember(effective, label, cand)                         # rule 4-13",
-             "        if holder is None:\n            self._remember(effective, label, cand)",
+             "        self._remember(effective, label, cand,                         # rule 4-13",
+             "        if holder is None:\n            self._remember(effective, label, cand,",
              required=True),
+    # ---- row 7d: ING15 and its two minors (7D-RUN 0.2, 0.5)
+    Mutation("4-10 the similar step never reuses a pending candidate (ING15)", "c20_70_d1",
+             REG, '            if not origin.startswith("proposed:"):      # never a pending one (ING15)',
+             "            if False:", required=True),
+    Mutation("4-10 the similar step skips a remembered host ref, not only pending ones",
+             "c20_70_d1", REG,
+             "            if kind != \"entity\" or not isinstance(answer, CandidateRef):\n"
+             "                continue\n"
+             '            if not origin.startswith("proposed:"):      # never a pending one (ING15)',
+             "            if kind != \"entity\":\n"
+             "                continue\n"
+             '            if origin.startswith("pending:"):', required=True),
+    Mutation("4-10 a recalled pending label's why names its holder", "c20_70_d1", REG,
+             '            if origin.startswith("pending:"):\n                # Name what was recalled',
+             "            if False:\n                # Name what was recalled", required=True),
+    # ---- row 7d round 2: ING16 and the retire door (7D-RUN 2.2)
+    Mutation("4-10 a remembered candidate is reused only while its row holds it (ING16)",
+             "c20_70_d1", REG,
+             "        return any(i.invocation_id == row for i in held.invocations)",
+             "        return True", required=True),
+    Mutation("4-10 the similar step reuses only a live proposal (ING16)", "c20_70_d1", REG,
+             "            alive = self._alive(answer, origin)\n            if alive is not False:",
+             "            alive = self._alive(answer, origin)\n            if True:", required=True),
+    Mutation("4-10 an unreadable liveness check keeps the act's own answer (ING16)",
+             "c20_70", REG,
+             '            return held.why_incomplete or "the ledger read did not finish"',
+             "            return False",
+             # Killed only where A4 cannot finish: the capability matrix's
+             # stores_events=False leg, which this sqlite-only sweep does not run.
+             required=False),
+    Mutation("4-10 a remembered candidate goes to the gate first (round 2 lens 2 #1)",
+             "c20_70_d1", REG, "        remembered = recalled\n",
+             "        remembered = recalled\n        if remembered is not None:\n"
+             "            return IngestLanding(\"reused\", None, None, remembered, None, \"x\")\n",
+             required=True),
+    Mutation("4-10 a host row remembered before the closure's members changed is the gate's",
+             "c20_70_d1", REG,
+             "                frozenset(closure[\"members\"]), registry._governed_facts(closure[\"entry\"])):",
+             "                self._members[at][0], registry._governed_facts(closure[\"entry\"])):",
+             required=True),
+    Mutation("4-10 a host row remembered before its entry was amended is the gate's",
+             "c20_70_d1", REG,
+             "                frozenset(closure[\"members\"]), registry._governed_facts(closure[\"entry\"])):",
+             "                frozenset(closure[\"members\"]), self._members[at][1]):",
+             required=True),
+    Mutation("4-10 a similar reuse says when its row could not be read (ING16)", "c20_70_d1",
+             REG, "                if alive is not True:\n                    unread[answer] = alive",
+             "                if False:\n                    unread[answer] = alive", required=True),
+    Mutation("6-6 a number that is also a container is judged as a number", "c20_47_d1", ING,
+             "    return isinstance(value, _CONTAINERS) and not isinstance(value, numbers.Number)",
+             "    return isinstance(value, _CONTAINERS)", required=True),
+    # ---- row 7d: row 7b's three recorded minors (7D-RUN 0.6)
+    Mutation("2-2 only the driver's own decode failure is a row that cannot be text",
+             "c20_05_d1", SQL, "            if not _is_decode_failure(exc):",
+             '            if "decode" not in str(exc).lower():', required=True),
+    Mutation("6-6 a rational is finite and never converted", "c20_47_d1", ING,
+             "    if isinstance(value, numbers.Rational):",
+             "    if isinstance(value, numbers.Integral):", required=True),
+    Mutation("6-6 a shared container is walked once", "c20_47_d1", ING,
+             "            if id(member) not in done:", "            if True:", required=True),
+    Mutation("6-6 a shared container is not a self-containing one", "c20_47_d1", ING,
+             "            if id(member) in on_path:",
+             "            if id(member) in on_path or id(member) in done:", required=True),
+    Mutation("6-6 a judged container is kept alive while its id is remembered",
+             "c20_47_d1", ING, "            judged.append(container)\n",
+             "            pass\n", required=True),
+    Mutation("6-6 the walk's end mark is its own, never an operand", "c20_47_d1", ING,
+             "        member = next(members, _END)\n        if member is _END:",
+             "        member = next(members, _CONTAINERS)\n        if member is _CONTAINERS:",
+             required=True),
+    # ---- row 7d: row 7c's recorded non-refusal minors (7D-RUN 0.7)
+    Mutation("4-8 the allowlist names kinds, at approve and import_types", "c20_34", ACT,
+             "        if effect.kind not in PROPOSABLE_KINDS:",
+             "        if effect.kind == \"type\":", required=True),
+    Mutation("4-11 A4 reads past the oldest page", "c20_71_d1", REG,
+             "            seen_cursors.add(nxt)\n            after = nxt",
+             "            break", required=True),
+    Mutation("4-9 a candidate never acquires an id", "c20_69", ING,
+             "    resolution: str\n    act_id: str\n",
+             "    resolution: str\n    act_id: str\n    id: str = \"\"\n", required=True),
+    Mutation("4-11 a repeated ledger cursor is an unfinished read", "c20_71_d1", REG,
+             "            if nxt in seen_cursors:", "            if False:", required=True),
+    Mutation("4-10 A4 holds at exactly match_at", "c20_71_d1", REG,
+             "                    if similar(key, norm(other.label)) < match_at:",
+             "                    if similar(key, norm(other.label)) <= match_at:",
+             required=True),
+    Mutation("4-11 a pending row names only an applied proposal", "c20_71_d1", REG,
+             '                    if rec.outcome == "applied" and not rec.compensates:\n'
+             "                        proposals",
+             "                    if True:\n                        proposals", required=True),
+    Mutation("4-11 an unreadable compensation is an unfinished read", "c20_71_d1", REG,
+             "                    if why_not:\n                        whys.append(why_not)",
+             "                    if False:\n                        whys.append(why_not)",
+             required=True),
+    Mutation("4-11 only a result for a matching input writes the identity", "c20_71_d1",
+             REG, "                if all(name in built.results for name in matched):",
+             "                if built.results:", required=True),
+    Mutation("A4 unwritten_for= takes only a CandidateRef", "c20_71_d1", REG,
+             "            if not isinstance(unwritten_for, CandidateRef):",
+             "            if False:", required=True),
 )
 
 
@@ -729,8 +840,24 @@ def _run(where: Path, test: str, suite: str = C20S) -> tuple[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--required", action="store_true")
+    parser.add_argument("--only", action="append", default=[],
+                        help="run only mutations whose rule or test contains this text "
+                             "(repeatable; row 7d, for batches when memory runs short)")
+    parser.add_argument("--list", action="store_true",
+                        help="print each mutation and whether its old text occurs once")
     args = parser.parse_args()
     chosen = [m for m in MUTATIONS if m.required or not args.required]
+    if args.only:
+        chosen = [m for m in chosen
+                  if any(o in m.rule or o in m.test for o in args.only)]
+    if args.list:
+        bad = 0
+        for m in chosen:
+            count = (ROOT / m.file).read_text(encoding="utf-8").count(m.old)
+            bad += count != 1
+            print(f"  {count}  {m.test:<10}  {m.rule}")
+        print(f"\n{len(chosen)} mutations, {bad} whose old text does not occur once")
+        return 1 if bad else 0
 
     base = _copy()
     verdict, out = _run(base, "c20 or finding_2")
