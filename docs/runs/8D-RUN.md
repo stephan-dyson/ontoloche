@@ -117,3 +117,89 @@ py docs/tools/check_skip_census.py
 ```
 
 `OO_POSTGRES_DSN=postgresql://postgres:openontology@localhost:55432/open_ontology` (container `oo-pg`). The full suite takes about 21 minutes, so it runs in the background.
+
+---
+
+## §1 — Results against §0, scored
+
+Every number below is from a command this row ran, and each is **[Observed]** unless it says otherwise. §0 is left exactly as committed at `adb31d0`. Findings from the adversarial loop are scored here where they change a §0 prediction, and listed round by round in §2.
+
+### §1.1 — Red first, per commit
+
+| step | red commit | what failed, and why | green commit |
+|---|---|---|---|
+| D14 | `bd86531` | `C12-78` and `C12-79`: 11 failures per sqlite-shaped leg, 22 on sqlite and postgres, each on the missing `alias_word_succeeded` warning alone (5 kinds at the import, 1 chain, 5 kinds at `reinstate`) | `8f1c039` |
+| B5-1, B5-2 | `3a491fd` | `C12-80`: the shared, interface and endpoint cases on the missing warning, and the held twin reading `not_in_document` where `held:definition_missing` was predicted | `8ec42ac` |
+| C5-4 | `0b02ad5` | `C12-81`: `bar_spt` listed twice in `unresolved_shared` | `2fb397b` |
+| D14 on a backend keeping no aliases | `783cbf3` | `C12-78`'s `an_alias_the_backend_does_not_keep_is_not_warned`: the warning named a second claimant that `stores_aliases=False` never stored | `45eab75` |
+| round 1 (§2) | `0724e83` | `C12-79`'s third door unwarned, `C12-80`'s retired twin reported bound, `C12-78`'s 17-hop chain warned `?` | `4e110dd` |
+
+- **Miss (predicted kinds): the third backend.** §0.4 item 2 predicted red "on all three legs". On `sqlite_minimal` the `retire(successor=)` that builds the tombstone is refused `no_consumer_evidence` (no membership index, and the forced override needs `stores_events`), so D14 cannot arise there. The red commit gates the D14 cases on `indexes_membership` and adds `C12-78`'s `without_a_membership_index_no_successor_can_be_named`, which pins that refusal on minimal and the successful retire elsewhere, with no skip.
+- **Hit: `edge`.** §0.1 item 2 had not tried it. It behaves as the other four kinds.
+- **Miss (process): `bd86531` was committed without its async mirror.** The same slip as 7D §1.1. `8f1c039` regenerated it, and every later red commit carried its mirror.
+
+### §1.2 — The fixes against §0.2 and §0.3
+
+- **§0.2 item 1 (the import door): a miss, found by the capability matrix.** The first full run on `1ceeec2` failed `check_capability_matrix` for `stores_events=False` (5 failures) and `stores_aliases=False` (10). Two causes. The D14 cases used aliases and `reinstate` (which needs an event trail) as scaffolding without declaring them, so they now carry `requires_capability`. And on `stores_aliases=False` the warning named a second claimant the backend never stored, a Rule U defect in the design. The import door now asks only when the backend keeps aliases (`45eab75`). `reinstate` needs no gate, since such a backend has no dormant aliases to check.
+- **§0.2 item 2 (the reinstate door): a hit for the alias holder, and a miss for a door §0 did not name.** Round 1's door lens found that reinstating the retired **end** of a chain, whose first word a live row already holds as an alias, recreates the state with nothing said. §0.6 had K2 (the holder) and K6 (the tombstone) and no row for the successor. Now warned (`4e110dd`).
+- **§0.2 item 3 (the walk is the reader's): a miss, found by round 1.** The `?` branch had no test at `1ceeec2`, and the walk stopped one hop short of `resolve_type`'s (the reader takes the first hop and `_IDENTITY_CHAIN_CAP` more), so a 17-hop chain the reader finishes was warned `?`. The walk now takes the reader's hops, in one helper `_succession_claimant` that both doors use. Dead ends stay one claimant, as predicted.
+- **§0.2 item 4 (nothing else changes): a hit.** The alias write, the reader and `reinstate`'s `successor_active` are unchanged and pinned.
+- **A call recorded:** the tombstone is found by `_word_spellings(word)` (the word and its `identity_key`), so an alias spelled `Zip_Code`-style still finds `zip_code`.
+- **§0.3 (B5): items 1 to 4 hit as stated, with one gap closed by round 1.** `_foundry_unresolved` builds `(kind, word) -> planned item`, and a reference whose apiName the plan lacks is resolved against the twin. Round 1's implementer lens found the binding reported when the twin was written retired (DEPRECATED) or refused by the real run, beside an `unresolved` entry for the same reference. A binding now stands only when its reference is not unresolved (`4e110dd`). A refusal is known only on the real run, so the dry run may still report it there, as §0.3 item 1 allows.
+- **`check_merge_guard.py` Part A** flagged first `_succeeded_alias_warnings` (`8ec42ac`) and then `_succession_claimant` (round 1) as unknown `successor` writers, its over-broad scan naming any mention of the field. Each reads only, and the verdict now sits on `_succession_claimant`. The checker exits 0.
+- **Text:** `INTERFACE.md` §5.4 gains both values (fifty-one to fifty-three, and `FoundryItem` becomes a carrier), rule 2.10-17 and §12 say D14 is warned and routed, and §2.5a gains the twin paragraph and K8's recorded gap. `PACKAGE.md` §6.2 gains `C12-78` to `C12-81` (575 to 579). Round 1's tests extend those four ids and add none.
+
+### §1.3 — Design tests (§0.5)
+
+| test | predicted | observed | score |
+|---|---|---|---|
+| probe `D14 alias import over a tombstone with successor` | `('alias_word_succeeded:zip_code:postal_code',)` | the same | hit |
+| probe `D14 live alias holders`, `D14 reinstate zip_code` | unchanged, now asserted | `['post_code']`, `successor_active`. `--assert` holds 22 lines (19 plus D14's three) | hit |
+| B5-1, dry and real | both report it, identical | `C12-80` shared case: the warning and `bound_by_conversion` on both runs, `unresolved_shared []` on both | hit |
+| the interface case | warned `predicate:FooInterface:fooInterface` | the same | hit |
+| a link endpoint (K7) | covered by the same path | `homeOffice` warned `dst:office:Office` on both runs | hit |
+| the five Foundry fixtures | byte-identical | `type_surface_snapshot.py --compare` against `add906f`: **0 differences across 10 reports**, after D14, B5, C5-4 and round 1 | hit |
+| UC1 to UC3 | green | see §1.6 | see §1.6 |
+| the 19 reserved-rule lines | unchanged | unchanged | hit |
+
+### §1.4 — Kill row (§0.6)
+
+- K1 and K2 are closed by the warning, K7 by the twin resolution.
+- **A door §0.6 did not list:** `reinstate` of a chain's retired end (round 1, door lens). Closed by the warning.
+- K3 (moves): not tested to the end. The door lens's `merge_types` attempt was refused `no_consumer_evidence` before it moved anything. The prediction stands, unverified.
+- K4: **hit, unreachable.** `propose_type` and `approve` take no `aliases` (the door lens read the signatures).
+- K5 and K6: unchanged and pinned. The door lens recorded one MINOR against K5's reader that predates this row: spellings sharing one `identity_key` (`Zip_Code`, `zip-code`) can resolve differently from `zip_code` once a row holds one of them as an alias. Each such write is warned. Left, as K5's.
+- K8: recorded in `INTERFACE.md` §2.5a and left. K9: unchanged.
+- **K10: zero new trips.** `check_merge_guard.py` exits 0 with the reader verdicts recorded.
+
+### §1.5 — Every touched contract id red by mutation
+
+`docs/tools/type_surface_mutation_sweep.py` on `4e110dd`: **15 mutations, 15 killed**, the unmutated copy green first. Seven on `C12-78`, three on `C12-79`, four on `C12-80`, one on `C12-81`. Two mutations are left out as **equivalent**, each commented in the sweep. Removing the tombstone's `successor` test changes nothing, because the walk stops at once when there is no successor. And since round 1, removing the held-twin guard changes nothing, because round 1's filter drops every binding whose reference is unresolved (it survived on `4e110dd`, which is how it was found).
+
+### §1.6 — The suite and the gates
+
+- First full run, on `1ceeec2`: three legs `1 failed, 3555 passed, 1054 skipped` (`0:22:25`). The one failure was `test_every_optional_capability_can_be_declined_alone`, the suite's copy of the capability matrix, which failed as §1.2 records. `check_links`, `check_spec_drift`, `check_merge_guard` and `check_skip_census` exited 0, `check_capability_matrix` exited 1, and `unasync --check` said 27 generated files are current.
+- On `45eab75` the capability matrix and the skip census exited 0.
+- RUN-ON-FINAL
+
+### §1.7 — Row 8c's other MINORs (§0.7)
+
+C5-4 is fixed (`C12-81`). The other ten (A5-1, A5-2/C5-2, C5-3, A5-3/C5-7, C5-1, C5-5, C5-6, A5-4, A5-5) are left for the reasons §0.7 gives, and no lens in this row reopened any of them. C5-8 was already corrected in 8C.
+
+### §1.8 — What went to the founder
+
+As §0.8 predicted: item 35 (`Q113`, D14: `warn`, `refuse` or `answer the alias holder`, recommended `refuse`) and item 36 (`Q114`, B5: `report` or `hold`, recommended `report`). Neither blocks. The default in force for each is built and pinned. Round 1's third door went into item 35's text, and no new item was needed.
+
+---
+
+## §2 — Adversarial loop
+
+The rule (§0.9): three fresh lenses a round (implementer, door adversary, fidelity), at most 3 rounds and a confirming round. A round is clean when no lens finds a MAJOR.
+
+### Round 1, on `45eab75` plus the §1 draft
+
+| lens | MAJOR | MINOR | what was done |
+|---|---|---|---|
+| implementer | 1: B5 reported a binding to a twin the real run refused | 4: a DEPRECATED twin, the same. The walk one hop short of the reader's. The import-door warning is stored on the row and can go stale, while the reinstate door's is not. A held referencing item still says bound | The MAJOR and the first two MINORs fixed red first (`0724e83`, `4e110dd`). The stored warning is **left**: the import door stores its warnings as R55's alias warnings already do, and changing what a row stores is outside this row. The held item is **left**: a held item's warnings describe the plan, and the plan did bind it |
+| door adversary | 1: reinstating a chain's retired end recreates D14 unwarned | 1: K5's spelling split, predating this row | The MAJOR fixed red first (`0724e83`, `4e110dd`). The MINOR left as K5's (§1.4) |
+| fidelity | 2: §1 scored §0.2 item 3 as a hit with no test behind it. §1 omitted the capability-matrix round | 6: rule 2.10-17's tense. §5.4 and PACKAGE missing the `stores_aliases` gate. PACKAGE's mech column read `**4**`. The minimal-backend exception missing from item 35 and §5.4. §0.4 item 4, §0.7 and K4 unscored. A circular comment in the sweep | All fixed in `7e720e9` and this section, except the circular comment, which is left (it points at a section that now exists) |
