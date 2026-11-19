@@ -345,6 +345,7 @@ def condition_problem(declared: Any, *, _path: str = INSTANCE_CONDITION_KEY) -> 
 
 
 _CONTAINERS = (Mapping, list, tuple, set, frozenset)
+_END = object()       # the walk's own end-of-members mark, which no operand can carry
 
 
 def _scalar_non_finite(value: Any) -> bool:
@@ -371,10 +372,14 @@ def _non_finite(value: Any) -> bool:
     a list nested 5,000 deep raised `RecursionError`, and a sub-list shared at 20
     levels was walked once per path. A container met again while it is still being
     walked (an ancestor of itself) contains itself, which is no comparable value. A
-    container met again after its walk finished is shared, and was already judged."""
+    container met again after its walk finished is shared, and was already judged.
+    `done` is keyed on `id()`, so the walk keeps every container it judged alive until it
+    returns: a mapping that builds its values on each read would otherwise free one, and
+    the next one built could carry its id (row 7d, 7D-RUN 2.1)."""
     if not isinstance(value, _CONTAINERS):
         return _scalar_non_finite(value)
     done: set[int] = set()
+    judged: list[Any] = []       # holds each id in `done` to its container
     on_path: set[int] = set()
     # Each frame is (container, iterator over its members). A container is on the path
     # from when it is pushed until its iterator is exhausted.
@@ -389,11 +394,12 @@ def _non_finite(value: Any) -> bool:
     push(value)
     while stack:
         container, members = stack[-1]
-        member = next(members, _CONTAINERS)      # a sentinel no operand can carry
-        if member is _CONTAINERS:
+        member = next(members, _END)
+        if member is _END:
             stack.pop()
             on_path.discard(id(container))
             done.add(id(container))
+            judged.append(container)
             continue
         if isinstance(member, _CONTAINERS):
             if id(member) in on_path:

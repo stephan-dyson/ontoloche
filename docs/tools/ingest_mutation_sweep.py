@@ -718,6 +718,13 @@ MUTATIONS = (
     Mutation("6-6 a shared container is not a self-containing one", "c20_47_d1", ING,
              "            if id(member) in on_path:",
              "            if id(member) in on_path or id(member) in done:", required=True),
+    Mutation("6-6 a judged container is kept alive while its id is remembered",
+             "c20_47_d1", ING, "            judged.append(container)\n",
+             "            pass\n", required=True),
+    Mutation("6-6 the walk's end mark is its own, never an operand", "c20_47_d1", ING,
+             "        member = next(members, _END)\n        if member is _END:",
+             "        member = next(members, _CONTAINERS)\n        if member is _CONTAINERS:",
+             required=True),
     # ---- row 7d: row 7c's recorded non-refusal minors (7D-RUN 0.7)
     Mutation("4-8 the allowlist names kinds, at approve and import_types", "c20_34", ACT,
              "        if effect.kind not in PROPOSABLE_KINDS:",

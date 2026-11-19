@@ -141,11 +141,11 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 | step | red commit | what failed, and why | green commit |
 |---|---|---|---|
-| ING15 | `9b418dc` | `C20-70` d1, `reused` where the act must propose, on sqlite and postgres (minimal skips: no invocation events) | `2de6ffb` |
+| ING15 | `9b418dc` | `C20-70` d1, `reused` where the act must propose, on sqlite and postgres (minimal skips at the `NEEDS_LEDGER` mark, `stores_attributes=False`; corrected in round 1, §2.1) | `2de6ffb` |
 | ING15 minor 2, the why | `9bd1083` | `C20-70` d1 why test: the why said "already answered" and named no holder | `a0e085b` |
 | ING15 minor 3, the filter | `9bd1083` | green on arrival, as §0.5 predicted. Its mutation is killed (§1.5) | — |
 | 7b B1 to B3 | `21afb8a` | `C20-05` d1 raised `NotSupported` for a dropped table named `host_decode_site_1`; `C20-47` d1 raised `OverflowError` and `RecursionError` | `812c080` |
-| 7c minors | `4c5842f` | seven coverage pins, all green on arrival, because the code they pin is correct. Each has a required mutation of its own (§1.5) | — |
+| 7c minors | `4c5842f` | eight coverage pins (one `C20-34` d1, seven `C20-71` d1; corrected in round 1, §2.1), all green on arrival, because the code they pin is correct. Each has a required mutation of its own (§1.5) | — |
 
 - **Recomputed:** `EAST`~`WEST` 0.9714, `WEST`~`WESTON` 0.9722, `EAST`~`WESTON` 0.9444, so §0.1 item 4's comment numbers hold.
 - **Miss (process): `4c5842f` was committed without its async mirror.** `tools/unasync.py` raised a `SyntaxError` on a chained `_act(...).land(...)`, the shape 7C §1.2 recorded, and a `| tail` hid it. This is the same slip as 7C §1.1's `2d8f7bb`. `f96a366` split the chain into two statements and regenerated the mirror, and `unasync.py --check` reports all 27 files current. The sync tests were right in `4c5842f`; only the aio copy was stale.
@@ -166,7 +166,7 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 | CMS triple, A4 after B | B's `WESTON` row alone | B's `WESTON` row alone, `complete=True` | hit |
 | Q92 slice, the split | `reused` falls by single digits, share above 68%, the 60% floor holds | 3,346 rows: **1,031 `proposed`, 2,310 `reused`, 5 `pending`**, 69.0% reused (`probe_a0e085b.log`, 18 of 18). Against 7c's 1,029, 2,310 and 7 | **share and floor: hit. The direction: miss.** `reused` did not move. Two `pending` landings became `proposed` |
 
-**The Q92 cost, stated.** The fix proposes two more identities in 3,346 rows, and folds none fewer. **[Inferred]** a net zero on `reused` with two from `pending` to `proposed` is what two pairs of this shape give: a label once reused onto a pending candidate now goes to A4 and is proposed (reused −1, proposed +1), and because it is now this act's own proposal, a later label near it that A4 used to hold `pending` is now reused onto it (pending −1, reused +1). That was not traced label by label. The probe ran on `a0e085b`; the act's code has not changed since, and §2 records the run on the final code.
+**The Q92 cost, stated.** The fix proposes two more identities in 3,346 rows, and folds none fewer. **[Inferred]** a net zero on `reused` with two from `pending` to `proposed` is what two pairs of this shape give: a label once reused onto a pending candidate now goes to A4 and is proposed (reused −1, proposed +1), and because it is now this act's own proposal, a later label near it that A4 used to hold `pending` is now reused onto it (pending −1, reused +1). That was not traced label by label. The probe ran on `a0e085b`. `registry.py` has not changed since (an empty diff to `8e06847`), but `ingest.py` and `_sql.py` did, in the 7b fixes, so the probe's whole code path is not the same; §2 records the run on the final code.
 
 ### §1.4 — The minors (§0.5 to §0.7)
 
@@ -190,7 +190,7 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 ### §1.5 — Mutation sweep
 
-`docs/tools/ingest_mutation_sweep.py` on `f96a366`: **200 mutations, 199 killed, 1 survivor, 0 not applied or broken, 0 required survivors, exit 0** (`sweep_f96a366.log`). The survivor is 7c's non-required `<n>` rounding case (C12). Row 7d added 19 required mutations: three for ING15 and its minors, four for B1 to B3, and twelve for the 7c minors. Seven existing targets moved with the fix and were retargeted. `--only` and `--list` are new; `--list` is the preflight that counts each target once.
+`docs/tools/ingest_mutation_sweep.py` on `f96a366`: **200 mutations, 199 killed, 1 survivor, 0 not applied or broken, 0 required survivors, exit 0** (`sweep_f96a366.log`). The survivor is 7c's non-required `<n>` rounding case (C12). Row 7d added 16 required mutations (184 to 200): three for ING15 and its minors, four for B1 to B3, and nine for the 7c minors. Eight existing targets were retargeted: five moved with the ING15 fix and three with the 7b fixes. *(Round 1 corrected this sentence, which said 19, twelve and seven, §2.1.)* `--only` and `--list` are new; `--list` is the preflight that counts each target once.
 
 ### §1.6 — Suite and gates
 
@@ -207,4 +207,23 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 ## §2 — Adversarial rounds (§0.9)
 
-*Written as the rounds run.*
+### §2.1 — Round 1, on `8e06847`
+
+Three fresh lenses, read-only, each in its own exported copy. Every finding below was reproduced by the lens on the reviewed commit.
+
+| # | lens | severity | finding | ruling |
+|---|---|---|---|---|
+| 1 | fidelity | MAJOR (record) | §1.5 said 19 new required mutations (twelve for 7c) and seven retargeted. It is 16 (nine for 7c) and eight (five ING15, three 7b) | **fixed** in §1.5. My own edit script holds 16 `Mutation(` rows; the 19 was a miscount |
+| 2 | build, door | MAJOR (claim) | **§0.2 item 5's invariant and §0.4 D2's prediction are false when the ledger changes during the act.** The act proposes EAST, an applied row compensates EAST's row (or `record_result` writes it with no host row), and the act's next WEST lands `reused` onto the dead candidate while a fresh act proposes. The same holds for a `pending` label whose holder is undone or written, and for an `existing` ref whose host row is deleted. Identical at `a6e9d7f` | **scored a miss, recorded as `INGEST.md` ING16, not fixed in row 7d.** See below |
+| 3 | door | MINOR | after #2's undo, the new `reused` why says the holder "holds an unwritten proposal", which is then false | **fixed:** it says *held ... when this act landed it* and names ING16 |
+| 4 | build | MINOR | `_non_finite`'s `done` is keyed on `id()` of containers it did not keep alive, so a mapping that builds its values on each read can free one and hand its id to a later container whose NaN is skipped. A regression from 7b's recursive walk | **fixed red first:** `a69acb5` (`C20-47` d1 red at `n = 2` of `[Fresh(1.0) for _ in range(n)] + [Fresh(nan)]`), then the walk keeps each judged container referenced |
+| 5 | door | MINOR | the end-of-members sentinel was the module's `_CONTAINERS` tuple, so an operand carrying that tuple stopped the walk before a later NaN | **fixed red first** in the same pair: a private `_END = object()` |
+| 6 | build | MINOR | `IngestAct.land`'s docstring still said "the one candidate this act recorded" | **fixed:** "itself proposed ..., never a pending one" |
+| 7 | fidelity | MINOR | §1.1 gave the minimal leg's skip as "no invocation events"; it is the `NEEDS_LEDGER` mark (`stores_attributes=False`) | **fixed** in §1.1 |
+| 8 | fidelity | MINOR | §1.1 said seven coverage pins; `4c5842f` adds eight | **fixed** in §1.1 |
+| 9 | fidelity | MINOR | §1.3's "the act's code has not changed since" holds for `registry.py` only | **fixed** in §1.3 |
+| 10 | door | MINOR | the mutation *A4 `unwritten_for=` takes only a CandidateRef* is killed by an `AttributeError`, not by the `ValueError` the test names | **left.** The test asserts `ValueError` and the mutation removes the only line that raises one, so the kill is the rule's own, reached through a crash. No change |
+
+**Why #2 is not fixed here, stated as a choice.** It is not ING15's shape and the fix did not introduce it: it is present at `a6e9d7f`, unchanged. It is what `INGEST.md` §4.3's first principle prescribes (*"every later reference to the same identity in that act reuses it rather than resolving again"*), so the code follows the rule and the rule has the gap. Closing it means re-checking each remembered answer against the ledger (A4 for a candidate, a host read for an `existing` ref) on every recall, which changes rule 4-10's *resolved once* and puts a ledger read on each of Q92's 2,310 recalls. That is a rule change with a cost, and this row pre-registered neither. So it is ING16, and it counts against row 6j's stopping rule as **out of scope** under §0.9's own test (an in-scope code MAJOR is a defect in what the row set out to build). §0.2 item 5 and §0.4 D2 are scored **misses**: both were stated without the *against a ledger nothing else writes during the act* condition they need. This is a ruling for the founder only if they want ING16 closed sooner; it is not a refusal or a hold, so it is not a DECISIONS-OPEN item (the kickoff's routing). **[Observed]** for the shapes, by both lenses on sqlite and postgres; **[Inferred]** for the cost.
+
+The fixes are `a69acb5` (red) and the commit after it. Round 1 produced a record MAJOR and code fixes, so round 2 is a full round on the fixed head.

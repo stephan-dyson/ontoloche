@@ -790,8 +790,8 @@ class IngestAct:
 
         The order is the rule: rule 4-10's recall of the exact key; ``resolve_instance``;
         ``existing`` is remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance``
-        record nothing (rule 4-7); on ``proposal``, the one candidate this act recorded
-        within ``match_at`` is reused (rule 4-10); ``proposal`` and ``ambiguous`` carry the
+        record nothing (rule 4-7); on ``proposal``, the one candidate this act itself
+        proposed within ``match_at`` is reused, never a pending one (rule 4-10, ING15); ``proposal`` and ``ambiguous`` carry the
         resolution's own ``CandidateRef``, under the EFFECTIVE type (rule 4-3);
         ``preflight``; rules 4-2 and 4-8 against the effects the gate read; amendment
         A4's read of who holds an unwritten proposal (rule 4-11); then
@@ -811,11 +811,12 @@ class IngestAct:
             is_ref = isinstance(recalled, InstanceRef)
             if origin is not None and origin.startswith("pending:"):
                 # Name what was recalled (row 7d, ING15's minor): this act proposed
-                # nothing for the label, and another row holds its identity.
+                # nothing for the label, and another row held its identity.
                 why = (f"this act already landed this label pending under "
                        f"{self.namespace}:{effective}, behind invocation "
-                       f"{origin.split(':', 1)[1]}, which holds an unwritten proposal for "
-                       f"it (INGEST.md rules 4-10, 4-11)")
+                       f"{origin.split(':', 1)[1]}, which held an unwritten proposal for "
+                       f"it when this act landed it (INGEST.md rules 4-10, 4-11; the "
+                       f"memory is not re-read within the act, ING16)")
             else:
                 why = (f"this act already answered for this identity under "
                        f"{self.namespace}:{effective} (INGEST.md rule 4-10)")
