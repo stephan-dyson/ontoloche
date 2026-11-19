@@ -3535,6 +3535,24 @@ def test_c12_78_the_walk_reaches_as_far_as_the_reader(registry):
     assert f"alias_word_succeeded:{names[0]}:{names[-1]}" in entry.warnings, entry.warnings
 
 
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+def test_c12_78_a_walk_the_cap_cuts_off_is_warned_unknown(registry):
+    """Row 8d round 3 (fidelity lens, MINOR 3). One hop past the reader's reach, neither the
+    reader nor the warning can finish the walk, so the claimant is `?` (Rule U)."""
+    from ontoloche.registry import _IDENTITY_CHAIN_CAP
+
+    namespace = "c12_78_cap_unknown"
+    names = [f"u{i:02d}" for i in range(_IDENTITY_CHAIN_CAP + 3)]
+    for name in names:
+        seed(registry, name, namespace=namespace)
+    for here, there in zip(names, names[1:]):
+        registry.retire(here, "dup", retired_by="user:sd", successor=there,
+                        namespace=namespace, force=True)
+    entry = registry.import_types([_d14_row("holder", "entity", None, aliases=(names[0],))],
+                                  namespace=namespace)[0]
+    assert f"alias_word_succeeded:{names[0]}:?" in entry.warnings, entry.warnings
+
+
 @pytest.mark.requires_capability("indexes_membership")
 def test_c12_78_an_alias_the_backend_does_not_keep_is_not_warned(adapter, make_registry):
     """Row 8d round 0 (the capability matrix, 8D-RUN.md 1.6): on `stores_aliases=False`

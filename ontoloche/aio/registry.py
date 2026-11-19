@@ -5734,6 +5734,14 @@ class AsyncRegistry:
             end = await self._succession_claimant(namespace, right.kind, left.name)
             if end is not None and end != "?":
                 merge_warnings.extend(await self._reinstated_end_warnings(namespace, right.kind, end))
+            # Round 3 (door lens, MAJOR 1): a retired `from_`'s aliases were dormant, and
+            # the merge makes them live on `into`. The fifth door.
+            if right.status != "retired" and self.caps.stores_aliases:
+                merge_warnings.extend(
+                    await self._succeeded_alias_warnings(
+                        namespace, right.kind, right.name, left.aliases or ()
+                    )
+                )
         return MergeResult(
             from_=from_,
             into=into,
