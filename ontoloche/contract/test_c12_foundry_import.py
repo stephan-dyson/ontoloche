@@ -3460,3 +3460,88 @@ def test_c12_79_reinstating_an_alias_over_a_tombstone_with_a_live_successor_is_w
                               namespace=namespace)
     assert isinstance(back, TypeEntry) and back.status == "active", back
     assert "alias_word_succeeded:zip_code:postal_code" in back.warnings, back.warnings
+
+
+def _b5_shared_twin():
+    """`faux_employee` (whose Employee maps the absent `fooSpt` onto `fullName`) plus a
+    shared property type `FooSpt`, which converts to the same word `foo_spt`."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_employee"))
+    twin = dict(foundry_fixture("faux_legacy")["sharedPropertyTypes"]["fooSpt"],
+                apiName="FooSpt", rid="ri.spt.FooSpt")
+    doc.setdefault("sharedPropertyTypes", {})["FooSpt"] = twin
+    return doc
+
+
+def _b5_interface_twin():
+    """The interface case: the document defines `fooInterface` and Employee still
+    implements the absent `FooInterface`. Both convert to `foo_interface`."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_employee"))
+    iface = doc["interfaceTypes"].pop("FooInterface")
+    doc["interfaceTypes"]["fooInterface"] = dict(iface, apiName="fooInterface")
+    return doc
+
+
+def _b5_endpoint_twin():
+    """The link case: a new Employee side points at the absent object type `office`,
+    which converts to the same word as the defined `Office`."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_employee"))
+    doc["objectTypes"]["Employee"]["linkTypes"].append({
+        "apiName": "homeOffice", "status": "ACTIVE", "objectTypeApiName": "office",
+        "cardinality": "ONE", "displayName": "Home office", "linkTypeRid": "rid.link-type.b5",
+        "foreignKeyPropertyApiName": "homeOffice",
+    })
+    return doc
+
+
+@pytest.mark.parametrize("case,kind,api_name,expected", [
+    ("shared", "entity", "Employee", ("shared", "foo_spt", "fooSpt", "FooSpt")),
+    ("interface", "entity", "Employee", ("predicate", "foo_interface", "FooInterface", "fooInterface")),
+    ("endpoint", "edge", "homeOffice", ("dst", "office", "office", "Office")),
+])
+def test_c12_80_a_reference_bound_to_a_converting_twin_is_reported_dry_and_real(
+    registry, case, kind, api_name, expected
+):
+    """Row 8d, B5-1 and B5-2 (8C-RUN.md 2.5). A reference to an apiName the document does
+    not define, while another apiName it does define converts to the same word, is bound
+    to that other row by the real run. It is reported on the plan and the result alike:
+    `reference_bound_by_conversion:<label>:<absent>:<twin>` on the item and
+    `bound_by_conversion` in its detail, and the dry run no longer says `not_in_document`
+    for what the real run resolves. Default in force: report, never hold (item 36)."""
+    label, word, absent, twin = expected
+    doc = {"shared": _b5_shared_twin, "interface": _b5_interface_twin,
+           "endpoint": _b5_endpoint_twin}[case]()
+    namespace = f"c12_80_{case}"
+    seen = {}
+    for dry in (True, False):
+        report = registry.import_foundry(doc, dry_run=dry, namespace=namespace)
+        item = [i for i in report.items if i.kind == kind and i.api_name == api_name][0]
+        warning = f"reference_bound_by_conversion:{label}:{absent}:{twin}"
+        assert warning in item.warnings, (dry, item.warnings)
+        assert item.detail.get("bound_by_conversion") == [
+            {label: word, "api": absent, "bound_to": twin}
+        ], (dry, item.detail)
+        assert not [u for u in item.detail.get("unresolved", ()) if u.get(label) == word], (
+            dry, item.detail.get("unresolved"))
+        seen[dry] = (item.detail.get("unresolved"), item.detail.get("bound_by_conversion"),
+                     report.properties["entities"]["Employee"]["unresolved_shared"])
+    assert seen[True] == seen[False], seen
+
+
+def test_c12_80_a_held_twin_binds_nothing(registry):
+    """B5's negative: a twin the planner holds (here `definition_missing`) binds nothing,
+    so the reference reads `held:<reason>` on both runs and nothing is reported bound."""
+    doc = _b5_shared_twin()
+    doc["sharedPropertyTypes"]["FooSpt"].pop("description", None)
+    for dry in (True, False):
+        report = registry.import_foundry(doc, dry_run=dry, namespace="c12_80_h")
+        employee = [i for i in report.items if i.kind == "entity" and i.name == "employee"][0]
+        assert "bound_by_conversion" not in employee.detail, employee.detail
+        assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
+            {"shared": "foo_spt", "why": "held:definition_missing"}
+        ], (dry, report.properties["entities"]["Employee"]["unresolved_shared"])
