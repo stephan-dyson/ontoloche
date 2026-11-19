@@ -3335,6 +3335,30 @@ async def test_c12_79_merging_a_chains_retired_end_into_a_live_row_is_warned(reg
                                  tier="unspecified")).type.name == "delta"
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+async def test_c12_79_merging_a_dead_end_into_a_retired_row_whose_chain_ends_live_is_warned(registry):
+    """Row 8d round 3 (implementer lens, MAJOR 1). The fourth door, when `into` is itself
+    retired with a live successor: the dead end now walks through `into` to that row, so
+    the claimant to name is the chain's new live end, not `into`."""
+    namespace = "c12_79_merge2"
+    for name in ("alpha", "beta", "gamma", "delta"):
+        await seed(registry, name, namespace=namespace)
+    await registry.retire("alpha", "dup", retired_by="user:sd", successor="beta",
+                    namespace=namespace, force=True)
+    await registry.retire("beta", "gone", retired_by="user:sd", namespace=namespace, force=True)
+    await registry.retire("gamma", "dup", retired_by="user:sd", successor="delta",
+                    namespace=namespace, force=True)
+    await registry.import_types([_d14_row("carrier", "entity", None, aliases=("alpha",))],
+                          namespace=namespace)
+    merged = await registry.merge_types(
+        "beta", "gamma", "m", merged_by="user:sd", namespace=namespace,
+        acknowledge=["retired_operand", "definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    assert (await registry.resolve_type("alpha", ResolveContext(), kind="entity", namespace=namespace,
+                                 tier="unspecified")).type.name == "delta"
+    assert "alias_word_succeeded:alpha:delta" in merged.warnings, merged.warnings
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
 async def test_c12_78_the_walk_reaches_as_far_as_the_reader(registry):
     """Row 8d round 1 (implementer lens, MINOR 3). The reader takes the first hop and up to
     `_IDENTITY_CHAIN_CAP` more; the warning's walk takes the same, so a chain the reader
