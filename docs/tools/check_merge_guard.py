@@ -292,15 +292,13 @@ KNOWN_CALLERS: dict[str, CallerVerdict] = {
         "`C9-37` and `C9-38`. Flagged by Part A's over-broad scan the minute it was "
         "added, which is this checker working exactly as row 4d built it to",
     ),
-    "_succeeded_alias_warnings": CallerVerdict(
+    "_succession_claimant": CallerVerdict(
         False,
-        "**READS** a retired row's `successor` and walks the chain, as `resolve_type` "
-        "does, to answer one question for `import_types` and `reinstate`: *would this "
-        "row's alias give a tombstone's word a second live claimant beside its live "
-        "successor?* (row 8d, D14). It returns warning strings and writes no row, so a "
-        "defect here makes the warning wrong, never a collapse. The predicate version "
-        "of D14 is refused `predicate_merge` at `retire`, so it never reaches the kill "
-        "row. Flagged by Part A's over-broad scan, which is this checker working",
+        "**READS** a retired row's `successor` and walks the chain exactly as far as "
+        "`resolve_type` does, returning the live row's name (or `None`, or `?` when the "
+        "cap cuts it off) for `_succeeded_alias_warnings` and `_reinstated_end_warnings` "
+        "(row 8d, D14 and its round-1 third door). It writes no row, so a defect here makes "
+        "a warning wrong, never a collapse.",
     ),
     "_search_namespaces": CallerVerdict(
         False,

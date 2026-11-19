@@ -49,12 +49,18 @@ MUTATIONS = (
     # EQUIVALENT mutant (the walk stops at once when there is no successor), so no test
     # can kill it. 8D-RUN.md §1 records it.
     Mutation("D14 the walk follows the chain", "c12_78_a_chain", REG,
-             "                if live.status != \"retired\":\n                    claimant = live.name\n                    break",
-             "                claimant = live.name\n                break", suite=C12),
+             "            if live.status != \"retired\":\n                return live.name\n\n    def _reinstated_end",
+             "            return live.name\n\n    def _reinstated_end", suite=C12),
     Mutation("D14 a dead end is one claimant", "c12_78_a_chain", REG,
-             "                if live.status != \"retired\":\n                    claimant = live.name\n                    break",
-             "                if live.status != \"retired\" or not live.successor:\n"
-             "                    claimant = live.name\n                    break", suite=C12),
+             "            if not nxt or nxt in walked:\n                return None\n            if hops > _IDENTITY_CHAIN_CAP:\n                return \"?\"",
+             "            if not nxt or nxt in walked:\n                return None if live is tomb else live.name\n"
+             "            if hops > _IDENTITY_CHAIN_CAP:\n                return \"?\"", suite=C12),
+    Mutation("D14 reinstating a chain's live end warns (round 1)", "c12_79_reinstating_the_live_end", REG,
+             "        alias_warnings.extend(self._reinstated_end_warnings(namespace, rec.kind, rec.name))",
+             "        pass", suite=C12),
+    Mutation("D14 the walk reaches as far as the reader (round 1)", "c12_78_the_walk_reaches", REG,
+             "            if hops > _IDENTITY_CHAIN_CAP:\n                return \"?\"",
+             "            if hops >= _IDENTITY_CHAIN_CAP:\n                return \"?\"", suite=C12),
     # ---- B5 (C12-80) --------------------------------------------------------------
     Mutation("B5 the twin is looked up", "c12_80", REG,
              "                    if twin is not None and twin.api_name != api:",
@@ -72,6 +78,9 @@ MUTATIONS = (
     Mutation("B5 bound_by_conversion is in the detail", "c12_80_a_reference", REG,
              "            if bound:\n                p.detail[\"bound_by_conversion\"] = bound",
              "            if False:\n                p.detail[\"bound_by_conversion\"] = bound", suite=C12),
+    Mutation("B5 a twin that is not live binds nothing (round 1)", "c12_80_a_twin_that", REG,
+             "                b for b in bound\n                if not any(",
+             "                b for b in bound\n                if True or not any(", suite=C12),
     # ---- C5-4 (C12-81) ------------------------------------------------------------
     Mutation("C5-4 an unresolved word is listed once", "c12_81", REG,
              "                    dict(pairs) for pairs in dict.fromkeys(tuple(u.items()) for u in unresolved)",

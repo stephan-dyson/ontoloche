@@ -4829,6 +4829,9 @@ class AsyncRegistry:
         alias_warnings.extend(
             await self._succeeded_alias_warnings(namespace, rec.kind, rec.name, dormant)
         )
+        # Round 1, door lens: the reinstated row may be the live END of a tombstone's
+        # chain whose name another live row holds as an alias. The third door.
+        alias_warnings.extend(await self._reinstated_end_warnings(namespace, rec.kind, rec.name))
         return self._written(await self._entry(stored, extra_warnings=tuple(alias_warnings)))
 
     async def _active_page(self, namespace: str) -> tuple[list, str | None]:
@@ -6766,6 +6769,16 @@ class AsyncRegistry:
                 p.detail["unresolved"] = [
                     dict(pairs) for pairs in dict.fromkeys(tuple(u.items()) for u in unresolved)
                 ]
+            # Round 1 (implementer lens, MAJOR 1): a twin written retired, or refused by
+            # the real run, leaves the reference unresolved, and nothing was bound.
+            bound = [
+                b for b in bound
+                if not any(
+                    u.get(label) == b[label]
+                    for u in unresolved
+                    for label in b if label not in ("api", "bound_to")
+                )
+            ]
             if bound:
                 p.detail["bound_by_conversion"] = bound
 
@@ -9482,36 +9495,64 @@ class AsyncRegistry:
         """
         found: list[str] = []
         for word in dict.fromkeys(a for a in aliases if a):
-            tomb = None
-            for spelling in self._word_spellings(word):
-                rec = await self.adapter.get_type(namespace, spelling, kind=kind)
-                if rec is not None:
-                    tomb = rec
-                    break
-            if tomb is None or tomb.status != "retired" or not getattr(tomb, "successor", None):
-                continue
-            live = tomb
-            walked = {tomb.name}
-            hops = 0
-            claimant: str | None = None
-            while True:
-                nxt = getattr(live, "successor", None)
-                if not nxt or nxt in walked:
-                    break
-                if hops >= _IDENTITY_CHAIN_CAP:
-                    claimant = "?"
-                    break
-                walked.add(nxt)
-                hops += 1
-                live = await self.adapter.get_type(namespace, nxt, kind=kind)
-                if live is None:
-                    break
-                if live.status != "retired":
-                    claimant = live.name
-                    break
+            claimant = await self._succession_claimant(namespace, kind, word)
             if claimant is not None and claimant != name:
                 found.append(f"alias_word_succeeded:{word}:{claimant}")
         return found
+
+    async def _succession_claimant(self, namespace: str, kind: str, word: str) -> str | None:
+        """The live row a tombstone named ``word`` hands its word to, walked as the
+        reader walks it, or ``None`` (no tombstone, no successor, or a dead end), or
+        ``"?"`` when the walk is cut off by the cap. Row 8d, D14.
+
+        The reader (``resolve_type``) takes the first hop and up to
+        ``_IDENTITY_CHAIN_CAP`` more, so this walk takes the same (round 1, implementer
+        lens MINOR 3: it had stopped one hop short and said ``?`` where the reader
+        finished)."""
+        tomb = None
+        for spelling in self._word_spellings(word):
+            rec = await self.adapter.get_type(namespace, spelling, kind=kind)
+            if rec is not None:
+                tomb = rec
+                break
+        if tomb is None or tomb.status != "retired" or not getattr(tomb, "successor", None):
+            return None
+        live = tomb
+        walked = {tomb.name}
+        hops = 0
+        while True:
+            nxt = getattr(live, "successor", None)
+            if not nxt or nxt in walked:
+                return None
+            if hops > _IDENTITY_CHAIN_CAP:
+                return "?"
+            walked.add(nxt)
+            hops += 1
+            live = await self.adapter.get_type(namespace, nxt, kind=kind)
+            if live is None:
+                return None
+            if live.status != "retired":
+                return live.name
+
+    async def _reinstated_end_warnings(self, namespace: str, kind: str, name: str) -> list[str]:
+        """``alias_word_succeeded:<word>:<name>`` for each word a LIVE row holds as an
+        alias whose tombstone's walk now ends at ``name``, just reinstated. Row 8d round 1
+        (door lens, MAJOR 1): a dead-end chain is one claimant, so the alias was written
+        unwarned, and reinstating the end made the reader answer it again with nothing
+        said. A scan that could not finish is warned ``?:<name>`` (Rule U)."""
+        if not self.caps.stores_aliases:
+            return []
+        records, why = await self._active_page(namespace)
+        found: list[str] = []
+        for other in records:
+            if other.kind != kind or other.name == name:
+                continue
+            for word in other.aliases or ():
+                if await self._succession_claimant(namespace, kind, word) == name:
+                    found.append(f"alias_word_succeeded:{word}:{name}")
+        if why is not None:
+            found.append(f"alias_word_succeeded:?:{name}")
+        return list(dict.fromkeys(found))
 
     async def _retired_holder(
         self,
