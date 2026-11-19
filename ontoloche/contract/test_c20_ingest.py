@@ -2682,6 +2682,7 @@ def test_c20_70_r1_a_foreign_act_id_is_refused_before_the_recall(adapter, make_r
                    context=InstanceContext(act_id="act-B", proposed_by="ai:ingest"))
 
 
+@NEEDS_RETIRE
 @NEEDS_LEDGER
 def test_c20_41_r1_the_act_records_the_effective_entrys_policy(adapter, make_registry):
     """`I-7` at the act (round 1, lens 3, M2). Through `land`, the policy recorded is the
