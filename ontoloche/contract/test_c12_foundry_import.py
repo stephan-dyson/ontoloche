@@ -3717,7 +3717,7 @@ def test_c12_80_a_twin_that_is_not_live_binds_nothing(registry):
         assert {"dst": "office", "why": "retired"} in side.detail.get("unresolved", []), (dry, side.detail)
 
 
-@pytest.mark.requires_capability("stores_events")
+@pytest.mark.requires_capability("stores_events", "stores_aliases")
 def test_c12_80_a_twin_the_real_run_refuses_binds_nothing(registry):
     """Round 1 and round 2 (implementer lens). A twin the real run refuses was never
     written, so nothing is bound to it, on the entity path and the shared-property path.
