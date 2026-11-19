@@ -3171,6 +3171,7 @@ def test_c20_47_d1_a_deep_or_shared_operand_is_walked_once(adapter):
     loop[0].append(loop)
     assert condition_problem({"op": "in", "attribute": "x", "value": loop, "why": "w"})
 
+@pytest.mark.requires_capability("stores_attributes", "stores_proposals")
 async def test_c20_34_d1_the_allowlist_holds_at_approve_and_import_types(adapter, make_registry):
     """Rule **4-8** (7C-RUN 2.1, recorded: `C20-34` covered two of the four doors in a
     test, the probe the rest). A predicate-proposing family written into a pending
@@ -3187,8 +3188,7 @@ async def test_c20_34_d1_the_allowlist_holds_at_approve_and_import_types(adapter
                               effects=[_HOST_WRITE])
     pending = await registry.propose_type("mint_b", "clean, amended past validation", [],
                                     "user:sd", kind="action", attributes=clean)
-    if getattr(pending, "id", None) is None:
-        pytest.skip(f"this backend holds no pending proposal to amend: {pending!r}"[:120])
+    assert getattr(pending, "id", None) is not None, pending
     rec = await adapter.get_proposal(pending.id)
     await adapter.put_proposal(dataclasses.replace(rec, attributes={
         **rec.attributes, "effects": [e.to_dict() for e in bad]}))
