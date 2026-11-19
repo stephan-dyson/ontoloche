@@ -3545,3 +3545,17 @@ def test_c12_80_a_held_twin_binds_nothing(registry):
         assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
             {"shared": "foo_spt", "why": "held:definition_missing"}
         ], (dry, report.properties["entities"]["Employee"]["unresolved_shared"])
+
+
+def test_c12_81_two_shared_property_types_on_one_property_list_the_word_once(registry):
+    """Row 8d, 8C-RUN.md 2.5 C5-4: two shared property types mapped onto one property
+    leave one slot naming one word, so an unresolved word is listed once, on both runs."""
+    import copy
+
+    doc = copy.deepcopy(foundry_fixture("faux_employee"))
+    doc["objectTypes"]["Employee"]["sharedPropertyTypeMapping"]["barSpt"] = "fullName"
+    for dry in (True, False):
+        report = registry.import_foundry(doc, dry_run=dry, namespace="c12_81")
+        unresolved = report.properties["entities"]["Employee"]["unresolved_shared"]
+        assert len(unresolved) == len({tuple(sorted(u.items())) for u in unresolved}), (dry, unresolved)
+        assert len(unresolved) == 1, (dry, unresolved)
