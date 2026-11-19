@@ -3195,3 +3195,99 @@ def test_c20_70_r5_the_recall_defers_to_rule_3_18(adapter, make_registry):
     again = act_g.land(NOTHING, type_name="facility")
     assert again.outcome == "unknowable", (again.outcome, again.why)
     assert len(_ledger(registry)) == 1
+
+
+# ---- row 7c, after the last adversarial round (round 6 findings) -------------------
+
+
+@NEEDS_LEDGER
+def test_c20_70_r6_one_landed_neighbour_never_settles_an_ambiguity(adapter, make_registry):
+    """Rule **4-10** (round 6, lens 2, MAJOR). The act has landed only X (`existing`).
+    The gate calls R `ambiguous` over X's and Y's host rows, so the act's landing of R
+    is the gate's: a review-mode proposal, never a recall of X's row."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    rows = [{"host_id": "X1", "label": x, "state": "AL"},
+            {"host_id": "Y1", "label": y, "state": "AL"}]
+    registry = _world(adapter, make_registry, rows)
+    _ingest_family(registry)
+    act_k = _act(registry, "act-r6k")
+    assert act_k.land(x, type_name="facility").outcome == "existing"
+    assert _resolve(registry, r).outcome == "ambiguous"
+    landing = act_k.land(r, type_name="facility")
+    assert landing.outcome == "proposed", (landing.outcome, landing.ref, landing.why)
+    assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+
+
+@NEEDS_LEDGER
+def test_c20_70_r6_a_repeat_of_a_label_the_act_answered_is_reused(adapter, make_registry):
+    """Rules **4-10** and **4-13** (round 6, lenses 1 and 2, MINOR). Inside the
+    non-transitive triple, a repeat of a label this act already answered is `reused`:
+    the exact key is resolved once, and no pending row is added per repeat."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    _ingest_family(registry)
+    act_m = _act(registry, "act-r6m")
+    first = [act_m.land(label, type_name="facility") for label in (x, y, r)]
+    assert [f.outcome for f in first] == ["proposed", "proposed", "pending"], first
+    again = [act_m.land(label, type_name="facility") for label in (x, r, x, r)]
+    assert [a.outcome for a in again] == ["reused"] * 4, [(a.outcome, a.why) for a in again]
+    assert again[0].candidate == first[0].candidate and again[1].candidate == first[2].candidate
+    assert len(_ledger(registry)) == 3
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_r6_after_a_retire_the_gate_answers_once_and_is_recalled(adapter, make_registry):
+    """Rule **4-10** with rule 2-17 (round 6, lens 2, m2). The host row exists only under
+    the retired member's name. After the retire the gate is asked once, and its answer
+    is recalled from then on."""
+    host_instances(adapter, _rows(), type_name="facility")
+    host_instances(adapter, [], type_name="ltc_facility")   # bound, and empty
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act_n = _act(registry, "act-r6n")
+    assert act_n.land(EXACT, type_name="facility").outcome == "existing"
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    gate = _resolve(registry, EXACT, type_name="ltc_facility")
+    after = [act_n.land(EXACT, type_name="ltc_facility") for _ in range(3)]
+    assert [a.outcome for a in after] == ["existing", "reused", "reused"], after
+    assert all(a.ref == gate.ref for a in after), (gate.ref, [a.ref for a in after])
+
+
+@NEEDS_LEDGER
+def test_c20_70_r6_the_cms_triple_with_one_landed_neighbour(adapter, make_registry):
+    """Rule **4-10** over real CMS labels (round 6, lens 3, MAJOR). Host rows E1 (EAST)
+    and W2 (WESTON); EAST ~ WEST and WEST ~ WESTON, EAST !~ WESTON. The act lands EAST
+    (`existing`), and its landing of WEST is the gate's review-mode proposal, never E1."""
+    rows = [{"host_id": "E1", "label": _EAST, "state": "AL"},
+            {"host_id": "W2", "label": _WESTON, "state": "AL"}]
+    registry = _world(adapter, make_registry, rows)
+    _ingest_family(registry)
+    act_p = _act(registry, "act-r6p")
+    assert act_p.land(_EAST, type_name="facility").outcome == "existing"
+    assert _resolve(registry, _WEST).outcome == "ambiguous"
+    landing = act_p.land(_WEST, type_name="facility")
+    assert landing.outcome == "proposed", (landing.outcome, landing.ref, landing.why)
+    assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+
+
+@NEEDS_LEDGER
+def test_c20_70_r6_a_remembered_proposal_never_hides_a_host_row(adapter, make_registry):
+    """Rule **4-10** (round 6, lens 3, same root). The act proposed X; the host holds Y.
+    The gate answers R `existing` (Y's row), and so does the act."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    registry = _world(adapter, make_registry, [{"host_id": "Y1", "label": y, "state": "AL"}])
+    _ingest_family(registry)
+    act_q = _act(registry, "act-r6q")
+    assert act_q.land(x, type_name="facility").outcome == "proposed"
+    gate = _resolve(registry, r)
+    assert gate.outcome == "existing", gate
+    landing = act_q.land(r, type_name="facility")
+    assert landing.outcome == "existing" and landing.ref == gate.ref, (
+        landing.outcome, landing.ref, landing.why)
