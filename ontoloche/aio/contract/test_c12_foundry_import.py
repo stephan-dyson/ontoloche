@@ -3286,6 +3286,50 @@ async def test_c12_78_a_chain_is_walked_to_its_live_end(registry):
                                   namespace=namespace))[0]
     assert not [w for w in again.warnings if w.startswith("alias_word_succeeded")], again.warnings
 
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+async def test_c12_79_reinstating_the_live_end_of_a_chain_is_warned(registry):
+    """Row 8d round 1 (door lens, MAJOR 1). A chain whose end is retired is one claimant,
+    so an alias over its first word is written unwarned. Reinstating that end makes the
+    reader answer it again while the alias holder still answers the word: D14's state,
+    reached by a third door, warned there. stores_events: forced retire and reinstate."""
+    namespace = "c12_79_end"
+    for name in ("a_word", "b_word", "c_word"):
+        await seed(registry, name, namespace=namespace)
+    await registry.retire("a_word", "dup", retired_by="user:sd", successor="b_word",
+                    namespace=namespace)
+    await registry.retire("b_word", "dup", retired_by="user:sd", successor="c_word",
+                    namespace=namespace, force=True)
+    await registry.retire("c_word", "gone", retired_by="user:sd", namespace=namespace, force=True)
+    entry = (await registry.import_types([_d14_row("e_word", "entity", None, aliases=("a_word",))],
+                                  namespace=namespace))[0]
+    assert not [w for w in entry.warnings if w.startswith("alias_word_succeeded")], entry.warnings
+    back = await registry.reinstate("c_word", "we were wrong", reinstated_by="user:sd",
+                              namespace=namespace)
+    assert back.status == "active", back
+    assert "alias_word_succeeded:a_word:c_word" in back.warnings, back.warnings
+    assert (await registry.resolve_type("a_word", ResolveContext(), kind="entity", namespace=namespace,
+                                 tier="unspecified")).type.name == "c_word"
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+async def test_c12_78_the_walk_reaches_as_far_as_the_reader(registry):
+    """Row 8d round 1 (implementer lens, MINOR 3). The reader takes the first hop and up to
+    `_IDENTITY_CHAIN_CAP` more; the warning's walk takes the same, so a chain the reader
+    finishes is never warned `?` (could not finish)."""
+    from ontoloche.registry import _IDENTITY_CHAIN_CAP
+
+    namespace = "c12_78_cap"
+    names = [f"w{i:02d}" for i in range(_IDENTITY_CHAIN_CAP + 2)]
+    for name in names:
+        await seed(registry, name, namespace=namespace)
+    for here, there in zip(names, names[1:]):
+        await registry.retire(here, "dup", retired_by="user:sd", successor=there,
+                        namespace=namespace, force=True)
+    assert (await registry.resolve_type(names[0], ResolveContext(), kind="entity", namespace=namespace,
+                                 tier="unspecified")).type.name == names[-1]
+    entry = (await registry.import_types([_d14_row("holder", "entity", None, aliases=(names[0],))],
+                                  namespace=namespace))[0]
+    assert f"alias_word_succeeded:{names[0]}:{names[-1]}" in entry.warnings, entry.warnings
+
 @pytest.mark.requires_capability("indexes_membership")
 async def test_c12_78_an_alias_the_backend_does_not_keep_is_not_warned(adapter, make_registry):
     """Row 8d round 0 (the capability matrix, 8D-RUN.md 1.6): on `stores_aliases=False`
@@ -3421,6 +3465,35 @@ async def test_c12_80_a_held_twin_binds_nothing(registry):
         assert report.properties["entities"]["Employee"]["unresolved_shared"] == [
             {"shared": "foo_spt", "why": "held:definition_missing"}
         ], (dry, report.properties["entities"]["Employee"]["unresolved_shared"])
+
+async def test_c12_80_a_twin_that_is_not_live_binds_nothing(registry):
+    """Row 8d round 1 (implementer lens, MAJOR 1 and MINOR 2). A twin the import writes
+    retired (DEPRECATED in the document) or that the real run refuses leaves nothing for
+    the reference to bind to, so the item carries no `reference_bound_by_conversion` and
+    the reference reads unresolved. A refusal is known only on the real run, so the dry run
+    may still report the binding there (8D-RUN.md 0.3 item 1)."""
+    import copy
+
+    deprecated = _b5_endpoint_twin()
+    deprecated["objectTypes"]["Office"]["objectType"]["status"] = "DEPRECATED"
+    for dry in (True, False):
+        report = await registry.import_foundry(deprecated, dry_run=dry, namespace="c12_80_dep")
+        side = [i for i in report.items if i.api_name == "homeOffice"][0]
+        assert not [w for w in side.warnings if w.startswith("reference_bound")], (dry, side)
+        assert "bound_by_conversion" not in side.detail, (dry, side.detail)
+        assert {"dst": "office", "why": "retired"} in side.detail.get("unresolved", []), (dry, side.detail)
+
+    namespace = "c12_80_ref"
+    await registry.import_types([{"name": "bureau", "definition": "a bureau", "status": "active",
+                            "aliases": ["office"]}], namespace=namespace)
+    await registry.retire("bureau", "gone", retired_by="user:sd", namespace=namespace, force=True)
+    report = await registry.import_foundry(_b5_endpoint_twin(), dry_run=False, namespace=namespace)
+    office = [i for i in report.items if i.api_name == "Office"][0]
+    assert office.outcome == "refused", office
+    side = [i for i in report.items if i.api_name == "homeOffice"][0]
+    assert not [w for w in side.warnings if w.startswith("reference_bound")], side
+    assert "bound_by_conversion" not in side.detail, side.detail
+    assert [u for u in side.detail.get("unresolved", []) if u.get("dst") == "office"], side.detail
 
 async def test_c12_81_two_shared_property_types_on_one_property_list_the_word_once(registry):
     """Row 8d, 8C-RUN.md 2.5 C5-4: two shared property types mapped onto one property
