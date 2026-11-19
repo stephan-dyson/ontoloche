@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**11 open · 16 ruled · 7 FYI** *(2026-11-18: item 31 added, Q108, a refusal question row 7b's review found; non-blocking, the current behaviour is the default in force. 2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**14 open · 16 ruled · 7 FYI** *(2026-11-18: items 32 to 34 added, Q110 to Q112, three refusal questions row 7c's adversarial review found; all non-blocking, the current behaviour is the default in force. 2026-11-18: item 31 added, Q108, a refusal question row 7b's review found; non-blocking, the current behaviour is the default in force. 2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 11 items
+## A. Decide when you want to — 14 items
 
 ### 28 · `Q87` — should the ingest loop refuse to propose when no consumer is registered for the namespace?
 
@@ -69,6 +69,46 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 - **`refuse`** — a `Refusal` saying the type is retired, so a caller cannot mistake it for an empty or undecided read.
 
 **Ask: `serve`, `unknowable` or `refuse`.** Default in force: `serve` (current behaviour). Non-blocking: row 7b lands with it and pins it in `C20-80` r4 ([`7B-RUN.md` §2.4](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/7B-RUN.md)).
+
+### 32 · `Q110` — should `record_invocation(warnings=)` check the suffix of a carried warning?
+
+*New 2026-11-18, found by row 7c's adversarial review (round 1) and routed by the supervisor as a refusal question.*
+
+**TL;DR.** Amendment A3 lets a host pass warnings from a closed set (`CARRIED_WARNINGS`) into `record_invocation`. The check reads only the part before the first colon. **[Observed]** bare `instance_proposal_pending`, bare `instance_ambiguous_at_proposal`, `instance_ambiguous_at_proposal:nope:x`, `consumers_unregistered:garbage` and `no_tenancy_predicate:x:y` are all recorded as given. The one case that did damage, a forged `instance_proposal_pending` hiding a real proposal from rule 4-11, is closed separately by row 7c without refusing anything: A4 now honours a pending warning only when it names an applied proposal of that row's own identity.
+
+**Why it is yours.** Checking the suffix means refusing a call that records today, which is what the registry refuses.
+
+- **`record`** — as today: the prefix is checked, the suffix is the caller's.
+- **`refuse`** — a `ValueError` when a suffix does not match the grammar INGEST.md §9 prints for that value (`<input_name>:<n>` with `<input_name>` an input the invocation carries and `<n>` a positive integer; `<invocation_id>`; no suffix where none is printed).
+
+**Ask: `record` or `refuse`.** Default in force: `record` (current behaviour). Non-blocking: row 7c lands with it ([`7C-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/7C-RUN.md) §2).
+
+### 33 · `Q111` — should `record_invocation(governed_by=)` have to name an entry that exists?
+
+*New 2026-11-18, found by row 7c's adversarial review (round 1) and routed by the supervisor as a refusal question.*
+
+**TL;DR.** Amendment A5 records which entry's match thresholds decided a proposal, as `governed_by="<namespace>:<entry>"`. The check is the shape only. **[Observed]** `governed_by="default:nonexistent"` and `"other_ns:facility"` are both recorded as the governing entry. The ingest act itself always passes the resolution's own `governed_by`, so this is reachable only by a host calling `record_invocation` directly.
+
+**Why it is yours.** Requiring the entry to exist (and to be in the invocation's namespace, and to hold the thresholds passed) refuses a call that records today.
+
+- **`record`** — as today: the form is checked, the reference is the caller's.
+- **`refuse`** — a `ValueError` unless `governed_by` names an entity entry in the invocation's namespace whose `MatchPolicy` equals the `match_policy` passed.
+
+**Ask: `record` or `refuse`.** Default in force: `record` (current behaviour). Non-blocking: row 7c lands with it.
+
+### 34 · `Q112` — should `record_result` refuse a result that is not an instance of the proposed type?
+
+*New 2026-11-18, found by row 7c's adversarial review (round 1) and routed by the supervisor as a refusal question.*
+
+**TL;DR.** `record_result` (amendment A2's writer) records what the host minted for an input. ACTIONS.md rule 6-15 refuses a `CandidateRef` as a result and nothing else about its shape. **[Observed]** for a candidate input, a `TypeRef("default","entity","facility")` is accepted, and so is an `InstanceRef` in a different namespace or under an unrelated type. Results are also accepted on a compensated invocation and on a `refused` one. A recorded result releases rule 4-11's hold, so a wrong-shaped result unblocks the identity as if the row had been written.
+
+**Why it is yours.** Each narrowing refuses a call that records today.
+
+- **`record`** — as today: any reference but a candidate.
+- **`refuse shape`** — for a candidate input, only an `InstanceRef` whose type is in the candidate's closure (same namespace and kind, same effective entry).
+- **`refuse shape and state`** — the same, and also refuse a result on a compensated or non-`applied` invocation.
+
+**Ask: `record`, `refuse shape` or `refuse shape and state`.** Default in force: `record` (current behaviour). Non-blocking: row 7c lands with it.
 
 ### 22 · `Q106` — a Foundry property with no description: import it with a warning, or decline it?
 

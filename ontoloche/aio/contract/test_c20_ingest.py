@@ -47,6 +47,7 @@ from ontoloche.ingest import (
     condition_from_mapping,
     condition_problem,
     evaluate,
+    match_policy_from_mapping,
     match_policy_problem,
     norm,
     similar,
@@ -55,6 +56,9 @@ from ontoloche.aio.registry import AsyncRegistry
 from ontoloche.types import Consumer, Refusal, ResolveContext, TypeEntry
 from ontoloche.aio.contract._support import host_instances, seed, snapshot
 from ontoloche.aio.contract.doubles import AsyncDegradedAdapter
+from ontoloche.actions import CARRIED_WARNINGS, Effect, InputSpec, parse_ref, ref_key  # noqa: E402
+from ontoloche.edges import InstanceRef, TypeRef  # noqa: E402
+from ontoloche.aio.contract._support import action_family  # noqa: E402
 
 
 NEEDS_ATTRIBUTES = pytest.mark.requires_capability("stores_attributes")
@@ -761,6 +765,22 @@ async def test_c20_41_the_policy_in_force_is_recorded(adapter, make_registry):
     ns, name = answer.governed_by.split(":")
     entry = await adapter.get_type(ns, name, kind="entity")
     assert entry.attributes[MATCH_POLICY_KEY] == POLICY
+    if not registry.caps.stores_invocations:
+        return
+    # The invocation half (row 7c, amendment A5): the thresholds that governed travel
+    # onto the record WITH the entry that governed them, copied, so the reviewer of a
+    # proposal can say which entry's numbers produced it (`I-7`).
+    await _ingest_family(registry)
+    rec = await registry.record_invocation(
+        "propose_facility", {"instance": (await _resolve(registry, NOTHING)).candidate},
+        actor="ai:ingest", outcome="applied",
+        match_policy=match_policy_from_mapping(POLICY), governed_by=answer.governed_by,
+    )
+    assert not isinstance(rec, Refusal), rec
+    assert rec.declared_policy["match_policy"] == {
+        "governed_by": "default:facility", "match_at": 0.97, "propose_below": 0.80,
+        "ambiguity_margin": 0.02,
+    }, rec.declared_policy
 
 @NEEDS_ATTRIBUTES
 async def test_c20_73_existing_requires_exactly_one_in_the_tied_set(adapter, make_registry):
@@ -1931,3 +1951,1097 @@ def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
     for value in (True, 3, 10 ** 400, 2.5, complex(1, 2)):
         assert condition_problem({"op": "eq", "attribute": "x", "value": value,
                                   "why": "w"}) is None
+
+NEEDS_LEDGER = pytest.mark.requires_capability("stores_attributes", "stores_invocations")
+
+_HOST_WRITE = Effect(op="host_state", why="the host writes the facility row (INGEST.md 4.2)")
+
+async def _ingest_family(registry, name="propose_facility", *, mode="auto"):
+    out = await action_family(registry, name, approval_mode=mode,
+                        inputs=[InputSpec("instance", "candidate")], effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    return out
+
+@NEEDS_LEDGER
+async def test_c20_69_a_proposed_thing_is_named_by_a_candidate_ref_with_no_id(adapter, make_registry):
+    """Rule **4-9**. A `CandidateRef` has no `id` and never acquires one: the host mints
+    the identifier, and the moment it does the ledger's reference is an `InstanceRef`
+    (amendment A2's `results`, `C20-29`). Through the ledger, the recorded input reads
+    back as the candidate and never as an instance."""
+    registry = await _world(adapter, make_registry)
+    res = await _resolve(registry, NOTHING)
+    assert res.outcome == "proposal", res
+    cand = res.candidate
+    assert isinstance(cand, CandidateRef)
+    assert {f.name for f in dataclasses.fields(cand)} == {"type", "label", "resolution", "act_id"}
+    assert not hasattr(cand, "id")
+    await _ingest_family(registry)
+    rec = await registry.record_invocation("propose_facility", {"instance": cand}, actor="ai:ingest",
+                                     outcome="applied")
+    assert not isinstance(rec, Refusal), rec
+    back = parse_ref(rec.inputs["instance"])
+    assert back == cand and isinstance(back, CandidateRef), back
+    assert "#" not in rec.inputs["instance"].split('"label"')[0], rec.inputs
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_29_the_minted_ref_is_recorded_in_results_under_the_effective_type(
+    adapter, make_registry
+):
+    """Rule **4-3**. The `InstanceRef` the host minted is recorded in `results`
+    (amendment A2), never in an effect's `why` and never in `inputs`, and the type it
+    is written under is the EFFECTIVE one the resolution reports (`I-3`)."""
+    registry = await _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=_rows())
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("a result is an event, and this backend keeps none")
+    res = await _resolve(registry, NOTHING, type_name="facility")
+    assert res.outcome == "proposal", res
+    assert res.candidate.type.name == "ltc_facility", "the EFFECTIVE type, not the declared"
+    await _ingest_family(registry)
+    rec = await registry.record_invocation("propose_facility", {"instance": res.candidate},
+                                     actor="ai:ingest", outcome="applied",
+                                     observed_effects=[_HOST_WRITE])
+    minted = InstanceRef(res.candidate.type, "995001")
+    out = await registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    assert not isinstance(out, Refusal), out
+    assert out.results == {"instance": minted}
+    assert out.results["instance"].type.name == "ltc_facility"
+    assert all(ref_key(minted) not in e.why for e in out.observed_effects)
+    assert parse_ref(out.inputs["instance"]) == res.candidate
+    # Through the act: the candidate it records is under the EFFECTIVE type too.
+    act_1 = await _act(registry, "act-29")
+    landing = await act_1.land(NOTHING + " two", type_name="facility")
+    assert landing.outcome == "proposed", landing
+    assert landing.candidate.type.name == "ltc_facility"
+    assert parse_ref(landing.invocation.inputs["instance"]).type.name == "ltc_facility"
+    assert landing.invocation.results == {}
+
+@NEEDS_LEDGER
+async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_family_says(
+    adapter, make_registry
+):
+    """Rule **4-5**, through the ledger (amendment A3). A proposal made over an
+    `ambiguous` resolution carries `instance_ambiguous_at_proposal:<input_name>:<n>` and
+    is recorded in `review` mode in an `auto` family, and the next proposal is not."""
+    registry = await _world(adapter, make_registry)
+    res = await _resolve(registry, BAND)
+    assert res.outcome == "ambiguous" and res.complete, res
+    await _ingest_family(registry, mode="auto")
+    warning = f"instance_ambiguous_at_proposal:instance:{res.known}"
+    rec = await registry.record_invocation("propose_facility", {"instance": res.candidate},
+                                     actor="ai:ingest", outcome="applied",
+                                     approval_mode="review", warnings=(warning,))
+    assert not isinstance(rec, Refusal), rec
+    assert rec.declared_policy["approval_mode"] == "review"
+    assert warning in rec.warnings
+    # Through the act, which computes the warning and the mode itself.
+    act = await _act(registry, "act-31")
+    landing = await act.land(BAND + " ", type_name="facility")
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        # The direct record above holds this identity, and a backend with no invocation
+        # events cannot say whether its row was written: rule 4-11 lands that unknowable
+        # and records nothing (amendment A4's complete=False).
+        assert landing.outcome == "unknowable" and landing.invocation is None, landing
+        return
+    assert landing.outcome in ("proposed", "pending"), landing
+    inv = landing.invocation
+    assert inv.declared_policy["approval_mode"] == "review"
+    assert inv.declared_policy["approval_mode_declared"] == "auto"
+    assert f"instance_ambiguous_at_proposal:instance:{_tied_n(landing.resolution, BAND + ' ')}" in (
+        inv.warnings)
+    plain = await act.land(NOTHING, type_name="facility")
+    assert plain.invocation.declared_policy["approval_mode"] == "auto"
+
+@NEEDS_LEDGER
+async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unreviewed_one(
+    adapter, make_registry
+):
+    """Rule **4-11**, through the ledger's A4 read. A proposal whose row has not been
+    written holds the identity whether or not it has been reviewed, and once the host
+    reports the row (`record_result`) it holds nothing."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    res = await _resolve(registry, NOTHING)
+    assert res.outcome == "proposal", res
+    await _ingest_family(registry, mode="review")
+    first = await registry.record_invocation("propose_facility", {"instance": res.candidate},
+                                       actor="ai:ingest", outcome="applied")
+    again = await _resolve(registry, NOTHING.upper())
+    held = await registry.invocations(unwritten_for=again.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [first.invocation_id]
+    await registry.review_invocation(first.invocation_id, reviewed_by="user:sd")
+    assert [i.invocation_id
+            for i in (await registry.invocations(unwritten_for=again.candidate)).invocations] == [
+        first.invocation_id], "draining the queue stood the guard down (I-5)"
+    await registry.record_result(first.invocation_id,
+                           {"instance": InstanceRef(res.candidate.type, "995001")},
+                           actor="host:cms")
+    assert (await registry.invocations(unwritten_for=again.candidate)).invocations == ()
+
+    # Through the act: a second act's landing of a held identity is `pending`, carries
+    # the holder, and mints no second identity.
+    other = "yyyy wwww elsewhere"
+    act_2 = await _act(registry, "act-71a")
+    holder = await act_2.land(other, type_name="facility")
+    assert holder.outcome == "proposed", holder
+    act_3 = await _act(registry, "act-71b")
+    second = await act_3.land(other.upper(), type_name="facility")
+    assert second.outcome == "pending", second
+    assert (f"instance_proposal_pending:{holder.invocation.invocation_id}"
+            in second.invocation.warnings)
+    held = await registry.invocations(unwritten_for=second.candidate)
+    assert [i.invocation_id for i in held.invocations] == [holder.invocation.invocation_id], (
+        "the pending row is itself a holder: two permissions for one identity")
+    await registry.review_invocation(holder.invocation.invocation_id, reviewed_by="user:sd")
+    act_4 = await _act(registry, "act-71c")
+    third = await act_4.land(other, type_name="facility")
+    assert third.outcome == "pending", "draining the queue stood the guard down (I-5)"
+
+def _tied_n(res, label, policy=POLICY):
+    """Rule 4-12's `<n>`: the rows a reviewer chooses among -- at or above `match_at`, or
+    at or above `propose_below` within `ambiguity_margin` of the top (rules 3-3, 5-12),
+    on the gate's UNROUNDED scores (the candidates' four places are display only)."""
+    scores = [similar(norm(label), norm(c.label)) for c in res.candidates]
+    top = max(scores)
+    return sum(1 for s in scores if s >= policy["match_at"] or (
+        top - s <= policy["ambiguity_margin"] + 1e-9 and s >= policy["propose_below"]))
+
+async def _act(registry, act_id="act-1", *, family="propose_facility", tier="small", **kw):
+    act = await registry.ingest_act(act_id, family=family, actor="ai:ingest", tier=tier, **kw)
+    assert not isinstance(act, Refusal), act
+    return act
+
+async def _ledger(registry):
+    return [i.invocation_id for i in (await registry.invocations(limit=10_000)).invocations]
+
+@NEEDS_LEDGER
+async def test_c20_27_a_propose_at_ingest_act_is_an_invocation_and_adds_no_store(
+    adapter, make_registry
+):
+    """Rule **4-1**. The act's proposal is an ordinary invocation of a `kind="action"`
+    family, and §4 adds no object with a store and no primitive: the act is memory."""
+    from ontoloche.aio.adapter import AsyncStorageAdapter as Adapter
+    from ontoloche.ingest import INGEST_LANDINGS, IngestLanding
+
+    assert not [n for n in dir(Adapter) if "ingest" in n.lower() or n.startswith("act")]
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_5 = await _act(registry)
+    landing = await act_5.land(NOTHING, type_name="facility")
+    assert isinstance(landing, IngestLanding) and landing.outcome in INGEST_LANDINGS
+    assert landing.outcome == "proposed", landing
+    inv = landing.invocation
+    assert inv.family == "propose_facility"
+    assert await adapter.get_type("default", "propose_facility", kind="action") is not None
+    assert parse_ref(inv.inputs["instance"]) == landing.candidate
+    assert await _ledger(registry) == [inv.invocation_id]
+    # A second act with the same id shares nothing: the memory is the act's, not a store.
+    act_6 = await _act(registry)
+    again = await act_6.land(NOTHING, type_name="facility")
+    # The LEDGER answers across acts, not the memory: `pending` where it can read whether
+    # the first row was written, `unknowable` (rule 4-11, A4) where it cannot. Never the
+    # act's own `reused`, which would be a store shared across acts.
+    events = registry.caps.stores_events and registry.caps.stores_invocation_events
+    assert again.outcome == ("pending" if events else "unknowable"), again
+
+@NEEDS_LEDGER
+async def test_c20_28_the_host_writes_the_row_and_this_project_performs_no_write(
+    adapter, make_registry
+):
+    """Rule **4-2**. The family must declare `host_state` (the act refuses one that does
+    not), and landing a proposal writes no instance row."""
+    registry = await _world(adapter, make_registry)
+    out = await action_family(registry, "no_host_write", approval_mode="auto",
+                        inputs=[InputSpec("instance", "candidate")], effects=[])
+    assert isinstance(out, TypeEntry), out
+    refused = await registry.ingest_act("a", family="no_host_write", actor="ai:ingest",
+                                  tier="small")
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+    out = await action_family(registry, "no_candidate", approval_mode="auto",
+                        inputs=[InputSpec("instance", "instance")], effects=[_HOST_WRITE])
+    refused = await registry.ingest_act("a", family="no_candidate", actor="ai:ingest", tier="small")
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+    unknown = await registry.ingest_act("a", family="nope", actor="ai:ingest", tier="small")
+    assert isinstance(unknown, Refusal) and unknown.reason == "action_family_unknown"
+
+    await _ingest_family(registry)
+    act_7 = await _act(registry)
+    landing = await act_7.land(NOTHING, type_name="facility")
+    assert landing.outcome == "proposed"
+    assert landing.invocation.declared_effects == (_HOST_WRITE,)
+    after = await _resolve(registry, NOTHING)
+    assert after.outcome == "proposal" and after.scanned == len(FACILITIES), (
+        "a proposal wrote a host row")
+
+@NEEDS_LEDGER
+async def test_c20_30_provenance_is_invocation_provenance_unchanged(adapter, make_registry):
+    """Rule **4-4**. Actor, tier, confidence, approver and `source_version` ride the
+    invocation's existing provenance, and §4 adds no field to it."""
+    import dataclasses
+
+    from ontoloche.actions import InvocationProvenance
+
+    assert [f.name for f in dataclasses.fields(InvocationProvenance)] == [
+        "created_at", "created_by_actor", "created_by", "model_tier", "confidence",
+        "approved_by", "approved_at", "evidence", "source_version", "history",
+        "history_why",
+    ]
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_8 = await _act(registry, tier="large")
+    landing = await act_8.land(
+        NOTHING, type_name="facility", confidence=0.4, source_version="cms-2026-08")
+    prov = landing.invocation.provenance
+    assert prov.created_by_actor == "ai:ingest" and prov.created_by == "ai"
+    assert prov.model_tier == "large" and prov.confidence == 0.4
+    assert prov.source_version == "cms-2026-08"
+    assert prov.approved_by and prov.approved_by.startswith("auto:")
+
+@NEEDS_LEDGER
+async def test_c20_33_unknowable_and_not_an_instance_yield_no_proposal(adapter, make_registry):
+    """Rule **4-7**. Both outcomes mint nothing, and the second is the classifier
+    SUCCEEDING: proposing over it is how a column header becomes a host row."""
+    registry = await _world(adapter, make_registry)
+    await seed(registry, "unscored")               # no MatchPolicy: nothing can be scored
+    await host_instances(adapter, _rows(), type_name="unscored")
+    await _ingest_family(registry)
+    act = await _act(registry)
+    header = await act.land("Provider Name", type_name="facility")
+    assert header.outcome == "not_an_instance", header
+    blind = await act.land(EXACT, type_name="unscored")
+    assert blind.outcome == "unknowable", blind
+    for landing in (header, blind):
+        assert landing.invocation is None and landing.candidate is None
+        assert landing.ref is None and landing.why
+    assert await _ledger(registry) == []
+
+@NEEDS_LEDGER
+async def test_c20_34_an_ingest_family_may_not_propose_a_predicate(adapter, make_registry):
+    """Rule **4-8**. Refused at declaration (`ACTIONS.md` 2.5's allowlist), and the act
+    refuses a family carrying one that reached the store past validation."""
+    import dataclasses
+
+    registry = await _world(adapter, make_registry)
+    from ontoloche.actions import action_attributes
+
+    out = await registry.propose_type(
+        "mint_predicate", "an ingest family that would mint predicates", [], "user:sd",
+        kind="action",
+        attributes=action_attributes(
+            reversibility="reversible", approval_mode="auto",
+            inputs=[InputSpec("instance", "candidate")],
+            effects=[_HOST_WRITE,
+                     Effect(op="propose_type", namespace="default", kind="predicate")],
+        ),
+    )
+    assert isinstance(out, Refusal) and out.reason == "effect_not_permitted", out
+    await _ingest_family(registry)
+    rec = await adapter.get_type("default", "propose_facility", kind="action")
+    effects = list(rec.attributes["effects"]) + [
+        Effect(op="propose_type", namespace="default", kind="predicate").to_dict()]
+    await adapter.put_type(dataclasses.replace(rec, attributes={**rec.attributes, "effects": effects}))
+    refused = await registry.ingest_act("a", family="propose_facility", actor="ai:ingest",
+                                  tier="small")
+    assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
+
+@NEEDS_LEDGER
+async def test_c20_32_ambiguous_proposals_are_enumerable_and_drained_only_by_review(
+    adapter, make_registry
+):
+    """Rule **4-6**. The review-mode proposals rule 4-5 records are in
+    `invocations(unreviewed=True)`, and only `review_invocation` takes them out."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("draining is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    act = await _act(registry)
+    ambiguous = (await act.land(BAND, type_name="facility")).invocation
+    clean = (await act.land(NOTHING, type_name="facility")).invocation
+    queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+    assert ambiguous.invocation_id in queue and clean.invocation_id not in queue
+    await registry.record_result(ambiguous.invocation_id,
+                           {"instance": InstanceRef(TypeRef("default", "entity", "facility"),
+                                                    "995002")},
+                           actor="host:cms")
+    queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+    assert ambiguous.invocation_id in queue, "a RESULT is not a review"
+    await registry.review_invocation(ambiguous.invocation_id, reviewed_by="user:sd")
+    queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+    assert ambiguous.invocation_id not in queue
+
+@NEEDS_LEDGER
+async def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
+    """Rule **4-12**. `<n>` is the tied set's size over a COMPLETE read -- the rows a
+    reviewer chooses among, not the resolution's display list (round 1) -- and an
+    unfinished read never reaches the proposal door (rule 3-6): it lands `unknowable`
+    and records nothing."""
+    # Padding rows nothing like BAND, so the read SCANS more rows than it KNOWS: an `<n>`
+    # taken from `scanned`, or from `known` (the five shown), is then a different number.
+    padding = [{"host_id": f"pad{i}", "label": f"qqqq unrelated padding {i}", "state": "XX"}
+               for i in range(7)]
+    registry = await _world(adapter, make_registry, rows=_rows() + padding)
+    await _ingest_family(registry)
+    act_9 = await _act(registry)
+    landing = await act_9.land(BAND, type_name="facility")
+    res = landing.resolution
+    assert res.outcome == "ambiguous" and res.complete
+    assert res.scanned > res.known, (res.scanned, res.known)
+    ambiguity = [w for w in landing.invocation.warnings
+                 if w.startswith("instance_ambiguous_at_proposal:")]
+    assert _tied_n(res, BAND) != res.known, "the fixture must separate the tied set from known"
+    assert ambiguity == [f"instance_ambiguous_at_proposal:instance:{_tied_n(res, BAND)}"], ambiguity
+
+    dup = await make_registry(adapter)
+    await host_instances(adapter, _rows() + _rows()[:1], type_name="dupes")
+    await seed(dup, "dupes", attributes=_governed())
+    act_10 = await _act(dup, "act-dup")
+    blind = await act_10.land(BAND, type_name="dupes")
+    assert blind.outcome == "unknowable" and blind.invocation is None, blind
+    assert not any(w.startswith("instance_ambiguous_at_proposal")
+                   for w in (blind.resolution.warnings if blind.resolution else ()))
+
+@NEEDS_LEDGER
+async def test_c20_70_within_one_act_an_identity_is_resolved_once_under_the_gates_key(
+    adapter, make_registry
+):
+    """Rule **4-10**. The key is the gate's: the closure of the type and the label under
+    the gate's own RELATION (`similar(norm(a), norm(b)) >= match_at`), not the raw label
+    (`I-4`) and not the label without its type (B1)."""
+    registry = await _world(adapter, make_registry)
+    await host_instances(adapter, _rows(), type_name="clinic")
+    await seed(registry, "clinic", attributes=_governed())
+    await _ingest_family(registry)
+    act = await _act(registry)
+
+    first = await act.land(EXACT, type_name="facility")
+    assert first.outcome == "existing"
+    again = await act.land(EXACT.upper(), type_name="facility")
+    assert again.outcome == "reused" and again.ref == first.ref and again.resolution is None
+
+    minted = await act.land(NOTHING, type_name="facility")
+    assert minted.outcome == "proposed"
+    for variant in (NOTHING.upper(), "  " + NOTHING + "!", "zzzz qqqq unrelatd"):
+        reused = await act.land(variant, type_name="facility")
+        assert reused.outcome == "reused", (variant, reused)
+        assert reused.candidate == minted.candidate and reused.invocation is None
+
+    other_type = await act.land(NOTHING, type_name="clinic")
+    assert other_type.outcome == "proposed", "B1: a second type's landing reused the first's"
+    assert other_type.candidate.type.name == "clinic"
+    assert len(await _ledger(registry)) == 2
+
+@NEEDS_LEDGER
+async def test_c20_81_the_per_act_memory_is_written_on_every_branch_that_answers(
+    adapter, make_registry
+):
+    """Rule **4-13** (finding B5). The pending branch binds the act as the minting one
+    does, so the same identity landing again in that act is `reused`, not a second
+    pending invocation. `existing` binds it too (B7)."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("rule 4-11's read needs invocation events to be complete")
+    await _ingest_family(registry)
+    act_11 = await _act(registry, "act-a")
+    await act_11.land(NOTHING, type_name="facility")
+    b = await _act(registry, "act-b")
+    pending = await b.land(NOTHING, type_name="facility")
+    assert pending.outcome == "pending", pending
+    again = await b.land(NOTHING, type_name="facility")
+    assert again.outcome == "reused" and again.candidate == pending.candidate
+    assert len(await _ledger(registry)) == 2, "the pending branch left the act unbound"
+
+@NEEDS_LEDGER
+async def test_c20_71_r1_a_compensating_row_holds_nothing(adapter, make_registry):
+    """Rule **4-11** (round 1, lens 1, MAJOR 1). A compensating invocation that carries
+    the same candidate undoes the proposal; it does not become a holder, or the identity
+    could never be proposed again."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry, mode="review")
+    act_a = await _act(registry, "act-r1a")
+    first = await act_a.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    undo = await registry.record_invocation(
+        "propose_facility", {"instance": first.candidate}, actor="user:sd",
+        outcome="applied", approved_by="user:sd", compensates=first.invocation.invocation_id)
+    assert not isinstance(undo, Refusal), undo
+    held = await registry.invocations(unwritten_for=first.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [], held
+    act_b = await _act(registry, "act-r1b")
+    again = await act_b.land(NOTHING, type_name="facility")
+    assert again.outcome == "proposed", again
+
+@NEEDS_LEDGER
+async def test_c20_71_r1_a_pending_warning_naming_no_holder_exempts_nothing(adapter, make_registry):
+    """Rule **4-11** (round 1, lens 2, M1). `instance_proposal_pending:<id>` makes a row
+    a non-holder only when `<id>` is a matching applied row of the same identity. A
+    proposal recorded directly with a pending warning naming nothing real is a holder."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    res = await _resolve(registry, NOTHING)
+    await _ingest_family(registry)
+    forged = await registry.record_invocation(
+        "propose_facility", {"instance": res.candidate}, actor="ai:ingest", outcome="applied",
+        warnings=("instance_proposal_pending:bogus",))
+    assert not isinstance(forged, Refusal), forged
+    act_c = await _act(registry, "act-r1c")
+    landing = await act_c.land(NOTHING, type_name="facility")
+    assert landing.outcome == "pending", landing
+    assert f"instance_proposal_pending:{forged.invocation_id}" in landing.invocation.warnings
+
+@NEEDS_LEDGER
+async def test_c20_71_r1_an_unrelated_broken_closure_does_not_stall_the_namespace(
+    adapter, make_registry
+):
+    """Rule **4-11** (round 1, lens 2, M2). A ledger row for another type whose label is
+    nothing like this identity cannot hold it, so its broken closure must not turn every
+    A4 read in the namespace `complete=False`."""
+    registry = await _world(adapter, make_registry)
+    await host_instances(adapter, _rows(), type_name="widget")
+    await seed(registry, "widget", attributes=_governed())
+    await _ingest_family(registry)
+    widget = await _resolve(registry, "qqqq widget nothing alike", type_name="widget")
+    assert widget.outcome == "proposal", widget
+    out = await registry.record_invocation("propose_facility", {"instance": widget.candidate},
+                                     actor="ai:ingest", outcome="applied")
+    assert not isinstance(out, Refusal), out
+    await _rewrite(adapter, "widget", status="retired", successor="gadget_missing")
+    cand = (await _resolve(registry, NOTHING)).candidate
+    held = await registry.invocations(unwritten_for=cand)
+    assert held.complete, held.why_incomplete
+    act_d = await _act(registry, "act-r1d")
+    assert (await act_d.land(NOTHING, type_name="facility")).outcome == "proposed"
+
+@NEEDS_LEDGER
+async def test_c20_72_r1_n_is_the_tied_set_not_the_display_list(adapter, make_registry):
+    """Rule **4-12** with §4.3's K9 (round 1, lens 1, MAJOR 2). On a band ambiguous
+    (rule 5-9) the resolution's `candidates` are the five best for display, sub-floor
+    rows included; `<n>` is the multiplicity a reviewer chooses among -- the rows at or
+    above `propose_below` within `ambiguity_margin` of the top."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_e = await _act(registry, "act-r1e")
+    landing = await act_e.land(BAND, type_name="facility")
+    res = landing.resolution
+    assert res.outcome == "ambiguous" and res.known > 1, res
+    floor = POLICY["propose_below"]
+    above = [c for c in res.candidates if c.score is not None and c.score >= floor]
+    assert len(above) == 1, [c.score for c in res.candidates]
+    ambiguity = [w for w in landing.invocation.warnings
+                 if w.startswith("instance_ambiguous_at_proposal:")]
+    assert ambiguity == ["instance_ambiguous_at_proposal:instance:1"], ambiguity
+
+@NEEDS_LEDGER
+async def test_c20_70_r1_a_foreign_act_id_is_refused_before_the_recall(adapter, make_registry):
+    """Rule **4-10**'s memory is the act's (round 1, lens 2, m3): a context naming another
+    act is a `ValueError` even when the act already answered for the identity."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_f = await _act(registry, "act-A")
+    await act_f.land(NOTHING, type_name="facility")
+    with pytest.raises(ValueError):
+        await act_f.land(NOTHING, type_name="facility",
+                   context=InstanceContext(act_id="act-B", proposed_by="ai:ingest"))
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_41_r1_the_act_records_the_effective_entrys_policy(adapter, make_registry):
+    """`I-7` at the act (round 1, lens 3, M2). Through `land`, the policy recorded is the
+    EFFECTIVE entry's, with `governed_by` naming it -- not the declared type. Rule 3-18
+    makes a closure whose entries disagree on the numbers `unknowable`, so the numbers
+    are equal by construction and `governed_by` is the only thing that can be wrong."""
+    registry = await _successor_world(adapter, make_registry, old_rows=_rows(), new_rows=_rows())
+    await _ingest_family(registry)
+    act_g = await _act(registry, "act-r1g")
+    landing = await act_g.land(NOTHING, type_name="facility")
+    assert landing.outcome == "proposed", landing
+    assert landing.resolution.governed_by == "default:ltc_facility"
+    assert landing.invocation.declared_policy["match_policy"] == {
+        "governed_by": "default:ltc_facility", "match_at": 0.97, "propose_below": 0.80,
+        "ambiguity_margin": 0.02,
+    }, landing.invocation.declared_policy
+
+_EAST = "RENNES HEALTH AND REHAB CENTER EAST"
+
+_WEST = "RENNES HEALTH AND REHAB CENTER WEST"
+
+_WESTON = "RENNES HEALTH AND REHAB CENTER WESTON"
+
+@NEEDS_LEDGER
+async def test_c20_71_r2_a_pending_row_is_judged_against_its_own_identity(adapter, make_registry):
+    """Rule **4-11**, amendment A4 (round 2, lens 1, M1). A `pending` row names the
+    proposal that held ITS identity. Whether it is exempt is judged against its own
+    label, not the reader's, or a pending row -- which proposes nothing and is never
+    written -- becomes a permanent holder for a third label the gate calls distinct."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    act_e, act_w, act_x = [await _act(registry, f"act-r2{c}") for c in "ewx"]
+    east = await act_e.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    west = await act_w.land(_WEST, type_name="facility")
+    assert west.outcome == "pending", west
+    await registry.record_result(east.invocation.invocation_id,
+                           {"instance": InstanceRef(east.candidate.type, "995101")},
+                           actor="host:cms")
+    weston = await act_x.land(_WESTON, type_name="facility")
+    assert weston.outcome == "proposed", weston
+    held = await registry.invocations(unwritten_for=weston.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        weston.invocation.invocation_id], held
+
+@NEEDS_LEDGER
+async def test_c20_71_r2_an_empty_incomplete_page_is_not_no_holder(adapter, make_registry):
+    """Rule **4-11**, Rule U (round 2, lens 1, m1). An empty page with `complete=False`
+    and no cursor is an unfinished read, not a confident empty ledger."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    cand = (await _resolve(registry, NOTHING)).candidate
+
+    class _Stalled:
+        def __init__(self, inner):
+            object.__setattr__(self, "inner", inner)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def __setattr__(self, name, value):
+            setattr(self.inner, name, value)
+
+        async def find_invocations(self, **kwargs):
+            page = await self.inner.find_invocations(**kwargs)
+            return type(page)(**{**page.__dict__, "records": (), "next_after": None,
+                                 "complete": False,
+                                 "why_incomplete": "the ledger could not be read"})
+
+    stalled = await make_registry(_Stalled(adapter))
+    held = await stalled.invocations(unwritten_for=cand)
+    assert not held.complete and "could not be read" in (held.why_incomplete or ""), held
+
+@NEEDS_LEDGER
+async def test_c20_71_r2_a_proposal_recorded_in_another_namespace_still_holds(
+    adapter, make_registry
+):
+    """Rule **4-10**'s key is the IDENTITY's namespace (round 2, lens 2, M2). A family in
+    `ops` that records a candidate of `default:entity:facility` holds that identity for
+    an act in `default`: A4 keys on the candidate's type, not on the ledger row's."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    out = await action_family(registry, "propose_facility", namespace="ops", approval_mode="auto",
+                        inputs=[InputSpec("instance", "candidate")], effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    cand = (await _resolve(registry, NOTHING)).candidate
+    elsewhere = await registry.record_invocation("propose_facility", {"instance": cand},
+                                           namespace="ops", actor="ai:ingest",
+                                           outcome="applied")
+    assert not isinstance(elsewhere, Refusal), elsewhere
+    act_n = await _act(registry, "act-r2n")
+    landing = await act_n.land(NOTHING, type_name="facility")
+    assert landing.outcome == "pending", landing
+    assert f"instance_proposal_pending:{elsewhere.invocation_id}" in landing.invocation.warnings
+
+@NEEDS_LEDGER
+async def test_c20_71_r2_a_failed_compensation_releases_nothing(adapter, make_registry):
+    """Rule **4-11** (round 2, lens 2, M3). An undo that was tried and FAILED undid
+    nothing, so the proposal it names still holds the identity."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry, mode="review")
+    act_f = await _act(registry, "act-r2f")
+    first = await act_f.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    undo = await registry.record_invocation(
+        "propose_facility", {"instance": first.candidate}, actor="user:sd",
+        outcome="failed", compensates=first.invocation.invocation_id)
+    assert not isinstance(undo, Refusal), undo
+    act_g = await _act(registry, "act-r2g")
+    again = await act_g.land(NOTHING, type_name="facility")
+    assert again.outcome == "pending", again
+
+@NEEDS_LEDGER
+async def test_c20_71_r2_an_unfinished_a4_read_lands_unknowable_through_the_act(
+    adapter, make_registry
+):
+    """§0.2 item 10, rule 4-11 with Rule U (round 2, lens 2, coverage). When A4 cannot
+    say whether a matching row was written, the act proposes nothing: `unknowable`, and
+    no second invocation is recorded."""
+    blind = AsyncDegradedAdapter(adapter, stores_invocation_events=False)
+    registry = await _world(blind, make_registry)
+    if not registry.caps.stores_invocations:
+        pytest.skip("this backend keeps no ledger")
+    await _ingest_family(registry)
+    act_u = await _act(registry, "act-r2u")
+    first = await act_u.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    act_v = await _act(registry, "act-r2v")
+    second = await act_v.land(NOTHING, type_name="facility")
+    assert second.outcome == "unknowable" and second.invocation is None, second
+    assert len(await _ledger(registry)) == 1
+
+@NEEDS_LEDGER
+async def test_c20_30_r2_the_resolutions_carried_warnings_ride_onto_the_invocation(
+    adapter, make_registry
+):
+    """Rule **4-4** with A3 (round 2, lens 2, coverage). The resolution's caller-reportable
+    warnings travel onto the invocation the act records."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_w = await _act(registry, "act-r2w")
+    landing = await act_w.land(NOTHING, type_name="facility")
+    assert landing.outcome == "proposed", landing
+    carried = [w for w in landing.resolution.warnings
+               if w.split(":", 1)[0] in CARRIED_WARNINGS]
+    assert carried, landing.resolution.warnings
+    for w in carried:
+        assert w in landing.invocation.warnings, (w, landing.invocation.warnings)
+
+@NEEDS_LEDGER
+async def test_c20_71_r3_every_candidate_input_of_a_row_is_judged(adapter, make_registry):
+    """Rule **4-11**, amendment A4 (round 3, lenses 1 and 2). A row with two candidate
+    inputs that both match holds the identity while EITHER is unwritten: a result for
+    `a` writes `a`, not `b`. Judging only the first input that matched released `b`."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    out = await action_family(registry, "propose_pair", approval_mode="auto",
+                        inputs=[InputSpec("a", "candidate"), InputSpec("b", "candidate")],
+                        effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    cand = (await _resolve(registry, NOTHING)).candidate
+    pair = await registry.record_invocation("propose_pair", {"a": cand, "b": cand},
+                                      actor="ai:ingest", outcome="applied")
+    assert not isinstance(pair, Refusal), pair
+    wrote = await registry.record_result(pair.invocation_id,
+                                   {"a": InstanceRef(cand.type, "995201")}, actor="host:cms")
+    assert not isinstance(wrote, Refusal), wrote
+    held = await registry.invocations(unwritten_for=cand)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        pair.invocation_id], held
+
+@NEEDS_LEDGER
+async def test_c20_28_r3_a_family_amended_after_the_act_began_is_judged_at_the_landing(
+    adapter, make_registry
+):
+    """Rule **4-2** (round 3, lens 2, m1; rule 4-8 at the landing is `C20-28` r4). The act checks its family when it
+    is created, and a family can be amended after that (`declaration_amended`). A landing
+    under a family that no longer says the host writes the row is refused, as a fresh
+    `ingest_act` would be, and records nothing."""
+    registry = await _world(adapter, make_registry)
+    if not registry.caps.stores_invocations:
+        pytest.skip("this backend keeps no ledger")
+    await _ingest_family(registry)
+    act_q = await _act(registry, "act-r3q")
+    from ontoloche.actions import action_attributes
+    await registry.import_types([{
+        "name": "propose_facility", "kind": "action", "definition": "amended",
+        "status": "active",
+        "attributes": action_attributes(
+            reversibility="reversible", approval_mode="auto",
+            inputs=[InputSpec("instance", "candidate")],
+            effects=[Effect(op="propose_type", kind="entity", namespace="default",
+                            why="the host write dropped")])}],
+        namespace="default", kind="action")
+    fresh = await registry.ingest_act("act-r3r", family="propose_facility", actor="ai:ingest",
+                                tier="small")
+    assert isinstance(fresh, Refusal) and fresh.reason == "attributes_schema_violation", fresh
+    landing = await act_q.land(NOTHING, type_name="facility")
+    assert landing.outcome == "refused", landing
+    assert landing.refusal is not None
+    assert landing.refusal.reason == "attributes_schema_violation", landing
+    assert await _ledger(registry) == []
+
+@NEEDS_LEDGER
+async def test_c20_27_r3_a_gate_refusal_through_the_act_records_nothing(adapter, make_registry):
+    """Rule **4-1** (round 3, lens 2, coverage). The act is an invocation of its family,
+    so the gate's verdict binds it: a tier the family does not admit is refused and
+    nothing is recorded."""
+    registry = await _world(adapter, make_registry)
+    out = await action_family(registry, "propose_facility", approval_mode="auto",
+                        min_auto_tier="large", inputs=[InputSpec("instance", "candidate")],
+                        effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    act_s = await _act(registry, "act-r3s", tier="small")
+    landing = await act_s.land(NOTHING, type_name="facility")
+    assert landing.outcome == "refused" and landing.invocation is None, landing
+    assert await _ledger(registry) == []
+
+@NEEDS_LEDGER
+async def test_c20_81_r3_existing_binds_and_a_refused_landing_binds_nothing(
+    adapter, make_registry
+):
+    """Rule **4-13** as amended in round 2 (round 3, lens 3, m2). An `existing` landing
+    writes the per-act memory, so the act's next landing of that identity is `reused`;
+    a `refused` landing recorded nothing and writes none, so it is refused again."""
+    registry = await _world(adapter, make_registry)
+    await _ingest_family(registry)
+    act_t = await _act(registry, "act-r3t")
+    first = await act_t.land(EXACT, type_name="facility")
+    assert first.outcome == "existing", first
+    again = await act_t.land(EXACT, type_name="facility")
+    assert again.outcome == "reused" and again.ref == first.ref, again
+
+    out = await action_family(registry, "propose_gated", approval_mode="auto",
+                        min_auto_tier="large", inputs=[InputSpec("instance", "candidate")],
+                        effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    act_u = await _act(registry, "act-r3u", family="propose_gated", tier="small")
+    refused = await act_u.land(NOTHING, type_name="facility")
+    assert refused.outcome == "refused", refused
+    twice = await act_u.land(NOTHING, type_name="facility")
+    assert twice.outcome == "refused", twice
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_71_r3_a_pending_row_is_exempt_through_the_closure_after_a_retire(
+    adapter, make_registry
+):
+    """Rule **4-11** with `I-5`'s second form (round 3, lens 2, coverage). A proposal made
+    under `facility`, and a pending row made under its successor after a retire, are one
+    identity. When the proposal is written the pending row holds nothing, so the next
+    landing proposes."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    await host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = await make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed())
+    await _ingest_family(registry)
+    act_a, act_b, act_c = [await _act(registry, f"act-r3{c}") for c in "abc"]
+    held = await act_a.land(NOTHING, type_name="facility")
+    assert held.outcome == "proposed", held
+    gone = await registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    pending = await act_b.land(NOTHING, type_name="ltc_facility")
+    assert pending.outcome == "pending", pending
+    await registry.record_result(held.invocation.invocation_id,
+                           {"instance": InstanceRef(held.candidate.type, "995001")},
+                           actor="host:cms")
+    after = await act_c.land(NOTHING, type_name="ltc_facility")
+    assert after.outcome == "proposed", after
+
+@NEEDS_LEDGER
+async def test_c20_71_r3_a_broken_target_closure_is_never_no_holder(adapter, make_registry):
+    """Rule **4-11**, `I-2` at the direct door (round 3, lens 2, coverage). When the
+    candidate's own closure cannot be finished, `invocations(unwritten_for=)` answers
+    `complete=False`, never a confident empty."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    act_o = await _act(registry, "act-r3o")
+    first = await act_o.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    await _rewrite(adapter, "facility", status="retired", successor="gone_missing")
+    held = await registry.invocations(unwritten_for=first.candidate)
+    assert not held.complete, held
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_70_r4_the_recall_follows_a_retire_inside_one_act(adapter, make_registry):
+    """Rule **4-10** (round 4, lens 2, m1). The act's memory is keyed under the closure of
+    `type_name`, so it holds when the type is retired between two landings of one act:
+    `facility` is now `ltc_facility`, and the second landing of the identity the act
+    already proposed is `reused`, not a fresh `pending` row."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    await host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = await make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed())
+    await _ingest_family(registry)
+    act_t = await _act(registry, "act-r4t")
+    first = await act_t.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    gone = await registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    for type_name in ("facility", "ltc_facility"):
+        again = await act_t.land(NOTHING, type_name=type_name)
+        assert again.outcome == "reused", (type_name, again.outcome, again.why)
+        assert again.candidate == first.candidate, again
+    assert len(await _ledger(registry)) == 1
+
+_PAIR_BASE = "kemubcrdlsbqgbcnnchcrnbsdhuusbssmbhbrejn"
+
+@NEEDS_LEDGER
+async def test_c20_71_r4_a_pending_row_is_exempt_only_when_each_candidate_is_held(
+    adapter, make_registry
+):
+    """Rule **4-11** (round 4, lens 2, m2). A pending row with two candidates that match
+    the reader, only one of them held by the row it names, is a holder for the other.
+    At `match_at` 0.97 the reader R matches X and Y and X does not match Y."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    await action_family(registry, "propose_pair", approval_mode="auto",
+                  inputs=[InputSpec("a", "candidate"), InputSpec("b", "candidate")],
+                  effects=[_HOST_WRITE])
+    act_u = await _act(registry, "act-r4u")
+    held = await act_u.land(_PAIR_BASE + "qz", type_name="facility")
+    assert held.outcome == "proposed", held
+    hid = held.invocation.invocation_id
+    cx = (await _resolve(registry, _PAIR_BASE + "qz")).candidate
+    cy = (await _resolve(registry, "qz" + _PAIR_BASE)).candidate
+    pair = await registry.record_invocation("propose_pair", {"a": cx, "b": cy}, actor="ai:x",
+                                      outcome="applied",
+                                      warnings=(f"instance_proposal_pending:{hid}",))
+    assert not isinstance(pair, Refusal), pair
+    reader = (await _resolve(registry, _PAIR_BASE)).candidate
+    ids = [i.invocation_id for i in (await registry.invocations(unwritten_for=reader)).invocations]
+    # Rows recorded in the same instant order on their random ids, so compare as a set.
+    assert sorted(ids) == sorted([hid, pair.invocation_id]), ids
+    await registry.record_result(hid, {"instance": InstanceRef(cx.type, "995301")}, actor="host:cms")
+    act_v = await _act(registry, "act-r4v")
+    landing = await act_v.land("qz" + _PAIR_BASE, type_name="facility")
+    assert landing.outcome == "pending", landing
+
+@NEEDS_LEDGER
+async def test_c20_28_r4_a_family_amended_to_propose_predicates_is_judged_at_the_landing(
+    adapter, make_registry
+):
+    """Rule **4-8** at the landing (round 4, lens 3, m1). The public doors refuse a
+    predicate-proposing family (`import_types` says `effect_not_permitted`), so this
+    writes one past them, as a host with write access to the store can. The landing is
+    refused and records nothing."""
+    registry = await _world(adapter, make_registry)
+    if not registry.caps.stores_invocations:
+        pytest.skip("this backend keeps no ledger")
+    await _ingest_family(registry)
+    act_w = await _act(registry, "act-r4w")
+    from ontoloche.actions import action_attributes
+    rec = await adapter.get_type("default", "propose_facility", kind="action")
+    await adapter.put_type(dataclasses.replace(rec, attributes=action_attributes(
+        reversibility="reversible", approval_mode="auto",
+        inputs=[InputSpec("instance", "candidate")],
+        effects=[_HOST_WRITE, Effect(op="propose_type", kind="predicate",
+                                     namespace="default", why="written past the door")])))
+    landing = await act_w.land(NOTHING, type_name="facility")
+    assert landing.outcome == "refused", landing
+    assert landing.refusal is not None
+    assert landing.refusal.reason == "attributes_schema_violation", landing
+    assert "4-8" in landing.why, landing.why
+    assert await _ledger(registry) == []
+
+@NEEDS_LEDGER
+async def test_c20_70_r5_the_recall_never_settles_an_ambiguity_the_gate_would_review(
+    adapter, make_registry
+):
+    """Rule **4-10** with the gate's non-transitive relation (round 5, lens 2, MAJOR).
+    At `match_at` 0.97 the label R matches X and Y and X does not match Y. One act lands
+    X and Y, both `existing`. The gate calls R `ambiguous`, so the act's landing of R
+    must be what a fresh act gives (a review-mode proposal), never a recall of whichever
+    of X and Y the act landed first."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    rows = [{"host_id": "X1", "label": x, "state": "AL"},
+            {"host_id": "Y1", "label": y, "state": "AL"}]
+    registry = await _world(adapter, make_registry, rows)
+    await _ingest_family(registry)
+    act_x = await _act(registry, "act-r5x")
+    assert (await act_x.land(x, type_name="facility")).outcome == "existing"
+    assert (await act_x.land(y, type_name="facility")).outcome == "existing"
+    gate = await _resolve(registry, r)
+    assert gate.outcome == "ambiguous", gate
+    landing = await act_x.land(r, type_name="facility")
+    assert landing.outcome != "reused", (landing.outcome, landing.ref, landing.why)
+    assert landing.outcome == "proposed", landing
+    assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+    # ...and a fresh act now finds that proposal as the identity's holder (rule 4-11),
+    # where `written` is readable; without it A4's read is unfinished (`unknowable`).
+    act_y = await _act(registry, "act-r5y")
+    events = registry.caps.stores_events and registry.caps.stores_invocation_events
+    assert (await act_y.land(r, type_name="facility")).outcome == (
+        "pending" if events else "unknowable")
+
+@NEEDS_LEDGER
+async def test_c20_70_r5_two_proposals_the_reader_matches_are_never_recalled_by_order(
+    adapter, make_registry
+):
+    """Rule **4-10** (round 5, lens 2, same root). One act proposes X and Y. R matches
+    both, so the act does not hand R either `CandidateRef`: the gate decides, and rule
+    4-11 finds the two unwritten proposals."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    act_z = await _act(registry, "act-r5z")
+    assert (await act_z.land(x, type_name="facility")).outcome == "proposed"
+    assert (await act_z.land(y, type_name="facility")).outcome == "proposed"
+    landing = await act_z.land(r, type_name="facility")
+    assert landing.outcome == "pending", (landing.outcome, landing.why)
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_70_r5_a_recalled_ref_is_the_one_the_gate_gives_now(adapter, make_registry):
+    """Rule **4-10** with rule 2-17 (round 5, lens 2, m2). After `facility` is retired
+    toward `ltc_facility`, the gate answers `existing` under the effective type. The
+    act's next landing of the same label gives that ref, not the retired member's."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    await host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed())
+    await _ingest_family(registry)
+    act_e = await _act(registry, "act-r5e")
+    first = await act_e.land(EXACT, type_name="facility")
+    assert first.outcome == "existing" and first.ref.type.name == "facility", first
+    gone = await registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    gate = await _resolve(registry, EXACT, type_name="ltc_facility")
+    again = await act_e.land(EXACT, type_name="ltc_facility")
+    assert again.ref == gate.ref, (again.outcome, again.ref, gate.ref)
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_70_r5_the_recall_defers_to_rule_3_18(adapter, make_registry):
+    """Rule **4-10** with rule 3-18 (round 5, lens 1, m1). The successor declares its own
+    `MatchPolicy`, so after the retire the gate declines to judge the extent
+    (`unknowable`). The act's next landing says the same, and records nothing."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    await host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = await make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed(dict(POLICY, match_at=0.95)))
+    await _ingest_family(registry)
+    act_g = await _act(registry, "act-r5g")
+    first = await act_g.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    gone = await registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    gate = await _resolve(registry, NOTHING)
+    assert gate.outcome == "unknowable", gate
+    again = await act_g.land(NOTHING, type_name="facility")
+    assert again.outcome == "unknowable", (again.outcome, again.why)
+    assert len(await _ledger(registry)) == 1
+
+@NEEDS_LEDGER
+async def test_c20_70_r6_one_landed_neighbour_never_settles_an_ambiguity(adapter, make_registry):
+    """Rule **4-10** (round 6, lens 2, MAJOR). The act has landed only X (`existing`).
+    The gate calls R `ambiguous` over X's and Y's host rows, so the act's landing of R
+    is the gate's: a review-mode proposal, never a recall of X's row."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    rows = [{"host_id": "X1", "label": x, "state": "AL"},
+            {"host_id": "Y1", "label": y, "state": "AL"}]
+    registry = await _world(adapter, make_registry, rows)
+    await _ingest_family(registry)
+    act_k = await _act(registry, "act-r6k")
+    assert (await act_k.land(x, type_name="facility")).outcome == "existing"
+    assert (await _resolve(registry, r)).outcome == "ambiguous"
+    landing = await act_k.land(r, type_name="facility")
+    assert landing.outcome == "proposed", (landing.outcome, landing.ref, landing.why)
+    assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+
+@NEEDS_LEDGER
+async def test_c20_70_r6_a_repeat_of_a_label_the_act_answered_is_reused(adapter, make_registry):
+    """Rules **4-10** and **4-13** (round 6, lenses 1 and 2, MINOR). Inside the
+    non-transitive triple, a repeat of a label this act already answered is `reused`:
+    the exact key is resolved once, and no pending row is added per repeat."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await _ingest_family(registry)
+    act_m = await _act(registry, "act-r6m")
+    first = [await act_m.land(label, type_name="facility") for label in (x, y, r)]
+    assert [f.outcome for f in first] == ["proposed", "proposed", "pending"], first
+    again = [await act_m.land(label, type_name="facility") for label in (x, r, x, r)]
+    assert [a.outcome for a in again] == ["reused"] * 4, [(a.outcome, a.why) for a in again]
+    assert again[0].candidate == first[0].candidate and again[1].candidate == first[2].candidate
+    assert len(await _ledger(registry)) == 3
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_70_r6_after_a_retire_the_gate_answers_once_and_is_recalled(adapter, make_registry):
+    """Rule **4-10** with rule 2-17 (round 6, lens 2, m2). The host row exists only under
+    the retired member's name. After the retire the gate is asked once, and its answer
+    is recalled from then on."""
+    await host_instances(adapter, _rows(), type_name="facility")
+    await host_instances(adapter, [], type_name="ltc_facility")   # bound, and empty
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed())
+    await _ingest_family(registry)
+    act_n = await _act(registry, "act-r6n")
+    assert (await act_n.land(EXACT, type_name="facility")).outcome == "existing"
+    gone = await registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    gate = await _resolve(registry, EXACT, type_name="ltc_facility")
+    after = [await act_n.land(EXACT, type_name="ltc_facility") for _ in range(3)]
+    assert [a.outcome for a in after] == ["existing", "reused", "reused"], after
+    assert all(a.ref == gate.ref for a in after), (gate.ref, [a.ref for a in after])
+
+@NEEDS_LEDGER
+async def test_c20_70_r6_the_cms_triple_with_one_landed_neighbour(adapter, make_registry):
+    """Rule **4-10** over real CMS labels (round 6, lens 3, MAJOR). Host rows E1 (EAST)
+    and W2 (WESTON); EAST ~ WEST and WEST ~ WESTON, EAST !~ WESTON. The act lands EAST
+    (`existing`), and its landing of WEST is the gate's review-mode proposal, never E1."""
+    rows = [{"host_id": "E1", "label": _EAST, "state": "AL"},
+            {"host_id": "W2", "label": _WESTON, "state": "AL"}]
+    registry = await _world(adapter, make_registry, rows)
+    await _ingest_family(registry)
+    act_p = await _act(registry, "act-r6p")
+    assert (await act_p.land(_EAST, type_name="facility")).outcome == "existing"
+    assert (await _resolve(registry, _WEST)).outcome == "ambiguous"
+    landing = await act_p.land(_WEST, type_name="facility")
+    assert landing.outcome == "proposed", (landing.outcome, landing.ref, landing.why)
+    assert landing.resolution is not None and landing.resolution.outcome == "ambiguous"
+
+@NEEDS_LEDGER
+async def test_c20_70_r6_a_remembered_proposal_never_hides_a_host_row(adapter, make_registry):
+    """Rule **4-10** (round 6, lens 3, same root). The act proposed X; the host holds Y.
+    The gate answers R `existing` (Y's row), and so does the act."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    registry = await _world(adapter, make_registry, [{"host_id": "Y1", "label": y, "state": "AL"}])
+    await _ingest_family(registry)
+    act_q = await _act(registry, "act-r6q")
+    assert (await act_q.land(x, type_name="facility")).outcome == "proposed"
+    gate = await _resolve(registry, r)
+    assert gate.outcome == "existing", gate
+    landing = await act_q.land(r, type_name="facility")
+    assert landing.outcome == "existing" and landing.ref == gate.ref, (
+        landing.outcome, landing.ref, landing.why)
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+async def test_c20_70_r6_after_a_retire_the_exact_key_is_recalled_before_the_gate(
+    adapter, make_registry
+):
+    """Rule **4-10** (post-cap fix, a pin the sweep asked for). The exact key reads each
+    entry's closure NOW. Inside the non-transitive triple the act holds three candidates
+    within `match_at` of R, so after a retire only the exact recall of R's own candidate
+    gives `reused`: the similar-candidate step sees three and goes on to A4."""
+    x, y, r = _PAIR_BASE + "qz", "qz" + _PAIR_BASE, _PAIR_BASE
+    await host_instances(adapter, _rows(), type_name="facility")
+    await host_instances(adapter, _rows(), type_name="ltc_facility")
+    registry = await make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    await seed(registry, "facility", attributes=_governed())
+    await seed(registry, "ltc_facility", attributes=_governed())
+    await _ingest_family(registry)
+    act_w = await _act(registry, "act-r6w")
+    first = [await act_w.land(label, type_name="facility") for label in (x, y, r)]
+    assert [f.outcome for f in first] == ["proposed", "proposed", "pending"], first
+    gone = await registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    again = await act_w.land(r, type_name="ltc_facility")
+    assert again.outcome == "reused" and again.candidate == first[2].candidate, (
+        again.outcome, again.why)
+    assert len(await _ledger(registry)) == 3

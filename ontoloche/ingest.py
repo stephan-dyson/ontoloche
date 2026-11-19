@@ -45,6 +45,8 @@ __all__ = [
     "InstanceCandidate",
     "InstanceResolution",
     "InstanceLookup",
+    "INGEST_LANDINGS",
+    "IngestLanding",
     "MatchPolicy",
     "Condition",
     "ConditionResult",
@@ -162,6 +164,40 @@ class InstanceLookup:
     why: str
     governed_by: str
     warnings: tuple[str, ...]
+
+
+#: Row 7c. What one ``IngestAct.land`` did, closed. ``existing``: the gate named a host
+#: row. ``proposed``: a propose invocation was recorded. ``pending``: one was recorded
+#: carrying ``instance_proposal_pending`` because an earlier proposal for the identity
+#: is unwritten (rule 4-11), so it holds no permission. ``reused``: rule 4-10's per-act
+#: memory answered and nothing was read or recorded. ``unknowable`` / ``not_an_instance``:
+#: rule 4-7, nothing recorded. ``refused``: a refusal (the resolution's, the gate's or
+#: the ledger's) and nothing recorded.
+INGEST_LANDINGS = (
+    "existing", "proposed", "pending", "reused", "unknowable", "not_an_instance", "refused",
+)
+
+
+@dataclass(frozen=True)
+class IngestLanding:
+    """``IngestAct.land``'s answer. INGEST.md §8, row 7c.
+
+    ``resolution`` is ``None`` for ``reused`` (the memory answered; when a similar
+    label was first read by the gate, that read is not carried) and for a ``refused`` that ``resolve_instance`` itself refused. ``ref`` is
+    set for ``existing`` and for a ``reused`` that recalled one; ``candidate`` for
+    ``proposed``, ``pending``, a ``reused`` that recalled one, and a ``refused`` after
+    the resolution (at preflight, at A4's read or at the record);
+    ``invocation`` for ``proposed`` and ``pending`` only. ``refusal`` carries the refusal
+    behind a ``refused`` landing. ``why`` is never empty.
+    """
+
+    outcome: str
+    resolution: InstanceResolution | None
+    ref: InstanceRef | None
+    candidate: CandidateRef | None
+    invocation: Any
+    why: str
+    refusal: Any = None
 
 
 # ----------------------------------------------------------------------- §5 the gate

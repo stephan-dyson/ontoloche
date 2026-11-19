@@ -42,6 +42,9 @@ REG = "ontoloche/registry.py"
 ING = "ontoloche/ingest.py"
 ADA = "ontoloche/adapter.py"
 SQL = "ontoloche/backends/_sql.py"
+ACT = "ontoloche/actions.py"
+C20S = "ontoloche/contract/test_c20_ingest.py"
+C19S = "ontoloche/contract/test_c19_actions.py"
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class Mutation:
     old: str
     new: str
     required: bool = False
+    suite: str = C20S  # row 7c: the C19 amendments' ids live in test_c19_actions.py
 
 
 MUTATIONS = (
@@ -498,6 +502,195 @@ MUTATIONS = (
              '        if condition is None:\n            warnings.append("no_tenancy_predicate")\n'
              "            survivors = list(one_copy)",
              "        if condition is None:\n            survivors = list(one_copy)"),
+    # ---- row 7c: every C19/C20 id it touched, each REQUIRED red (7C-RUN.md 0.8) ------
+    Mutation("ACTIONS 6-14 (A1) a candidate's resolution is checked", "c19_111", REG,
+             '("resolution", ref.resolution not in CANDIDATE_RESOLUTIONS),',
+             '("resolution", False),', required=True, suite=C19S),
+    Mutation("ACTIONS 3-9 (A2) results derive from the events", "c19_109", REG,
+             "                    out[name] = parse_ref(key)",
+             "                    pass", required=True, suite=C19S),
+    Mutation("ACTIONS 6-15 (A2) record_result refuses an undeclared input", "c19_114",
+             REG, "            if name not in carried:", "            if False:",
+             required=True, suite=C19S),
+    Mutation("ACTIONS 6-16 (A3) approval_mode raises the row", "c19_112", REG,
+             "            if rank[approval_mode] > rank.get(declared_mode, 0):",
+             "            if False:", required=True, suite=C19S),
+    Mutation("ACTIONS 6-17 (A4) a result releases a holder, review does not", "c19_113",
+             REG, "                if all(name in built.results for name in matched):\n                    continue\n",
+             "", required=True, suite=C19S),
+    Mutation("ACTIONS 3-10 (A5) the match policy is recorded", "c19_110", REG,
+             '            policy_of_record = {**policy_of_record, "match_policy": '
+             "match_policy_of_record}",
+             "            pass", required=True, suite=C19S),
+    Mutation("5-7 (A5) the invocation half of C20-41", "c20_41", REG,
+             '            policy_of_record = {**policy_of_record, "match_policy": '
+             "match_policy_of_record}",
+             "            pass", required=True),
+    Mutation("4-1 the act is memory, not a store", "c20_27", REG,
+             "    _memory: list = dataclasses.field(default_factory=list)",
+             "    _memory: list = dataclasses.field(default_factory=lambda _s=[]: _s)",
+             required=True),
+    Mutation("4-2 the family must declare host_state", "c20_28", REG,
+             '    if not any(e.op == "host_state" for e in effects):',
+             "    if False:", required=True),
+    Mutation("4-3 the candidate is under the EFFECTIVE type", "c20_29", REG,
+             "        cand = res.candidate\n",
+             "        cand = (dataclasses.replace(res.candidate, type=dataclasses.replace("
+             "res.candidate.type, name=type_name)) if res.candidate else None)\n",
+             required=True),
+    Mutation("4-4 provenance is the gate's, unchanged", "c20_30", REG,
+             "            approved_by=judged.approved_by, confidence=confidence,",
+             "            approved_by=None, confidence=confidence,", required=True),
+    Mutation("4-5 an ambiguous proposal is recorded in review", "c20_31", REG,
+             '            approval_mode = "review"', "            approval_mode = None",
+             required=True),
+    Mutation("4-6 the review queue holds the ambiguous proposals", "c20_32", REG,
+             '            approval_mode = "review"', "            approval_mode = None",
+             required=True),
+    Mutation("4-7 not_an_instance proposes nothing", "c20_33", REG,
+             'if res.outcome in ("unknowable", "not_an_instance"):',
+             'if res.outcome == "unknowable":', required=True),
+    Mutation("4-8 the act refuses a predicate-proposing family", "c20_34", REG,
+             '    if any(e.op == "propose_type" and e.kind == "predicate" '
+             "for e in effects):",
+             "    if False:", required=True),
+    Mutation("4-9 a candidate reads back as itself", "c20_69", ACT,
+             'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], '
+             'body["act_id"])',
+             'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], "")',
+             required=True),
+    Mutation("4-10 the recall uses the gate's relation", "c20_70", REG,
+             "            if similar(want, norm(seen_label)) < match_at:",
+             "            if want != norm(seen_label):", required=True),
+    Mutation("4-11 a holder makes the landing pending", "c20_71", REG,
+             "        holder = held.invocations[0].invocation_id if held.invocations else None",
+             "        holder = None", required=True),
+    Mutation("4-12 <n> is the tied set, not the display list", "c20_72", REG,
+             "                n = sum(", "                n = res.known or sum(",
+             required=True),
+    # ---- row 7c, adversarial round 1: one mutation per fix, the regression's shape
+    Mutation("6-17 (A4) a compensating row holds nothing", "c20_71", REG,
+             "                if rec.compensates:", "                if False:",
+             required=True),
+    Mutation("6-17 (A4) a pending warning exempts only when it names a holder", "c20_71",
+             REG, "            if not exempt:\n                to_judge.append(",
+             "            if False:\n                to_judge.append(", required=True),
+    Mutation("6-17 (A4) the label test runs before the closure walk", "c20_71", REG,
+             "                    if similar(key, norm(other.label)) < match_at:\n"
+             "                        continue\n"
+             "                    if other.type.name != cand.type.name:\n"
+             "                        if self._effective_of(namespace, other.type.name, "
+             "closures, whys) != target:\n"
+             "                            continue\n",
+             "                    if other.type.name != cand.type.name:\n"
+             "                        if self._effective_of(namespace, other.type.name, "
+             "closures, whys) != target:\n"
+             "                            continue\n"
+             "                    if similar(key, norm(other.label)) < match_at:\n"
+             "                        continue\n",
+             required=True),
+    # ---- row 7c, adversarial round 2
+    Mutation("6-17 (A4) a pending row is judged against its own label", "c20_71", REG,
+             "                        if similar(norm(own.label), norm(theirs.label)) < match_at:",
+             "                        if similar(key, norm(theirs.label)) < match_at:",
+             required=True),
+    Mutation("6-17 (A4) an empty incomplete page is an unfinished read", "c20_71", REG,
+             "                if not page.complete:\n                    whys.append(page.why_incomplete "
+             "or \"the ledger read stopped with no cursor\")",
+             "                if not page.complete and page.records:\n                    "
+             "whys.append(page.why_incomplete or \"the ledger read stopped with no cursor\")",
+             required=True),
+    Mutation("4-10 A4 reads the whole ledger, keyed on the candidate's namespace", "c20_71",
+             REG, "                namespace=None, after=after, limit=max(1, int(page_size))",
+             "                namespace=namespace, after=after, limit=max(1, int(page_size))",
+             required=True),
+    Mutation("4-11 only an applied compensation releases a holder", "c20_71", REG,
+             '                if other.compensates == rec.invocation_id and other.outcome == "applied":',
+             "                if other.compensates == rec.invocation_id:", required=True),
+    Mutation("4-11 an unfinished A4 read proposes nothing", "c20_71", REG,
+             "        if not held.complete:", "        if False:", required=True),
+    Mutation("4-4 the resolution's carried warnings ride onto the invocation", "c20_30", REG,
+             '        warnings = [w for w in res.warnings if w.split(":", 1)[0] in CARRIED_WARNINGS]',
+             "        warnings = []", required=True),
+    Mutation("4-12 <n> is counted on the gate's unrounded scores", "c20_72", REG,
+             "                scores = [similar(norm(label), norm(c.label)) for c in res.candidates]",
+             "                scores = [c.score for c in res.candidates if c.score is not None]"),
+    # ---- row 7c, adversarial round 3
+    Mutation("6-17 (A4) a row holds while ANY matching input is unwritten", "c20_71", REG,
+             "                if all(name in built.results for name in matched):",
+             "                if any(name in built.results for name in matched):",
+             required=True),
+    Mutation("4-2 the family's effects are judged again at the landing", "c20_28", REG,
+             "        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8",
+             "        problem = None", required=True),
+    Mutation("4-11 a pending row is exempt through the closure, not only by name", "c20_71",
+             REG, "                        if theirs.type.name == own.type.name or self._effective_of(",
+             "                        if theirs.type.name == own.type.name or False and self._effective_of(",
+             required=True),
+    Mutation("4-1 the gate's refusal binds the act", "c20_27", REG,
+             '        if judged.verdict != "allowed":', "        if False:", required=True),
+    Mutation("4-11 a broken target closure is never a confident no-holder", "c20_71", REG,
+             '            return InvocationReport((), None, False, "; ".join(whys))',
+             "            return InvocationReport((), 0, True, None)", required=True),
+    Mutation("4-13 a refused landing writes no memory", "c20_81", REG,
+             "            refusal = judged.refusal\n            return IngestLanding(",
+             "            self._remember(effective, label, cand)\n"
+             "            refusal = judged.refusal\n            return IngestLanding(",
+             required=True),
+    # ---- row 7c, adversarial round 4
+    Mutation("4-10 the recall reads each memory entry's closure now", "c20_70", REG,
+             "            if now[eff] == effective:\n                latest = (eff, answer)",
+             "            if eff == effective:\n                latest = (eff, answer)",
+             required=True),
+    Mutation("4-11 a pending row is exempt only when EACH own candidate is held", "c20_71",
+             REG,
+             "                if not own_held:\n                    exempt = False\n"
+             "                    break\n            if not exempt:",
+             "                if own_held:\n                    break\n            else:\n"
+             "                exempt = False\n            if not exempt:", required=True),
+    Mutation("4-11 every matching candidate of a pending row is its own", "c20_71", REG,
+             "                    mine.append(other)",
+             "                    mine.append(other) if not mine else None", required=True),
+    Mutation("4-13 an `existing` landing binds the identity", "c20_81", REG,
+             "            self._remember(effective, label, res.ref)                  # rule 4-13, B7",
+             "            pass", required=True),
+    Mutation("4-8 the landing judges predicate-proposing effects", "c20_28", REG,
+             "        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8",
+             "        problem = _ingest_effects_problem([e for e in judged.declared_effects "
+             "if e.op != \"propose_type\"])", required=True),
+    # ---- row 7c, adversarial round 5
+    Mutation("4-10 two distinct remembered answers are an ambiguity the gate decides",
+             "c20_70", REG,
+             "        return found[0] if len(found) == 1 else None",
+             "        return found[0] if found else None", required=True),
+    Mutation("4-10 the recall defers to rule 3-18", "c20_70", REG,
+             "        if registry._governed_change(self.namespace, type_name, closure):",
+             "        if False:", required=True),
+    Mutation("4-10 a host row under a retired type is the gate's to answer", "c20_70", REG,
+             "        if isinstance(answer, InstanceRef) and eff != effective:",
+             "        if False:", required=True),
+    # ---- row 7c, the post-cap fix of round 6's MAJOR
+    Mutation("4-10 the recall's own key is the exact normalised label", "c20_70", REG,
+             "            if kind != \"entity\" or norm(seen_label) != want:",
+             "            if kind != \"entity\" or similar(want, norm(seen_label)) < 0.97:",
+             required=True),
+    Mutation("4-10 the most recent answer for the key is recalled", "c20_70", REG,
+             "                latest = (eff, answer)          # the most recent answer for this key",
+             "                latest = latest or (eff, answer)", required=True),
+    Mutation("4-10 a similar label is recalled only after the gate says proposal", "c20_70",
+             REG, '        if res.outcome == "proposal":                                  # rule 4-10',
+             "        if False:", required=True),
+    Mutation("4-10 a foreign act_id is refused before the recall", "c20_70", REG,
+             "        if context is not None and context.act_id != self.act_id:",
+             "        if False:", required=True),
+    Mutation("I-7 the act records the effective entry as governing", "c20_41", REG,
+             "            governed_by=res.governed_by if policy_raw is not None else None,",
+             '            governed_by=f"{self.namespace}:{type_name}" '
+             "if policy_raw is not None else None,", required=True),
+    Mutation("4-13 the pending branch writes the memory", "c20_81", REG,
+             "        self._remember(effective, label, cand)                         # rule 4-13",
+             "        if holder is None:\n            self._remember(effective, label, cand)",
+             required=True),
 )
 
 
@@ -511,9 +704,9 @@ def _copy() -> Path:
     return where
 
 
-def _run(where: Path, test: str) -> tuple[str, str]:
+def _run(where: Path, test: str, suite: str = C20S) -> tuple[str, str]:
     done = subprocess.run(
-        [sys.executable, "-m", "pytest", "ontoloche/contract/test_c20_ingest.py", "-q",
+        [sys.executable, "-m", "pytest", suite, "-q",
          "-p", "no:cacheprovider", "-k", f"({test}) and not minimal and not postgres"],
         cwd=where, capture_output=True, text=True,
         env={**__import__("os").environ, "PYTHONPATH": str(where),
@@ -545,6 +738,13 @@ def main() -> int:
         print("the UNMUTATED copy is not green, so no red below would mean anything:\n")
         print(out[-3000:])
         return 2
+    c19_ids = " or ".join(sorted({m.test for m in chosen if m.suite == C19S}))
+    if c19_ids:
+        verdict, out = _run(base, c19_ids, C19S)
+        if verdict != "survived":
+            print("the UNMUTATED copy's C19 ids are not green:\n")
+            print(out[-3000:])
+            return 2
     print(f"baseline green in {base}")
 
     results = []
@@ -557,7 +757,7 @@ def main() -> int:
         where = _copy()
         target = where / m.file
         target.write_text(source.replace(m.old, m.new), encoding="utf-8")
-        verdict, out = _run(where, m.test)
+        verdict, out = _run(where, m.test, m.suite)
         results.append((m, verdict))
         if verdict == "broken":
             print(out[-1500:])

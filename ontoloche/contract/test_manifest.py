@@ -37,23 +37,22 @@ EXPECTED_PER_GROUP = {
     16: 8,
     17: 53,
     18: 10,
-    19: 108,
-    # Row 7b: INGEST.md's read side. 77 of the 90 ids its rule tables name; the other
-    # thirteen are section 4's, row 7c's, and are listed in PLANNED_IDS below.
-    20: 77,
+    # Row 7c: amendments A1-A5 and record_result.
+    19: 114,
+    # Row 7b: INGEST.md's read side, 77 ids. Row 7c: section 4's thirteen, all 90.
+    20: 90,
     # Row 8c: INTERFACE.md 2.10, property declarations.
     21: 17,
 }
-TOTAL = 556
+TOTAL = 575
 
 #: Ids a spec's rule table names that a LATER row builds, so a group's numbering has
 #: gaps. Row 7b: INGEST.md 4 (the propose-at-ingest contract) is row 7c's, and its ids
 #: were minted by row 7a in rule order, interleaved with the read side's. A group's
 #: enumerated ids are ``1..count + len(planned)`` minus the planned ones, so a planned id
 #: the suite claims is an EXTRA here, and `check_spec_drift.py` fails it too.
-PLANNED_IDS: dict[int, frozenset[int]] = {
-    20: frozenset({27, 28, 29, 30, 31, 32, 33, 34, 69, 70, 71, 72, 81}),
-}
+#: Empty since row 7c built INGEST.md 4; kept so a later planned id has a home.
+PLANNED_IDS: dict[int, frozenset[int]] = {}
 
 
 def enumerated_ids() -> set[str]:

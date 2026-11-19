@@ -64,6 +64,9 @@ from ontoloche.actions import (
     ACTION_ATTRIBUTE_KEYS,
     ACTION_PAYLOAD_KIND,
     ADMISSION_RULE,
+    APPROVAL_MODES,
+    CANDIDATE_RESOLUTIONS,
+    CARRIED_WARNINGS,
     EVALUATORS,
     GATE_VERDICTS,
     OUTCOMES,
@@ -82,6 +85,7 @@ from ontoloche.actions import (
     effect_target,
     flat_form_problem,
     is_person,
+    parse_ref,
     ref_key,
     ref_kind,
     ref_shape,
@@ -117,10 +121,12 @@ from ontoloche.ingest import (
     INSTANCE_CONDITION_KEY,
     MATCH_POLICY_KEY,
     CandidateRef,
+    IngestLanding,
     InstanceCandidate,
     InstanceContext,
     InstanceLookup,
     InstanceResolution,
+    MatchPolicy,
     condition_from_mapping,
     condition_problem,
     entry_declaration_problem,
@@ -165,7 +171,7 @@ from ontoloche.types import (
     UsageReport,
 )
 
-__all__ = ["AsyncRegistry"]
+__all__ = ["AsyncIngestAct", "AsyncRegistry"]
 
 # Pure module-level helpers with no I/O in them, borrowed not copied.
 from ontoloche.registry import (
@@ -190,6 +196,7 @@ from ontoloche.registry import (
     _evidence_to_dict,
     _has_external_doc,
     _import_refusal,
+    _ingest_effects_problem,
     _iso,
     _one_copy_per_identity,
     _policy_terms,
@@ -198,6 +205,275 @@ from ontoloche.registry import (
     _ts,
     _uuid,
 )
+
+
+@dataclass(eq=False)
+class AsyncIngestAct:
+    """One propose-at-ingest act. INGEST.md 4.3, rules 4-3, 4-5, 4-7 and 4-10 to 4-13.
+
+    Built by :meth:`AsyncRegistry.ingest_act`, never directly. **No store and no primitive**
+    (rule 4-1): ``_memory`` is rule 4-10's per-act recall, and it dies with the act. The
+    order of :meth:`land` is the probe kit's reference order (``ingest_probe_kit.py``).
+    """
+
+    #: A dataclass rather than a hand-written ``__init__``: ``tools/unasync.py`` rewrites
+    #: ``AsyncRegistry.__init__`` into ``_open`` and requires that pattern to match once.
+    _registry: Any
+    act_id: str
+    family: str
+    actor: str
+    tier: str
+    namespace: str
+    input_name: str
+    #: rule 4-10's memory: ``(kind, effective, label, answer)`` per identity the act has
+    #: answered for. A LIST, because the gate's relation is not an equivalence and so
+    #: cannot be a dict key (finding B1).
+    _memory: list = dataclasses.field(default_factory=list)
+
+    async def _recall(self, type_name: str, label: str) -> tuple[str | None, Any]:
+        """Rule 4-10's lookup under the GATE'S key: the closure's effective entry and the
+        label under §3's normaliser, exactly -- the functions ``resolve_instance`` uses,
+        so the act and the gate cannot key differently (``I-4``). Anything only
+        similar is the gate's to judge (rounds 5 and 6). ``(effective, answer)``;
+        ``effective`` is ``None`` when the closure did not finish, and then nothing is
+        recalled (the resolution will say why)."""
+        registry = self._registry
+        closure = await registry._instance_closure(self.namespace, type_name)
+        if not closure["complete"]:
+            return None, None
+        effective = closure["effective"]
+        policy_raw, _ = registry._governed_facts(closure["entry"])
+        if policy_raw is None or match_policy_problem(policy_raw) is not None:
+            return effective, None
+        # Rule 3-18: when a member of the closure declares other governed facts, the
+        # gate declines to judge the extent, so the act recalls nothing and lets the
+        # gate say so (round 5, lens 1, m1).
+        if await registry._governed_change(self.namespace, type_name, closure):
+            return effective, None
+        # The key is the label under §3's normaliser, EXACTLY (rule 4-10). A label
+        # that only matches a remembered one at `match_at` is the gate's to judge: its
+        # relation is not transitive, so R can match X while the gate calls R
+        # `ambiguous` over X and a Y this act never landed (rounds 5 and 6). A fuzzy
+        # proposal is still caught by A4 (rule 4-11), and an `existing` read records
+        # nothing, so sending it to the gate costs a read, never an identity.
+        want = norm(label)
+        now: dict[str, Any] = {}
+        latest = None
+        for kind, eff, seen_label, answer in self._memory:
+            if kind != "entity" or norm(seen_label) != want:
+                continue
+            # The entry's OWN closure, read now: a retire between two landings of one
+            # act moves `facility` onto `ltc_facility`, and the stored name alone would
+            # miss it (round 4, lens 2, m1). An unfinished closure recalls nothing.
+            if eff not in now:
+                theirs = await registry._instance_closure(self.namespace, eff)
+                now[eff] = theirs["effective"] if theirs["complete"] else None
+            if now[eff] == effective:
+                latest = (eff, answer)          # the most recent answer for this key
+        if latest is None:
+            return effective, None
+        eff, answer = latest
+        # A host row remembered before the closure changed goes back to the gate once:
+        # rule 2-17 may now answer it under the effective name. The gate's answer is
+        # remembered under the current effective entry and recalled from then on
+        # (rounds 5 and 6). A recalled `CandidateRef` is the one recorded.
+        if isinstance(answer, InstanceRef) and eff != effective:
+            return effective, None
+        return effective, answer
+
+    async def _similar_candidate(self, effective: str | None, label: str) -> Any:
+        """Rule 4-10 under the gate's RELATION, asked only AFTER the gate answered
+        ``proposal`` (no host row is near the label): the one ``CandidateRef`` this act
+        recorded for a label within ``match_at`` under the same effective entry, or
+        ``None`` when there is none or more than one. The gate, not the memory, settles
+        ``existing`` and ``ambiguous``, because its relation is not transitive and a
+        neighbour the act never landed can tie (rounds 5 and 6)."""
+        if effective is None:
+            return None
+        registry = self._registry
+        entry = await registry.adapter.get_type(self.namespace, effective, kind="entity")
+        if entry is None:
+            return None
+        policy_raw, _ = registry._governed_facts(entry)
+        if policy_raw is None or match_policy_problem(policy_raw) is not None:
+            return None
+        match_at = match_policy_from_mapping(policy_raw).match_at
+        want = norm(label)
+        now: dict[str, Any] = {}
+        found: list = []
+        for kind, eff, seen_label, answer in self._memory:
+            if kind != "entity" or not isinstance(answer, CandidateRef):
+                continue
+            if similar(want, norm(seen_label)) < match_at:
+                continue
+            if eff not in now:
+                theirs = await registry._instance_closure(self.namespace, eff)
+                now[eff] = theirs["effective"] if theirs["complete"] else None
+            if now[eff] == effective and answer not in found:
+                found.append(answer)
+        return found[0] if len(found) == 1 else None
+
+    def _remember(self, effective: str | None, label: str, answer: Any) -> None:
+        if effective is not None and answer is not None:
+            self._memory.append(("entity", effective, label, answer))
+
+    async def land(
+        self,
+        label: str,
+        *,
+        type_name: str,
+        context: InstanceContext | None = None,
+        confidence: float | None = None,
+        source_version: str | None = None,
+    ) -> IngestLanding:
+        """Resolve one landed row and, where section 4 allows, record a proposal.
+
+        The order is the rule: rule 4-10's recall of the exact key; ``resolve_instance``;
+        ``existing`` is remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance``
+        record nothing (rule 4-7); on ``proposal``, the one candidate this act recorded
+        within ``match_at`` is reused (rule 4-10); ``proposal`` and ``ambiguous`` carry the
+        resolution's own ``CandidateRef``, under the EFFECTIVE type (rule 4-3);
+        ``preflight``; rules 4-2 and 4-8 against the effects the gate read; amendment
+        A4's read of who holds an unwritten proposal (rule 4-11); then
+        ``record_invocation`` with the gate's judgement, the policy that governed (A5),
+        the resolution's carried warnings, and on ``ambiguous`` ``review`` mode plus
+        ``instance_ambiguous_at_proposal`` (rule 4-5, A3). The memory is written on every
+        branch that answers with a ref or a candidate, pending included (rule 4-13).
+        """
+        registry = self._registry
+        if context is not None and context.act_id != self.act_id:
+            raise ValueError(
+                f"context.act_id {context.act_id!r} is not this act's {self.act_id!r}: a "
+                f"candidate must name the act that proposed it (INGEST.md 4.1)"
+            )
+        effective, recalled = await self._recall(type_name, label)
+        if recalled is not None:                                      # rule 4-10
+            is_ref = isinstance(recalled, InstanceRef)
+            return IngestLanding(
+                "reused", None, recalled if is_ref else None,
+                None if is_ref else recalled, None,
+                f"this act already answered for this identity under "
+                f"{self.namespace}:{effective} (INGEST.md rule 4-10)",
+            )
+        ctx = context if context is not None else InstanceContext(
+            act_id=self.act_id, proposed_by=self.actor)
+        res = await registry.resolve_instance(
+            label, ctx, type_name=type_name, namespace=self.namespace, tier=self.tier)
+        if isinstance(res, Refusal):
+            return IngestLanding("refused", None, None, None, None,
+                                 f"the resolution was refused: {res.reason}", res)
+        if res.outcome == "existing":
+            self._remember(effective, label, res.ref)                  # rule 4-13, B7
+            return IngestLanding("existing", res, res.ref, None, None, res.reason)
+        if res.outcome in ("unknowable", "not_an_instance"):          # rule 4-7
+            return IngestLanding(
+                res.outcome, res, None, None, None,
+                f"{res.outcome} proposes nothing (INGEST.md rule 4-7): {res.reason}",
+            )
+        if res.outcome == "proposal":                                  # rule 4-10
+            held = await self._similar_candidate(effective, label)
+            if held is not None:
+                return IngestLanding(
+                    "reused", None, None, held, None,
+                    f"this act already proposed this identity under "
+                    f"{self.namespace}:{effective}, and the gate finds no host row near "
+                    f"it (INGEST.md rule 4-10)",
+                )
+        cand = res.candidate
+        if cand is None or not res.complete:  # pragma: no cover - rule 3-6 forbids it
+            return IngestLanding(
+                "unknowable", res, None, None, None,
+                "a proposal outcome without a finished read cannot be proposed over "
+                "(INGEST.md rules 3-6, 4-12)",
+            )
+        inputs = {self.input_name: cand}
+        judged = await registry.preflight(
+            self.family, inputs, namespace=self.namespace, actor=self.actor, tier=self.tier)
+        if isinstance(judged, Refusal):
+            return IngestLanding("refused", res, None, cand, None,
+                                 f"the gate refused: {judged.reason}", judged)
+        if judged.verdict != "allowed":
+            refusal = judged.refusal
+            return IngestLanding(
+                "refused", res, None, cand, None,
+                f"the gate refused: {refusal.reason if refusal else judged.verdict}",
+                refusal,
+            )
+        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8
+        if problem is not None:
+            refusal = Refusal(
+                "attributes_schema_violation",
+                {"family": self.family, "namespace": self.namespace,
+                 "why": f"{self.family!r} {problem}"},
+            )
+            return IngestLanding(
+                "refused", res, None, cand, None,
+                f"the family was amended after this act began and {problem}", refusal,
+            )
+        held = await registry.invocations(unwritten_for=cand)               # rule 4-11, A4
+        if isinstance(held, Refusal):
+            return IngestLanding("refused", res, None, cand, None,
+                                 f"the ledger read was refused: {held.reason}", held)
+        if not held.complete:
+            return IngestLanding(
+                "unknowable", res, None, None, None,
+                f"who already holds a proposal for this identity could not be read to "
+                f"the end, so nothing is proposed (INGEST.md rule 4-11): "
+                f"{held.why_incomplete}",
+            )
+        warnings = [w for w in res.warnings if w.split(":", 1)[0] in CARRIED_WARNINGS]
+        approval_mode = None
+        governed = await registry.adapter.get_type(
+            self.namespace, cand.type.name, kind="entity")
+        policy_raw, _ = registry._governed_facts(governed)
+        if res.outcome == "ambiguous":                                # rules 4-5, 4-12
+            # `<n>` is the multiplicity a reviewer chooses among (4.3, K9): the rows at or
+            # above `propose_below` within `ambiguity_margin` of the top -- rules 3-3 and
+            # 5-12's tied set. NOT `res.known`: on a band ambiguous (rule 5-9) the
+            # resolution's `candidates` are the five best for display, sub-floor rows
+            # included, and `:5` would tell a reviewer of a one-row band it is a five-way
+            # collision (round 1, lens 1). Counted over the finished read rule 3-6 already
+            # guarantees, under the policy that governed it.
+            n = res.known
+            if policy_raw is not None and match_policy_problem(policy_raw) is None:
+                pol = match_policy_from_mapping(policy_raw)
+                # The gate's own unrounded scores: `candidates` carry four places for
+                # display, and a margin decided on rounded numbers can count a row the
+                # gate did not tie (round 2, lens 3, m1).
+                scores = [similar(norm(label), norm(c.label)) for c in res.candidates]
+                top = max(scores) if scores else None
+                n = sum(
+                    1 for s in scores
+                    if s >= pol.match_at or (
+                        top - s <= pol.ambiguity_margin + _SCORE_EPS
+                        and s >= pol.propose_below
+                    )
+                )
+            warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:{n}")
+            approval_mode = "review"
+        holder = held.invocations[0].invocation_id if held.invocations else None
+        if holder is not None:
+            warnings.append(f"instance_proposal_pending:{holder}")
+        rec = await registry.record_invocation(
+            self.family, inputs, namespace=self.namespace, actor=self.actor,
+            outcome="applied", tier=self.tier, gate_verdict=judged.verdict,
+            approved_by=judged.approved_by, confidence=confidence,
+            source_version=source_version, judged=judged, approval_mode=approval_mode,
+            warnings=tuple(warnings),
+            match_policy=policy_raw if policy_raw is not None else None,
+            governed_by=res.governed_by if policy_raw is not None else None,
+        )
+        if isinstance(rec, Refusal):
+            return IngestLanding("refused", res, None, cand, None,
+                                 f"the ledger refused: {rec.reason}", rec)
+        self._remember(effective, label, cand)                         # rule 4-13
+        if holder is not None:
+            return IngestLanding(
+                "pending", res, None, cand, rec,
+                f"invocation {holder} already holds an unwritten proposal for this "
+                f"identity, so this one mints nothing (INGEST.md rule 4-11)",
+            )
+        return IngestLanding("proposed", res, None, cand, rec, res.reason)
 
 
 class AsyncRegistry:
@@ -10359,8 +10635,9 @@ class AsyncRegistry:
                         "supplied": type(ref).__name__,
                         "why": (
                             f"input {name!r} is a {type(ref).__name__} and not one of "
-                            f"ACTIONS.md 2.3's three reference shapes (TypeRef, "
-                            f"InstanceRef, EdgeRef). An unreadable reference is refused "
+                            f"ACTIONS.md 2.3's four reference shapes (TypeRef, "
+                            f"InstanceRef, EdgeRef, CandidateRef). An unreadable "
+                            f"reference is refused "
                             f"rather than read as the most permissive shape -- the "
                             f"exclusion is general or it is nothing"
                         ),
@@ -10411,6 +10688,38 @@ class AsyncRegistry:
                         ),
                     },
                 )
+            if shape == "candidate":
+                # Amendment A1 (row 7c, INGEST.md 4.1). A candidate is the subject of a
+                # proposal: its resolution must be one that produces a candidate, and it
+                # must carry the label and the act it belongs to, or the ledger holds a
+                # proposal for nothing in particular (F1's invented-id `allowed`).
+                for field_name, bad in (
+                    ("resolution", ref.resolution not in CANDIDATE_RESOLUTIONS),
+                    ("label", not ref.label.strip()),
+                    ("act_id", not ref.act_id.strip()),
+                ):
+                    if bad:
+                        return Refusal(
+                            "input_kind_mismatch",
+                            {
+                                "input": name,
+                                "problem": field_name,
+                                "supplied": getattr(ref, field_name),
+                                "why": (
+                                    f"input {name!r} is a CandidateRef whose "
+                                    f"{field_name} is "
+                                    + (
+                                        f"{ref.resolution!r}, not one of "
+                                        f"{list(CANDIDATE_RESOLUTIONS)} -- the two "
+                                        f"outcomes INGEST.md 3.1 lets mint a candidate"
+                                        if field_name == "resolution"
+                                        else "empty -- a proposal must say what it "
+                                        "proposes and which ingest act it belongs to "
+                                        "(INGEST.md 4.1)"
+                                    )
+                                ),
+                            },
+                        )
             kind = ref_kind(ref)
             # **The kind the CALLER wrote is a claim; the stored row is the fact -- and
             # trusting the claim was the ACTIONS door's own kill-row walk.** `ref_kind`
@@ -10433,8 +10742,8 @@ class AsyncRegistry:
             # does not resolve instances, and `type_active` is the precondition that asks
             # about registration. What is refused is a claim the registry can SEE is
             # false.
-            if shape in ("type", "instance"):
-                target = type_of(ref) if shape == "instance" else ref
+            if shape in ("type", "instance", "candidate"):
+                target = ref if shape == "type" else ref.type
                 stored = await self.adapter.find_types(
                     TypeQuery(namespace=target.namespace, name_in=(target.name,),
                               include_retired=True)
@@ -10477,7 +10786,7 @@ class AsyncRegistry:
                         ),
                     },
                 )
-            if spec.ref == "instance" and kind != "entity":
+            if spec.ref in ("instance", "candidate") and kind != "entity":
                 return Refusal(
                     "input_kind_mismatch",
                     {
@@ -10485,7 +10794,11 @@ class AsyncRegistry:
                         "problem": "kind",
                         "declared": "entity",
                         "supplied": kind,
-                        "why": 'an InstanceRef names an instance of a kind="entity" type',
+                        "why": (
+                            f"an {'InstanceRef' if shape == 'instance' else 'CandidateRef'} "
+                            f'names an instance of a kind="entity" type (ACTIONS.md 2.3, '
+                            f"INGEST.md 4.1)"
+                        ),
                     },
                 )
             if spec.kinds is not None and kind not in spec.kinds:
@@ -10760,6 +11073,22 @@ class AsyncRegistry:
         the escape.
         """
         subject = inputs.get(condition.subject)
+        if isinstance(subject, CandidateRef):
+            # Amendment A1. A candidate has no instance yet, so a TYPE condition is asked
+            # of its type, and an edge condition has no instance to ask about: that is
+            # unknown, never vacuously true or false (Rule U).
+            if condition.kind in ("edge_exists", "edge_absent"):
+                return PreconditionResult(
+                    condition,
+                    None,
+                    "neighbors",
+                    why=(
+                        "the subject is a CandidateRef -- a thing that does not exist yet "
+                        "has no edges to look for, and answering `absent` for it would "
+                        "be a confident claim about nothing (INGEST.md 4.1)"
+                    ),
+                )
+            subject = subject.type
         subject_key = ref_key(subject) if subject is not None else condition.subject
 
         if condition.kind == "type_active":
@@ -11223,6 +11552,55 @@ class AsyncRegistry:
             **base,
         )
 
+    # ====================================================== INGEST.md 4 the ingest act
+    async def ingest_act(
+        self,
+        act_id: str,
+        *,
+        family: str,
+        actor: str,
+        tier: str,
+        namespace: str = "default",
+        input_name: str = "instance",
+    ) -> "AsyncIngestAct | Refusal":
+        """INGEST.md 4.3 -- one propose-at-ingest act. Row 7c.
+
+        **Memory, not a store** (rule 4-1): the act holds rule 4-10's per-act recall and
+        nothing else, and every proposal it makes is an ordinary ``record_invocation`` of
+        ``family``. It refuses, with ``attributes_schema_violation``, a family that cannot
+        carry section 4: no ``InputSpec(ref="candidate")`` named ``input_name``, no
+        ``Effect(op="host_state")`` (rule 4-2: the HOST writes the row), or a
+        ``propose_type`` effect on ``kind="predicate"`` (rule 4-8; the declaration door
+        refuses it already, and this is the one door the act has for a row written past
+        that door).
+        """
+        for label, value in (("act_id", act_id), ("actor", actor), ("tier", tier),
+                             ("input_name", input_name)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"ingest_act requires a non-empty {label} (INGEST.md 4.3)")
+        fam, _ = await self._action_family(family, namespace)
+        if fam is None:
+            return Refusal(
+                "action_family_unknown", {"family": family, "namespace": namespace}
+            )
+        problem = None
+        if not any(s.name == input_name and s.ref == "candidate" for s in fam.inputs):
+            problem = (
+                f"declares no InputSpec({input_name!r}, ref=\"candidate\"), so a proposal "
+                f"has nowhere to name the thing it proposes (INGEST.md rule 4-9)"
+            )
+        else:
+            problem = _ingest_effects_problem(fam.effects)
+        if problem is not None:
+            return Refusal(
+                "attributes_schema_violation",
+                {"family": family, "namespace": namespace, "why": f"{family!r} {problem}"},
+            )
+        return AsyncIngestAct(
+            self, act_id, family=family, actor=actor, tier=tier, namespace=namespace,
+            input_name=input_name,
+        )
+
     # ================================================ ACTIONS.md 6.2 record_invocation
     def _invocations_absent(self, detail: dict) -> Refusal | None:
         """ACTIONS.md 8 rule 8-1. **Never an empty report.**
@@ -11268,6 +11646,7 @@ class AsyncRegistry:
         history_why: str | None = None
         reviewed_at: datetime | None = None
         reviewed_by: str | None = None
+        results: dict = {}
         for flag in ("stores_invocation_events", "stores_events"):
             if not getattr(self.caps, flag):
                 history_why = self.caps.reason(flag)
@@ -11286,6 +11665,7 @@ class AsyncRegistry:
                 if r.event == "invocation_reviewed":
                     reviewed_at = r.at
                     reviewed_by = r.actor
+            results = self._results_of(rows)
         return Invocation(
             invocation_id=rec.invocation_id,
             family=rec.family,
@@ -11324,7 +11704,29 @@ class AsyncRegistry:
             reviewed_by=reviewed_by,
             warnings=tuple(rec.warnings or ()),
             attr_schema_version=rec.attr_schema_version,
+            results=results,
         )
+
+    @staticmethod
+    def _results_of(rows) -> dict:
+        '''Amendment A2's slot, derived from the ``invocation_recorded`` events
+        ``record_result`` appends. The LATEST report for a name wins, because the ledger is
+        append-only and a correction is a new event (ACTIONS.md 3.5); the earlier ones
+        stay in ``history``. A stored key that does not parse is skipped rather than
+        guessed at -- ``record_result`` writes only keys ``parse_ref`` reads.'''
+        out: dict = {}
+        for r in rows:
+            if r.event != "invocation_recorded":
+                continue
+            reported = (r.detail or {}).get("results")
+            if not isinstance(reported, dict):
+                continue
+            for name, key in reported.items():
+                try:
+                    out[name] = parse_ref(key)
+                except ValueError:  # pragma: no cover - never written by record_result
+                    continue
+        return out
 
     async def _compensated_by(self, invocation_id: str, namespace: str) -> str | None:
         """The BACKWARD pointer, derived. ACTIONS.md 9.
@@ -11396,8 +11798,21 @@ class AsyncRegistry:
         refusal: Refusal | None = None,
         compensates: str | None = None,
         judged: Preflight | None = None,
+        approval_mode: str | None = None,
+        warnings: Sequence[str] = (),
+        match_policy: MatchPolicy | Mapping[str, Any] | None = None,
+        governed_by: str | None = None,
     ) -> Invocation | Refusal:
         """ACTIONS.md 6.2 -- what happened. The ledger, and it files a report.
+
+        **Amendment A3** (row 7c, INGEST.md 4.4). ``approval_mode=`` RAISES this one
+        invocation's mode of record (``auto`` < ``review`` < ``human``) and never lowers
+        it; when it raises, ``declared_policy["approval_mode_declared"]`` keeps the mode
+        the family declared, so the record says both. ``warnings=`` carries what a host
+        may forward from a resolution -- ``CARRIED_WARNINGS``, a closed subset -- and
+        anything else is a ``ValueError``, because the registry's own detectors
+        (``effect_undeclared``, ``approval_unrecorded``...) are findings ABOUT the host and
+        a host that could write them could forge their absence's opposite.
 
         **It does not refuse on ``effect_undeclared``, on a stale precondition, or on a
         ``gate_verdict`` of ``refused``.** All three are recorded, warned where 2.5 says
@@ -11418,6 +11833,62 @@ class AsyncRegistry:
         """
         if outcome not in OUTCOMES:
             raise ValueError(f"outcome must be one of {list(OUTCOMES)}; got {outcome!r}")
+        if approval_mode is not None and approval_mode not in APPROVAL_MODES:
+            raise ValueError(
+                f"approval_mode must be one of {list(APPROVAL_MODES)} or None; got "
+                f"{approval_mode!r} (ACTIONS.md 6.2, amendment A3)"
+            )
+        carried_warnings = tuple(warnings)
+        # Amendment A5 (row 7c, INGEST.md rule 5-7, `I-7`): the thresholds that decided a
+        # proposal and the entry they came from, both or neither -- thresholds with no
+        # entry, or an entry with no thresholds, cannot answer *which numbers produced
+        # this row*.
+        match_policy_of_record: dict | None = None
+        if (match_policy is None) != (governed_by is None):
+            raise ValueError(
+                "match_policy= and governed_by= are given together or not at all: one "
+                "without the other cannot say which entry's thresholds governed "
+                "(ACTIONS.md 6.2, amendment A5)"
+            )
+        if match_policy is not None:
+            terms = (
+                {
+                    "match_at": match_policy.match_at,
+                    "propose_below": match_policy.propose_below,
+                    "ambiguity_margin": match_policy.ambiguity_margin,
+                    "why": match_policy.why,
+                }
+                if isinstance(match_policy, MatchPolicy)
+                else match_policy
+            )
+            problem = match_policy_problem(terms)
+            if problem is not None:
+                raise ValueError(
+                    f"match_policy= is not a MatchPolicy INGEST.md 5 accepts: {problem}"
+                )
+            if (
+                not isinstance(governed_by, str)
+                or governed_by.count(":") != 1
+                or not all(part.strip() for part in governed_by.split(":"))
+            ):
+                raise ValueError(
+                    f"governed_by= is '<namespace>:<entry>', as InstanceResolution."
+                    f"governed_by prints it; got {governed_by!r} (amendment A5)"
+                )
+            parsed = match_policy_from_mapping(terms)
+            match_policy_of_record = {
+                "governed_by": governed_by,
+                "match_at": parsed.match_at,
+                "propose_below": parsed.propose_below,
+                "ambiguity_margin": parsed.ambiguity_margin,
+            }
+        for w in carried_warnings:
+            if not isinstance(w, str) or w.split(":", 1)[0] not in CARRIED_WARNINGS:
+                raise ValueError(
+                    f"warnings= takes only {list(CARRIED_WARNINGS)} -- what a host may "
+                    f"carry from a resolution. {w!r} is a finding the registry makes "
+                    f"itself, or not a warning at all (ACTIONS.md 6.2, amendment A3)"
+                )
         if gate_verdict not in GATE_VERDICTS:
             raise ValueError(
                 f"gate_verdict must be one of {list(GATE_VERDICTS)}; got {gate_verdict!r}"
@@ -11492,6 +11963,21 @@ class AsyncRegistry:
                 "tier_order": list(self.policy(namespace).tier_order.tiers),
             }
             version = judged.family_version
+        if approval_mode is not None:
+            declared_mode = policy_of_record.get("approval_mode")
+            rank = {m: i for i, m in enumerate(APPROVAL_MODES)}
+            if rank[approval_mode] > rank.get(declared_mode, 0):
+                # Amendment A3: ONE row raised, never the family. The declared mode stays
+                # on the record beside it, or a reviewer could not tell a review-mode
+                # family from an auto family whose host asked for review this once.
+                policy_of_record = {
+                    **policy_of_record,
+                    "approval_mode": approval_mode,
+                    "approval_mode_declared": declared_mode,
+                }
+        warnings.extend(carried_warnings)
+        if match_policy_of_record is not None:
+            policy_of_record = {**policy_of_record, "match_policy": match_policy_of_record}
 
         # ACTIONS.md 3.2 / 5.2 -- **never FABRICATED and never DISCARDED**, judged against
         # the POLICY OF RECORD so an approval the gate granted survives a later
@@ -11823,6 +12309,119 @@ class AsyncRegistry:
         )
 
     # ==================================================== ACTIONS.md 6.3 invocations
+    async def record_result(
+        self,
+        invocation_id: str,
+        results: dict,
+        *,
+        actor: str,
+        namespace: str = "default",
+    ) -> Invocation | Refusal:
+        '''Record what the host MINTED for an invocation. ACTIONS.md 6.6, amendment **A2**.
+
+        **A sixth call, for R73's reason.** The host writes the instance row after the
+        proposal is recorded (INGEST.md rule 4-2), so the result arrives in a LATER act,
+        and the store never rewrites a row. So it is appended as an
+        ``invocation_recorded`` event carrying ``detail["results"]`` -- 3.5's own sentence,
+        *"a correction is an ``invocation_recorded`` event carrying the correction"*, and
+        the path evidence already rides -- and ``Invocation.results`` is derived from it.
+
+        A result is keyed by an input the invocation actually carried, and it names a
+        thing that EXISTS: a ``CandidateRef`` is refused. A second result for the same
+        name is recorded and the latest reads back, because refusing it would destroy the
+        evidence that the host reported twice (ACTIONS.md 6.2's argument).
+        '''
+        if not isinstance(actor, str) or not actor.strip():
+            raise ValueError(
+                "record_result requires a non-empty actor -- a result nobody reported is "
+                "a claim with no author (ACTIONS.md 3.2)"
+            )
+        if not isinstance(results, dict) or not results:
+            raise ValueError(
+                "record_result takes a non-empty mapping of input name to the reference "
+                "the host minted for it (ACTIONS.md 6.6)"
+            )
+        absent = self._invocations_absent({"invocation_id": invocation_id})
+        if absent is not None:
+            return absent
+        rec = await self.adapter.get_invocation(invocation_id)
+        if rec is not None and rec.namespace != namespace:
+            rec = None
+        if rec is None:
+            return Refusal(
+                "unknown_invocation",
+                {
+                    "invocation_id": invocation_id,
+                    "namespace": namespace,
+                    "why": (
+                        f"no invocation {invocation_id!r} is stored in namespace "
+                        f"{namespace!r}, so there is nothing to record a result on "
+                        f"(ACTIONS.md 6.6)"
+                    ),
+                },
+            )
+        if not (self.caps.stores_events and self.caps.stores_invocation_events):
+            return Refusal(
+                "cannot_record_override",
+                {
+                    "invocation_id": invocation_id,
+                    "why": (
+                        "a result is an event and this backend cannot keep one, so "
+                        "recording it would be a claim nothing records: "
+                        + self.caps.reason(
+                            "stores_events"
+                            if not self.caps.stores_events
+                            else "stores_invocation_events"
+                        )
+                    ),
+                },
+            )
+        carried = set((rec.inputs or {}).keys())
+        stored: dict[str, str] = {}
+        for name, ref in results.items():
+            shape = ref_shape(ref)
+            problem = None
+            if name not in carried:
+                problem = ("undeclared", f"the invocation carried no input named {name!r}")
+            elif shape is None:
+                problem = (
+                    "unrecognised",
+                    f"{type(ref).__name__} is not one of ACTIONS.md 2.3's reference shapes",
+                )
+            elif shape == "candidate":
+                problem = (
+                    "candidate",
+                    "a result names a thing that EXISTS, and a CandidateRef is a thing "
+                    "that does not exist yet (INGEST.md 4.1)",
+                )
+            else:
+                unfaithful = flat_form_problem(ref)
+                if unfaithful is not None:
+                    problem = ("unrepresentable", unfaithful)
+            if problem is not None:
+                return Refusal(
+                    "input_kind_mismatch",
+                    {
+                        "invocation_id": invocation_id,
+                        "input": name,
+                        "problem": problem[0],
+                        "why": f"result {name!r}: {problem[1]} (ACTIONS.md 6.6)",
+                    },
+                )
+            stored[name] = ref_key(ref)
+        await self._append_event(
+            rec.namespace,
+            "invocation_recorded",
+            actor,
+            kind="action",
+            name=rec.family,
+            invocation_id=invocation_id,
+            detail={"results": stored},
+        )
+        return await self._invocation(
+            rec, compensated_by=await self._compensated_by(invocation_id, rec.namespace)
+        )
+
     async def invocations(
         self,
         *,
@@ -11835,8 +12434,14 @@ class AsyncRegistry:
         unreviewed: bool | None = None,
         since: datetime | None = None,
         limit: int = 100,
+        unwritten_for: CandidateRef | None = None,
     ) -> InvocationReport | Refusal:
         """ACTIONS.md 6.3 -- the read, and **every filtered answer is a FLOOR**.
+
+        **Except ``unwritten_for=``, amendment A4** (row 7c, INGEST.md 4.4, rule 4-11):
+        a SCOPED read that pages to exhaustion and can therefore answer ``complete=True``.
+        See :meth:`_unwritten_for`. It combines with no other filter, because a combined
+        answer is a floor again and rule 4-11 cannot act on a floor.
 
         ``complete`` is ``False`` whenever a filter suppressed rows or ``limit``
         truncated the answer, which is INTERFACE.md 5.6's rule for ``TypeListing``
@@ -11852,6 +12457,30 @@ class AsyncRegistry:
         explicitly rather than by analogy -- so anticipating it here would be a build row
         taking a routed decision.
         """
+        if unwritten_for is not None:
+            combined = {
+                k: v
+                for k, v in (
+                    ("family", family), ("namespace", namespace), ("actor", actor),
+                    ("outcome", outcome), ("gate_verdict", gate_verdict),
+                    ("effect_undeclared", effect_undeclared), ("unreviewed", unreviewed),
+                    ("since", since),
+                )
+                if v is not None
+            }
+            if combined:
+                raise ValueError(
+                    f"unwritten_for= is a scoped read and combines with no other filter "
+                    f"(got {sorted(combined)}): a combined answer is a floor again, and "
+                    f"INGEST.md rule 4-11 cannot act on a floor (ACTIONS.md 6.3, A4)"
+                )
+            if not isinstance(unwritten_for, CandidateRef):
+                raise ValueError(
+                    f"unwritten_for= takes a CandidateRef, got "
+                    f"{type(unwritten_for).__name__} (ACTIONS.md 6.3, A4)"
+                )
+            return await self._unwritten_for(unwritten_for, page_size=limit)
+
         absent = self._invocations_absent({"family": family, "namespace": namespace})
         if absent is not None:
             return absent
@@ -12074,6 +12703,229 @@ class AsyncRegistry:
             # existence rather than about anything a caller did.
             warnings=(),
         )
+
+    async def _effective_of(
+        self, namespace: str, type_name: str, closures: dict, whys: list
+    ) -> str | None:
+        """A4's closure step, memoised per read. ``None`` (and a ``why``) when the
+        closure could not finish: an unfinished walk never answers *same entry* or
+        *different entry* (INGEST.md rule 3-17, ``I-2``)."""
+        if type_name not in closures:
+            closures[type_name] = await self._instance_closure(namespace, type_name)
+        c = closures[type_name]
+        if not c["complete"]:
+            whys.append(f"the closure of {namespace}:{type_name} did not finish: {c['why']}")
+            return None
+        return c["effective"]
+
+    async def _unwritten_for(self, cand: CandidateRef, *, page_size: int) -> InvocationReport | Refusal:
+        """Amendment **A4**: who holds a proposal for ``cand``'s identity whose row has
+        not been WRITTEN. INGEST.md rule 4-11; the three asks §4.4 names.
+
+        (i) **Unwritten, not unreviewed.** A row holds the identity while it was applied,
+        is not undone by an APPLIED compensation, is not itself a compensation, and has
+        no ``results`` entry for the matching input (amendment A2). A row carrying
+        ``instance_proposal_pending:<id>`` is exempt only when ``<id>`` is an applied
+        proposal of EACH of that row's own matching candidates (rounds 1 to 3). Review
+        does not enter.
+        (ii) **Rule 4-10's key, under the gate's own relation**, over the whole ledger and
+        keyed on the CANDIDATE's namespace, not the recording row's (round 2): same kind,
+        the same EFFECTIVE entry under :meth:`_instance_closure` (the function
+        ``resolve_instance`` uses, so the two cannot drift: ``I-2``, ``I-4``), and
+        ``similar(norm(a), norm(b)) >= match_at`` of that entry. (iii) **Not the oldest
+        page**: the primitive's keyset cursor is followed until the ledger is exhausted
+        (B2), and ``complete=True`` is answered only when every page was read, every
+        closure finished, and -- for any row that matched -- its events were readable.
+        An unreadable ``written`` half is never a confident *no holder* (``I-5``).
+        """
+        namespace = cand.type.namespace
+        absent = self._invocations_absent({"namespace": namespace})
+        if absent is not None:
+            return absent
+        whys: list[str] = []
+        closures: dict[str, dict] = {}
+
+        target = await self._effective_of(namespace, cand.type.name, closures, whys)
+        if target is None:
+            return InvocationReport((), None, False, "; ".join(whys))
+        entry = closures[cand.type.name]["entry"]
+        policy_raw, _ = self._governed_facts(entry)
+        if policy_raw is None or match_policy_problem(policy_raw) is not None:
+            why = (
+                f"{namespace}:{target} declares no usable MatchPolicy, so nothing says which "
+                f"labels are the same identity (INGEST.md rule 4-10)"
+            )
+            return InvocationReport((), None, False, why)
+        match_at = match_policy_from_mapping(policy_raw).match_at
+        key = norm(cand.label)
+        events_readable = self.caps.stores_events and self.caps.stores_invocation_events
+
+        holders = []
+        # Every applied, non-compensating row's candidates, matching or not: a pending
+        # row's exemption is judged against ITS OWN identity, not the reader's, because
+        # the gate's relation is not transitive (round 2, lens 1, M1: CMS's ...EAST,
+        # ...WEST and ...WESTON, where WEST was held by EAST and WESTON is neither).
+        proposals: dict[str, list] = {}
+        pending_rows: list = []
+        to_judge: list = []
+        order = 0
+        after: str | None = None
+        seen_cursors: set[str] = set()
+        while True:
+            # The WHOLE ledger, not the identity's namespace: rule 4-10's key is the
+            # candidate's type, and a family in another namespace may record a candidate
+            # of this one (round 2, lens 2, M2). Keyed below on the candidate's own
+            # namespace, never on the row's.
+            page = await self.adapter.find_invocations(
+                namespace=None, after=after, limit=max(1, int(page_size))
+            )
+            for rec in page.records:
+                matched: list[str] = []
+                mine: list = []
+                for name, flat in (rec.inputs or {}).items():
+                    if not isinstance(flat, str) or not flat.startswith('{"candidate":'):
+                        continue
+                    try:
+                        other = parse_ref(flat)
+                    except ValueError:
+                        continue
+                    if other.type.namespace != namespace or other.type.kind != cand.type.kind:
+                        continue
+                    if rec.outcome == "applied" and not rec.compensates:
+                        proposals.setdefault(rec.invocation_id, []).append(other)
+                    # The label first: a row whose label is not this identity cannot hold
+                    # it, whatever its closure says, so an unrelated broken closure must
+                    # not make the whole namespace unreadable (round 1, lens 2, M2).
+                    if similar(key, norm(other.label)) < match_at:
+                        continue
+                    if other.type.name != cand.type.name:
+                        if await self._effective_of(namespace, other.type.name, closures, whys) != target:
+                            continue
+                    # EVERY input that matches, not the first: a row with two candidate
+                    # inputs holds the identity while either is unwritten (round 3,
+                    # lenses 1 and 2), and on postgres JSONB reorders keys, so "first"
+                    # was not even the same input on every backend.
+                    matched.append(name)
+                    mine.append(other)
+                if not matched:
+                    continue
+                if rec.outcome != "applied":
+                    continue
+                if rec.compensates:
+                    # A compensating row undoes a proposal; it proposes nothing, even
+                    # when it carries the same candidate (round 1, lens 1, MAJOR 1).
+                    continue
+                named = [
+                    w.split(":", 1)[1] for w in (rec.warnings or ())
+                    if w.split(":", 1)[0] == "instance_proposal_pending"
+                    and ":" in w
+                ]
+                if named or "instance_proposal_pending" in (rec.warnings or ()):
+                    # A pending row is not a holder ONLY when the rows it names hold an
+                    # applied proposal of EACH of its own matching candidates. Otherwise the
+                    # warning is an exemption anyone can write (round 1, lens 2, M1), and
+                    # the row is judged as any other.
+                    pending_rows.append((order, rec, matched, named, mine))
+                    order += 1
+                    continue
+                to_judge.append((order, rec, matched))
+                order += 1
+            nxt = page.next_after
+            if nxt is None:
+                # An empty page that says it is incomplete is still an unfinished
+                # read, and an unfinished read is never a confident "no holder"
+                # (round 2, lens 1, m1; Rule U).
+                if not page.complete:
+                    whys.append(page.why_incomplete or "the ledger read stopped with no cursor")
+                break
+            if nxt in seen_cursors:
+                whys.append("the ledger cursor repeated, so the scan could not finish")
+                break
+            seen_cursors.add(nxt)
+            after = nxt
+
+        for o, rec, matched, named, mine in pending_rows:
+            # Exempt only when EACH of the row's own matching candidates is held by a
+            # row it names (rounds 2 and 3).
+            exempt = bool(named)
+            for own in mine:
+                own_held = False
+                for held in named:
+                    for theirs in proposals.get(held, ()):
+                        if similar(norm(own.label), norm(theirs.label)) < match_at:
+                            continue
+                        if theirs.type.name == own.type.name or await self._effective_of(
+                            namespace, theirs.type.name, closures, whys
+                        ) == target:
+                            own_held = True
+                            break
+                    if own_held:
+                        break
+                if not own_held:
+                    exempt = False
+                    break
+            if not exempt:
+                to_judge.append((o, rec, matched))
+        to_judge.sort(key=lambda item: item[0])
+        for _, rec, matched in to_judge:
+                if not events_readable:
+                    whys.append(
+                        f"invocation {rec.invocation_id} matches and this backend keeps no "
+                        f"invocation events, so whether its row was written cannot be read: "
+                        + self.caps.reason(
+                            "stores_events" if not self.caps.stores_events
+                            else "stores_invocation_events"
+                        )
+                    )
+                    continue
+                built = await self._invocation(
+                    rec, compensated_by=await self._compensated_by(rec.invocation_id, rec.namespace)
+                )
+                if all(name in built.results for name in matched):
+                    continue
+                if built.compensated_by:
+                    # Only an undo that was APPLIED undid anything. A `failed` or
+                    # `refused` compensation leaves the proposal's permission live
+                    # (round 2, lens 2, M3).
+                    undone, why_not = await self._applied_compensation(rec)
+                    if why_not:
+                        whys.append(why_not)
+                        continue
+                    if undone:
+                        continue
+                holders.append(built)
+        why = "; ".join(dict.fromkeys(whys)) or None
+        return InvocationReport(
+            invocations=tuple(holders),
+            known=len(holders),
+            complete=why is None,
+            why_incomplete=why,
+            warnings=(),
+        )
+
+    async def _applied_compensation(self, rec) -> tuple[bool, str | None]:
+        """Whether an ``applied`` invocation compensates ``rec``, read to exhaustion.
+        ``(undone, why_incomplete)``. Rule 4-11 (round 2, lens 2, M3)."""
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = await self.adapter.find_invocations(
+                namespace=rec.namespace, compensates=rec.invocation_id, after=after,
+                limit=50,
+            )
+            for other in page.records:
+                if other.compensates == rec.invocation_id and other.outcome == "applied":
+                    return True, None
+            nxt = page.next_after
+            if nxt is None:
+                if not page.complete:
+                    return False, (page.why_incomplete
+                                   or "the compensation read stopped with no cursor")
+                return False, None
+            if nxt in cursors:
+                return False, "the compensation cursor repeated, so the read could not finish"
+            cursors.add(nxt)
+            after = nxt
 
     async def _scope_census(
         self, namespace: str | None

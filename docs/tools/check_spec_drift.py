@@ -286,6 +286,8 @@ ACTION_CALLS = (
     # D-6b-3 with its signature printed NOWHERE -- which is exactly the gap this
     # tuple exists to close, and 6.5 now prints it.
     "review_invocation",
+    # Row 7c, amendment A2. The sixth call: the `results` slot's only writer.
+    "record_result",
 )
 
 #: `ACTIONS.md`'s printed MODULE-LEVEL function signatures, against `actions.py`. **Row
@@ -415,6 +417,7 @@ _WORDS = {
     "thirty-eight": 38, "thirty-nine": 39, "forty": 40, "forty-one": 41,
     "forty-two": 42, "forty-three": 43, "forty-four": 44, "forty-five": 45,
     "forty-six": 46, "forty-seven": 47, "forty-eight": 48, "forty-nine": 49, "fifty": 50,
+    "fifty-one": 51,
 }
 
 
@@ -1079,8 +1082,10 @@ INGEST_ADAPTER_SHAPES = ("InstanceRecord", "CandidateQuery", "CandidatePage")
 INGEST_SHAPES = (
     "CandidateRef", "MatchPolicy", "Condition", "ConditionResult",
     "InstanceContext", "InstanceResolution", "InstanceCandidate", "InstanceLookup",
+    # Row 7c: the act's answer.
+    "IngestLanding",
 )
-INGEST_CALLS = ("resolve_instance", "get_instance_checked")
+INGEST_CALLS = ("resolve_instance", "get_instance_checked", "ingest_act")
 INGEST_PRIMITIVES = ("get_instance", "find_instance_candidates")
 
 #: The sections whose rules row 7b built, and the heading each table sits under.
@@ -1091,9 +1096,11 @@ R31_INGEST_SECTIONS = {
     "5": "### 5.2 *\"I already know 38 of these\"*",
     "6": "### 6.4 The one change R60 requires",
     "7": "### 7.3 The tenancy predicate is the host's",
+    # Row 7c: the write side, built. Rules 4-1 to 4-13 and §4.4's five amendments.
+    "4": "### 4.4 The FIVE amendments",
 }
-#: Row 7c's. Planned: every id named, none claimed.
-PLANNED_R31_INGEST_SECTIONS = {"4": "### 4.4 The FIVE amendments"}
+#: Empty since row 7c, which built section 4. Kept so a later planned section has a home.
+PLANNED_R31_INGEST_SECTIONS: dict[str, str] = {}
 
 _INGEST_PRIMITIVE = re.compile(r"^\*\*2[23]\. `(\w+)\((.*?)\) ->", re.M)
 _INGEST_VOCAB_ROW = re.compile(
@@ -1599,7 +1606,8 @@ def main() -> int:
         f"{len(INGEST_CALLS)} calls, primitives 22 and 23, the Condition terms and 9's "
         f"ordinals match the code; every rule in "
         f"{', '.join(sorted(R31_INGEST_SECTIONS))} carries a claimed id, and "
-        f"{', '.join(sorted(PLANNED_R31_INGEST_SECTIONS))} is planned for row 7c.\n"
+        f"{', '.join(sorted(PLANNED_R31_INGEST_SECTIONS)) or 'no section'} is planned "
+        f"(row 7c built section 4).\n"
         f"INTERFACE.md: {len(PLANNED_SHAPES)} PLANNED shapes are printed and not yet built, "
         f"every printed shape is listed, and "
         + (

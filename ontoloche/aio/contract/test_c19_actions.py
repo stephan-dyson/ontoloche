@@ -5031,3 +5031,361 @@ async def test_c19_108_nested_membership_inside_a_declared_input_is_unordered_to
         "and never by position, and ACTIONS.md 1 says NO ORDERING",
         getattr(out, "reason", None), getattr(out, "detail", None),
     )
+
+_HOST_WRITE = Effect(op="host_state", why="the host writes the instance row; ACTIONS.md 2.5")
+
+def _candidate(label="Burns Nursing Home: #1 (Montgomery)", *, name="facility",
+               resolution="proposal", act_id="act-c19", namespace="default", kind="entity"):
+    from ontoloche.ingest import CandidateRef
+
+    return CandidateRef(TypeRef(namespace, kind, name), label, resolution, act_id)
+
+async def _propose_family(registry, name="propose_facility", *, mode="auto", ref="candidate"):
+    return await action_family(
+        registry,
+        name,
+        approval_mode=mode,
+        inputs=[InputSpec("instance", ref)],
+        effects=[_HOST_WRITE],
+    )
+
+@NEEDS_ATTRIBUTES
+async def test_c19_111_a_candidate_is_a_fourth_reference_shape_validated_at_both_doors(
+    adapter, make_registry
+):
+    """Rule **6-14**, amendment **A1** (`INGEST.md` 4.4, rule 4-9).
+
+    A thing being proposed has no `InstanceRef`, and F1 recorded the four ways the
+    shipped doors failed it: omitted is `missing`, its type is `ref` mismatch, an
+    invented id is `allowed` (rule 1-1 forbids it), and an optional input lets the gate
+    answer for a subject it never saw. `ref="candidate"` is the honest name.
+    """
+    from ontoloche.actions import REF_SHAPES, ref_shape
+    from ontoloche.ingest import CandidateRef
+
+    assert REF_SHAPES == ("type", "instance", "edge", "candidate")
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    declared = await _propose_family(registry)
+    assert isinstance(declared, TypeEntry), declared
+
+    cand = _candidate()
+    assert ref_shape(cand) == "candidate"
+    gate = await registry.preflight("propose_facility", {"instance": cand}, actor="ai:ingest")
+    assert not isinstance(gate, Refusal), gate
+    assert gate.verdict == "allowed", gate
+
+    # Wrong shape, both directions.
+    instance = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+    wrong = await registry.preflight("propose_facility", {"instance": instance}, actor="ai:ingest")
+    assert isinstance(wrong, Refusal) and wrong.reason == "input_kind_mismatch", wrong
+    assert (wrong.detail["declared"], wrong.detail["supplied"]) == ("candidate", "instance")
+    await _propose_family(registry, "touch_facility", ref="instance")
+    back = await registry.preflight("touch_facility", {"instance": cand}, actor="ai:ingest")
+    assert isinstance(back, Refusal) and back.reason == "input_kind_mismatch", back
+    assert (back.detail["declared"], back.detail["supplied"]) == ("instance", "candidate")
+
+    # A candidate that is not a candidate.
+    await seed(registry, "flag_it", kind="action", attributes=action_attributes(
+        reversibility="reversible", approval_mode="auto"))
+    for bad, problem in (
+        (_candidate(kind="action", name="flag_it"), "kind"),
+        (_candidate(resolution="existing"), "resolution"),
+        (_candidate(label=""), "label"),
+        (_candidate(act_id=""), "act_id"),
+    ):
+        out = await registry.preflight("propose_facility", {"instance": bad}, actor="ai:ingest")
+        assert isinstance(out, Refusal) and out.reason == "input_kind_mismatch", (bad, out)
+        assert out.detail["problem"] == problem, (bad, out.detail)
+
+    # The flat form carries a label with both separators and reads back exactly.
+    key = ref_key(cand)
+    assert parse_ref(key) == cand, key
+    assert isinstance(parse_ref(key), CandidateRef)
+    for malformed in ('{"candidate": 1}', '{"candidate": {"label": "x"}}', '{"candidate":'):
+        with pytest.raises(ValueError):
+            parse_ref(malformed)
+
+    if registry.caps.stores_invocations:
+        rec = await registry.record_invocation(
+            "propose_facility", {"instance": cand}, actor="ai:ingest",
+            outcome="applied", gate_verdict="allowed", judged=gate,
+        )
+        assert not isinstance(rec, Refusal), rec
+        assert parse_ref(rec.inputs["instance"]) == cand
+        wrong_rec = await registry.record_invocation(
+            "propose_facility", {"instance": instance}, actor="ai:ingest", outcome="applied",
+        )
+        assert isinstance(wrong_rec, Refusal) and wrong_rec.reason == "input_kind_mismatch"
+
+@NEEDS_INVOCATIONS
+async def test_c19_109_results_carry_what_the_host_minted_and_nothing_else_does(
+    adapter, make_registry
+):
+    """Rule **3-9**, amendment **A2** (`INGEST.md` 4.4, rule 4-3).
+
+    `Invocation` had no field that carries a RESULT. F2's route A (the ref in the
+    `host_state` effect's `why`) made a correct run warn `effect_undeclared`, and route B
+    (an optional input used as an output) is one container meaning two things. The slot
+    is filled by a LATER act, `record_result`, because the host writes after the
+    proposal is recorded and the store never rewrites a row: it rides an
+    `invocation_recorded` event, which is 3.5's own sentence for a correction.
+    """
+    from ontoloche.actions import Invocation
+
+    assert "results" in Invocation.__dataclass_fields__
+    registry = await make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("a result is an event, and this backend keeps none")
+    await seed(registry, "facility")
+    await _propose_family(registry)
+    cand = _candidate()
+    minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+    # F2's route A, reproduced: the ref in the effect's `why` makes a correct run warn,
+    # because a `host_state` effect's identity IS its `why` (rule 2.5-9).
+    route_a = await registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        observed_effects=[Effect(op="host_state", why=f"wrote {ref_key(minted)}")],
+    )
+    assert any(w.startswith("effect_undeclared:host_state") for w in route_a.warnings)
+    # The slot: the host reports the DECLARED effect and the ref goes in `results`.
+    rec = await registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        observed_effects=[_HOST_WRITE],
+    )
+    assert not isinstance(rec, Refusal), rec
+    assert rec.results == {}, "nothing is minted until the host says so"
+    assert not any(w.startswith("effect_undeclared") for w in rec.warnings), rec.warnings
+
+    out = await registry.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    assert not isinstance(out, Refusal), out
+    assert out.results == {"instance": minted}, out.results
+    assert parse_ref(out.inputs["instance"]) == cand, "the input is still the candidate"
+    assert out.observed_effects == rec.observed_effects, "the record is never rewritten"
+    assert any(
+        e.event == "invocation_recorded" and "results" in e.detail
+        for e in out.provenance.history
+    ), out.provenance.history
+
+    # Read back through the ledger, not only from the writer's return value.
+    listed = [i for i in (await registry.invocations(family="propose_facility")).invocations
+              if i.invocation_id == rec.invocation_id]
+    assert listed and listed[0].results == {"instance": minted}
+
+    # Append-only: a second result is recorded and the latest reads back.
+    later = InstanceRef(TypeRef("default", "entity", "facility"), "015010")
+    again = await registry.record_result(rec.invocation_id, {"instance": later}, actor="host:cms")
+    assert again.results == {"instance": later}, again.results
+
+@NEEDS_INVOCATIONS
+async def test_c19_114_record_result_is_the_slots_only_writer_and_refuses_what_it_cannot_keep(
+    adapter, make_registry
+):
+    """Rule **6-15**, amendment **A2**'s writer. A sixth call, for R73's reason: a
+    result is a later act, so it is a call and not a parameter."""
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    await _propose_family(registry)
+    cand = _candidate()
+    minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+    rec = await registry.record_invocation("propose_facility", {"instance": cand},
+                                     actor="ai:ingest", outcome="applied")
+    assert not isinstance(rec, Refusal), rec
+
+    with pytest.raises(ValueError):
+        await registry.record_result(rec.invocation_id, {"instance": minted}, actor=" ")
+    for bad_id, ns in (("no-such-invocation", "default"), (rec.invocation_id, "elsewhere")):
+        out = await registry.record_result(bad_id, {"instance": minted}, actor="host:cms",
+                                     namespace=ns)
+        assert isinstance(out, Refusal) and out.reason == "unknown_invocation", out
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        as_cand = await registry.record_result(rec.invocation_id, {"instance": cand},
+                                         actor="host:cms")
+        assert isinstance(as_cand, Refusal) and as_cand.reason == "input_kind_mismatch"
+        undeclared = await registry.record_result(rec.invocation_id, {"other": minted},
+                                            actor="host:cms")
+        assert isinstance(undeclared, Refusal)
+        assert undeclared.reason == "input_kind_mismatch", undeclared
+
+    eventless = await make_registry(AsyncDegradedAdapter(
+        adapter, stores_invocation_events=False,
+        why={"stores_invocation_events": "the host owns the schema and has no event table"},
+    ))
+    kept = await eventless.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied")
+    out = await eventless.record_result(kept.invocation_id, {"instance": minted}, actor="host:cms")
+    assert isinstance(out, Refusal) and out.reason == "cannot_record_override", out
+
+    blind = await make_registry(AsyncDegradedAdapter(adapter, stores_invocations=False,
+                                          why=NO_INVOCATIONS))
+    out = await blind.record_result(rec.invocation_id, {"instance": minted}, actor="host:cms")
+    assert isinstance(out, Refusal) and out.reason == "action_store_absent", out
+
+@NEEDS_INVOCATIONS
+async def test_c19_112_one_invocation_can_be_raised_to_review_and_warnings_are_a_closed_set(
+    adapter, make_registry
+):
+    """Rule **6-16**, amendment **A3** (`INGEST.md` 4.4, rule 4-5).
+
+    F3: `declared_policy` was copied from the family, so the only shipped route to
+    `review` was a governance act moving EVERY later row there. `approval_mode=` raises
+    ONE invocation's mode of record and never lowers it, and `warnings=` takes only what
+    a host may carry from a resolution, so the registry's own detectors cannot be forged.
+    """
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    await _propose_family(registry)
+    cand = _candidate(resolution="ambiguous")
+    carried = ("instance_ambiguous_at_proposal:instance:2", "consumers_unregistered")
+    raised = await registry.record_invocation(
+        "propose_facility", {"instance": cand}, actor="ai:ingest", outcome="applied",
+        approval_mode="review", warnings=carried,
+    )
+    assert not isinstance(raised, Refusal), raised
+    assert raised.declared_policy["approval_mode"] == "review"
+    assert raised.declared_policy["approval_mode_declared"] == "auto"
+    for w in carried:
+        assert w in raised.warnings, raised.warnings
+    plain = await registry.record_invocation("propose_facility", {"instance": _candidate()},
+                                       actor="ai:ingest", outcome="applied")
+    assert plain.declared_policy["approval_mode"] == "auto", "ONE row, not every later one"
+    assert "approval_mode_declared" not in plain.declared_policy
+
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
+        assert raised.invocation_id in queue and plain.invocation_id not in queue
+
+    # Never lowers.
+    await _propose_family(registry, "careful_propose", mode="human")
+    lowered = await registry.record_invocation("careful_propose", {"instance": cand},
+                                         actor="ai:ingest", outcome="applied",
+                                         approval_mode="auto")
+    assert lowered.declared_policy["approval_mode"] == "human", lowered.declared_policy
+
+    for bad_mode in ("maybe", ""):
+        with pytest.raises(ValueError):
+            await registry.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied",
+                                       approval_mode=bad_mode)
+    for forged in (("effect_undeclared:host_state:x",), ("declaration_amended:1:2",),
+                   ("approval_unrecorded",), ("made_up_value",)):
+        with pytest.raises(ValueError):
+            await registry.record_invocation("propose_facility", {"instance": cand},
+                                       actor="ai:ingest", outcome="applied", warnings=forged)
+
+_A4_POLICY = {"match_at": 0.97, "propose_below": 0.80, "ambiguity_margin": 0.02,
+              "why": "C19-113: the kit's thresholds"}
+
+async def _record_proposal(registry, cand, *, outcome="applied", **kw):
+    out = await registry.record_invocation("propose_facility", {"instance": cand},
+                                     actor="ai:ingest", outcome=outcome, **kw)
+    assert not isinstance(out, Refusal), out
+    return out
+
+@NEEDS_INVOCATIONS
+async def test_c19_113_unwritten_for_is_a_scoped_read_that_pages_to_the_end(
+    adapter, make_registry
+):
+    """Rule **6-17**, amendment **A4** (`INGEST.md` 4.4, rule 4-11).
+
+    B2: the shipped read returns the OLDEST 100 rows and `complete=False` for any
+    filter, so rule 4-11's question could not be asked. `unwritten_for=` is a scoped
+    read: rule 4-10's key (namespace, kind, the closure's effective entry, the label
+    under the gate's own normaliser at that entry's `match_at`), paged to exhaustion,
+    keeping only proposals that still HOLD a permission (no result, applied, not
+    compensated, not themselves `pending`). It combines with nothing.
+    """
+    from ontoloche.ingest import MATCH_POLICY_KEY
+
+    registry = await make_registry(adapter)
+    await seed(registry, "facility", attributes={MATCH_POLICY_KEY: _A4_POLICY})
+    await seed(registry, "clinic", attributes={MATCH_POLICY_KEY: _A4_POLICY})
+    await _propose_family(registry)
+    cand = _candidate("Burns Nursing Home Inc")
+
+    # Noise first: 120 unrelated proposals so the holder is NOT in the oldest 100 (B2).
+    for n in range(120):
+        await _record_proposal(registry, _candidate(f"Unrelated Facility {n:03d}"))
+    holder = await _record_proposal(registry, _candidate("BURNS NURSING HOME, INC."))   # same key under norm
+    await _record_proposal(registry, _candidate("Burns Nursing Home Inc", name="clinic"))  # another type: no
+    await _record_proposal(registry, _candidate("Burns Nursing Home Inc"), outcome="refused",
+           refusal=Refusal("precondition_unmet", {"why": "x"}))  # holds nothing
+
+    with pytest.raises(ValueError):
+        await registry.invocations(unwritten_for=cand, family="propose_facility")
+    with pytest.raises(ValueError):
+        await registry.invocations(unwritten_for=cand, unreviewed=True)
+
+    found = await registry.invocations(unwritten_for=cand)
+    assert not isinstance(found, Refusal), found
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        # The `written` half cannot be read: a confident `no holder` would fail open,
+        # and so would a confident holder list that cannot say which rows are written.
+        assert not found.complete and found.why_incomplete, found
+        assert holder.invocation_id in found.why_incomplete
+    else:
+        assert found.complete, found.why_incomplete
+        assert [i.invocation_id for i in found.invocations] == [holder.invocation_id]
+        assert found.known == 1
+
+    # Reviewed is NOT written: draining the queue must not stand the guard down (I-5).
+    if registry.caps.stores_events and registry.caps.stores_invocation_events:
+        await registry.review_invocation(holder.invocation_id, reviewed_by="user:sd")
+        still = await registry.invocations(unwritten_for=cand)
+        assert [i.invocation_id for i in still.invocations] == [holder.invocation_id]
+        # Written is: once the host reports the row, the proposal holds nothing.
+        minted = InstanceRef(TypeRef("default", "entity", "facility"), "015009")
+        await registry.record_result(holder.invocation_id, {"instance": minted}, actor="host:cms")
+        gone = await registry.invocations(unwritten_for=cand)
+        assert gone.complete and gone.invocations == () and gone.known == 0
+        # A row that is itself `pending` holds nothing either.
+        await _record_proposal(registry, _candidate("Burns Nursing Home Inc"),
+               warnings=(f"instance_proposal_pending:{holder.invocation_id}",))
+        assert (await registry.invocations(unwritten_for=cand)).invocations == ()
+
+    # An entry with no MatchPolicy cannot say what counts as the same label.
+    await seed(registry, "unscored")
+    unscored = await registry.invocations(unwritten_for=_candidate("x", name="unscored"))
+    assert not unscored.complete and unscored.why_incomplete, unscored
+
+@NEEDS_INVOCATIONS
+async def test_c19_110_the_match_policy_that_governed_is_recorded_with_its_entry(
+    adapter, make_registry
+):
+    """Rule **3-10**, amendment **A5** (`INGEST.md` 4.4, rule 5-7, `I-7`).
+
+    `declared_policy` carried the family's approval policy and not the thresholds that
+    decided a proposal, so a reviewer could not tell which entry's numbers produced the
+    row in front of them. `match_policy=` and `governed_by=` travel together, both or
+    neither, and land copied as the gate judged them, for rule 3-8's reason.
+    """
+    from ontoloche.ingest import MatchPolicy
+
+    registry = await make_registry(adapter)
+    await seed(registry, "facility")
+    await _propose_family(registry)
+    policy = MatchPolicy(0.97, 0.80, 0.02, "the kit's thresholds")
+    rec = await registry.record_invocation(
+        "propose_facility", {"instance": _candidate()}, actor="ai:ingest",
+        outcome="applied", match_policy=policy, governed_by="default:ltc_facility",
+    )
+    assert not isinstance(rec, Refusal), rec
+    expected = {"governed_by": "default:ltc_facility", "match_at": 0.97,
+                "propose_below": 0.80, "ambiguity_margin": 0.02}
+    assert rec.declared_policy["match_policy"] == expected
+    listed = [i for i in (await registry.invocations(family="propose_facility")).invocations
+              if i.invocation_id == rec.invocation_id]
+    assert listed and listed[0].declared_policy["match_policy"] == expected
+
+    plain = await registry.record_invocation("propose_facility", {"instance": _candidate()},
+                                       actor="ai:ingest", outcome="applied")
+    assert "match_policy" not in plain.declared_policy
+
+    for kwargs in ({"match_policy": policy}, {"governed_by": "default:facility"},
+                   {"match_policy": {"match_at": 2.0, "propose_below": 0.8,
+                                     "ambiguity_margin": 0.02, "why": "x"},
+                    "governed_by": "default:facility"},
+                   {"match_policy": policy, "governed_by": "no-colon"}):
+        with pytest.raises(ValueError):
+            await registry.record_invocation("propose_facility", {"instance": _candidate()},
+                                       actor="ai:ingest", outcome="applied", **kwargs)
