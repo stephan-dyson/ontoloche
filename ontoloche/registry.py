@@ -6910,7 +6910,9 @@ class Registry:
                                 tuple(row.get("aliases") or ()),
                             )
                         )
-                        if status != "retired"
+                        # A backend that keeps no aliases writes none, so no second
+                        # claimant exists and the warning would be false (Rule U).
+                        if status != "retired" and self.caps.stores_aliases
                         else ()
                     )
                 ),

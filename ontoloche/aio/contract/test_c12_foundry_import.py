@@ -3266,7 +3266,7 @@ async def test_c12_78_one_claimant_is_not_warned(registry):
     assert plain.status == "active", plain
     assert not [w for w in plain.warnings if w.startswith("alias_word_succeeded")]
 
-@pytest.mark.requires_capability("stores_events", "indexes_membership")
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
 async def test_c12_78_a_chain_is_walked_to_its_live_end(registry):
     """The walk is the reader's: `a -> b -> c` with `c` live warns `c`, and a chain whose
     end is retired is one claimant (8B-RUN.md 2.5 finding 2's dead end).

@@ -29,11 +29,14 @@ C12 = "ontoloche/contract/test_c12_foundry_import.py"
 MUTATIONS = (
     # ---- D14 (C12-78, C12-79) ----------------------------------------------------
     Mutation("D14 the import door warns", "c12_78_an_alias", REG,
-             "                        if status != \"retired\"\n                        else ()",
-             "                        if False\n                        else ()", suite=C12),
+             "if status != \"retired\" and self.caps.stores_aliases",
+             "if False", suite=C12),
     Mutation("D14 a retired row is not warned at import", "c12_79", REG,
-             "                        if status != \"retired\"\n                        else ()",
-             "                        if True\n                        else ()", suite=C12),
+             "if status != \"retired\" and self.caps.stores_aliases",
+             "if self.caps.stores_aliases", suite=C12),
+    Mutation("D14 a backend keeping no aliases is not warned", "c12_78_an_alias_the", REG,
+             "if status != \"retired\" and self.caps.stores_aliases",
+             "if status != \"retired\"", suite=C12),
     Mutation("D14 the reinstate door warns", "c12_79", REG,
              "        alias_warnings.extend(\n"
              "            self._succeeded_alias_warnings(namespace, rec.kind, rec.name, dormant)\n"
