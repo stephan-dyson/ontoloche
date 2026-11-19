@@ -7209,7 +7209,11 @@ class Registry:
                 if why is not None:
                     unresolved.append({label: word, "why": why})
             if unresolved:
-                p.detail["unresolved"] = unresolved
+                # Row 8d, C5-4: two shared property types mapped onto one property
+                # give two refs to one slot's word, and listed it twice. Once, in order.
+                p.detail["unresolved"] = [
+                    dict(pairs) for pairs in dict.fromkeys(tuple(u.items()) for u in unresolved)
+                ]
             if bound:
                 p.detail["bound_by_conversion"] = bound
 
