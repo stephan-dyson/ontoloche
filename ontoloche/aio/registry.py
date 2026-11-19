@@ -354,7 +354,10 @@ class AsyncIngestAct:
             n = res.known
             if policy_raw is not None and match_policy_problem(policy_raw) is None:
                 pol = match_policy_from_mapping(policy_raw)
-                scores = [c.score for c in res.candidates if c.score is not None]
+                # The gate's own unrounded scores: `candidates` carry four places for
+                # display, and a margin decided on rounded numbers can count a row the
+                # gate did not tie (round 2, lens 3, m1).
+                scores = [similar(norm(label), norm(c.label)) for c in res.candidates]
                 top = max(scores) if scores else None
                 n = sum(
                     1 for s in scores
@@ -12645,9 +12648,12 @@ class AsyncRegistry:
         not been WRITTEN. INGEST.md rule 4-11; the three asks §4.4 names.
 
         (i) **Unwritten, not unreviewed.** A row holds the identity while it was applied,
-        is not compensated, is not itself ``instance_proposal_pending``, and has no
-        ``results`` entry for the matching input (amendment A2). Review does not enter.
-        (ii) **Rule 4-10's key, under the gate's own relation**: same namespace and kind,
+        is not undone by an APPLIED compensation, is not itself a compensation, and has
+        no ``results`` entry for the matching input (amendment A2). A row carrying
+        ``instance_proposal_pending:<id>`` is exempt only when ``<id>`` is an applied
+        proposal of that row's OWN identity (rounds 1 and 2). Review does not enter.
+        (ii) **Rule 4-10's key, under the gate's own relation**, over the whole ledger and
+        keyed on the CANDIDATE's namespace, not the recording row's (round 2): same kind,
         the same EFFECTIVE entry under :meth:`_instance_closure` (the function
         ``resolve_instance`` uses, so the two cannot drift: ``I-2``, ``I-4``), and
         ``similar(norm(a), norm(b)) >= match_at`` of that entry. (iii) **Not the oldest
@@ -12679,20 +12685,27 @@ class AsyncRegistry:
         events_readable = self.caps.stores_events and self.caps.stores_invocation_events
 
         holders = []
-        matching_ids: set[str] = set()
+        # Every applied, non-compensating row's candidates, matching or not: a pending
+        # row's exemption is judged against ITS OWN identity, not the reader's, because
+        # the gate's relation is not transitive (round 2, lens 1, M1: CMS's ...EAST,
+        # ...WEST and ...WESTON, where WEST was held by EAST and WESTON is neither).
+        proposals: dict[str, list] = {}
         pending_rows: list = []
         to_judge: list = []
         order = 0
         after: str | None = None
         seen_cursors: set[str] = set()
         while True:
+            # The WHOLE ledger, not the identity's namespace: rule 4-10's key is the
+            # candidate's type, and a family in another namespace may record a candidate
+            # of this one (round 2, lens 2, M2). Keyed below on the candidate's own
+            # namespace, never on the row's.
             page = await self.adapter.find_invocations(
-                namespace=namespace, after=after, limit=max(1, int(page_size))
+                namespace=None, after=after, limit=max(1, int(page_size))
             )
             for rec in page.records:
-                if rec.namespace != namespace:
-                    continue
                 matched = None
+                mine = None
                 for name, flat in (rec.inputs or {}).items():
                     if not isinstance(flat, str) or not flat.startswith('{"candidate":'):
                         continue
@@ -12702,6 +12715,8 @@ class AsyncRegistry:
                         continue
                     if other.type.namespace != namespace or other.type.kind != cand.type.kind:
                         continue
+                    if rec.outcome == "applied" and not rec.compensates:
+                        proposals.setdefault(rec.invocation_id, []).append(other)
                     # The label first: a row whose label is not this identity cannot hold
                     # it, whatever its closure says, so an unrelated broken closure must
                     # not make the whole namespace unreadable (round 1, lens 2, M2).
@@ -12710,7 +12725,7 @@ class AsyncRegistry:
                     if other.type.name != cand.type.name:
                         if await self._effective_of(namespace, other.type.name, closures, whys) != target:
                             continue
-                    matched = name
+                    matched, mine = name, other
                     break
                 if matched is None:
                     continue
@@ -12720,25 +12735,27 @@ class AsyncRegistry:
                     # A compensating row undoes a proposal; it proposes nothing, even
                     # when it carries the same candidate (round 1, lens 1, MAJOR 1).
                     continue
-                matching_ids.add(rec.invocation_id)
                 named = [
                     w.split(":", 1)[1] for w in (rec.warnings or ())
                     if w.split(":", 1)[0] == "instance_proposal_pending"
                     and ":" in w
                 ]
                 if named or "instance_proposal_pending" in (rec.warnings or ()):
-                    # A pending row is not a holder ONLY when the holder it names is a
-                    # matching applied row of this same identity. Otherwise the warning
-                    # is an exemption anyone can write (round 1, lens 2, M1), and the
-                    # row is judged as any other.
-                    pending_rows.append((order, rec, matched, named))
+                    # A pending row is not a holder ONLY when the row it names is an
+                    # applied proposal of the pending row's OWN identity. Otherwise the
+                    # warning is an exemption anyone can write (round 1, lens 2, M1), and
+                    # the row is judged as any other.
+                    pending_rows.append((order, rec, matched, named, mine))
                     order += 1
                     continue
                 to_judge.append((order, rec, matched))
                 order += 1
             nxt = page.next_after
             if nxt is None:
-                if not page.complete and page.records:
+                # An empty page that says it is incomplete is still an unfinished
+                # read, and an unfinished read is never a confident "no holder"
+                # (round 2, lens 1, m1; Rule U).
+                if not page.complete:
                     whys.append(page.why_incomplete or "the ledger read stopped with no cursor")
                 break
             if nxt in seen_cursors:
@@ -12746,10 +12763,22 @@ class AsyncRegistry:
                 break
             seen_cursors.add(nxt)
             after = nxt
-        to_judge.extend(
-            (o, rec, matched) for o, rec, matched, named in pending_rows
-            if not (set(named) & matching_ids)
-        )
+
+        for o, rec, matched, named, mine in pending_rows:
+            exempt = False
+            for held in named:
+                for theirs in proposals.get(held, ()):
+                    if similar(norm(mine.label), norm(theirs.label)) < match_at:
+                        continue
+                    if theirs.type.name == mine.type.name or await self._effective_of(
+                        namespace, theirs.type.name, closures, whys
+                    ) == target:
+                        exempt = True
+                        break
+                if exempt:
+                    break
+            if not exempt:
+                to_judge.append((o, rec, matched))
         to_judge.sort(key=lambda item: item[0])
         for _, rec, matched in to_judge:
                 if not events_readable:
@@ -12763,10 +12792,20 @@ class AsyncRegistry:
                     )
                     continue
                 built = await self._invocation(
-                    rec, compensated_by=await self._compensated_by(rec.invocation_id, namespace)
+                    rec, compensated_by=await self._compensated_by(rec.invocation_id, rec.namespace)
                 )
-                if built.compensated_by or matched in built.results:
+                if matched in built.results:
                     continue
+                if built.compensated_by:
+                    # Only an undo that was APPLIED undid anything. A `failed` or
+                    # `refused` compensation leaves the proposal's permission live
+                    # (round 2, lens 2, M3).
+                    undone, why_not = await self._applied_compensation(rec)
+                    if why_not:
+                        whys.append(why_not)
+                        continue
+                    if undone:
+                        continue
                 holders.append(built)
         why = "; ".join(dict.fromkeys(whys)) or None
         return InvocationReport(
@@ -12776,6 +12815,30 @@ class AsyncRegistry:
             why_incomplete=why,
             warnings=(),
         )
+
+    async def _applied_compensation(self, rec) -> tuple[bool, str | None]:
+        """Whether an ``applied`` invocation compensates ``rec``, read to exhaustion.
+        ``(undone, why_incomplete)``. Rule 4-11 (round 2, lens 2, M3)."""
+        after: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = await self.adapter.find_invocations(
+                namespace=rec.namespace, compensates=rec.invocation_id, after=after,
+                limit=50,
+            )
+            for other in page.records:
+                if other.compensates == rec.invocation_id and other.outcome == "applied":
+                    return True, None
+            nxt = page.next_after
+            if nxt is None:
+                if not page.complete:
+                    return False, (page.why_incomplete
+                                   or "the compensation read stopped with no cursor")
+                return False, None
+            if nxt in cursors:
+                return False, "the compensation cursor repeated, so the read could not finish"
+            cursors.add(nxt)
+            after = nxt
 
     async def _scope_census(
         self, namespace: str | None

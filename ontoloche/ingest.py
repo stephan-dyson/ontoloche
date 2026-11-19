@@ -185,8 +185,8 @@ class IngestLanding:
     ``resolution`` is ``None`` for ``reused`` (the memory answered, nothing was
     resolved) and for a ``refused`` that ``resolve_instance`` itself refused. ``ref`` is
     set for ``existing`` and for a ``reused`` that recalled one; ``candidate`` for
-    ``proposed``, ``pending``, a ``reused`` that recalled one, and a ``refused`` at
-    preflight;
+    ``proposed``, ``pending``, a ``reused`` that recalled one, and a ``refused`` after
+    the resolution (at preflight, at A4's read or at the record);
     ``invocation`` for ``proposed`` and ``pending`` only. ``refusal`` carries the refusal
     behind a ``refused`` landing. ``why`` is never empty.
     """

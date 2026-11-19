@@ -237,6 +237,14 @@ def allowlist() -> None:
     refusals.append(("ingest_act", getattr(door4, "reason", type(door4).__name__)))
     for door, why in refusals:
         print(f"  {door}: {why}")
+    # The type store, not only the reasons: no refused family was minted, and the one
+    # amended past validation is still pending (round 2, lens 3, m5).
+    minted = [n for n in ("mint_a", "mint_b", "mint_c")
+              if adapter.get_type("cms", n, kind="action") is not None]
+    still_pending = pid is not None and adapter.get_proposal(pid).status == "pending"
+    print(f"  minted: {minted}; mint_b still pending: {still_pending}")
+    check("no refused family reached the type store, and mint_b is still pending",
+          not minted and still_pending, f"minted={minted} pending={still_pending}")
     check("four refusals, nothing recorded",
           refusals[0][1] == "effect_not_permitted" and refusals[1][1] == "effect_not_permitted"
           and refusals[2][1] == "import_refused:effect_not_permitted"

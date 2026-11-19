@@ -74,7 +74,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 *New 2026-11-18, found by row 7c's adversarial review (round 1) and routed by the supervisor as a refusal question.*
 
-**TL;DR.** Amendment A3 lets a host pass warnings from a closed set (`CARRIED_WARNINGS`) into `record_invocation`. The check reads only the part before the first colon. **[Observed]** bare `instance_proposal_pending`, bare `instance_ambiguous_at_proposal`, `instance_ambiguous_at_proposal:nope:x`, `consumers_unregistered:garbage` and `no_tenancy_predicate:x:y` are all recorded as given. The one case that did damage, a forged `instance_proposal_pending` hiding a real proposal from rule 4-11, is closed separately by row 7c without refusing anything: A4 now ignores a pending warning unless it names a matching holder.
+**TL;DR.** Amendment A3 lets a host pass warnings from a closed set (`CARRIED_WARNINGS`) into `record_invocation`. The check reads only the part before the first colon. **[Observed]** bare `instance_proposal_pending`, bare `instance_ambiguous_at_proposal`, `instance_ambiguous_at_proposal:nope:x`, `consumers_unregistered:garbage` and `no_tenancy_predicate:x:y` are all recorded as given. The one case that did damage, a forged `instance_proposal_pending` hiding a real proposal from rule 4-11, is closed separately by row 7c without refusing anything: A4 now honours a pending warning only when it names an applied proposal of that row's own identity.
 
 **Why it is yours.** Checking the suffix means refusing a call that records today, which is what the registry refuses.
 

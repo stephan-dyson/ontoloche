@@ -2047,7 +2047,7 @@ async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_f
     inv = landing.invocation
     assert inv.declared_policy["approval_mode"] == "review"
     assert inv.declared_policy["approval_mode_declared"] == "auto"
-    assert f"instance_ambiguous_at_proposal:instance:{_tied_n(landing.resolution)}" in (
+    assert f"instance_ambiguous_at_proposal:instance:{_tied_n(landing.resolution, BAND + ' ')}" in (
         inv.warnings)
     plain = await act.land(NOTHING, type_name="facility")
     assert plain.invocation.declared_policy["approval_mode"] == "auto"
@@ -2098,10 +2098,11 @@ async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unre
     third = await act_4.land(other, type_name="facility")
     assert third.outcome == "pending", "draining the queue stood the guard down (I-5)"
 
-def _tied_n(res, policy=POLICY):
+def _tied_n(res, label, policy=POLICY):
     """Rule 4-12's `<n>`: the rows a reviewer chooses among -- at or above `match_at`, or
-    at or above `propose_below` within `ambiguity_margin` of the top (rules 3-3, 5-12)."""
-    scores = [c.score for c in res.candidates if c.score is not None]
+    at or above `propose_below` within `ambiguity_margin` of the top (rules 3-3, 5-12),
+    on the gate's UNROUNDED scores (the candidates' four places are display only)."""
+    scores = [similar(norm(label), norm(c.label)) for c in res.candidates]
     top = max(scores)
     return sum(1 for s in scores if s >= policy["match_at"] or (
         top - s <= policy["ambiguity_margin"] + 1e-9 and s >= policy["propose_below"]))
@@ -2288,8 +2289,8 @@ async def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
     assert res.scanned > res.known, (res.scanned, res.known)
     ambiguity = [w for w in landing.invocation.warnings
                  if w.startswith("instance_ambiguous_at_proposal:")]
-    assert _tied_n(res) != res.known, "the fixture must separate the tied set from known"
-    assert ambiguity == [f"instance_ambiguous_at_proposal:instance:{_tied_n(res)}"], ambiguity
+    assert _tied_n(res, BAND) != res.known, "the fixture must separate the tied set from known"
+    assert ambiguity == [f"instance_ambiguous_at_proposal:instance:{_tied_n(res, BAND)}"], ambiguity
 
     dup = await make_registry(adapter)
     await host_instances(adapter, _rows() + _rows()[:1], type_name="dupes")
