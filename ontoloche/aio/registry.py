@@ -359,8 +359,16 @@ class AsyncIngestAct:
         effective, recalled, origin = await self._recall(type_name, label)
         if recalled is not None:                                      # rule 4-10
             is_ref = isinstance(recalled, InstanceRef)
-            why = (f"this act already answered for this identity under "
-                   f"{self.namespace}:{effective} (INGEST.md rule 4-10)")
+            if origin is not None and origin.startswith("pending:"):
+                # Name what was recalled (row 7d, ING15's minor): this act proposed
+                # nothing for the label, and another row holds its identity.
+                why = (f"this act already landed this label pending under "
+                       f"{self.namespace}:{effective}, behind invocation "
+                       f"{origin.split(':', 1)[1]}, which holds an unwritten proposal for "
+                       f"it (INGEST.md rules 4-10, 4-11)")
+            else:
+                why = (f"this act already answered for this identity under "
+                       f"{self.namespace}:{effective} (INGEST.md rule 4-10)")
             return IngestLanding(
                 "reused", None, recalled if is_ref else None,
                 None if is_ref else recalled, None, why,
