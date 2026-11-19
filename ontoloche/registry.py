@@ -6178,8 +6178,12 @@ class Registry:
         # Row 8d round 2 (door lens, MAJOR 1): a retired `from_` was a chain's dead end,
         # and now hands its word on to `into`, so `into` may have become the live end of a
         # chain whose first word another live row holds as an alias. The fourth door.
+        # Round 3 (implementer lens, MAJOR 1): `into` may itself be retired with a live
+        # successor, so the claimant is wherever the chain through `from_` now ends live.
         if left.status == "retired" and target_ns == namespace:
-            merge_warnings.extend(self._reinstated_end_warnings(namespace, right.kind, right.name))
+            end = self._succession_claimant(namespace, right.kind, left.name)
+            if end is not None and end != "?":
+                merge_warnings.extend(self._reinstated_end_warnings(namespace, right.kind, end))
         return MergeResult(
             from_=from_,
             into=into,
