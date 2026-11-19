@@ -1624,7 +1624,7 @@ Every BLOCKING finding of that loop is an assertion here. They were fixed in a t
 | C20-28 | **4-2** The host writes the instance row: the family declares `Effect(op="host_state")`, and this project performs no write *(row 7c)* | — |
 | C20-29 | **4-3** The minted `InstanceRef` is recorded in `results` under the EFFECTIVE type, never in a `why` or in `inputs` *(row 7c)* | — |
 | C20-30 | **4-4** Provenance is `InvocationProvenance` unchanged *(row 7c)* | — |
-| C20-31 | **4-5** A proposal over an `ambiguous` resolution carries `instance_ambiguous_at_proposal` and is recorded in `review` whatever the family declared *(row 7c)* | — |
+| C20-31 | **4-5** A proposal over an `ambiguous` resolution carries `instance_ambiguous_at_proposal` and is recorded in `review` whatever the family declared, or stricter where the family declared stricter *(row 7c)* | — |
 | C20-32 | **4-6** Those proposals are enumerable by `invocations(unreviewed=True)` and drained only by `review_invocation` *(row 7c)* | — |
 | C20-33 | **4-7** `unknowable` and `not_an_instance` yield no proposal *(row 7c)* | — |
 | C20-34 | **4-8** An ingest family may not declare `Effect(op="propose_type", kind="predicate")` *(row 7c)* | — |
@@ -1674,7 +1674,7 @@ Every BLOCKING finding of that loop is an assertion here. They were fixed in a t
 | C20-78 | **3-17** A **cycle** in the successor chain is `complete=False` with a `why` | — |
 | C20-79 | **3-18** Where the closure moved and the successor's entry declares a **different `MatchPolicy` or a different predicate**, the resolution is `unknowable` with a `why` naming the changed fact — **`I-7`, and §5.3 is where the ... | — |
 | C20-80 | **3-19** **The identity's extent is the whole closure** | — |
-| C20-81 | **4-13** The per-act memory is written on every branch that answers with a `CandidateRef`, pending included *(row 7c)* | — |
+| C20-81 | **4-13** The per-act memory is written on every branch that records or recalls an identity — `existing`, pending and minting — and not on a `refused` landing *(row 7c)* | — |
 | C20-82 | **5-10** **A successor does NOT inherit its predecessor's `MatchPolicy`.** Where a closure hop crosses into an entry declaring a different one, the resolution is `unknowable` (rule 3-18) rather than answered under rules the ... | — |
 | C20-83 | **6-18** **A successor does not inherit its predecessor's predicate.** A closure hop into an entry declaring a different one is `unknowable` (rule 3-18), because a tenancy predicate the caller never named deciding a caller's ... | — |
 | C20-84 | **7-5** A host declaring a `successor` on an entry declares the successor entry's `MatchPolicy` and predicate too, or resolutions crossing that hop answer `unknowable` (rules 3-18, 5-10, 6-18) | — |

@@ -516,7 +516,7 @@ MUTATIONS = (
              "            if rank[approval_mode] > rank.get(declared_mode, 0):",
              "            if False:", required=True, suite=C19S),
     Mutation("ACTIONS 6-17 (A4) a result releases a holder, review does not", "c19_113",
-             REG, "                if matched in built.results:\n                    continue\n",
+             REG, "                if all(name in built.results for name in matched):\n                    continue\n",
              "", required=True, suite=C19S),
     Mutation("ACTIONS 3-10 (A5) the match policy is recorded", "c19_110", REG,
              '            policy_of_record = {**policy_of_record, "match_policy": '
@@ -531,8 +531,8 @@ MUTATIONS = (
              "    _memory: list = dataclasses.field(default_factory=lambda _s=[]: _s)",
              required=True),
     Mutation("4-2 the family must declare host_state", "c20_28", REG,
-             '        elif not any(e.op == "host_state" for e in fam.effects):',
-             "        elif False:", required=True),
+             '    if not any(e.op == "host_state" for e in effects):',
+             "    if False:", required=True),
     Mutation("4-3 the candidate is under the EFFECTIVE type", "c20_29", REG,
              "        cand = res.candidate\n",
              "        cand = (dataclasses.replace(res.candidate, type=dataclasses.replace("
@@ -551,9 +551,9 @@ MUTATIONS = (
              'if res.outcome in ("unknowable", "not_an_instance"):',
              'if res.outcome == "unknowable":', required=True),
     Mutation("4-8 the act refuses a predicate-proposing family", "c20_34", REG,
-             '        elif any(e.op == "propose_type" and e.kind == "predicate" '
-             "for e in fam.effects):",
-             "        elif False:", required=True),
+             '    if any(e.op == "propose_type" and e.kind == "predicate" '
+             "for e in effects):",
+             "    if False:", required=True),
     Mutation("4-9 a candidate reads back as itself", "c20_69", ACT,
              'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], '
              'body["act_id"])',
@@ -591,8 +591,8 @@ MUTATIONS = (
              required=True),
     # ---- row 7c, adversarial round 2
     Mutation("6-17 (A4) a pending row is judged against its own label", "c20_71", REG,
-             "                    if similar(norm(mine.label), norm(theirs.label)) < match_at:",
-             "                    if similar(key, norm(theirs.label)) < match_at:",
+             "                        if similar(norm(own.label), norm(theirs.label)) < match_at:",
+             "                        if similar(key, norm(theirs.label)) < match_at:",
              required=True),
     Mutation("6-17 (A4) an empty incomplete page is an unfinished read", "c20_71", REG,
              "                if not page.complete:\n                    whys.append(page.why_incomplete "
@@ -615,6 +615,28 @@ MUTATIONS = (
     Mutation("4-12 <n> is counted on the gate's unrounded scores", "c20_72", REG,
              "                scores = [similar(norm(label), norm(c.label)) for c in res.candidates]",
              "                scores = [c.score for c in res.candidates if c.score is not None]"),
+    # ---- row 7c, adversarial round 3
+    Mutation("6-17 (A4) a row holds while ANY matching input is unwritten", "c20_71", REG,
+             "                if all(name in built.results for name in matched):",
+             "                if any(name in built.results for name in matched):",
+             required=True),
+    Mutation("4-2 the family's effects are judged again at the landing", "c20_28", REG,
+             "        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8",
+             "        problem = None", required=True),
+    Mutation("4-11 a pending row is exempt through the closure, not only by name", "c20_71",
+             REG, "                        if theirs.type.name == own.type.name or self._effective_of(",
+             "                        if theirs.type.name == own.type.name or False and self._effective_of(",
+             required=True),
+    Mutation("4-1 the gate's refusal binds the act", "c20_27", REG,
+             '        if judged.verdict != "allowed":', "        if False:", required=True),
+    Mutation("4-11 a broken target closure is never a confident no-holder", "c20_71", REG,
+             '            return InvocationReport((), None, False, "; ".join(whys))',
+             "            return InvocationReport((), 0, True, None)", required=True),
+    Mutation("4-13 a refused landing writes no memory", "c20_81", REG,
+             "            refusal = judged.refusal\n            return IngestLanding(",
+             "            self._remember(effective, label, cand)\n"
+             "            refusal = judged.refusal\n            return IngestLanding(",
+             required=True),
     Mutation("4-10 a foreign act_id is refused before the recall", "c20_70", REG,
              "        if context is not None and context.act_id != self.act_id:",
              "        if False:", required=True),

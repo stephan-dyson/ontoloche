@@ -638,6 +638,25 @@ def _one_copy_per_identity(records, effective: str):
     return kept, ""
 
 
+def _ingest_effects_problem(effects) -> str | None:
+    """Rules **4-2** and **4-8** over a family's declared effects: ``None``, or why an
+    ingest act may not run under it. Shared by :meth:`Registry.ingest_act`, which judges
+    the family when the act is made, and :meth:`IngestAct.land`, which judges the effects
+    the gate read at the landing, because a family can be amended in between
+    (``declaration_amended``; row 7c round 3)."""
+    if not any(e.op == "host_state" for e in effects):
+        return (
+            "declares no Effect(op=\"host_state\"): the HOST writes the instance row "
+            "and the family must say so (INGEST.md rule 4-2)"
+        )
+    if any(e.op == "propose_type" and e.kind == "predicate" for e in effects):
+        return (
+            "declares a propose_type effect on kind=\"predicate\", which ingestion -- the "
+            "highest-volume caller -- may never reach (INGEST.md rule 4-8, ACTIONS.md 2.5)"
+        )
+    return None
+
+
 @dataclass(eq=False)
 class IngestAct:
     """One propose-at-ingest act. INGEST.md 4.3, rules 4-3, 4-5, 4-7 and 4-10 to 4-13.
@@ -758,6 +777,17 @@ class IngestAct:
                 "refused", res, None, cand, None,
                 f"the gate refused: {refusal.reason if refusal else judged.verdict}",
                 refusal,
+            )
+        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8
+        if problem is not None:
+            refusal = Refusal(
+                "attributes_schema_violation",
+                {"family": self.family, "namespace": self.namespace,
+                 "why": f"{self.family!r} {problem}"},
+            )
+            return IngestLanding(
+                "refused", res, None, cand, None,
+                f"the family was amended after this act began and {problem}", refusal,
             )
         held = registry.invocations(unwritten_for=cand)               # rule 4-11, A4
         if isinstance(held, Refusal):
@@ -11938,16 +11968,8 @@ class Registry:
                 f"declares no InputSpec({input_name!r}, ref=\"candidate\"), so a proposal "
                 f"has nowhere to name the thing it proposes (INGEST.md rule 4-9)"
             )
-        elif not any(e.op == "host_state" for e in fam.effects):
-            problem = (
-                "declares no Effect(op=\"host_state\"): the HOST writes the instance row "
-                "and the family must say so (INGEST.md rule 4-2)"
-            )
-        elif any(e.op == "propose_type" and e.kind == "predicate" for e in fam.effects):
-            problem = (
-                "declares a propose_type effect on kind=\"predicate\", which ingestion -- the "
-                "highest-volume caller -- may never reach (INGEST.md rule 4-8, ACTIONS.md 2.5)"
-            )
+        else:
+            problem = _ingest_effects_problem(fam.effects)
         if problem is not None:
             return Refusal(
                 "attributes_schema_violation",
@@ -13136,8 +13158,8 @@ class Registry:
                 namespace=None, after=after, limit=max(1, int(page_size))
             )
             for rec in page.records:
-                matched = None
-                mine = None
+                matched: list[str] = []
+                mine: list = []
                 for name, flat in (rec.inputs or {}).items():
                     if not isinstance(flat, str) or not flat.startswith('{"candidate":'):
                         continue
@@ -13157,9 +13179,13 @@ class Registry:
                     if other.type.name != cand.type.name:
                         if self._effective_of(namespace, other.type.name, closures, whys) != target:
                             continue
-                    matched, mine = name, other
-                    break
-                if matched is None:
+                    # EVERY input that matches, not the first: a row with two candidate
+                    # inputs holds the identity while either is unwritten (round 3,
+                    # lenses 1 and 2), and on postgres JSONB reorders keys, so "first"
+                    # was not even the same input on every backend.
+                    matched.append(name)
+                    mine.append(other)
+                if not matched:
                     continue
                 if rec.outcome != "applied":
                     continue
@@ -13197,17 +13223,24 @@ class Registry:
             after = nxt
 
         for o, rec, matched, named, mine in pending_rows:
-            exempt = False
-            for held in named:
-                for theirs in proposals.get(held, ()):
-                    if similar(norm(mine.label), norm(theirs.label)) < match_at:
-                        continue
-                    if theirs.type.name == mine.type.name or self._effective_of(
-                        namespace, theirs.type.name, closures, whys
-                    ) == target:
-                        exempt = True
+            # Exempt only when EACH of the row's own matching candidates is held by a
+            # row it names (rounds 2 and 3).
+            exempt = bool(named)
+            for own in mine:
+                own_held = False
+                for held in named:
+                    for theirs in proposals.get(held, ()):
+                        if similar(norm(own.label), norm(theirs.label)) < match_at:
+                            continue
+                        if theirs.type.name == own.type.name or self._effective_of(
+                            namespace, theirs.type.name, closures, whys
+                        ) == target:
+                            own_held = True
+                            break
+                    if own_held:
                         break
-                if exempt:
+                if not own_held:
+                    exempt = False
                     break
             if not exempt:
                 to_judge.append((o, rec, matched))
@@ -13226,7 +13259,7 @@ class Registry:
                 built = self._invocation(
                     rec, compensated_by=self._compensated_by(rec.invocation_id, rec.namespace)
                 )
-                if matched in built.results:
+                if all(name in built.results for name in matched):
                     continue
                 if built.compensated_by:
                     # Only an undo that was APPLIED undid anything. A `failed` or
