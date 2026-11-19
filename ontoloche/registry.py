@@ -7050,15 +7050,23 @@ class Registry:
 
         items: list[FoundryItem] = []
         for p in planned:
+            # Row 8d (B5): said on the item on both runs, from the plan.
+            bound_warnings = tuple(
+                f"reference_bound_by_conversion:{label}:{b['api']}:{b['bound_to']}"
+                for b in p.detail.get("bound_by_conversion", ())
+                for label in b if label not in ("api", "bound_to")
+            )
             if p.reason is not None:
                 items.append(
                     FoundryItem(p.kind, p.api_name, p.name, "held", p.reason,
+                                warnings=bound_warnings,
                                 detail=p.detail, carried_properties=p.carried)
                 )
                 continue
             if dry_run:
                 items.append(
                     FoundryItem(p.kind, p.api_name, p.name, "would_write",
+                                warnings=bound_warnings,
                                 detail=p.detail, carried_properties=p.carried)
                 )
                 continue
@@ -7068,7 +7076,7 @@ class Registry:
                 FoundryItem(
                     p.kind, p.api_name, p.name,
                     "refused" if refused else "written", refused,
-                    warnings=tuple(entry.warnings), detail=p.detail,
+                    warnings=tuple(entry.warnings) + bound_warnings, detail=p.detail,
                     carried_properties=p.carried,
                 )
             )
@@ -7106,11 +7114,28 @@ class Registry:
         explained by the plan. A dry run cannot predict a guard's refusal (2.5a).
         """
         by_api = {(p.kind, p.api_name): p for p in planned}
+        # **Row 8d, B5-1 and B5-2** (8C-RUN.md 2.5). A reference to an apiName the
+        # document does not define, while one it DOES define converts to the same word,
+        # was bound by the real run to that other row (the store holds it by then) and
+        # answered `not_in_document` by the dry run. R110 compares planned items only, so
+        # nothing held it and nothing said it. The reference is now resolved against
+        # that twin on both runs, so they agree, and reported. Reported, never held:
+        # holding the referencing item is a refusal, DECISIONS-OPEN item 36.
+        by_word: dict[tuple[str, str], object] = {}
+        for p in planned:
+            by_word.setdefault((p.kind, p.name), p)
         for p in planned:
             unresolved = []
+            bound = []
             for label, kind, api, word in p.refs:
                 target_kind = "predicate" if kind == "interface" else kind
                 target = by_api.get((target_kind, api))
+                if target is None and isinstance(word, str) and word:
+                    twin = by_word.get((target_kind, word))
+                    if twin is not None and twin.api_name != api:
+                        target = twin
+                        if twin.reason is None:
+                            bound.append({label: word, "api": api, "bound_to": twin.api_name})
                 if target_kind == "property" and isinstance(word, str) and word:
                     # **Row 8c round 2 (lens C, MAJOR 1).** A shared slot is resolved
                     # by rule 2.10-11's reader, so the report and the entity's own
@@ -7185,6 +7210,8 @@ class Registry:
                     unresolved.append({label: word, "why": why})
             if unresolved:
                 p.detail["unresolved"] = unresolved
+            if bound:
+                p.detail["bound_by_conversion"] = bound
 
     # ===================================================================== edges
     #

@@ -543,6 +543,12 @@ WARNING_VALUES = (
     # the reader answers the successor. Carries `<word>:<live claimant>` (`?` when the
     # walk was cut off at the cap). Warned, never refused: DECISIONS-OPEN item 35.
     "alias_word_succeeded",
+    # INTERFACE.md 2.5a, row 8d, B5-1 and B5-2. `FoundryItem`, on a dry run and a real
+    # run alike, from `import_foundry`: a reference naming an apiName the document does
+    # not define is bound to the planned item whose apiName converts to the same word.
+    # Carries `<label>:<absent apiName>:<twin apiName>`. Reported, never held:
+    # DECISIONS-OPEN item 36.
+    "reference_bound_by_conversion",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the
