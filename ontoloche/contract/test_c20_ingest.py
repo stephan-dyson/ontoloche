@@ -3822,3 +3822,59 @@ def test_c20_47_d1_a_number_that_is_also_a_mapping_is_judged_as_a_number(adapter
 
     assert _non_finite(FloatMap("nan"))
     assert _non_finite([FloatMap("nan")])
+
+
+# ------------------------------------- row 7d round 3 (7D-RUN 2.3)
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+def test_c20_70_d1_a_host_row_remembered_before_the_closure_grew_goes_to_the_gate(
+        adapter, make_registry):
+    """Rule **4-10** (7D-RUN 2.3, round 3 lens 2 #1). A host row remembered before the
+    closure CHANGED goes back to the gate, and the closure changes when its members do,
+    not only its effective name. The act lands a label `existing` on an `ltc_facility`
+    row; `facility`, whose table holds an exact twin, is then retired toward
+    `ltc_facility`. The effective entry is still `ltc_facility`, and the gate now sees two
+    rows at 1.0. The act's repeat is the gate's `ambiguous`, as a fresh act's is, never a
+    `reused` that hides the tie from every reviewer."""
+    label = _EAST
+    host_instances(adapter, [{"host_id": "OLD1", "label": label, "state": "AL"}],
+                   type_name="facility")
+    host_instances(adapter, [{"host_id": "NEW1", "label": label, "state": "AL"}],
+                   type_name="ltc_facility")
+    registry = make_registry(adapter)
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act = _act(registry, "act-r3a")
+    first = act.land(label, type_name="ltc_facility")
+    assert first.outcome == "existing", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    again = act.land(label, type_name="ltc_facility")
+    assert again.outcome != "reused", again
+    assert again.resolution is not None and again.resolution.outcome == "ambiguous", again
+
+
+@NEEDS_LEDGER
+def test_c20_70_d1_a_similar_reuse_says_when_its_row_could_not_be_read(adapter, make_registry):
+    """Rule **4-10**, ING16 (7D-RUN 2.3, round 3 lens 1 #1). When the read of whether a
+    remembered candidate's row still holds it cannot finish, the act's own answer stands
+    and the landing says the check could not be made, on the similar step as on the exact
+    key. Forced here by a ledger whose read of the act's own row never finishes."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    act = _act(registry, "act-r3b")
+    east = act.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+
+    def unfinished(page, kwargs):
+        return type(page)(**{**page.__dict__, "complete": False, "next_after": None,
+                             "why_incomplete": "the ledger read did not finish here"})
+
+    act._registry = make_registry(_LedgerDouble(adapter, unfinished))
+    west = act.land(_WEST, type_name="facility")
+    assert west.outcome == "reused" and west.candidate == east.candidate, west
+    assert "could not be read" in west.why, west.why
