@@ -42,6 +42,9 @@ REG = "ontoloche/registry.py"
 ING = "ontoloche/ingest.py"
 ADA = "ontoloche/adapter.py"
 SQL = "ontoloche/backends/_sql.py"
+ACT = "ontoloche/actions.py"
+C20S = "ontoloche/contract/test_c20_ingest.py"
+C19S = "ontoloche/contract/test_c19_actions.py"
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class Mutation:
     old: str
     new: str
     required: bool = False
+    suite: str = C20S  # row 7c: the C19 amendments' ids live in test_c19_actions.py
 
 
 MUTATIONS = (
@@ -498,6 +502,77 @@ MUTATIONS = (
              '        if condition is None:\n            warnings.append("no_tenancy_predicate")\n'
              "            survivors = list(one_copy)",
              "        if condition is None:\n            survivors = list(one_copy)"),
+    # ---- row 7c: every C19/C20 id it touched, each REQUIRED red (7C-RUN.md 0.8) ------
+    Mutation("ACTIONS 6-14 (A1) a candidate's resolution is checked", "c19_111", REG,
+             '("resolution", ref.resolution not in CANDIDATE_RESOLUTIONS),',
+             '("resolution", False),', required=True, suite=C19S),
+    Mutation("ACTIONS 3-9 (A2) results derive from the events", "c19_109", REG,
+             "                    out[name] = parse_ref(key)",
+             "                    pass", required=True, suite=C19S),
+    Mutation("ACTIONS 6-15 (A2) record_result refuses an undeclared input", "c19_114",
+             REG, "            if name not in carried:", "            if False:",
+             required=True, suite=C19S),
+    Mutation("ACTIONS 6-16 (A3) approval_mode raises the row", "c19_112", REG,
+             "            if rank[approval_mode] > rank.get(declared_mode, 0):",
+             "            if False:", required=True, suite=C19S),
+    Mutation("ACTIONS 6-17 (A4) a result releases a holder, review does not", "c19_113",
+             REG, "if built.compensated_by or matched in built.results:",
+             "if built.compensated_by:", required=True, suite=C19S),
+    Mutation("ACTIONS 3-10 (A5) the match policy is recorded", "c19_110", REG,
+             '            policy_of_record = {**policy_of_record, "match_policy": '
+             "match_policy_of_record}",
+             "            pass", required=True, suite=C19S),
+    Mutation("5-7 (A5) the invocation half of C20-41", "c20_41", REG,
+             '            policy_of_record = {**policy_of_record, "match_policy": '
+             "match_policy_of_record}",
+             "            pass", required=True),
+    Mutation("4-1 the act is memory, not a store", "c20_27", REG,
+             "    _memory: list = dataclasses.field(default_factory=list)",
+             "    _memory: list = dataclasses.field(default_factory=lambda _s=[]: _s)",
+             required=True),
+    Mutation("4-2 the family must declare host_state", "c20_28", REG,
+             '        elif not any(e.op == "host_state" for e in fam.effects):',
+             "        elif False:", required=True),
+    Mutation("4-3 the candidate is under the EFFECTIVE type", "c20_29", REG,
+             "        cand = res.candidate\n",
+             "        cand = (dataclasses.replace(res.candidate, type=dataclasses.replace("
+             "res.candidate.type, name=type_name)) if res.candidate else None)\n",
+             required=True),
+    Mutation("4-4 provenance is the gate's, unchanged", "c20_30", REG,
+             "            approved_by=judged.approved_by, confidence=confidence,",
+             "            approved_by=None, confidence=confidence,", required=True),
+    Mutation("4-5 an ambiguous proposal is recorded in review", "c20_31", REG,
+             '            approval_mode = "review"', "            approval_mode = None",
+             required=True),
+    Mutation("4-6 the review queue holds the ambiguous proposals", "c20_32", REG,
+             '            approval_mode = "review"', "            approval_mode = None",
+             required=True),
+    Mutation("4-7 not_an_instance proposes nothing", "c20_33", REG,
+             'if res.outcome in ("unknowable", "not_an_instance"):',
+             'if res.outcome == "unknowable":', required=True),
+    Mutation("4-8 the act refuses a predicate-proposing family", "c20_34", REG,
+             '        elif any(e.op == "propose_type" and e.kind == "predicate" '
+             "for e in fam.effects):",
+             "        elif False:", required=True),
+    Mutation("4-9 a candidate reads back as itself", "c20_69", ACT,
+             'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], '
+             'body["act_id"])',
+             'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], "")',
+             required=True),
+    Mutation("4-10 the recall uses the gate's relation", "c20_70", REG,
+             "                similar(want, norm(seen_label)) + _SCORE_EPS >= match_at",
+             "                want == norm(seen_label)", required=True),
+    Mutation("4-11 a holder makes the landing pending", "c20_71", REG,
+             "        holder = held.invocations[0].invocation_id if held.invocations else None",
+             "        holder = None", required=True),
+    Mutation("4-12 <n> is the finished read's known", "c20_72", REG,
+             'warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:{res.known}")',
+             'warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:'
+             '{res.scanned}")', required=True),
+    Mutation("4-13 the pending branch writes the memory", "c20_81", REG,
+             "        self._remember(effective, label, cand)                         # rule 4-13",
+             "        if holder is None:\n            self._remember(effective, label, cand)",
+             required=True),
 )
 
 
@@ -511,9 +586,9 @@ def _copy() -> Path:
     return where
 
 
-def _run(where: Path, test: str) -> tuple[str, str]:
+def _run(where: Path, test: str, suite: str = C20S) -> tuple[str, str]:
     done = subprocess.run(
-        [sys.executable, "-m", "pytest", "ontoloche/contract/test_c20_ingest.py", "-q",
+        [sys.executable, "-m", "pytest", suite, "-q",
          "-p", "no:cacheprovider", "-k", f"({test}) and not minimal and not postgres"],
         cwd=where, capture_output=True, text=True,
         env={**__import__("os").environ, "PYTHONPATH": str(where),
@@ -545,6 +620,13 @@ def main() -> int:
         print("the UNMUTATED copy is not green, so no red below would mean anything:\n")
         print(out[-3000:])
         return 2
+    c19_ids = " or ".join(sorted({m.test for m in chosen if m.suite == C19S}))
+    if c19_ids:
+        verdict, out = _run(base, c19_ids, C19S)
+        if verdict != "survived":
+            print("the UNMUTATED copy's C19 ids are not green:\n")
+            print(out[-3000:])
+            return 2
     print(f"baseline green in {base}")
 
     results = []
@@ -557,7 +639,7 @@ def main() -> int:
         where = _copy()
         target = where / m.file
         target.write_text(source.replace(m.old, m.new), encoding="utf-8")
-        verdict, out = _run(where, m.test)
+        verdict, out = _run(where, m.test, m.suite)
         results.append((m, verdict))
         if verdict == "broken":
             print(out[-1500:])

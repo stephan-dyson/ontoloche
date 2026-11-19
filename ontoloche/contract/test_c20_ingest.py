@@ -2490,13 +2490,20 @@ def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
     """Rule **4-12**. `<n>` is the resolution's `known` over a COMPLETE read, and an
     unfinished read never reaches the proposal door (rule 3-6): it lands `unknowable`
     and records nothing."""
-    registry = _world(adapter, make_registry)
+    # Padding rows nothing like BAND, so the read SCANS more rows than it KNOWS: an `<n>`
+    # taken from `scanned` (or any count but `known`) is then a different number.
+    padding = [{"host_id": f"pad{i}", "label": f"qqqq unrelated padding {i}", "state": "XX"}
+               for i in range(7)]
+    registry = _world(adapter, make_registry, rows=_rows() + padding)
     _ingest_family(registry)
     act_9 = _act(registry)
     landing = act_9.land(BAND, type_name="facility")
     res = landing.resolution
     assert res.outcome == "ambiguous" and res.complete
-    assert f"instance_ambiguous_at_proposal:instance:{res.known}" in landing.invocation.warnings
+    assert res.scanned > res.known, (res.scanned, res.known)
+    ambiguity = [w for w in landing.invocation.warnings
+                 if w.startswith("instance_ambiguous_at_proposal:")]
+    assert ambiguity == [f"instance_ambiguous_at_proposal:instance:{res.known}"], ambiguity
 
     dup = make_registry(adapter)
     host_instances(adapter, _rows() + _rows()[:1], type_name="dupes")
