@@ -3354,7 +3354,7 @@ def _d14_row(name, kind, attributes, *, status="active", aliases=("zip_code",)):
 
 # indexes_membership: without it `retire(successor=)` is refused `no_consumer_evidence`,
 # so no tombstone with a successor exists. Pinned for that backend below.
-@pytest.mark.requires_capability("indexes_membership")
+@pytest.mark.requires_capability("indexes_membership", "stores_aliases")
 @pytest.mark.parametrize("kind", D14_KINDS)
 def test_c12_78_an_alias_over_a_tombstone_with_a_live_successor_is_warned(registry, kind):
     """Row 8d, D14 (8B-RUN.md 2.5 finding 10, probe line D14). An import writing a
@@ -3417,6 +3417,19 @@ def test_c12_78_a_chain_is_walked_to_its_live_end(registry):
     assert not [w for w in again.warnings if w.startswith("alias_word_succeeded")], again.warnings
 
 
+@pytest.mark.requires_capability("indexes_membership")
+def test_c12_78_an_alias_the_backend_does_not_keep_is_not_warned(adapter, make_registry):
+    """Row 8d round 0 (the capability matrix, 8D-RUN.md 1.6): on `stores_aliases=False`
+    the alias is never stored, so no second claimant exists and the warning would state a
+    false fact (Rule U)."""
+    registry = make_registry(DegradedAdapter(adapter, stores_aliases=False))
+    _d14_store(registry, "entity", "c12_78_na")
+    entry = registry.import_types([_d14_row("post_code", "entity", None)],
+                                  namespace="c12_78_na")[0]
+    assert entry.aliases == (), entry
+    assert not [w for w in entry.warnings if w.startswith("alias_word_succeeded")], entry.warnings
+
+
 def test_c12_78_without_a_membership_index_no_successor_can_be_named(registry):
     """D14 on the third backend: with `indexes_membership=False` the retire that would
     build the tombstone is refused `no_consumer_evidence` (overridable only by a forced
@@ -3441,7 +3454,8 @@ def test_c12_78_the_predicate_version_is_refused_at_retire(registry):
     assert isinstance(out, Refusal) and out.reason == "predicate_merge", out
 
 
-@pytest.mark.requires_capability("indexes_membership")
+# stores_events: `reinstate` clears a retirement and is refused without an event trail.
+@pytest.mark.requires_capability("indexes_membership", "stores_aliases", "stores_events")
 @pytest.mark.parametrize("kind", D14_KINDS)
 def test_c12_79_reinstating_an_alias_over_a_tombstone_with_a_live_successor_is_warned(
     registry, kind
