@@ -376,4 +376,22 @@ Round 6 is the last round §0.9 allows. Lenses 2 and 3 found the same code MAJOR
 
 **A slip, caught after the commit.** To check that pin against the mutant by hand I edited the sync line, regenerated, and restored it, but then ran only `unasync.py --check` with its output thrown away, not the regeneration. `05857fc` therefore committed the mutant in `ontoloche/aio/registry.py` (`if eff == effective:`), and its message claimed 716 passed where the async pin failed. The next run showed 715 and 1 failed (`pending`, the mutant's answer) three times out of three. The following commit regenerates the mirror (one line), `unasync.py --check` reports current, and C19+C20 sync+aio gives 716 passed. The sweep and the five gates in `05857fc` ran on that stale mirror, and none of them reads it for this line, so §2.8 reruns the gates on the final code.
 
-**The review.** Recorded in §2.8 once it reports.
+**The review.** One fresh lens on `0d60c85..710e158`, recorded in §2.8.
+
+### §2.8 — The supervisor-authorised review of the post-cap fix, and the final runs
+
+**This row lands NOT CLEAN.** The one lens the supervisor authorised on `0d60c85..710e158` found an in-scope reachable MAJOR, and the ruling was to land with it recorded, not to fix it. The last code any lens saw is `710e158`, the final code. No code changed after it.
+
+| # | severity | finding | outcome |
+|---|---|---|---|
+| 1 | MAJOR | Rule 4-10's similar-candidate step reuses a candidate this act landed `pending`. Over the CMS triple: another act proposes `EAST`; this act lands `WEST` `pending` (EAST's row holds it); the gate answers `WESTON` `proposal`; the act lands `WESTON` `reused` onto WEST's candidate with no row of its own, while a fresh act proposes it. `EAST` ~ `WESTON` is 0.944, below `match_at`, so WESTON is folded into EAST's identity and no reviewer sees it. Present at `0d60c85` and carried unchanged by the fix | **open**, recorded as `INGEST.md` ING15. Not tried: reuse only a candidate the act itself proposed |
+| 2 | MINOR | The `reused` why says "this act already proposed this identity" when the candidate came from a `pending` landing | open, with ING15 |
+| 3 | MINOR | `_similar_candidate`'s `isinstance(answer, CandidateRef)` filter has no test and no mutation. Without it, under a `propose_below` of 0.96, a remembered `existing` ref overrides the gate's `proposal` (observed by the lens; not reachable under the suite's `POLICY`) | open |
+
+The lens also checked, and found clean: the mirror is current, C19+C20 sync+aio is 716 passed on a clean archive of `710e158`, every 4-10 sweep target occurs once and has the regression's shape, and rule 3-18 is not bypassed on the proposal path (the gate answers `unknowable` first).
+
+**Probe on `710e158`** (`probe_710e158.log`): **18 of 18, exit 0.** Every value matches `b61d641` except Q92's 3,346-row split, now 1,029 `proposed`, 2,310 `reused` and 7 `pending` (69.0% reused, against 1,031, 2,315 and 0, 69.2%). The 7 are labels only within `match_at` of earlier ones, which now go to the gate and are held by A4 instead of being recalled. That is the fix's stated cost, and Q92's 60% floor holds.
+
+**Full suite on `710e158`, three legs:** **3,352 passed, 988 skipped, 0 failed** (sqlite, minimal, postgres on `oo-pg` at port 55432), in 19m47s (`full_suite_710e158.log`).
+
+**Gates on the final docs:** all five exit 0 at the commit that records this section: `check_links`, `check_spec_drift`, `check_merge_guard`, `check_capability_matrix` and `check_skip_census`.
