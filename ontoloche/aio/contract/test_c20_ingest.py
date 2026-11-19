@@ -3369,3 +3369,32 @@ async def test_c20_71_d1_a4_reads_past_the_first_page(adapter, make_registry):
     held = await registry.invocations(unwritten_for=cand, limit=1)
     assert held.complete and [i.invocation_id for i in held.invocations] == [
         holder.invocation_id], held
+
+def test_c20_47_d1_a_freed_container_never_hides_a_later_one(adapter):
+    """Rule **6-6** (7D-RUN 2.1, round 1 lens 1 #3 and lens 2 #5). The walk remembers a
+    finished container by `id()`, so it keeps that container alive: a mapping that builds
+    its values fresh on each read frees the first one, and CPython hands its id to the
+    next, whose NaN was skipped. And the end-of-members sentinel is the walk's own, so an
+    operand carrying the module's container tuple is walked past it."""
+    from collections.abc import Mapping
+
+    from ontoloche.ingest import _CONTAINERS, _non_finite
+
+    class Fresh(Mapping):
+        def __init__(self, x):
+            self.x = x
+
+        def __getitem__(self, key):
+            return [self.x]
+
+        def __iter__(self):
+            return iter(("k",))
+
+        def __len__(self):
+            return 1
+
+    nan = float("nan")
+    assert _non_finite([Fresh(nan)])
+    for n in range(1, 40):      # CPython hands a freed id on; some n meets it
+        assert _non_finite([Fresh(1.0) for _ in range(n)] + [Fresh(nan)]), n
+    assert _non_finite([_CONTAINERS, nan])
