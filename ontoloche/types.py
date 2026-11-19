@@ -537,6 +537,20 @@ WARNING_VALUES = (
     # Rule 4-11: a proposal for an identity whose earlier proposal's row is unwritten.
     # Carries the holder's `<invocation_id>`.
     "instance_proposal_pending",
+    # INTERFACE.md 5.4, row 8d, D14. `TypeEntry`, from `import_types` and `reinstate`, and
+    # `MergeResult`, from `merge_types` with a retired `from_`,
+    # when a live row carries as an alias the NAME of a retired same-kind row whose
+    # successor walk ends at another live row: the word now has two live claimants and
+    # the reader answers the successor. Carries `<word>:<live claimant>` (`?` when the
+    # walk was cut off at the cap; `?:<name>` when a reinstate or merge could not finish
+    # its scan of live rows). Warned, never refused: DECISIONS-OPEN item 35.
+    "alias_word_succeeded",
+    # INTERFACE.md 2.5a, row 8d, B5-1 and B5-2. `FoundryItem`, on a dry run and a real
+    # run alike, from `import_foundry`: a reference naming an apiName the document does
+    # not define is bound to the planned item whose apiName converts to the same word.
+    # Carries `<label>:<absent apiName>:<twin apiName>`. Reported, never held:
+    # DECISIONS-OPEN item 36.
+    "reference_bound_by_conversion",
 )
 
 # INTERFACE.md 5.3 -- a near miss and its score. The score is ``None`` when the

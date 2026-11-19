@@ -52,6 +52,10 @@ RESERVED = {
     "D12 postal_code now": "{'base_type': 'int'}",
     "D13 retire a referenced value set": "retired",
     "D13 warnings": "()",
+    # D14 (row 8d): warned, and the default in force pinned (DECISIONS-OPEN item 35).
+    "D14 alias import over a tombstone with successor": "('alias_word_succeeded:zip_code:postal_code',)",
+    "D14 live alias holders of zip_code": "['post_code']",
+    "D14 reinstate zip_code": "successor_active",
     # 2.10-18: collapsing two entities whose declarations contradict.
     "D11 retire(survey, successor=citation)": "retired",
     "D11 warnings": "()",

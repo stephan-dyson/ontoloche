@@ -5273,6 +5273,15 @@ class Registry:
                     "successor": successor,
                 },
             )
+        # Row 8d, D14's second door: a row coming back to life with an alias whose
+        # word a tombstone's live successor also answers to. Warned, never refused
+        # (DECISIONS-OPEN item 35).
+        alias_warnings.extend(
+            self._succeeded_alias_warnings(namespace, rec.kind, rec.name, dormant)
+        )
+        # Round 1, door lens: the reinstated row may be the live END of a tombstone's
+        # chain whose name another live row holds as an alias. The third door.
+        alias_warnings.extend(self._reinstated_end_warnings(namespace, rec.kind, rec.name))
         return self._written(self._entry(stored, extra_warnings=tuple(alias_warnings)))
 
     def _active_page(self, namespace: str) -> tuple[list, str | None]:
@@ -6166,6 +6175,23 @@ class Registry:
                     "aliases_added": [left.name],
                 },
             )
+        # Row 8d round 2 (door lens, MAJOR 1): a retired `from_` was a chain's dead end,
+        # and now hands its word on to `into`, so `into` may have become the live end of a
+        # chain whose first word another live row holds as an alias. The fourth door.
+        # Round 3 (implementer lens, MAJOR 1): `into` may itself be retired with a live
+        # successor, so the claimant is wherever the chain through `from_` now ends live.
+        if left.status == "retired" and target_ns == namespace:
+            end = self._succession_claimant(namespace, right.kind, left.name)
+            if end is not None and end != "?":
+                merge_warnings.extend(self._reinstated_end_warnings(namespace, right.kind, end))
+            # Round 3 (door lens, MAJOR 1): a retired `from_`'s aliases were dormant, and
+            # the merge makes them live on `into`. The fifth door.
+            if right.status != "retired" and self.caps.stores_aliases:
+                merge_warnings.extend(
+                    self._succeeded_alias_warnings(
+                        namespace, right.kind, right.name, left.aliases or ()
+                    )
+                )
         return MergeResult(
             from_=from_,
             into=into,
@@ -6894,6 +6920,21 @@ class Registry:
                     # report the same partial page, and a fact said twice is the
                     # `_merged_marker` defect one call along (row 4d, round 2).
                     + tuple(dict.fromkeys(extra_import_warnings))
+                    # Row 8d, D14: an alias whose word a tombstone's live successor
+                    # also answers to. Only on a row written live: a retired row is
+                    # not a claimant until `reinstate`, which asks the same question.
+                    + (
+                        tuple(
+                            self._succeeded_alias_warnings(
+                                namespace, row.get("kind", kind), name,
+                                tuple(row.get("aliases") or ()),
+                            )
+                        )
+                        # A backend that keeps no aliases writes none, so no second
+                        # claimant exists and the warning would be false (Rule U).
+                        if status != "retired" and self.caps.stores_aliases
+                        else ()
+                    )
                 ),
                 retire_reason=retire_reason,
                 retired_by=imported_by if status == "retired" else None,
@@ -7031,15 +7072,23 @@ class Registry:
 
         items: list[FoundryItem] = []
         for p in planned:
+            # Row 8d (B5): said on the item on both runs, from the plan.
+            bound_warnings = tuple(
+                f"reference_bound_by_conversion:{label}:{b['api']}:{b['bound_to']}"
+                for b in p.detail.get("bound_by_conversion", ())
+                for label in b if label not in ("api", "bound_to")
+            )
             if p.reason is not None:
                 items.append(
                     FoundryItem(p.kind, p.api_name, p.name, "held", p.reason,
+                                warnings=bound_warnings,
                                 detail=p.detail, carried_properties=p.carried)
                 )
                 continue
             if dry_run:
                 items.append(
                     FoundryItem(p.kind, p.api_name, p.name, "would_write",
+                                warnings=bound_warnings,
                                 detail=p.detail, carried_properties=p.carried)
                 )
                 continue
@@ -7049,7 +7098,7 @@ class Registry:
                 FoundryItem(
                     p.kind, p.api_name, p.name,
                     "refused" if refused else "written", refused,
-                    warnings=tuple(entry.warnings), detail=p.detail,
+                    warnings=tuple(entry.warnings) + bound_warnings, detail=p.detail,
                     carried_properties=p.carried,
                 )
             )
@@ -7087,11 +7136,28 @@ class Registry:
         explained by the plan. A dry run cannot predict a guard's refusal (2.5a).
         """
         by_api = {(p.kind, p.api_name): p for p in planned}
+        # **Row 8d, B5-1 and B5-2** (8C-RUN.md 2.5). A reference to an apiName the
+        # document does not define, while one it DOES define converts to the same word,
+        # was bound by the real run to that other row (the store holds it by then) and
+        # answered `not_in_document` by the dry run. R110 compares planned items only, so
+        # nothing held it and nothing said it. The reference is now resolved against
+        # that twin on both runs, so they agree, and reported. Reported, never held:
+        # holding the referencing item is a refusal, DECISIONS-OPEN item 36.
+        by_word: dict[tuple[str, str], object] = {}
+        for p in planned:
+            by_word.setdefault((p.kind, p.name), p)
         for p in planned:
             unresolved = []
+            bound = []
             for label, kind, api, word in p.refs:
                 target_kind = "predicate" if kind == "interface" else kind
                 target = by_api.get((target_kind, api))
+                if target is None and isinstance(word, str) and word:
+                    twin = by_word.get((target_kind, word))
+                    if twin is not None and twin.api_name != api:
+                        target = twin
+                        if twin.reason is None:
+                            bound.append(({label: word, "api": api, "bound_to": twin.api_name}, twin))
                 if target_kind == "property" and isinstance(word, str) and word:
                     # **Row 8c round 2 (lens C, MAJOR 1).** A shared slot is resolved
                     # by rule 2.10-11's reader, so the report and the entity's own
@@ -7165,7 +7231,24 @@ class Registry:
                 if why is not None:
                     unresolved.append({label: word, "why": why})
             if unresolved:
-                p.detail["unresolved"] = unresolved
+                # Row 8d, C5-4: two shared property types mapped onto one property
+                # give two refs to one slot's word, and listed it twice. Once, in order.
+                p.detail["unresolved"] = [
+                    dict(pairs) for pairs in dict.fromkeys(tuple(u.items()) for u in unresolved)
+                ]
+            # Rounds 1 and 2 (implementer lens): a twin written retired (DEPRECATED) or
+            # refused by the real run was never live, so nothing was bound to it. Asked of
+            # the twin itself: round 1 asked whether the reference read unresolved, and on
+            # the shared-property path a reader that redirects the slot never does.
+            bound = [
+                b for b, twin in bound
+                if str(twin.row.get("status") or "").upper() != "DEPRECATED"
+                and not (
+                    id(twin) in results and _import_refusal(results[id(twin)].warnings)
+                )
+            ]
+            if bound:
+                p.detail["bound_by_conversion"] = bound
 
     # ===================================================================== edges
     #
@@ -9859,6 +9942,85 @@ class Registry:
                 return False
             current = getattr(nxt, "successor", None)
         return False
+
+    def _succeeded_alias_warnings(
+        self, namespace: str, kind: str, name: str, aliases: Sequence[str]
+    ) -> list[str]:
+        """``alias_word_succeeded:<word>:<live claimant>`` for each alias that would
+        give its word a second live claimant. Row 8d, D14 (8D-RUN.md 0.2).
+
+        An alias may be the NAME of a retired row (``C12-09``'s succession, which
+        ``_retired_holder`` deliberately does not refuse). When that tombstone has a
+        successor whose walk ends at a LIVE row, the reader (``resolve_type``, rule
+        2.10-11) answers the successor while this row answers to the word too: two live
+        claimants, same kind, one word. **Warned, never refused**: whether to refuse the
+        write or change which claimant the reader answers is the founder's
+        (DECISIONS-OPEN item 35), and the default in force is to write it.
+
+        The walk is the reader's: same kind and namespace, ``_IDENTITY_CHAIN_CAP`` hops,
+        cycle-guarded. A dead end, or a walk ending at ``name`` itself, is one claimant.
+        A walk cut off by the cap is warned with ``?`` (Rule U: we could not finish).
+        """
+        found: list[str] = []
+        for word in dict.fromkeys(a for a in aliases if a):
+            claimant = self._succession_claimant(namespace, kind, word)
+            if claimant is not None and claimant != name:
+                found.append(f"alias_word_succeeded:{word}:{claimant}")
+        return found
+
+    def _succession_claimant(self, namespace: str, kind: str, word: str) -> str | None:
+        """The live row a tombstone named ``word`` hands its word to, walked as the
+        reader walks it, or ``None`` (no tombstone, no successor, or a dead end), or
+        ``"?"`` when the walk is cut off by the cap. Row 8d, D14.
+
+        The reader (``resolve_type``) takes the first hop and up to
+        ``_IDENTITY_CHAIN_CAP`` more, so this walk takes the same (round 1, implementer
+        lens MINOR 3: it had stopped one hop short and said ``?`` where the reader
+        finished)."""
+        tomb = None
+        for spelling in self._word_spellings(word):
+            rec = self.adapter.get_type(namespace, spelling, kind=kind)
+            if rec is not None:
+                tomb = rec
+                break
+        if tomb is None or tomb.status != "retired" or not getattr(tomb, "successor", None):
+            return None
+        live = tomb
+        walked = {tomb.name}
+        hops = 0
+        while True:
+            nxt = getattr(live, "successor", None)
+            if not nxt or nxt in walked:
+                return None
+            if hops > _IDENTITY_CHAIN_CAP:
+                return "?"
+            walked.add(nxt)
+            hops += 1
+            live = self.adapter.get_type(namespace, nxt, kind=kind)
+            if live is None:
+                return None
+            if live.status != "retired":
+                return live.name
+
+    def _reinstated_end_warnings(self, namespace: str, kind: str, name: str) -> list[str]:
+        """``alias_word_succeeded:<word>:<name>`` for each word a LIVE row holds as an
+        alias whose tombstone's walk now ends at ``name``, just reinstated. Row 8d round 1
+        (door lens, MAJOR 1): a dead-end chain is one claimant, so the alias was written
+        unwarned, and reinstating the end made the reader answer it again with nothing
+        said. A scan that could not finish is warned ``?:<name>`` (Rule U)."""
+        if not self.caps.stores_aliases:
+            return []
+        records, why = self._active_page(namespace)
+        found: list[str] = []
+        for other in records:
+            if other.kind != kind or other.name == name:
+                continue
+            for word in other.aliases or ():
+                if self._succession_claimant(namespace, kind, word) == name:
+                    found.append(f"alias_word_succeeded:{word}:{name}")
+        if why is not None:
+            found.append(f"alias_word_succeeded:?:{name}")
+        return list(dict.fromkeys(found))
 
     def _retired_holder(
         self,

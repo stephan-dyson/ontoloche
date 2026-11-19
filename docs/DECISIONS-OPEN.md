@@ -4,7 +4,7 @@
 
 > This file is the GitHub-readable mirror of the founder decision page, so it can be read from a phone or any machine without the local HTML. The local page is `C:\Users\steph\.claude\fleet-supervisor\decisions\2026-09-09-ontoloche-decisions.html`; where the two disagree, this file is the one that was checked most recently.
 
-**14 open · 16 ruled · 7 FYI** *(2026-11-18: items 32 to 34 added, Q110 to Q112, three refusal questions row 7c's adversarial review found; all non-blocking, the current behaviour is the default in force. 2026-11-18: item 31 added, Q108, a refusal question row 7b's review found; non-blocking, the current behaviour is the default in force. 2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
+**16 open · 16 ruled · 7 FYI** *(2026-11-19: items 35 and 36 added by row 8d, Q113 and Q114, two refusal questions on the type surface; both non-blocking, the current behaviour is the default in force and is now warned. 2026-11-18: items 32 to 34 added, Q110 to Q112, three refusal questions row 7c's adversarial review found; all non-blocking, the current behaviour is the default in force. 2026-11-18: item 31 added, Q108, a refusal question row 7b's review found; non-blocking, the current behaviour is the default in force. 2026-11-18: items 28 to 30 added, the three refusal questions in `INGEST.md` §11 that were never carried here. None blocks row 7b, which builds the spec's default for each. 2026-11-17: item 23 ruled `fold into the build row`, R111, row 8c opens. 2026-11-16: row 8a merged into main with row 8b's items; item 27 ruled `fix and land`; from now on only refusal rulings come here. 2026-11-15: item 27 added, row 8a round 6 found one MAJOR. 2026-11-15: item 26 ruled `round 6`. 2026-11-13: item 26 added, row 8a stopped at the review cap. 2026-11-12: items 19 to 23 added by row 8b, Q103 to Q107, none blocking. Item 23 asks whether row 8b's open round-5 findings get a fix pass. 2026-11-12: item 25 added, open, row 8a round 4. 2026-11-12: item 24 added and ruled, R109–R110, row 8a. 2026-09-22: item 18 added and ruled `adopt B`, recorded as R108. R105–R107 ruled in session and recorded at [`2026-09-22-founder-rulings-R105-R107.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/decisions/2026-09-22-founder-rulings-R105-R107.md). The local HTML page was not regenerated for this change.)*
 
 **2026-09-09: you ruled all three open items in one pass, including the oldest and largest question in the project.** Q56 is closed after ten days and twenty-three kill-row trips; the governance stop criterion is armed and has fired; and the namespace item turned out to name something that does not exist. Details in section E.
 
@@ -12,7 +12,35 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 
 ---
 
-## A. Decide when you want to — 14 items
+## A. Decide when you want to — 16 items
+
+### 35 · `Q113` — should an alias write that gives a word a second live claimant be refused?
+
+*New 2026-11-19, row 8d, defect D14 ([`8D-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8D-RUN.md), first found by row 8b's round 4).*
+
+**TL;DR.** After `retire("zip_code", successor="postal_code")`, an import of `post_code` with `aliases: ["zip_code"]` is written. **[Observed]** `zip_code` then has two live claimants for every kind but `predicate`, on every backend that indexes membership (without it the retire is refused): `postal_code` down the successor chain, which `resolve_type` answers (at 1.0 for entity, property and value_set rows; an action row's resolution carries no confidence), and `post_code` as an alias. `reinstate("zip_code")` is refused `successor_active`. The same state is reached by importing the alias on a `deprecated` row and reinstating it, by reinstating the retired end of a chain whose first word a live row already holds as an alias, and by `merge_types` with a retired `from_`, which can extend such a chain to a live row or move the retired row's dormant aliases onto one. Row 8d now **warns** it at all five doors (`alias_word_succeeded:<word>:<the live row the reader answers>`). The predicate version cannot arise, because a predicate's `retire(successor=)` is refused `predicate_merge`, so this never reaches the kill row.
+
+**Why it is yours.** Refusing the write, or changing which claimant a reader answers, decides what the registry refuses or holds.
+
+- **`warn`** — today, as row 8d built it: the alias is written and warned, the reader answers the successor.
+- **`refuse`** — `import_types` refuses the row `import_refused:word_held_by_successor` and `reinstate` refuses the same way, with a path back (*name the successor as the alias holder, or retire the successor first*). This is how the registry already treats a tombstone's **aliases** (`word_held_by_tombstone`, the kill row's sixteenth trip). The cost: a Foundry dump that lists a deprecated name as an alias of a new type is refused that row until someone acts.
+- **`answer the alias holder`** — keep writing it, and make the reader answer the row that took the word as an alias instead of the successor. This changes what a word already in use resolves to, silently for every caller who has not re-read.
+
+**Ask: `warn`, `refuse`, or `answer the alias holder`.** **Recommendation: `refuse`**, because two live answers to one word is exactly what this registry exists to stop, and the registry already refuses the sibling case. Default in force: `warn`. Non-blocking: pinned by `C12-78`, `C12-79` and the probe.
+
+### 36 · `Q114` — should a Foundry import hold a type whose reference converts onto a different type?
+
+*New 2026-11-19, row 8d, B5-1 and B5-2 ([`8C-RUN.md`](https://github.com/stephan-dyson/ontoloche/blob/main/docs/runs/8C-RUN.md) §2.5).*
+
+**TL;DR.** A Foundry type can point at an apiName the document never defines (Palantir's own `faux_employee` maps the absent `fooSpt` onto `Employee.fullName`). If the document also defines a different apiName that converts to the same word (a hand-added `FooSpt`), the import binds the reference to that other row. **[Observed before row 8d]** the real run did it silently and the dry run said `not_in_document`. Row 8d makes both runs agree and **report** it: the item carries `reference_bound_by_conversion:shared:fooSpt:FooSpt`. Your R110 holds two *defined* twins; nothing holds this case.
+
+**Why it is yours.** Holding the referencing type would be a new hold at the import.
+
+- **`report`** — today, as row 8d built it: bound and warned, on the dry run and the real run.
+- **`hold`** — hold the referencing item `reference_converts_to_other`, liftable with `names=` or by fixing the document, the way R110 holds a collision.
+
+**Ask: `report` or `hold`.** **Recommendation: `report`.** Only one row exists, the binding is very likely the one the author meant (a case slip), the dry run now says so before anything is written, and holding would stop an import that today lands. Default in force: `report`. Non-blocking: pinned by `C12-80`.
+
 
 ### 28 · `Q87` — should the ingest loop refuse to propose when no consumer is registered for the namespace?
 
@@ -266,7 +294,7 @@ One new item is below, and it exists because ruling item 4 uncovered it rather t
 - **`fold into the build row`** — leave §2.10 as it is and make the 14 findings the properties build row's first task, reviewed with its code.
 - **`leave`** — accept §2.10 as landed. A build row will meet these gaps and decide them itself.
 
-**Also carried here, unrouted:** a defect older than row 8b, found by its round 4 and reproduced (probe line D14). After `retire(word, successor=X)`, importing another entry with that word as an alias is written silently, so one word has two live claimants, for every kind, and the retired word can no longer be reinstated. It does not reach the kill row (the predicate version is refused). No row carries it yet.
+**Also carried here, routed by row 8d to item 35:** a defect older than row 8b, found by its round 4 and reproduced (probe line D14). After `retire(word, successor=X)`, importing another entry with that word as an alias is written silently, so one word has two live claimants, for every kind, and the retired word can no longer be reinstated. It does not reach the kill row (the predicate version is refused). *Carried by row 8d (2026-11-19): warned, and the refusal question is item 35.*
 
 ### 27 · Row 8a round 6 found one MAJOR. Fix it and land, or land as is? → **RULED: `fix and land`** *(2026-11-16)*
 
