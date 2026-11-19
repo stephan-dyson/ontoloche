@@ -560,8 +560,8 @@ MUTATIONS = (
              'return CandidateRef(TypeRef(*parts), body["label"], body["resolution"], "")',
              required=True),
     Mutation("4-10 the recall uses the gate's relation", "c20_70", REG,
-             "                similar(want, norm(seen_label)) >= match_at",
-             "                want == norm(seen_label)", required=True),
+             "            if kind != \"entity\" or similar(want, norm(seen_label)) < match_at:",
+             "            if kind != \"entity\" or want != norm(seen_label):", required=True),
     Mutation("4-11 a holder makes the landing pending", "c20_71", REG,
              "        holder = held.invocations[0].invocation_id if held.invocations else None",
              "        holder = None", required=True),
@@ -637,6 +637,26 @@ MUTATIONS = (
              "            self._remember(effective, label, cand)\n"
              "            refusal = judged.refusal\n            return IngestLanding(",
              required=True),
+    # ---- row 7c, adversarial round 4
+    Mutation("4-10 the recall reads each memory entry's closure now", "c20_70", REG,
+             "            if now[eff] == effective:",
+             "            if eff == effective:", required=True),
+    Mutation("4-11 a pending row is exempt only when EACH own candidate is held", "c20_71",
+             REG,
+             "                if not own_held:\n                    exempt = False\n"
+             "                    break\n            if not exempt:",
+             "                if own_held:\n                    break\n            else:\n"
+             "                exempt = False\n            if not exempt:", required=True),
+    Mutation("4-11 every matching candidate of a pending row is its own", "c20_71", REG,
+             "                    mine.append(other)",
+             "                    mine.append(other) if not mine else None", required=True),
+    Mutation("4-13 an `existing` landing binds the identity", "c20_81", REG,
+             "            self._remember(effective, label, res.ref)                  # rule 4-13, B7",
+             "            pass", required=True),
+    Mutation("4-8 the landing judges predicate-proposing effects", "c20_28", REG,
+             "        problem = _ingest_effects_problem(judged.declared_effects)   # rules 4-2, 4-8",
+             "        problem = _ingest_effects_problem([e for e in judged.declared_effects "
+             "if e.op != \"propose_type\"])", required=True),
     Mutation("4-10 a foreign act_id is refused before the recall", "c20_70", REG,
              "        if context is not None and context.act_id != self.act_id:",
              "        if False:", required=True),

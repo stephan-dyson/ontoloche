@@ -2629,7 +2629,7 @@ async def test_c20_71_r3_every_candidate_input_of_a_row_is_judged(adapter, make_
 async def test_c20_28_r3_a_family_amended_after_the_act_began_is_judged_at_the_landing(
     adapter, make_registry
 ):
-    """Rules **4-2** and **4-8** (round 3, lens 2, m1). The act checks its family when it
+    """Rule **4-2** (round 3, lens 2, m1; rule 4-8 at the landing is `C20-28` r4). The act checks its family when it
     is created, and a family can be amended after that (`declaration_amended`). A landing
     under a family that no longer says the host writes the row is refused, as a fresh
     `ingest_act` would be, and records nothing."""
@@ -2799,7 +2799,8 @@ async def test_c20_71_r4_a_pending_row_is_exempt_only_when_each_candidate_is_hel
     assert not isinstance(pair, Refusal), pair
     reader = (await _resolve(registry, _PAIR_BASE)).candidate
     ids = [i.invocation_id for i in (await registry.invocations(unwritten_for=reader)).invocations]
-    assert ids == [hid, pair.invocation_id], ids
+    # Rows recorded in the same instant order on their random ids, so compare as a set.
+    assert sorted(ids) == sorted([hid, pair.invocation_id]), ids
     await registry.record_result(hid, {"instance": InstanceRef(cx.type, "995301")}, actor="host:cms")
     act_v = await _act(registry, "act-r4v")
     landing = await act_v.land("qz" + _PAIR_BASE, type_name="facility")

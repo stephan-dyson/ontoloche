@@ -246,10 +246,17 @@ class AsyncIngestAct:
             return effective, None
         match_at = match_policy_from_mapping(policy_raw).match_at
         want = norm(label)
+        now: dict[str, Any] = {}
         for kind, eff, seen_label, answer in self._memory:
-            if kind == "entity" and eff == effective and (
-                similar(want, norm(seen_label)) >= match_at
-            ):
+            if kind != "entity" or similar(want, norm(seen_label)) < match_at:
+                continue
+            # The entry's OWN closure, read now: a retire between two landings of one
+            # act moves `facility` onto `ltc_facility`, and the stored name alone would
+            # miss it (round 4, lens 2, m1). An unfinished closure recalls nothing.
+            if eff not in now:
+                theirs = await registry._instance_closure(self.namespace, eff)
+                now[eff] = theirs["effective"] if theirs["complete"] else None
+            if now[eff] == effective:
                 return effective, answer
         return effective, None
 

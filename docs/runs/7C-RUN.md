@@ -205,7 +205,8 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 ### §1.2 — The build against §0.2
 
-- **Hits:** items 1 to 12 are built as stated, apart from the deviations below. The two warnings were minted as 50 and 51 in `37bd05c`, and no refusal reason was minted.
+- **Hits:** items 1 to 12 are built as stated, apart from the deviations below. No refusal reason was minted.
+- **Deviation, item 12.** §0.2 item 12 said the two warnings are minted in the commit whose code first emits them. They were minted as 50 and 51 in `37bd05c` (A3), where `record_invocation` first *accepts* them. The code that emits them is the act, `37363e5`.
 - **Deviation, rule numbers.** §0.2 item 13 bound 6-15 to `C19-112`, 6-16 to `C19-113` and 6-17 to `C19-114`. `ACTIONS.md` shipped them in landing order instead: 6-15 is `record_result` (`C19-114`), 6-16 is A3 (`C19-112`) and 6-17 is A4 (`C19-113`). The drift checker requires consecutive numbers in the order the rules land, and A2's writer landed first. The rows' content is §0's.
 - **Deviation, the act's shape.** `IngestAct` is a module-level dataclass placed before `Registry`, not a nested helper. That keeps `Registry.__init__` the only `__init__`, which `tools/unasync.py`'s pre-substitution must match exactly once. It is mirrored by extending unasync's `extract` and `RENAMES`, not by hand.
 - **Deviation, tests.** The tests' chained `_act(...).land(...)` became two statements, because unasync awaited the chain as `await await`.
@@ -214,7 +215,7 @@ Every number below is from a command this row ran, and each is **[Observed]** un
 
 ### §1.3 — Census
 
-- **Miss: §0.2 item 13's "562 ids" was an arithmetic slip.** 556 plus six `C19` ids is 562, but the thirteen §4 `C20` ids were planned ids already counted as absent, so the total is 556 + 6 + 13 = **575**. `test_manifest.py`, `PACKAGE.md` §6.2 and `check_spec_drift.py` all say 575, with `C19` at 114, `C20` at 90 and `PLANNED_IDS` empty (`1b3051c`).
+- **Miss: §0.2 item 13's "562 ids" was an arithmetic slip.** 556 plus six `C19` ids is 562, but the thirteen §4 `C20` ids were planned ids already counted as absent, so the total is 556 + 6 + 13 = **575**. `test_manifest.py` and `PACKAGE.md` §6.2 both say 575, with `C19` at 114, `C20` at 90 and `PLANNED_IDS` empty (`1b3051c`). `check_spec_drift.py` reads the manifest and reports every rule in `INGEST.md` §1 to §7 claimed and no section planned.
 
 ### §1.4 — Design tests (§0.4), from `docs/tools/ingest_write_probe.py`, 18 of 18
 
@@ -240,17 +241,17 @@ Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rer
 
 ### §1.6 — Mutation sweep
 
-`docs/tools/ingest_mutation_sweep.py` at `8247df4`: **173 mutations, 172 killed, 0 required survivors, 0 not applied.** Every row-7c `C19` and `C20` id has at least one required mutation of its own. The one survivor is not required: `<n>` counted on rounded rather than unrounded scores, which no fixture can tell apart because none sits on a rounding edge. Four misses happened along the way, all recorded:
+`docs/tools/ingest_mutation_sweep.py` at the round 4 fix: **178 mutations, 177 killed, 0 required survivors, 0 not applied** (`sweep_r4.log`; at `8247df4` it was 173 and 172). Every row-7c `C19` and `C20` id has at least one required mutation of its own. The one survivor is not required: `<n>` counted on rounded rather than unrounded scores, which no fixture can tell apart because none sits on a rounding edge. Four misses happened along the way, all recorded:
 
 - **First run: one survivor, `C20-72`.** In the five-row fixture `scanned == known`, so `{res.known}` → `{res.scanned}` passed. The test was padded with seven unrelated rows and asserts `scanned > known`, and the rerun killed the mutant.
 - **Round 2: two mutations never ran, and the summary still said 0 required survivors.** My round 2 edits had rewritten the C19-113 target and duplicated the 3-17 target. My shell wrapper's `echo exit=$?` also hid the sweep's exit 1. Both were retargeted, and the sweep's own exit code is now logged.
-- **Round 3: two mutations (4-2, 4-8) pointed at code the fix had moved.** A preflight that counts every target before the run caught them.
+- **Rounds 3 and 4: three mutations pointed at code a fix had moved** (4-2 and 4-8 in round 3, the recall's relation in round 4). A preflight that counts every target before the run caught them.
 - **`c20_69` kills only a strawman.** It drops `act_id` in `parse_ref`, which any round-trip test kills. Rule 4-9's "no `id`" assertion is never reached by a mutation. Recorded, not fixed.
 
 ### §1.7 — Suite and gates
 
 - **Full suite, three legs** (sqlite, minimal, postgres on `oo-pg` at port 55432): 3,228 passed, 926 skipped, 0 failed at `25cce19`, in 21m34s. Two later runs were stopped on purpose, because the code changed under them (`30b512d` at 49%, `b61d641` when round 3's tests landed). The run on the final code is in §2.5.
-- **Gates at `8247df4`:** all five exit 0: `check_links`, `check_spec_drift` (all 90 `C20` ids built, §4 in `R31_INGEST_SECTIONS`), `check_merge_guard`, `check_capability_matrix` and `check_skip_census`.
+- **Gates at `8247df4`:** all five exit 0: `check_links`, `check_spec_drift` (every `INGEST.md` rule claimed, no section planned; the 90 `C20` ids are the manifest's count), `check_merge_guard`, `check_capability_matrix` and `check_skip_census`.
 - **One miss on the way.** `check_capability_matrix` failed the `indexes_membership=False` cell once, on round 1's I-7 pin, because its successor world needs `retire`. The test took `NEEDS_RETIRE`, like every other successor-world test (`30b512d`).
 
 ### §1.8 — Kill row (§0.7)
@@ -265,7 +266,7 @@ Run at `b61d641` (`probe_r2.log`). Round 3 changed A4 again, so the probe is rer
 
 ## §2 — Adversarial rounds (§0.9)
 
-Each round ran three fresh lenses on the commit named, read-only on the tree: lens 1 builds against the spec, lens 2 attacks the doors, lens 3 checks the claims and the evidence. Nothing under review was edited while a lens ran. Every MAJOR fix was red first, and a full round followed it.
+Each round ran three fresh lenses on the commit named, read-only on the tree: lens 1 builds against the spec, lens 2 attacks the doors, lens 3 checks the claims and the evidence. Nothing under review was edited while a lens ran. Every code MAJOR fix was red first. The MAJORs that were not code were a probe made sensitive, a pin green on arrival, a measurement and a wording fix, each named in its table. A full round followed every MAJOR.
 
 ### §2.1 — Round 1, on `25cce19`
 
@@ -282,14 +283,14 @@ Each round ran three fresh lenses on the commit named, read-only on the tree: le
 | 9 | 1 | MINOR | an epsilon in the recall relation | removed |
 | 10 | 1, 2 | MINOR | three new-refusal questions (suffix validation, `governed_by` existence, `record_result` with a `TypeRef`) | routed, DECISIONS-OPEN items 32–34, Q110–Q112 |
 
-Recorded, not fixed: `C20-34` covers two of the four doors in a test and the probe covers the rest; the paging-past-the-oldest mutation was not added; `c20_69`'s mutation is a strawman (§1.6); a family whose extra required inputs the act never supplies is refused late, at the gate, not at `ingest_act`; rule 4-10's text names the relation by prose, not by the gate's function. `C19-114`'s docstring was corrected and the rule renumbering recorded as a deviation (§1.2).
+Recorded, not fixed: `C20-34` covers two of the four doors in a test and the probe covers the rest; the paging-past-the-oldest mutation was not added; `c20_69`'s mutation is a strawman (§1.6); a family whose extra required inputs the act never supplies is refused late, at the gate, not at `ingest_act`; rule 4-10's text names the relation by prose, not by the gate's function. `IngestLanding`'s field notes were fixed. `C19-114`'s docstring was corrected and the rule renumbering recorded as a deviation (§1.2).
 
 ### §2.2 — Round 2, on `30b512d`
 
 | # | lens | severity | finding | outcome |
 |---|---|---|---|---|
 | 1 | 1 | MAJOR | A pending row's exemption was judged against the reader's label, and the gate's relation is not transitive. Over CMS's `...EAST`, `...WEST` and `...WESTON` a pending row that is never written became a permanent holder for `WESTON` | fixed, `f2d6796` red, `b61d641` |
-| 2 | 2 (lens 1 and 3 as MINOR) | MAJOR | An empty page with `complete=False` read as a confident "no holder" (I-1) | fixed |
+| 2 | 2 (lens 1 as MINOR) | MAJOR | An empty page with `complete=False` read as a confident "no holder" (I-1) | fixed |
 | 3 | 2 | MAJOR | A4 scoped on the recording row's namespace. A family in `ops` recording a candidate of `default` was invisible to rule 4-11 (I-4) | fixed: whole-ledger scan keyed on the candidate's namespace. No refusal was added, so nothing routed |
 | 4 | 2 | MAJOR (scope call) | A `failed` compensation released a live holder (I-5) | fixed in A4: only an `applied` compensation releases. The ledger read still reports a failed undo as `compensated`; that is `ACTIONS.md` §9 semantics from before this row, recorded and not changed |
 | 5 | 2 | MINOR | A compensation of a compensation leaves the first row compensated; `ACTIONS.md` defines no undo of an undo | recorded |
@@ -301,7 +302,7 @@ Recorded, not fixed: `C20-34` covers two of the four doors in a test and the pro
 
 ### §2.3 — Round 3, on `b61d641`
 
-No lens found an in-scope reachable MAJOR, so §0.9's stopping rule was met here. The MINORs below include two code fixes, and §0.9 asks that the last round see the final code, so round 4 ran on `8247df4`.
+No lens found an in-scope reachable MAJOR, so §0.9's stopping rule was met here. The MINORs below include two code fixes, and §0.9 asks that the last round see the final code, so round 4 ran on `49eabca`, whose code is `8247df4`'s.
 
 | # | lens | severity | finding | outcome |
 |---|---|---|---|---|
@@ -315,3 +316,20 @@ No lens found an in-scope reachable MAJOR, so §0.9's stopping rule was met here
 | 8 | 3 | note | §8.1a row 6's "the same 400 CMS labels" could be read as 7b's set | reworded |
 
 Lens 3 also re-ran every red commit's tests against that commit's tree and found red-first held for every pair, and found every **[Observed]** number in `INGEST.md` matched the probe log.
+
+### §2.4 — Round 4, on `49eabca`
+
+Lens 3 found one evidence MAJOR, so a full round 5 follows. Lenses 1 and 2 found no in-scope reachable MAJOR.
+
+| # | lens | severity | finding | outcome |
+|---|---|---|---|---|
+| 1 | 3 | MAJOR (evidence) | The `docs/README.md` row and §2's preamble said every MAJOR was fixed red first. Eight of the eleven were. One was a pin green on arrival, one a probe made sensitive and one a measurement | reworded in both places |
+| 2 | 2 | MINOR | Rule 4-10's recall compared the effective name stored when the memory was written. A retire between two landings of one act moved `facility` onto `ltc_facility`, and the second landing of the identity the act had proposed came back `pending`, with one extra ledger row. No second identity was minted, because A4 caught the first proposal | fixed, `6b381e5` red, fixed in the following commit: each entry's closure is read at the recall |
+| 3 | 2 | MINOR | Round 3's "each own candidate is held" exemption and `mine` keeping every matching candidate survived mutation | pinned by `C20-71` r4, green on arrival, with two required mutations |
+| 4 | 3 | MINOR | Rule 4-8's half of the landing re-check had no test. It is not reachable through any printed call, because every public door refuses a predicate-proposing family | pinned by `C20-28` r4, which writes the family past the doors, green on arrival, with a required mutation. `C20-28` r3's docstring now names rule 4-2 only |
+| 5 | 1 | MINOR | Rule 4-2 said the re-check runs "at each landing". A `reused` or `existing` landing returns before the gate and records nothing | reworded: each landing that reaches the gate |
+| 6 | 3 | MINOR | §1.3 and §1.7 credited `check_spec_drift.py` with the 575 and 90 counts, which come from `test_manifest.py` | reworded |
+| 7 | 3 | MINOR | §1.2 scored item 12 a hit, but the warnings were minted where `record_invocation` accepts them (`37bd05c`), not where the act emits them (`37363e5`) | recorded as a deviation |
+| 8 | 3 | MINOR | `C20-81`'s `existing` clause had no sweep mutation; `INGEST.md` §8.1a row 6 stated the 0% baseline twice; §2.1 left out the `IngestLanding` notes fix; §2.2 #2 credited lens 3 with a MINOR it did not raise; §2.3 said round 4 "ran" on `8247df4` | mutation added, the others fixed |
+
+While writing `C20-71` r4, one assertion compared ids in order. Two rows recorded in the same instant order on their random ids, so it failed once in four runs. It now compares a set.
