@@ -30,7 +30,7 @@ EXPECTED_PER_GROUP = {
     9: 38,
     10: 27,
     11: 5,
-    12: 77,
+    12: 79,
     13: 5,
     14: 7,
     15: 13,
@@ -44,7 +44,7 @@ EXPECTED_PER_GROUP = {
     # Row 8c: INTERFACE.md 2.10, property declarations.
     21: 17,
 }
-TOTAL = 575
+TOTAL = 577
 
 #: Ids a spec's rule table names that a LATER row builds, so a group's numbering has
 #: gaps. Row 7b: INGEST.md 4 (the propose-at-ingest contract) is row 7c's, and its ids

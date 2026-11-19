@@ -3323,3 +3323,140 @@ def test_c12_77_two_shared_property_types_converting_to_one_word_are_both_held(r
     employee = _items(report, kind="entity", name="employee")[0]
     assert "property_reference_unregistered:fullName:foo_spt" in employee.warnings
 
+
+
+#: Row 8d (D14): every kind that can hold a tombstone with a successor. `predicate` is
+#: absent on purpose: its `retire(successor=)` is refused `predicate_merge`, pinned below.
+D14_KINDS = ("entity", "edge", "property", "value_set", "action")
+
+
+def _d14_attributes(kind):
+    return {"base_type": "str"} if kind == "property" else None
+
+
+def _d14_store(registry, kind, namespace):
+    attributes = _d14_attributes(kind)
+    seed(registry, "zip_code", kind=kind, attributes=attributes, namespace=namespace)
+    seed(registry, "postal_code", kind=kind, attributes=attributes, namespace=namespace)
+    retired = registry.retire("zip_code", "duplicate", retired_by="user:sd",
+                              successor="postal_code", namespace=namespace)
+    assert isinstance(retired, TypeEntry) and retired.status == "retired", retired
+    return attributes
+
+
+def _d14_row(name, kind, attributes, *, status="active", aliases=("zip_code",)):
+    row = {"name": name, "definition": f"the {name}", "status": status,
+           "aliases": list(aliases)}
+    if attributes is not None:
+        row["attributes"] = attributes
+    return row
+
+
+# indexes_membership: without it `retire(successor=)` is refused `no_consumer_evidence`,
+# so no tombstone with a successor exists. Pinned for that backend below.
+@pytest.mark.requires_capability("indexes_membership")
+@pytest.mark.parametrize("kind", D14_KINDS)
+def test_c12_78_an_alias_over_a_tombstone_with_a_live_successor_is_warned(registry, kind):
+    """Row 8d, D14 (8B-RUN.md 2.5 finding 10, probe line D14). An import writing a
+    retired row's NAME as an alias, while that row's successor is live, leaves the word
+    with two live claimants. Warned `alias_word_succeeded:<word>:<successor>`.
+
+    **The default in force is pinned beside the warning** (DECISIONS-OPEN item 35): the
+    alias is written, the reader answers the successor, and the tombstone cannot be
+    reinstated while the successor lives. Refusing the write, or answering the alias
+    holder, is the founder's."""
+    namespace = f"c12_78_{kind}"
+    attributes = _d14_store(registry, kind, namespace)
+    entry = registry.import_types([_d14_row("post_code", kind, attributes)], kind=kind,
+                                  namespace=namespace)[0]
+    assert entry.status == "active" and "zip_code" in entry.aliases, entry
+    assert "alias_word_succeeded:zip_code:postal_code" in entry.warnings, entry.warnings
+    found = registry.resolve_type("zip_code", ResolveContext(source="c12_78"), kind=kind,
+                                  namespace=namespace, tier="opus")
+    assert found.outcome == "existing" and found.type.name == "postal_code", found
+    back = registry.reinstate("zip_code", "bring it back", reinstated_by="user:sd",
+                              namespace=namespace)
+    assert isinstance(back, Refusal) and back.reason == "successor_active", back
+
+
+@pytest.mark.requires_capability("indexes_membership")
+def test_c12_78_one_claimant_is_not_warned(registry):
+    """D14's negatives: the successor itself taking the word, a dead-end chain, and a
+    tombstone with no successor (C12-09's succession) each leave one live claimant."""
+    namespace = "c12_78_one"
+    _d14_store(registry, "entity", namespace)
+    own = registry.import_types([_d14_row("postal_code", "entity", None)],
+                                namespace=namespace)[0]
+    assert not [w for w in own.warnings if w.startswith("alias_word_succeeded")], own.warnings
+    seed(registry, "lone", namespace=namespace)
+    registry.retire("lone", "gone", retired_by="user:sd", namespace=namespace)
+    plain = registry.import_types([_d14_row("solo", "entity", None, aliases=("lone",))],
+                                  namespace=namespace)[0]
+    assert plain.status == "active", plain
+    assert not [w for w in plain.warnings if w.startswith("alias_word_succeeded")]
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership")
+def test_c12_78_a_chain_is_walked_to_its_live_end(registry):
+    """The walk is the reader's: `a -> b -> c` with `c` live warns `c`, and a chain whose
+    end is retired is one claimant (8B-RUN.md 2.5 finding 2's dead end).
+    stores_events: the second hop retires a successor, which needs a forced retire."""
+    namespace = "c12_78_chain"
+    for name in ("a_word", "b_word", "c_word"):
+        seed(registry, name, namespace=namespace)
+    registry.retire("a_word", "dup", retired_by="user:sd", successor="b_word",
+                    namespace=namespace)
+    registry.retire("b_word", "dup", retired_by="user:sd", successor="c_word",
+                    namespace=namespace, force=True)
+    entry = registry.import_types([_d14_row("d_word", "entity", None, aliases=("a_word",))],
+                                  namespace=namespace)[0]
+    assert "alias_word_succeeded:a_word:c_word" in entry.warnings, entry.warnings
+    registry.retire("c_word", "gone", retired_by="user:sd", namespace=namespace, force=True)
+    again = registry.import_types([_d14_row("e_word", "entity", None, aliases=("b_word",))],
+                                  namespace=namespace)[0]
+    assert not [w for w in again.warnings if w.startswith("alias_word_succeeded")], again.warnings
+
+
+def test_c12_78_without_a_membership_index_no_successor_can_be_named(registry):
+    """D14 on the third backend: with `indexes_membership=False` the retire that would
+    build the tombstone is refused `no_consumer_evidence` (overridable only by a forced
+    retire, which needs `stores_events`), so the two-claimant state cannot arise there.
+    On a backend that indexes membership the same retire succeeds."""
+    seed(registry, "zip_code", namespace="c12_78_m")
+    seed(registry, "postal_code", namespace="c12_78_m")
+    out = registry.retire("zip_code", "duplicate", retired_by="user:sd",
+                          successor="postal_code", namespace="c12_78_m")
+    if registry.caps.indexes_membership:
+        assert isinstance(out, TypeEntry) and out.status == "retired", out
+    else:
+        assert isinstance(out, Refusal) and out.reason == "no_consumer_evidence", out
+
+
+def test_c12_78_the_predicate_version_is_refused_at_retire(registry):
+    """D14 does not reach the kill row: a predicate cannot be retired into a successor."""
+    seed(registry, "zip_code", kind="predicate", namespace="c12_78_p")
+    seed(registry, "postal_code", kind="predicate", namespace="c12_78_p")
+    out = registry.retire("zip_code", "duplicate", retired_by="user:sd",
+                          successor="postal_code", namespace="c12_78_p")
+    assert isinstance(out, Refusal) and out.reason == "predicate_merge", out
+
+
+@pytest.mark.requires_capability("indexes_membership")
+@pytest.mark.parametrize("kind", D14_KINDS)
+def test_c12_79_reinstating_an_alias_over_a_tombstone_with_a_live_successor_is_warned(
+    registry, kind
+):
+    """Row 8d, D14's second door (8D-RUN.md 0.1 item 4): a `deprecated` import carries the
+    word as an alias while retired, and `reinstate` makes it live beside the successor.
+    Warned on the reinstated entry. Default in force: it is reinstated."""
+    namespace = f"c12_79_{kind}"
+    attributes = _d14_store(registry, kind, namespace)
+    stored = registry.import_types(
+        [_d14_row("post_code", kind, attributes, status="deprecated")], kind=kind,
+        namespace=namespace,
+    )[0]
+    assert stored.status == "retired", stored
+    back = registry.reinstate("post_code", "in use again", reinstated_by="user:sd",
+                              namespace=namespace)
+    assert isinstance(back, TypeEntry) and back.status == "active", back
+    assert "alias_word_succeeded:zip_code:postal_code" in back.warnings, back.warnings
