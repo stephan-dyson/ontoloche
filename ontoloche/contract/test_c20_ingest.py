@@ -2154,7 +2154,7 @@ def test_c20_47_r5_every_non_finite_shape_is_refused(adapter):
 # The propose-at-ingest contract. Ids `C20-27`..`C20-34`, `C20-69`..`C20-72`, `C20-81`.
 # Each was committed red before the code that turns it green (7C-RUN 0.3).
 
-from ..actions import Effect, InputSpec, parse_ref, ref_key  # noqa: E402
+from ..actions import CARRIED_WARNINGS, Effect, InputSpec, parse_ref, ref_key  # noqa: E402
 from ..edges import InstanceRef, TypeRef  # noqa: E402
 from ._support import action_family  # noqa: E402
 
@@ -2699,3 +2699,150 @@ def test_c20_41_r1_the_act_records_the_effective_entrys_policy(adapter, make_reg
         "governed_by": "default:ltc_facility", "match_at": 0.97, "propose_below": 0.80,
         "ambiguity_margin": 0.02,
     }, landing.invocation.declared_policy
+
+
+# ------------------------------------------------- row 7c, adversarial round 2 regressions
+#: Three real CMS facility names (2026-10-01 file, normalised). The gate's relation is
+#: not transitive over them at match_at 0.97: EAST~WEST 0.971, WEST~WESTON 0.972,
+#: EAST~WESTON 0.944.
+_EAST = "RENNES HEALTH AND REHAB CENTER EAST"
+_WEST = "RENNES HEALTH AND REHAB CENTER WEST"
+_WESTON = "RENNES HEALTH AND REHAB CENTER WESTON"
+
+
+@NEEDS_LEDGER
+def test_c20_71_r2_a_pending_row_is_judged_against_its_own_identity(adapter, make_registry):
+    """Rule **4-11**, amendment A4 (round 2, lens 1, M1). A `pending` row names the
+    proposal that held ITS identity. Whether it is exempt is judged against its own
+    label, not the reader's, or a pending row -- which proposes nothing and is never
+    written -- becomes a permanent holder for a third label the gate calls distinct."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    _ingest_family(registry)
+    act_e, act_w, act_x = (_act(registry, f"act-r2{c}") for c in "ewx")
+    east = act_e.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    west = act_w.land(_WEST, type_name="facility")
+    assert west.outcome == "pending", west
+    registry.record_result(east.invocation.invocation_id,
+                           {"instance": InstanceRef(east.candidate.type, "995101")},
+                           actor="host:cms")
+    weston = act_x.land(_WESTON, type_name="facility")
+    assert weston.outcome == "proposed", weston
+    held = registry.invocations(unwritten_for=weston.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        weston.invocation.invocation_id], held
+
+
+@NEEDS_LEDGER
+def test_c20_71_r2_an_empty_incomplete_page_is_not_no_holder(adapter, make_registry):
+    """Rule **4-11**, Rule U (round 2, lens 1, m1). An empty page with `complete=False`
+    and no cursor is an unfinished read, not a confident empty ledger."""
+    registry = _world(adapter, make_registry)
+    _ingest_family(registry)
+    cand = _resolve(registry, NOTHING).candidate
+
+    class _Stalled:
+        def __init__(self, inner):
+            object.__setattr__(self, "inner", inner)
+
+        def __getattr__(self, name):
+            return getattr(self.inner, name)
+
+        def __setattr__(self, name, value):
+            setattr(self.inner, name, value)
+
+        def find_invocations(self, **kwargs):
+            page = self.inner.find_invocations(**kwargs)
+            return type(page)(**{**page.__dict__, "records": (), "next_after": None,
+                                 "complete": False,
+                                 "why_incomplete": "the ledger could not be read"})
+
+    stalled = make_registry(_Stalled(adapter))
+    held = stalled.invocations(unwritten_for=cand)
+    assert not held.complete and "could not be read" in (held.why_incomplete or ""), held
+
+
+@NEEDS_LEDGER
+def test_c20_71_r2_a_proposal_recorded_in_another_namespace_still_holds(
+    adapter, make_registry
+):
+    """Rule **4-10**'s key is the IDENTITY's namespace (round 2, lens 2, M2). A family in
+    `ops` that records a candidate of `default:entity:facility` holds that identity for
+    an act in `default`: A4 keys on the candidate's type, not on the ledger row's."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    _ingest_family(registry)
+    out = action_family(registry, "propose_facility", namespace="ops", approval_mode="auto",
+                        inputs=[InputSpec("instance", "candidate")], effects=[_HOST_WRITE])
+    assert isinstance(out, TypeEntry), out
+    cand = _resolve(registry, NOTHING).candidate
+    elsewhere = registry.record_invocation("propose_facility", {"instance": cand},
+                                           namespace="ops", actor="ai:ingest",
+                                           outcome="applied")
+    assert not isinstance(elsewhere, Refusal), elsewhere
+    act_n = _act(registry, "act-r2n")
+    landing = act_n.land(NOTHING, type_name="facility")
+    assert landing.outcome == "pending", landing
+    assert f"instance_proposal_pending:{elsewhere.invocation_id}" in landing.invocation.warnings
+
+
+@NEEDS_LEDGER
+def test_c20_71_r2_a_failed_compensation_releases_nothing(adapter, make_registry):
+    """Rule **4-11** (round 2, lens 2, M3). An undo that was tried and FAILED undid
+    nothing, so the proposal it names still holds the identity."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("`written` is an event, and this backend keeps none")
+    _ingest_family(registry, mode="review")
+    act_f = _act(registry, "act-r2f")
+    first = act_f.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    undo = registry.record_invocation(
+        "propose_facility", {"instance": first.candidate}, actor="user:sd",
+        outcome="failed", compensates=first.invocation.invocation_id)
+    assert not isinstance(undo, Refusal), undo
+    act_g = _act(registry, "act-r2g")
+    again = act_g.land(NOTHING, type_name="facility")
+    assert again.outcome == "pending", again
+
+
+@NEEDS_LEDGER
+def test_c20_71_r2_an_unfinished_a4_read_lands_unknowable_through_the_act(
+    adapter, make_registry
+):
+    """§0.2 item 10, rule 4-11 with Rule U (round 2, lens 2, coverage). When A4 cannot
+    say whether a matching row was written, the act proposes nothing: `unknowable`, and
+    no second invocation is recorded."""
+    blind = DegradedAdapter(adapter, stores_invocation_events=False)
+    registry = _world(blind, make_registry)
+    if not registry.caps.stores_invocations:
+        pytest.skip("this backend keeps no ledger")
+    _ingest_family(registry)
+    act_u = _act(registry, "act-r2u")
+    first = act_u.land(NOTHING, type_name="facility")
+    assert first.outcome == "proposed", first
+    act_v = _act(registry, "act-r2v")
+    second = act_v.land(NOTHING, type_name="facility")
+    assert second.outcome == "unknowable" and second.invocation is None, second
+    assert len(_ledger(registry)) == 1
+
+
+@NEEDS_LEDGER
+def test_c20_30_r2_the_resolutions_carried_warnings_ride_onto_the_invocation(
+    adapter, make_registry
+):
+    """Rule **4-4** with A3 (round 2, lens 2, coverage). The resolution's caller-reportable
+    warnings travel onto the invocation the act records."""
+    registry = _world(adapter, make_registry)
+    _ingest_family(registry)
+    act_w = _act(registry, "act-r2w")
+    landing = act_w.land(NOTHING, type_name="facility")
+    assert landing.outcome == "proposed", landing
+    carried = [w for w in landing.resolution.warnings
+               if w.split(":", 1)[0] in CARRIED_WARNINGS]
+    assert carried, landing.resolution.warnings
+    for w in carried:
+        assert w in landing.invocation.warnings, (w, landing.invocation.warnings)
