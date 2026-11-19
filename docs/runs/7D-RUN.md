@@ -135,7 +135,73 @@ py docs/tools/check_skip_census.py
 
 ## §1 — Results against §0, scored
 
-*Written as the row runs.*
+Every number below is from a command this row ran, and each is **[Observed]** unless it says otherwise. Hits are stated as hits, misses as misses. §0 is left exactly as committed at `ef1406c`.
+
+### §1.1 — Red first, per commit
+
+| step | red commit | what failed, and why | green commit |
+|---|---|---|---|
+| ING15 | `9b418dc` | `C20-70` d1, `reused` where the act must propose, on sqlite and postgres (minimal skips: no invocation events) | `2de6ffb` |
+| ING15 minor 2, the why | `9bd1083` | `C20-70` d1 why test: the why said "already answered" and named no holder | `a0e085b` |
+| ING15 minor 3, the filter | `9bd1083` | green on arrival, as §0.5 predicted. Its mutation is killed (§1.5) | — |
+| 7b B1 to B3 | `21afb8a` | `C20-05` d1 raised `NotSupported` for a dropped table named `host_decode_site_1`; `C20-47` d1 raised `OverflowError` and `RecursionError` | `812c080` |
+| 7c minors | `4c5842f` | seven coverage pins, all green on arrival, because the code they pin is correct. Each has a required mutation of its own (§1.5) | — |
+
+- **Recomputed:** `EAST`~`WEST` 0.9714, `WEST`~`WESTON` 0.9722, `EAST`~`WESTON` 0.9444, so §0.1 item 4's comment numbers hold.
+- **Miss (process): `4c5842f` was committed without its async mirror.** `tools/unasync.py` raised a `SyntaxError` on a chained `_act(...).land(...)`, the shape 7C §1.2 recorded, and a `| tail` hid it. This is the same slip as 7C §1.1's `2d8f7bb`. `f96a366` split the chain into two statements and regenerated the mirror, and `unasync.py --check` reports all 27 files current. The sync tests were right in `4c5842f`; only the aio copy was stale.
+- **Miss: a result-conditioned skip.** `C20-34` d1 first skipped when `propose_type` returned no pending proposal (the minimal leg approves at once). `check_skip_census` failed on it. `66555ff` replaced the skip with `requires_capability("stores_attributes", "stores_proposals")`.
+
+### §1.2 — The fix against §0.2
+
+- **Hits:** items 1 to 6 are built as stated. Each memory entry is `(kind, effective, label, answer, origin)`, with origin `existing`, `proposed` or `pending:<holder id>`. `_similar_candidate` skips any entry whose origin is not `proposed`. `_recall` returns the origin, and the `reused` why for a `pending` origin names the holder.
+- **Kept, and now redundant:** the `isinstance(answer, CandidateRef)` filter stays in front of the origin test. An `existing` origin always carries an `InstanceRef`, so the origin test alone would skip it. The mutation that pins finding 3 therefore removes both and keeps only a *skip pending* test, which is the plausible wrong fix (§1.5).
+- **Text:** `INGEST.md` rule 4-10 now names the relation as `similar(norm(a), norm(b)) >= match_at` (C5) and says the similar step reuses only a candidate the act itself proposed. §8's order paragraph says the same, and ING15's row says fixed (`80aa448`).
+
+### §1.3 — Design tests (§0.4)
+
+| test | predicted | observed | score |
+|---|---|---|---|
+| CMS triple, act B's `WESTON` | `proposed`, no pending warning | `proposed`, no `instance_proposal_pending` warning | hit |
+| CMS triple, fresh act C's `WESTON` | `pending` behind B's row | `pending` | hit |
+| CMS triple, A4 after B | B's `WESTON` row alone | B's `WESTON` row alone, `complete=True` | hit |
+| Q92 slice, the split | `reused` falls by single digits, share above 68%, the 60% floor holds | 3,346 rows: **1,031 `proposed`, 2,310 `reused`, 5 `pending`**, 69.0% reused (`probe_a0e085b.log`, 18 of 18). Against 7c's 1,029, 2,310 and 7 | **share and floor: hit. The direction: miss.** `reused` did not move. Two `pending` landings became `proposed` |
+
+**The Q92 cost, stated.** The fix proposes two more identities in 3,346 rows, and folds none fewer. **[Inferred]** a net zero on `reused` with two from `pending` to `proposed` is what two pairs of this shape give: a label once reused onto a pending candidate now goes to A4 and is proposed (reused −1, proposed +1), and because it is now this act's own proposal, a later label near it that A4 used to hold `pending` is now reused onto it (pending −1, reused +1). That was not traced label by label. The probe ran on `a0e085b`; the act's code has not changed since, and §2 records the run on the final code.
+
+### §1.4 — The minors (§0.5 to §0.7)
+
+| # | outcome |
+|---|---|
+| ING15 minor 2 | fixed, red first (§1.1) |
+| ING15 minor 3 | pinned, green on arrival, mutation killed |
+| B1 | fixed: `_is_decode_failure` walks the exception chain for a `UnicodeDecodeError` or SQLite's "could not decode to utf-8". `C20-05` r5 and r6 (the real non-UTF-8 rows) stay green |
+| B2 | fixed: a `numbers.Rational` is finite and is never passed to `float()` |
+| B3 | fixed: `_non_finite` is an iterative walk that visits each container once and still refuses a container on its own path. 7b's `c20_47_r4` mutation pointed at the old recursive line, and the new `--list` preflight caught it before the sweep ran. It now removes the walk's push |
+| C1 | `C20-34` d1 adds `approve` and `import_types`, green on arrival; the allowlist mutation is killed |
+| C2 | `C20-71` d1 reads past the first page with `limit=1`; the mutation that stops after one page is killed |
+| C3 | the mutation that gives `CandidateRef` an `id` field is killed by `C20-69` |
+| C4 | **left**, as §0.7 said |
+| C5 | reworded (§1.2) |
+| C6 | **left**, as §0.7 said |
+| C7 | both pinned: a repeated cursor answers incomplete, and A4 holds at exactly `match_at` (the policy's `match_at` set to EAST ~ WEST itself) |
+| C8, C9, C11 | **left**, as §0.7 said |
+| C10 | five of nine pinned (the cursor repeat, the proposals filter, the `why_not` branch, a result for an unmatched input, the `CandidateRef` type check). **Four left:** the kind check (every door refuses a candidate whose kind is not `entity`, so a mixed-kind ledger needs a row written past validation) [Inferred]; `_applied_compensation`'s paging (51 compensations of one row to reach its second page, the same paging shape C2 pins for A4); and the holder sort and *the holder is the oldest*, because rows recorded in the same instant order on random ids (7C §2.4) and no rule says which holder the warning names |
+| C12 | **left, not attempted.** No search of the CMS file for a pair on a four-place rounding edge was run |
+
+### §1.5 — Mutation sweep
+
+`docs/tools/ingest_mutation_sweep.py` on `f96a366`: **200 mutations, 199 killed, 1 survivor, 0 not applied or broken, 0 required survivors, exit 0** (`sweep_f96a366.log`). The survivor is 7c's non-required `<n>` rounding case (C12). Row 7d added 19 required mutations: three for ING15 and its minors, four for B1 to B3, and twelve for the 7c minors. Seven existing targets moved with the fix and were retargeted. `--only` and `--list` are new; `--list` is the preflight that counts each target once.
+
+### §1.6 — Suite and gates
+
+- **Full suite, three legs** (sqlite, minimal, postgres on `oo-pg` at port 55432) on `f96a366`: **3,414 passed, 1,010 skipped, 0 failed**, in 20m34s (`suite_f96a366.log`).
+- **Gates:** `check_links`, `check_spec_drift` and `check_merge_guard` exit 0. `check_skip_census` failed once (§1.1) and exits 0 at `66555ff`. `check_capability_matrix` is recorded in §2 with the final runs.
+
+### §1.7 — Kill row (§0.4)
+
+- **D1 closed** by the fix, pinned by `C20-70` d1 and two required mutations.
+- **Predicted zero new type-identity trips. Hit:** `check_merge_guard.py` Part A finds no new identity writer. The fix touches no type row.
+- D2 to D7 are scored by the rounds (§2).
 
 ---
 
