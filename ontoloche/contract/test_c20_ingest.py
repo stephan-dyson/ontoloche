@@ -3696,3 +3696,129 @@ def test_c20_47_d1_a_freed_container_never_hides_a_later_one(adapter):
     for n in range(1, 40):      # CPython hands a freed id on; some n meets it
         assert _non_finite([Fresh(1.0) for _ in range(n)] + [Fresh(nan)]), n
     assert _non_finite([_CONTAINERS, nan])
+
+
+# ------------------------------------- row 7d round 2, ING16: a remembered row that died
+def _undo(registry, landing):
+    out = registry.record_invocation(
+        "propose_facility", {"instance": landing.candidate}, actor="user:sd",
+        outcome="applied", approved_by="user:sd",
+        compensates=landing.invocation.invocation_id)
+    assert not isinstance(out, Refusal), out
+
+
+def _write(registry, landing, row_id):
+    out = registry.record_result(landing.invocation.invocation_id,
+                                 {"instance": InstanceRef(landing.candidate.type, row_id)},
+                                 actor="host:cms")
+    assert not isinstance(out, Refusal), out
+
+
+@NEEDS_LEDGER
+@pytest.mark.parametrize("ends", ["compensated", "written"])
+def test_c20_70_d1_an_own_proposal_that_ended_is_not_reused(adapter, make_registry, ends):
+    """Rule **4-10**, ING16 (7D-RUN 2.2, round 2). The act reuses a candidate it proposed
+    only while its own row is still unwritten. The act proposes EAST; an applied row then
+    undoes EAST's row (`C20-71` r1's shape), or `record_result` writes it with no host
+    row (r2's). The act's WEST, within `match_at` of EAST,
+    lands as a fresh act's would, proposed and not reused onto the ended candidate, and
+    the repeat of EAST then goes to the gate and onto the act's live WEST proposal."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry, mode="review" if ends == "compensated" else "auto")
+    act = _act(registry, "act-i16")
+    east = act.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    (_undo(registry, east) if ends == "compensated" else _write(registry, east, "995161"))
+    fresh_act = _act(registry, "act-i16f")
+    fresh = fresh_act.land(_WEST, type_name="facility")
+    assert fresh.outcome == "proposed", fresh
+    _undo(registry, fresh) if ends == "compensated" else _write(registry, fresh, "995162")
+    west = act.land(_WEST, type_name="facility")
+    assert west.outcome == "proposed", west
+    assert west.candidate != east.candidate
+    again = act.land(_EAST, type_name="facility")   # its memory of EAST ended: the gate,
+    assert again.outcome == "reused" and again.candidate == west.candidate, again  # then WEST
+
+
+@NEEDS_LEDGER
+@pytest.mark.parametrize("ends", ["compensated", "written"])
+def test_c20_70_d1_a_pending_label_whose_holder_ended_is_landed_again(adapter, make_registry,
+                                                                      ends):
+    """Rule **4-10**, ING16 (7D-RUN 2.2, round 2). Act A proposes EAST and act B lands
+    WEST `pending` behind it. A's row is then undone or written. B's repeat of WEST lands
+    as a fresh act's would, `proposed`, never `reused` behind a holder that holds nothing."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry, mode="review" if ends == "compensated" else "auto")
+    act_a = _act(registry, "act-i16a")
+    act_b = _act(registry, "act-i16b")
+    east = act_a.land(_EAST, type_name="facility")
+    west = act_b.land(_WEST, type_name="facility")
+    assert (east.outcome, west.outcome) == ("proposed", "pending"), (east, west)
+    (_undo(registry, east) if ends == "compensated" else _write(registry, east, "995163"))
+    again = act_b.land(_WEST, type_name="facility")
+    assert again.outcome == "proposed", again
+
+
+@NEEDS_RETIRE
+@NEEDS_LEDGER
+@pytest.mark.parametrize("banded", [False, True])
+def test_c20_70_d1_a_candidate_remembered_before_a_retire_goes_to_the_gate(
+        adapter, make_registry, banded):
+    """Rule **4-10** (7D-RUN 2.2, round 2 lens 2 #1). A remembered candidate is reused only
+    after the gate, like a remembered host row after its closure changed. The act proposes
+    a label under `ltc_facility`; `facility`, whose host table holds the label, is then
+    retired toward `ltc_facility`. The act's repeat lands `existing` on that row, as a
+    fresh act's does, never `reused` onto a second identity for one host thing. With the
+    host row only in the band, the act reuses its own live candidate and a fresh act lands
+    `pending` behind it: both mint nothing."""
+    label = _PAIR_BASE[:34] + "zzzzzz" if banded else _PAIR_BASE
+    host_instances(adapter, [{"host_id": "H1", "label": label, "state": "AL"}],
+                   type_name="facility")
+    host_instances(adapter, _rows()[1:2], type_name="ltc_facility")
+    registry = make_registry(adapter)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    seed(registry, "facility", attributes=_governed())
+    seed(registry, "ltc_facility", attributes=_governed())
+    _ingest_family(registry)
+    act = _act(registry, "act-i16r")
+    first = act.land(_PAIR_BASE, type_name="ltc_facility")
+    assert first.outcome == "proposed", first
+    gone = registry.retire("facility", "renamed", retired_by="user:sd",
+                           successor="ltc_facility")
+    assert isinstance(gone, TypeEntry), gone
+    again = act.land(_PAIR_BASE, type_name="ltc_facility")
+    fresh_act = _act(registry, "act-i16rf")
+    fresh = fresh_act.land(_PAIR_BASE, type_name="ltc_facility")
+    if banded:
+        assert (again.outcome, again.candidate) == ("reused", first.candidate), again
+        assert fresh.outcome == "pending", fresh
+    else:
+        assert fresh.outcome == "existing", fresh
+        assert (again.outcome, again.ref) == ("existing", fresh.ref), again
+
+
+def test_c20_47_d1_a_number_that_is_also_a_mapping_is_judged_as_a_number(adapter):
+    """Rule **6-6** (7D-RUN 2.2, round 2 lens 2 #3). An operand that is both a number and
+    a container is judged as the number first, as the recursive walk did: a NaN float that
+    is also an empty mapping is refused."""
+    from collections.abc import Mapping
+
+    from ..ingest import _non_finite
+
+    class FloatMap(float, Mapping):
+        def __getitem__(self, key):
+            raise KeyError(key)
+
+        def __iter__(self):
+            return iter(())
+
+        def __len__(self):
+            return 0
+
+    assert _non_finite(FloatMap("nan"))
+    assert _non_finite([FloatMap("nan")])
