@@ -3321,3 +3321,33 @@ def test_c20_70_r6_after_a_retire_the_exact_key_is_recalled_before_the_gate(
     assert again.outcome == "reused" and again.candidate == first[2].candidate, (
         again.outcome, again.why)
     assert len(_ledger(registry)) == 3
+
+
+# ------------------------------------------------------------- row 7d, ING15 and its minors
+@NEEDS_LEDGER
+def test_c20_70_d1_a_pending_candidate_never_absorbs_a_distinct_label(adapter, make_registry):
+    """Rule **4-10**, ING15 (row 7c's post-cap review, MAJOR). Act A proposes EAST; act B
+    lands WEST `pending` behind A's row; the gate answers WESTON `proposal`. WEST's
+    candidate is A's identity, and EAST ~ WESTON is 0.944, below `match_at`, so reusing
+    it folds WESTON into EAST with no reviewer. The similar step reuses only a candidate
+    the act itself PROPOSED: B proposes WESTON, exactly as a fresh act would."""
+    registry = _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    _ingest_family(registry)
+    act_a, act_b, act_c = (_act(registry, f"act-d1{c}") for c in "abc")
+    east = act_a.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    west = act_b.land(_WEST, type_name="facility")
+    assert west.outcome == "pending", west
+    assert _resolve(registry, _WESTON).outcome == "proposal"
+    weston = act_b.land(_WESTON, type_name="facility")
+    assert weston.outcome == "proposed", (weston.outcome, weston.why)
+    assert weston.invocation is not None and not any(
+        w.startswith("instance_proposal_pending:") for w in weston.invocation.warnings
+    ), weston.invocation.warnings
+    held = registry.invocations(unwritten_for=weston.candidate)
+    assert held.complete and [i.invocation_id for i in held.invocations] == [
+        weston.invocation.invocation_id], held
+    fresh = act_c.land(_WESTON, type_name="facility")
+    assert fresh.outcome == "pending", (fresh.outcome, fresh.why)
