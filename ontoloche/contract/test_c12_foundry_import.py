@@ -3443,6 +3443,31 @@ def test_c12_79_reinstating_the_live_end_of_a_chain_is_warned(registry):
 
 
 @pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
+def test_c12_79_merging_a_chains_retired_end_into_a_live_row_is_warned(registry):
+    """Row 8d round 2 (door lens, MAJOR 1). `merge_types` with a retired `from_` points
+    the dead end of a chain at a live row, which the reader then answers for the chain's
+    first word while another live row holds that word as an alias: D14's state through a
+    fourth door, warned on the `MergeResult`. stores_events: forced retires."""
+    namespace = "c12_79_merge"
+    for name in ("alpha", "beta", "delta"):
+        seed(registry, name, namespace=namespace)
+    registry.retire("alpha", "dup", retired_by="user:sd", successor="beta",
+                    namespace=namespace, force=True)
+    registry.retire("beta", "gone", retired_by="user:sd", namespace=namespace, force=True)
+    entry = registry.import_types([_d14_row("carrier", "entity", None, aliases=("alpha",))],
+                                  namespace=namespace)[0]
+    assert not [w for w in entry.warnings if w.startswith("alias_word_succeeded")], entry.warnings
+    merged = registry.merge_types(
+        "beta", "delta", "m", merged_by="user:sd", namespace=namespace,
+        acknowledge=["retired_operand", "definitions_diverge", "no_consumer_evidence"],
+    )
+    assert not isinstance(merged, Refusal), merged
+    assert "alias_word_succeeded:alpha:delta" in merged.warnings, merged.warnings
+    assert registry.resolve_type("alpha", ResolveContext(), kind="entity", namespace=namespace,
+                                 tier="unspecified").type.name == "delta"
+
+
+@pytest.mark.requires_capability("stores_events", "indexes_membership", "stores_aliases")
 def test_c12_78_the_walk_reaches_as_far_as_the_reader(registry):
     """Row 8d round 1 (implementer lens, MINOR 3). The reader takes the first hop and up to
     `_IDENTITY_CHAIN_CAP` more; the warning's walk takes the same, so a chain the reader
@@ -3626,6 +3651,12 @@ def test_c12_80_a_twin_that_is_not_live_binds_nothing(registry):
         assert "bound_by_conversion" not in side.detail, (dry, side.detail)
         assert {"dst": "office", "why": "retired"} in side.detail.get("unresolved", []), (dry, side.detail)
 
+
+@pytest.mark.requires_capability("stores_events")
+def test_c12_80_a_twin_the_real_run_refuses_binds_nothing(registry):
+    """Round 1 and round 2 (implementer lens). A twin the real run refuses was never
+    written, so nothing is bound to it, on the entity path and the shared-property path.
+    stores_events: each store is built with a forced retire."""
     namespace = "c12_80_ref"
     registry.import_types([{"name": "bureau", "definition": "a bureau", "status": "active",
                             "aliases": ["office"]}], namespace=namespace)
@@ -3637,6 +3668,21 @@ def test_c12_80_a_twin_that_is_not_live_binds_nothing(registry):
     assert not [w for w in side.warnings if w.startswith("reference_bound")], side
     assert "bound_by_conversion" not in side.detail, side.detail
     assert [u for u in side.detail.get("unresolved", []) if u.get("dst") == "office"], side.detail
+
+    # Round 2 (implementer lens, MAJOR 1): the shared-property path. The reader redirects
+    # the slot down a property tombstone's chain, so it never reads unresolved, and the
+    # refused twin was still reported bound beside `property_reference_redirected`.
+    namespace = "c12_80_spt"
+    registry.import_types([{"name": "foo_spt", "definition": "a foo", "status": "active"},
+                           {"name": "bar_prop", "definition": "a bar", "status": "active"}],
+                          namespace=namespace, kind="property")
+    registry.retire("foo_spt", "gone", retired_by="user:sd", namespace=namespace,
+                    successor="bar_prop", force=True)
+    report = registry.import_foundry(_b5_shared_twin(), dry_run=False, namespace=namespace)
+    assert [i for i in report.items if i.api_name == "FooSpt"][0].outcome == "refused"
+    employee = [i for i in report.items if i.api_name == "Employee"][0]
+    assert not [w for w in employee.warnings if w.startswith("reference_bound")], employee.warnings
+    assert "bound_by_conversion" not in employee.detail, employee.detail
 
 
 def test_c12_81_two_shared_property_types_on_one_property_list_the_word_once(registry):
