@@ -111,6 +111,8 @@ RENAMES = {
     "StorageAdapter": "AsyncStorageAdapter",
     "AttributeStore": "AsyncAttributeStore",
     "Registry": "AsyncRegistry",
+    # Row 7c: INGEST.md 4.3's act calls the registry, so it is mirrored with it.
+    "IngestAct": "AsyncIngestAct",
     "BaseSqlAdapter": "AsyncBaseSqlAdapter",
     "DegradedAdapter": "AsyncDegradedAdapter",
     "SQLiteAdapter": "AsyncSQLiteAdapter",
@@ -289,8 +291,8 @@ SPECS: tuple[FileSpec, ...] = (
     FileSpec(
         source="ontoloche/registry.py",
         target="ontoloche/aio/registry.py",
-        extract=("Registry",),
-        extra_header='\n__all__ = ["AsyncRegistry"]\n',
+        extract=("IngestAct", "Registry"),
+        extra_header='\n__all__ = ["AsyncIngestAct", "AsyncRegistry"]\n',
         trailer=REGISTRY_TRAILER,
         borrow_from="ontoloche.registry",
         pre_substitutions=((r"^    def __init__\(", "    def _open("),),

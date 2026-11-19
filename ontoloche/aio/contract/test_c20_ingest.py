@@ -2009,7 +2009,8 @@ async def test_c20_29_the_minted_ref_is_recorded_in_results_under_the_effective_
     assert all(ref_key(minted) not in e.why for e in out.observed_effects)
     assert parse_ref(out.inputs["instance"]) == res.candidate
     # Through the act: the candidate it records is under the EFFECTIVE type too.
-    landing = _act(registry, "act-29").land(NOTHING + " two", type_name="facility")
+    act_1 = await _act(registry, "act-29")
+    landing = await act_1.land(NOTHING + " two", type_name="facility")
     assert landing.outcome == "proposed", landing
     assert landing.candidate.type.name == "ltc_facility"
     assert parse_ref(landing.invocation.inputs["instance"]).type.name == "ltc_facility"
@@ -2034,14 +2035,20 @@ async def test_c20_31_an_ambiguous_proposal_is_recorded_in_review_whatever_the_f
     assert rec.declared_policy["approval_mode"] == "review"
     assert warning in rec.warnings
     # Through the act, which computes the warning and the mode itself.
-    act = _act(registry, "act-31")
-    landing = act.land(BAND + " ", type_name="facility")
+    act = await _act(registry, "act-31")
+    landing = await act.land(BAND + " ", type_name="facility")
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        # The direct record above holds this identity, and a backend with no invocation
+        # events cannot say whether its row was written: rule 4-11 lands that unknowable
+        # and records nothing (amendment A4's complete=False).
+        assert landing.outcome == "unknowable" and landing.invocation is None, landing
+        return
     assert landing.outcome in ("proposed", "pending"), landing
     inv = landing.invocation
     assert inv.declared_policy["approval_mode"] == "review"
     assert inv.declared_policy["approval_mode_declared"] == "auto"
     assert f"instance_ambiguous_at_proposal:instance:{landing.resolution.known}" in inv.warnings
-    plain = act.land(NOTHING, type_name="facility")
+    plain = await act.land(NOTHING, type_name="facility")
     assert plain.invocation.declared_policy["approval_mode"] == "auto"
 
 @NEEDS_LEDGER
@@ -2074,9 +2081,11 @@ async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unre
     # Through the act: a second act's landing of a held identity is `pending`, carries
     # the holder, and mints no second identity.
     other = "yyyy wwww elsewhere"
-    holder = _act(registry, "act-71a").land(other, type_name="facility")
+    act_2 = await _act(registry, "act-71a")
+    holder = await act_2.land(other, type_name="facility")
     assert holder.outcome == "proposed", holder
-    second = _act(registry, "act-71b").land(other.upper(), type_name="facility")
+    act_3 = await _act(registry, "act-71b")
+    second = await act_3.land(other.upper(), type_name="facility")
     assert second.outcome == "pending", second
     assert (f"instance_proposal_pending:{holder.invocation.invocation_id}"
             in second.invocation.warnings)
@@ -2084,11 +2093,12 @@ async def test_c20_71_the_guard_asks_who_holds_an_unwritten_proposal_not_an_unre
     assert [i.invocation_id for i in held.invocations] == [holder.invocation.invocation_id], (
         "the pending row is itself a holder: two permissions for one identity")
     await registry.review_invocation(holder.invocation.invocation_id, reviewed_by="user:sd")
-    third = _act(registry, "act-71c").land(other, type_name="facility")
+    act_4 = await _act(registry, "act-71c")
+    third = await act_4.land(other, type_name="facility")
     assert third.outcome == "pending", "draining the queue stood the guard down (I-5)"
 
-def _act(registry, act_id="act-1", *, family="propose_facility", tier="small", **kw):
-    act = registry.ingest_act(act_id, family=family, actor="ai:ingest", tier=tier, **kw)
+async def _act(registry, act_id="act-1", *, family="propose_facility", tier="small", **kw):
+    act = await registry.ingest_act(act_id, family=family, actor="ai:ingest", tier=tier, **kw)
     assert not isinstance(act, Refusal), act
     return act
 
@@ -2107,17 +2117,23 @@ async def test_c20_27_a_propose_at_ingest_act_is_an_invocation_and_adds_no_store
     assert not [n for n in dir(Adapter) if "ingest" in n.lower() or n.startswith("act")]
     registry = await _world(adapter, make_registry)
     await _ingest_family(registry)
-    landing = _act(registry).land(NOTHING, type_name="facility")
+    act_5 = await _act(registry)
+    landing = await act_5.land(NOTHING, type_name="facility")
     assert isinstance(landing, IngestLanding) and landing.outcome in INGEST_LANDINGS
     assert landing.outcome == "proposed", landing
     inv = landing.invocation
     assert inv.family == "propose_facility"
-    assert await registry.get_type("propose_facility", kind="action") is not None
+    assert await adapter.get_type("default", "propose_facility", kind="action") is not None
     assert parse_ref(inv.inputs["instance"]) == landing.candidate
     assert await _ledger(registry) == [inv.invocation_id]
     # A second act with the same id shares nothing: the memory is the act's, not a store.
-    again = _act(registry).land(NOTHING, type_name="facility")
-    assert again.outcome == "pending", "the LEDGER answers across acts, not the memory"
+    act_6 = await _act(registry)
+    again = await act_6.land(NOTHING, type_name="facility")
+    # The LEDGER answers across acts, not the memory: `pending` where it can read whether
+    # the first row was written, `unknowable` (rule 4-11, A4) where it cannot. Never the
+    # act's own `reused`, which would be a store shared across acts.
+    events = registry.caps.stores_events and registry.caps.stores_invocation_events
+    assert again.outcome == ("pending" if events else "unknowable"), again
 
 @NEEDS_LEDGER
 async def test_c20_28_the_host_writes_the_row_and_this_project_performs_no_write(
@@ -2129,18 +2145,19 @@ async def test_c20_28_the_host_writes_the_row_and_this_project_performs_no_write
     out = await action_family(registry, "no_host_write", approval_mode="auto",
                         inputs=[InputSpec("instance", "candidate")], effects=[])
     assert isinstance(out, TypeEntry), out
-    refused = registry.ingest_act("a", family="no_host_write", actor="ai:ingest",
+    refused = await registry.ingest_act("a", family="no_host_write", actor="ai:ingest",
                                   tier="small")
     assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
     out = await action_family(registry, "no_candidate", approval_mode="auto",
                         inputs=[InputSpec("instance", "instance")], effects=[_HOST_WRITE])
-    refused = registry.ingest_act("a", family="no_candidate", actor="ai:ingest", tier="small")
+    refused = await registry.ingest_act("a", family="no_candidate", actor="ai:ingest", tier="small")
     assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
-    unknown = registry.ingest_act("a", family="nope", actor="ai:ingest", tier="small")
+    unknown = await registry.ingest_act("a", family="nope", actor="ai:ingest", tier="small")
     assert isinstance(unknown, Refusal) and unknown.reason == "action_family_unknown"
 
     await _ingest_family(registry)
-    landing = _act(registry).land(NOTHING, type_name="facility")
+    act_7 = await _act(registry)
+    landing = await act_7.land(NOTHING, type_name="facility")
     assert landing.outcome == "proposed"
     assert landing.invocation.declared_effects == (_HOST_WRITE,)
     after = await _resolve(registry, NOTHING)
@@ -2162,7 +2179,8 @@ async def test_c20_30_provenance_is_invocation_provenance_unchanged(adapter, mak
     ]
     registry = await _world(adapter, make_registry)
     await _ingest_family(registry)
-    landing = _act(registry, tier="large").land(
+    act_8 = await _act(registry, tier="large")
+    landing = await act_8.land(
         NOTHING, type_name="facility", confidence=0.4, source_version="cms-2026-08")
     prov = landing.invocation.provenance
     assert prov.created_by_actor == "ai:ingest" and prov.created_by == "ai"
@@ -2178,10 +2196,10 @@ async def test_c20_33_unknowable_and_not_an_instance_yield_no_proposal(adapter, 
     await seed(registry, "unscored")               # no MatchPolicy: nothing can be scored
     await host_instances(adapter, _rows(), type_name="unscored")
     await _ingest_family(registry)
-    act = _act(registry)
-    header = act.land("Provider Name", type_name="facility")
+    act = await _act(registry)
+    header = await act.land("Provider Name", type_name="facility")
     assert header.outcome == "not_an_instance", header
-    blind = act.land(EXACT, type_name="unscored")
+    blind = await act.land(EXACT, type_name="unscored")
     assert blind.outcome == "unknowable", blind
     for landing in (header, blind):
         assert landing.invocation is None and landing.candidate is None
@@ -2213,7 +2231,7 @@ async def test_c20_34_an_ingest_family_may_not_propose_a_predicate(adapter, make
     effects = list(rec.attributes["effects"]) + [
         Effect(op="propose_type", namespace="default", kind="predicate").to_dict()]
     await adapter.put_type(dataclasses.replace(rec, attributes={**rec.attributes, "effects": effects}))
-    refused = registry.ingest_act("a", family="propose_facility", actor="ai:ingest",
+    refused = await registry.ingest_act("a", family="propose_facility", actor="ai:ingest",
                                   tier="small")
     assert isinstance(refused, Refusal) and refused.reason == "attributes_schema_violation"
 
@@ -2227,9 +2245,9 @@ async def test_c20_32_ambiguous_proposals_are_enumerable_and_drained_only_by_rev
     if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
         pytest.skip("draining is an event, and this backend keeps none")
     await _ingest_family(registry)
-    act = _act(registry)
-    ambiguous = act.land(BAND, type_name="facility").invocation
-    clean = act.land(NOTHING, type_name="facility").invocation
+    act = await _act(registry)
+    ambiguous = (await act.land(BAND, type_name="facility")).invocation
+    clean = (await act.land(NOTHING, type_name="facility")).invocation
     queue = {i.invocation_id for i in (await registry.invocations(unreviewed=True)).invocations}
     assert ambiguous.invocation_id in queue and clean.invocation_id not in queue
     await registry.record_result(ambiguous.invocation_id,
@@ -2249,7 +2267,8 @@ async def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
     and records nothing."""
     registry = await _world(adapter, make_registry)
     await _ingest_family(registry)
-    landing = _act(registry).land(BAND, type_name="facility")
+    act_9 = await _act(registry)
+    landing = await act_9.land(BAND, type_name="facility")
     res = landing.resolution
     assert res.outcome == "ambiguous" and res.complete
     assert f"instance_ambiguous_at_proposal:instance:{res.known}" in landing.invocation.warnings
@@ -2257,7 +2276,8 @@ async def test_c20_72_n_is_counted_over_a_finished_read(adapter, make_registry):
     dup = await make_registry(adapter)
     await host_instances(adapter, _rows() + _rows()[:1], type_name="dupes")
     await seed(dup, "dupes", attributes=_governed())
-    blind = _act(dup, "act-dup").land(BAND, type_name="dupes")
+    act_10 = await _act(dup, "act-dup")
+    blind = await act_10.land(BAND, type_name="dupes")
     assert blind.outcome == "unknowable" and blind.invocation is None, blind
     assert not any(w.startswith("instance_ambiguous_at_proposal")
                    for w in (blind.resolution.warnings if blind.resolution else ()))
@@ -2273,21 +2293,21 @@ async def test_c20_70_within_one_act_an_identity_is_resolved_once_under_the_gate
     await host_instances(adapter, _rows(), type_name="clinic")
     await seed(registry, "clinic", attributes=_governed())
     await _ingest_family(registry)
-    act = _act(registry)
+    act = await _act(registry)
 
-    first = act.land(EXACT, type_name="facility")
+    first = await act.land(EXACT, type_name="facility")
     assert first.outcome == "existing"
-    again = act.land(EXACT.upper(), type_name="facility")
+    again = await act.land(EXACT.upper(), type_name="facility")
     assert again.outcome == "reused" and again.ref == first.ref and again.resolution is None
 
-    minted = act.land(NOTHING, type_name="facility")
+    minted = await act.land(NOTHING, type_name="facility")
     assert minted.outcome == "proposed"
     for variant in (NOTHING.upper(), "  " + NOTHING + "!", "zzzz qqqq unrelatd"):
-        reused = act.land(variant, type_name="facility")
+        reused = await act.land(variant, type_name="facility")
         assert reused.outcome == "reused", (variant, reused)
         assert reused.candidate == minted.candidate and reused.invocation is None
 
-    other_type = act.land(NOTHING, type_name="clinic")
+    other_type = await act.land(NOTHING, type_name="clinic")
     assert other_type.outcome == "proposed", "B1: a second type's landing reused the first's"
     assert other_type.candidate.type.name == "clinic"
     assert len(await _ledger(registry)) == 2
@@ -2303,10 +2323,11 @@ async def test_c20_81_the_per_act_memory_is_written_on_every_branch_that_answers
     if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
         pytest.skip("rule 4-11's read needs invocation events to be complete")
     await _ingest_family(registry)
-    _act(registry, "act-a").land(NOTHING, type_name="facility")
-    b = _act(registry, "act-b")
-    pending = b.land(NOTHING, type_name="facility")
+    act_11 = await _act(registry, "act-a")
+    await act_11.land(NOTHING, type_name="facility")
+    b = await _act(registry, "act-b")
+    pending = await b.land(NOTHING, type_name="facility")
     assert pending.outcome == "pending", pending
-    again = b.land(NOTHING, type_name="facility")
+    again = await b.land(NOTHING, type_name="facility")
     assert again.outcome == "reused" and again.candidate == pending.candidate
     assert len(await _ledger(registry)) == 2, "the pending branch left the act unbound"

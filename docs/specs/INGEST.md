@@ -1080,6 +1080,36 @@ def get_instance_checked(
 ) -> InstanceLookup | Refusal: ...
 ```
 
+```python
+def ingest_act(
+    act_id: str,
+    *,
+    family: str,                    # a kind="action" family carrying InputSpec(input_name,
+                                    #   ref="candidate") and Effect(op="host_state")
+    actor: str,
+    tier: str,
+    namespace: str = "default",
+    input_name: str = "instance",
+) -> IngestAct | Refusal: ...       # action_family_unknown, attributes_schema_violation
+```
+
+```
+IngestAct.land(label, *, type_name, context=None, confidence=None, source_version=None)
+    -> IngestLanding
+
+IngestLanding:                      # row 7c -- one land's answer
+    outcome:     "existing" | "proposed" | "pending" | "reused" | "unknowable"
+                 | "not_an_instance" | "refused"           # INGEST_LANDINGS
+    resolution:  InstanceResolution | None  # None only for `reused`
+    ref:         InstanceRef | None         # `existing`, or a `reused` that recalled one
+    candidate:   CandidateRef | None        # `proposed`, `pending`, or a `reused` one
+    invocation:  Invocation | None          # `proposed` and `pending` only
+    why:         str                        # never empty
+    refusal:     Refusal | None             # the refusal behind a `refused` landing
+```
+
+**The act is memory, and rule 4-1 is why it is shaped this way** (row 7c). `ingest_act` returns an in-memory object holding rule 4-10's recall and nothing else: no store, no primitive, and every proposal it makes is an ordinary `record_invocation` of the family. `land` runs the probe kit's order: the recall, under the gate's own key (rule 4-10); `resolve_instance`; `existing` remembered (rule 4-13); `unknowable` and `not_an_instance` record nothing (rule 4-7); the resolution's `CandidateRef` under the effective type (rule 4-3); `preflight`; amendment A4's read of who holds an unwritten proposal (rule 4-11); then `record_invocation` with the gate's judgement, A5's policy, the resolution's carried warnings and, on `ambiguous`, A3's `review` mode plus `instance_ambiguous_at_proposal` (rules 4-5, 4-12). A4's read that cannot finish lands `unknowable` and records nothing, and a refusal anywhere records nothing. `pending` **is** recorded, carrying `instance_proposal_pending:<holder>`, and holds no permission (A4 never counts it as a holder).
+
 **`get_instance_checked` is primitive 22's registry door** (§8.1a finding 2, built by row 7b). It walks the
 same closure `resolve_instance` walks (§3.4a), looks the id up under every member (rule 3-19's extent),
 collapses one row under two member names to one (rule 2-17), and judges it by the **effective** entry's

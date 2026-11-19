@@ -114,6 +114,7 @@ from .ingest import (
     INSTANCE_CONDITION_KEY,
     MATCH_POLICY_KEY,
     CandidateRef,
+    IngestLanding,
     InstanceCandidate,
     InstanceContext,
     InstanceLookup,
@@ -635,6 +636,171 @@ def _one_copy_per_identity(records, effective: str):
                 chosen = dataclasses.replace(chosen, type_name=effective)
         kept.append(chosen)
     return kept, ""
+
+
+@dataclass(eq=False)
+class IngestAct:
+    """One propose-at-ingest act. INGEST.md 4.3, rules 4-3, 4-5, 4-7 and 4-10 to 4-13.
+
+    Built by :meth:`Registry.ingest_act`, never directly. **No store and no primitive**
+    (rule 4-1): ``_memory`` is rule 4-10's per-act recall, and it dies with the act. The
+    order of :meth:`land` is the probe kit's reference order (``ingest_probe_kit.py``).
+    """
+
+    #: A dataclass rather than a hand-written ``__init__``: ``tools/unasync.py`` rewrites
+    #: ``Registry.__init__`` into ``_open`` and requires that pattern to match once.
+    _registry: Any
+    act_id: str
+    family: str
+    actor: str
+    tier: str
+    namespace: str
+    input_name: str
+    #: rule 4-10's memory: ``(kind, effective, label, answer)`` per identity the act has
+    #: answered for. A LIST, because the gate's relation is not an equivalence and so
+    #: cannot be a dict key (finding B1).
+    _memory: list = dataclasses.field(default_factory=list)
+
+    def _recall(self, type_name: str, label: str) -> tuple[str | None, Any]:
+        """Rule 4-10's lookup under the GATE'S key: the closure's effective entry and
+        ``similar(norm(a), norm(b)) >= match_at`` of that entry -- the functions
+        ``resolve_instance`` uses, so the act and the gate cannot key differently
+        (``I-4``). ``(effective, answer)``; ``effective`` is ``None`` when the closure
+        did not finish, and then nothing is recalled (the resolution will say why)."""
+        registry = self._registry
+        closure = registry._instance_closure(self.namespace, type_name)
+        if not closure["complete"]:
+            return None, None
+        effective = closure["effective"]
+        policy_raw, _ = registry._governed_facts(closure["entry"])
+        if policy_raw is None or match_policy_problem(policy_raw) is not None:
+            return effective, None
+        match_at = match_policy_from_mapping(policy_raw).match_at
+        want = norm(label)
+        for kind, eff, seen_label, answer in self._memory:
+            if kind == "entity" and eff == effective and (
+                similar(want, norm(seen_label)) + _SCORE_EPS >= match_at
+            ):
+                return effective, answer
+        return effective, None
+
+    def _remember(self, effective: str | None, label: str, answer: Any) -> None:
+        if effective is not None and answer is not None:
+            self._memory.append(("entity", effective, label, answer))
+
+    def land(
+        self,
+        label: str,
+        *,
+        type_name: str,
+        context: InstanceContext | None = None,
+        confidence: float | None = None,
+        source_version: str | None = None,
+    ) -> IngestLanding:
+        """Resolve one landed row and, where section 4 allows, record a proposal.
+
+        The order is the rule: rule 4-10's recall; ``resolve_instance``; ``existing`` is
+        remembered (rule 4-13, B7); ``unknowable`` and ``not_an_instance`` record nothing
+        (rule 4-7); ``proposal`` and ``ambiguous`` carry the resolution's own
+        ``CandidateRef``, under the EFFECTIVE type (rule 4-3); ``preflight``; amendment
+        A4's read of who holds an unwritten proposal (rule 4-11); then
+        ``record_invocation`` with the gate's judgement, the policy that governed (A5),
+        the resolution's carried warnings, and on ``ambiguous`` ``review`` mode plus
+        ``instance_ambiguous_at_proposal`` (rule 4-5, A3). The memory is written on every
+        branch that answers with a ref or a candidate, pending included (rule 4-13).
+        """
+        registry = self._registry
+        effective, recalled = self._recall(type_name, label)
+        if recalled is not None:                                      # rule 4-10
+            is_ref = isinstance(recalled, InstanceRef)
+            return IngestLanding(
+                "reused", None, recalled if is_ref else None,
+                None if is_ref else recalled, None,
+                f"this act already answered for this identity under "
+                f"{self.namespace}:{effective} (INGEST.md rule 4-10)",
+            )
+        ctx = context if context is not None else InstanceContext(
+            act_id=self.act_id, proposed_by=self.actor)
+        if ctx.act_id != self.act_id:
+            raise ValueError(
+                f"context.act_id {ctx.act_id!r} is not this act's {self.act_id!r}: a "
+                f"candidate must name the act that proposed it (INGEST.md 4.1)"
+            )
+        res = registry.resolve_instance(
+            label, ctx, type_name=type_name, namespace=self.namespace, tier=self.tier)
+        if isinstance(res, Refusal):
+            return IngestLanding("refused", None, None, None, None,
+                                 f"the resolution was refused: {res.reason}", res)
+        if res.outcome == "existing":
+            self._remember(effective, label, res.ref)                  # rule 4-13, B7
+            return IngestLanding("existing", res, res.ref, None, None, res.reason)
+        if res.outcome in ("unknowable", "not_an_instance"):          # rule 4-7
+            return IngestLanding(
+                res.outcome, res, None, None, None,
+                f"{res.outcome} proposes nothing (INGEST.md rule 4-7): {res.reason}",
+            )
+        cand = res.candidate
+        if cand is None or not res.complete:  # pragma: no cover - rule 3-6 forbids it
+            return IngestLanding(
+                "unknowable", res, None, None, None,
+                "a proposal outcome without a finished read cannot be proposed over "
+                "(INGEST.md rules 3-6, 4-12)",
+            )
+        inputs = {self.input_name: cand}
+        judged = registry.preflight(
+            self.family, inputs, namespace=self.namespace, actor=self.actor, tier=self.tier)
+        if isinstance(judged, Refusal):
+            return IngestLanding("refused", res, None, cand, None,
+                                 f"the gate refused: {judged.reason}", judged)
+        if judged.verdict != "allowed":
+            refusal = judged.refusal
+            return IngestLanding(
+                "refused", res, None, cand, None,
+                f"the gate refused: {refusal.reason if refusal else judged.verdict}",
+                refusal,
+            )
+        held = registry.invocations(unwritten_for=cand)               # rule 4-11, A4
+        if isinstance(held, Refusal):
+            return IngestLanding("refused", res, None, cand, None,
+                                 f"the ledger read was refused: {held.reason}", held)
+        if not held.complete:
+            return IngestLanding(
+                "unknowable", res, None, None, None,
+                f"who already holds a proposal for this identity could not be read to "
+                f"the end, so nothing is proposed (INGEST.md rule 4-11): "
+                f"{held.why_incomplete}",
+            )
+        warnings = [w for w in res.warnings if w.split(":", 1)[0] in CARRIED_WARNINGS]
+        approval_mode = None
+        if res.outcome == "ambiguous":                                # rules 4-5, 4-12
+            warnings.append(f"instance_ambiguous_at_proposal:{self.input_name}:{res.known}")
+            approval_mode = "review"
+        holder = held.invocations[0].invocation_id if held.invocations else None
+        if holder is not None:
+            warnings.append(f"instance_proposal_pending:{holder}")
+        governed = registry.adapter.get_type(
+            self.namespace, cand.type.name, kind="entity")
+        policy_raw, _ = registry._governed_facts(governed)
+        rec = registry.record_invocation(
+            self.family, inputs, namespace=self.namespace, actor=self.actor,
+            outcome="applied", tier=self.tier, gate_verdict=judged.verdict,
+            approved_by=judged.approved_by, confidence=confidence,
+            source_version=source_version, judged=judged, approval_mode=approval_mode,
+            warnings=tuple(warnings),
+            match_policy=policy_raw if policy_raw is not None else None,
+            governed_by=res.governed_by if policy_raw is not None else None,
+        )
+        if isinstance(rec, Refusal):
+            return IngestLanding("refused", res, None, cand, None,
+                                 f"the ledger refused: {rec.reason}", rec)
+        self._remember(effective, label, cand)                         # rule 4-13
+        if holder is not None:
+            return IngestLanding(
+                "pending", res, None, cand, rec,
+                f"invocation {holder} already holds an unwritten proposal for this "
+                f"identity, so this one mints nothing (INGEST.md rule 4-11)",
+            )
+        return IngestLanding("proposed", res, None, cand, rec, res.reason)
 
 
 class Registry:
@@ -11711,6 +11877,63 @@ class Registry:
             verdict="allowed",
             approved_by=f"auto:{self.policy(namespace).auto_policy_name}",
             **base,
+        )
+
+    # ====================================================== INGEST.md 4 the ingest act
+    def ingest_act(
+        self,
+        act_id: str,
+        *,
+        family: str,
+        actor: str,
+        tier: str,
+        namespace: str = "default",
+        input_name: str = "instance",
+    ) -> "IngestAct | Refusal":
+        """INGEST.md 4.3 -- one propose-at-ingest act. Row 7c.
+
+        **Memory, not a store** (rule 4-1): the act holds rule 4-10's per-act recall and
+        nothing else, and every proposal it makes is an ordinary ``record_invocation`` of
+        ``family``. It refuses, with ``attributes_schema_violation``, a family that cannot
+        carry section 4: no ``InputSpec(ref="candidate")`` named ``input_name``, no
+        ``Effect(op="host_state")`` (rule 4-2: the HOST writes the row), or a
+        ``propose_type`` effect on ``kind="predicate"`` (rule 4-8; the declaration door
+        refuses it already, and this is the one door the act has for a row written past
+        that door).
+        """
+        for label, value in (("act_id", act_id), ("actor", actor), ("tier", tier),
+                             ("input_name", input_name)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"ingest_act requires a non-empty {label} (INGEST.md 4.3)")
+        fam, _ = self._action_family(family, namespace)
+        if fam is None:
+            return Refusal(
+                "action_family_unknown", {"family": family, "namespace": namespace}
+            )
+        problem = None
+        if not any(s.name == input_name and s.ref == "candidate" for s in fam.inputs):
+            problem = (
+                f"declares no InputSpec({input_name!r}, ref=\"candidate\"), so a proposal "
+                f"has nowhere to name the thing it proposes (INGEST.md rule 4-9)"
+            )
+        elif not any(e.op == "host_state" for e in fam.effects):
+            problem = (
+                "declares no Effect(op=\"host_state\"): the HOST writes the instance row "
+                "and the family must say so (INGEST.md rule 4-2)"
+            )
+        elif any(e.op == "propose_type" and e.kind == "predicate" for e in fam.effects):
+            problem = (
+                "declares a propose_type effect on kind=\"predicate\", which ingestion -- the "
+                "highest-volume caller -- may never reach (INGEST.md rule 4-8, ACTIONS.md 2.5)"
+            )
+        if problem is not None:
+            return Refusal(
+                "attributes_schema_violation",
+                {"family": family, "namespace": namespace, "why": f"{family!r} {problem}"},
+            )
+        return IngestAct(
+            self, act_id, family=family, actor=actor, tier=tier, namespace=namespace,
+            input_name=input_name,
         )
 
     # ================================================ ACTIONS.md 6.2 record_invocation
