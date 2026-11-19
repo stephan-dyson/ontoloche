@@ -3073,3 +3073,42 @@ async def test_c20_70_d1_a_pending_candidate_never_absorbs_a_distinct_label(adap
         weston.invocation.invocation_id], held
     fresh = await act_c.land(_WESTON, type_name="facility")
     assert fresh.outcome == "pending", (fresh.outcome, fresh.why)
+
+@NEEDS_LEDGER
+async def test_c20_70_d1_a_recalled_pending_label_says_what_holds_it(adapter, make_registry):
+    """Rule **4-10** (ING15's minor, 7C-RUN 2.8 finding 2). A repeat of a label this act
+    landed `pending` is `reused` (rule 4-13), and its why names the holder's invocation:
+    this act proposed nothing for it."""
+    registry = await _world(adapter, make_registry)
+    if not (registry.caps.stores_events and registry.caps.stores_invocation_events):
+        pytest.skip("A4's read needs invocation events, and this backend keeps none")
+    await _ingest_family(registry)
+    act_a, act_b = [await _act(registry, f"act-d2{c}") for c in "ab"]
+    east = await act_a.land(_EAST, type_name="facility")
+    assert east.outcome == "proposed", east
+    assert (await act_b.land(_WEST, type_name="facility")).outcome == "pending"
+    again = await act_b.land(_WEST, type_name="facility")
+    assert again.outcome == "reused", again
+    assert east.invocation.invocation_id in again.why, again.why
+    assert "pending" in again.why and "proposed" not in again.why, again.why
+
+_HIGH_FLOOR = {"match_at": 0.97, "propose_below": 0.96, "ambiguity_margin": 0.0,
+               "why": "C20 row 7d: a floor above 0.944, so the similar step is reachable"}
+
+@NEEDS_LEDGER
+async def test_c20_70_d1_a_remembered_host_ref_is_never_a_similar_candidate(
+    adapter, make_registry
+):
+    """Rule **4-10** (ING15's minor, 7C-RUN 2.8 finding 3). The similar step reuses only
+    a candidate the act proposed. A remembered `existing` ref within `match_at` must not
+    override the gate's `proposal`: the host row is EAST, the act lands WEST (`existing`,
+    0.971), and WESTON (0.944 to EAST, 0.972 to WEST) is the gate's proposal."""
+    registry = await _world(adapter, make_registry,
+                      [{"host_id": "E1", "label": _EAST, "state": "AL"}], policy=_HIGH_FLOOR)
+    await _ingest_family(registry)
+    act_h = await _act(registry, "act-d3")
+    assert (await act_h.land(_WEST, type_name="facility")).outcome == "existing"
+    assert (await _resolve(registry, _WESTON)).outcome == "proposal"
+    weston = await act_h.land(_WESTON, type_name="facility")
+    assert weston.outcome == "proposed", (weston.outcome, weston.why)
+    assert weston.ref is None and isinstance(weston.candidate, CandidateRef), weston
